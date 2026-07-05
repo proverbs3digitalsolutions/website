@@ -62,36 +62,4 @@
     });
   });
 
-  /* Contact form validation (client-side only — wire to a form backend before launch) */
-  const form = document.getElementById("contactForm");
-  const status = document.getElementById("formStatus");
-
-  if (form) {
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      let valid = true;
-
-      const fields = [
-        { id: "name", check: (v) => v.trim().length > 0 },
-        { id: "email", check: (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) },
-        { id: "message", check: (v) => v.trim().length > 0 },
-      ];
-
-      fields.forEach(({ id, check }) => {
-        const input = document.getElementById(id);
-        const row = input.closest(".form__row");
-        const isValid = check(input.value);
-        row.classList.toggle("has-error", !isValid);
-        if (!isValid) valid = false;
-      });
-
-      if (!valid) {
-        status.textContent = "Please fix the highlighted fields.";
-        return;
-      }
-
-      status.textContent = "Thanks — this form isn't yet connected to an inbox. Please email hello@proverbs3digitalsolutions.com directly for now.";
-      form.reset();
-    });
-  }
 })();
