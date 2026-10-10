@@ -65,6 +65,7 @@ See `.env.example`. Important settings for production:
 | `APP_URL` | Public URL, used in email links |
 | `SMTP_URL` / `MAIL_FROM` | Transactional email for verification, password reset and invitations |
 | `STORAGE_DIR` | Private directory for uploads. Use a persistent volume and back it up |
+| `TRUST_PROXY` | Number of reverse-proxy hops to trust (`1` behind a single HTTPS proxy). Keep `0` if the app is exposed directly |
 | `NODE_ENV=production` | Secure cookies, HSTS, and hides development links |
 
 ## Deploying
@@ -73,7 +74,7 @@ See `.env.example`. Important settings for production:
 
 1. Managed PostgreSQL with automated daily backups and point-in-time recovery.
 2. A persistent, backed-up volume for `STORAGE_DIR` (or switch `src/routes/files.js` to private S3-compatible storage).
-3. HTTPS in front of the app (the app sets `trust proxy` for one hop).
+3. HTTPS in front of the app; set `TRUST_PROXY=1` so rate limiting sees real client IPs.
 4. An SMTP provider (Postmark, SES, Mailgun or similar) for verification and reset emails.
 5. Error monitoring and uptime checks.
 6. Privacy review: see `docs/PRIVACY-CHECKLIST.md`.

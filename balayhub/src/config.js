@@ -19,6 +19,8 @@ const config = {
   sessionTtlHours: Number(env.SESSION_TTL_HOURS || 24 * 7),
   sessionIdleHours: Number(env.SESSION_IDLE_HOURS || 12),
   maxUploadBytes: 10 * 1024 * 1024,
+  // Number of reverse-proxy hops to trust for client IPs (0 = none). Set to 1 behind a single HTTPS proxy.
+  trustProxy: Number(env.TRUST_PROXY || 0),
   privacyPolicyVersion: '2026-10-01',
   timezone: 'Asia/Manila',
 };

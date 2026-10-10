@@ -60,7 +60,7 @@ router.post('/files',
     const rawName = decodeURIComponent(String(req.get('X-File-Name') || `upload.${spec.ext}`));
     const fileName = rawName.replace(/[^\w.\- ()]/g, '_').slice(0, 150) || `upload.${spec.ext}`;
     const key = path.join(req.user.organization_id, `${crypto.randomUUID()}.${spec.ext}`);
-    const full = path.join(config.storageDir, key);
+    const full = path.resolve(config.storageDir, key);
     await fs.promises.mkdir(path.dirname(full), { recursive: true });
     await fs.promises.writeFile(full, req.body, { mode: 0o600 });
     const file = await one(
@@ -76,7 +76,7 @@ router.get('/files/:id', ah(async (req, res) => {
   const file = await one('SELECT * FROM files WHERE file_id = $1 AND organization_id = $2', [id, req.user.organization_id]);
   if (!file) throw notFound();
   await checkRecord(req.user, file.related_record_type, file.related_record_id);
-  const full = path.join(config.storageDir, file.storage_key);
+  const full = path.resolve(config.storageDir, file.storage_key);
   if (!full.startsWith(path.resolve(config.storageDir))) throw notFound();
   if (file.related_record_type === 'lease') await audit(null, req.user, 'file.downloaded', 'lease', file.related_record_id, { file_id: id });
   res.set('Content-Type', file.mime_type);

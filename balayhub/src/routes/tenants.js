@@ -30,8 +30,17 @@ router.get('/tenants', ah(async (req, res) => {
   where.push(`t.status = $${params.length}`);
   if (req.query.q) {
     params.push(`%${String(req.query.q).slice(0, 100)}%`);
-    where.push(`(t.full_name ILIKE $${params.length} OR t.email ILIKE $${params.length} OR t.phone ILIKE $${params.length}
-                 OR u.unit_name ILIKE $${params.length} OR p.property_name ILIKE $${params.length})`);
+    const n = params.length;
+    // Staff can't see contact details, so they can't search by them either.
+    const contact = req.user.role === 'staff' ? '' : ` OR t.email ILIKE $${n} OR t.phone ILIKE $${n}`;
+    where.push(`(t.full_name ILIKE $${n}${contact} OR u.unit_name ILIKE $${n} OR p.property_name ILIKE $${n})`);
+  }
+  // Non-owners only see the current lease if it is in a property assigned to them.
+  let leaseScope = '';
+  if (req.user.role !== 'owner') {
+    params.push(req.user.user_id);
+    leaseScope = ` AND EXISTS (SELECT 1 FROM units ux JOIN property_assignments pa ON pa.property_id = ux.property_id
+                                WHERE ux.unit_id = l.unit_id AND pa.user_id = $${params.length})`;
   }
   const { rows } = await query(
     `WITH ${LEASE_BALANCE_CTE}
@@ -40,7 +49,7 @@ router.get('/tenants', ah(async (req, res) => {
             u.unit_id, u.unit_name, p.property_id, p.property_name,
             COALESCE(lb.outstanding, 0) AS outstanding, COALESCE(lb.overdue, 0) AS overdue
        FROM tenants t
-       LEFT JOIN leases l ON l.tenant_id = t.tenant_id AND l.lease_status = 'active'
+       LEFT JOIN leases l ON l.tenant_id = t.tenant_id AND l.lease_status = 'active'${leaseScope}
        LEFT JOIN units u ON u.unit_id = l.unit_id
        LEFT JOIN properties p ON p.property_id = u.property_id
        LEFT JOIN lease_balance lb ON lb.lease_id = l.lease_id
@@ -53,13 +62,16 @@ router.post('/tenants', managers, ah(async (req, res) => {
   const body = validate(req.body, tenantSpec);
   const org = req.user.organization_id;
   if (!req.body.confirm_duplicate) {
+    // Only records this user may see are listed, so the check can't reveal
+    // contact details from properties they aren't assigned to.
+    const dupParams = [body.full_name, body.email, body.phone];
     const { rows: dupes } = await query(
-      `SELECT tenant_id, full_name, email, phone, status FROM tenants
-        WHERE organization_id = $1
-          AND (lower(full_name) = lower($2)
-               OR ($3::text IS NOT NULL AND lower(email) = lower($3))
-               OR ($4::text IS NOT NULL AND regexp_replace(phone, '\\D', '', 'g') = regexp_replace($4, '\\D', '', 'g')))`,
-      [org, body.full_name, body.email, body.phone]);
+      `SELECT t.tenant_id, t.full_name, t.email, t.phone, t.status FROM tenants t
+        WHERE ${tenantScope(req.user, dupParams)}
+          AND (lower(t.full_name) = lower($1)
+               OR ($2::text IS NOT NULL AND lower(t.email) = lower($2))
+               OR ($3::text IS NOT NULL AND regexp_replace(t.phone, '\\D', '', 'g') = regexp_replace($3, '\\D', '', 'g')))`,
+      dupParams);
     if (dupes.length) {
       throw new HttpError(409, 'A tenant with the same name, email, or phone already exists. Review the existing record before adding another.',
         { code: 'DUPLICATE', duplicates: dupes.map((d) => redactTenant(req.user, d)) });
@@ -226,7 +238,8 @@ router.patch('/leases/:id', managers, ah(async (req, res) => {
       [lease.lease_id, ...keys.map((k) => body[k])]);
     // An earlier end date removes charges for months after the lease ends.
     if (l.end_date) {
-      await db.query(`DELETE FROM rent_charges WHERE lease_id = $1 AND period > date_trunc('month', $2::date)`, [l.lease_id, l.end_date]);
+      await db.query(`DELETE FROM rent_charges WHERE lease_id = $1 
+         AND period > date_trunc('month', (SELECT start_date FROM leases WHERE lease_id = $1)) AND (period > date_trunc('month', $2::date) OR due_date > $2::date)`, [l.lease_id, l.end_date]);
     }
     await audit(db, req.user, 'lease.updated', 'lease', l.lease_id, {
       before: Object.fromEntries(keys.map((k) => [k, lease[k]])), after: body });
@@ -246,12 +259,17 @@ router.post('/leases/:id/end', managers, ah(async (req, res) => {
   if (body.end_date < lease.start_date) {
     throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { end_date: 'Move-out date must be on or after the lease start.' } });
   }
+  const { today } = await one(`SELECT ${TODAY} AS today`);
+  if (body.end_date > today) {
+    throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { end_date: 'Move-out date can’t be in the future. To plan a move-out, set the lease end date with “Change terms” and end the lease on the day they leave.' } });
+  }
   await tx(async (db) => {
     await syncCharges(req.user.organization_id, db);
     await db.query(
       `UPDATE leases SET lease_status = $2, end_date = $3, ended_at = now() WHERE lease_id = $1`,
       [lease.lease_id, body.lease_status, body.end_date]);
-    await db.query(`DELETE FROM rent_charges WHERE lease_id = $1 AND period > date_trunc('month', $2::date)`, [lease.lease_id, body.end_date]);
+    await db.query(`DELETE FROM rent_charges WHERE lease_id = $1 
+         AND period > date_trunc('month', (SELECT start_date FROM leases WHERE lease_id = $1)) AND (period > date_trunc('month', $2::date) OR due_date > $2::date)`, [lease.lease_id, body.end_date]);
     await audit(db, req.user, `lease.${body.lease_status}`, 'lease', lease.lease_id, { end_date: body.end_date, note: body.note });
   });
   res.json({ ok: true });

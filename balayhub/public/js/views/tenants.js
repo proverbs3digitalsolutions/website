@@ -186,7 +186,7 @@ export async function tenantDetailView(el, { params, query, rerender }) {
     submitText: 'End Lease',
     fields: [
       h('p', null, `Unit ${lease.unit_name} becomes vacant. Any unpaid balance stays on record and can still be collected.`),
-      field({ name: 'end_date', label: 'Move-out date', type: 'date', required: true, value: todayManila() }),
+      field({ name: 'end_date', label: 'Move-out date', type: 'date', required: true, value: todayManila(), max: todayManila(), hint: 'Planning a future move-out? Use “Change terms” to set the lease end date, then end the lease on moving day.' }),
       field({ name: 'lease_status', label: 'Reason', type: 'select', required: true, value: 'ended', placeholderOption: false, options: [['ended', 'Lease ended / tenant moved out'], ['terminated', 'Terminated early']] }),
       field({ name: 'note', label: 'Note (optional)', type: 'textarea', maxlength: 500 }),
     ],

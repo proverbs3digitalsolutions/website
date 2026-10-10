@@ -18,6 +18,8 @@ const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, max: 20,
   key: (req) => `${req.ip}|${String(req.body?.email || '').toLowerCase()}`,
 });
+// Per-IP cap regardless of email, against password spraying.
+const ipLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 60, key: (req) => `ip|${req.ip}` });
 const emailLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, key: (req) => `mail|${req.ip}` });
 
 function publicUser(u) {
@@ -63,7 +65,7 @@ async function loadInvitation(token) {
 }
 
 // ---------------------------------------------------------------- sign up
-router.post('/auth/signup', authLimiter, ah(async (req, res) => {
+router.post('/auth/signup', ipLimiter, authLimiter, ah(async (req, res) => {
   const body = validate(req.body, {
     full_name: { type: 'string', required: true, max: 120, label: 'Full name' },
     email: { type: 'email', required: true, label: 'Email' },
@@ -130,7 +132,7 @@ router.post('/auth/signup', authLimiter, ah(async (req, res) => {
 }));
 
 // ---------------------------------------------------------------- log in / out
-router.post('/auth/login', authLimiter, ah(async (req, res) => {
+router.post('/auth/login', ipLimiter, authLimiter, ah(async (req, res) => {
   const body = validate(req.body, {
     email: { type: 'email', required: true, label: 'Email' },
     password: { type: 'string', required: true, max: 200, label: 'Password' },

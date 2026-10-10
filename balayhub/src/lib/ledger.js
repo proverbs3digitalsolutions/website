@@ -21,16 +21,19 @@ async function syncCharges(organizationId, db) {
   await (db || { query }).query(
     `INSERT INTO rent_charges (lease_id, period, due_date, amount_due)
      SELECT l.lease_id, gs.period::date,
-            GREATEST(l.start_date,
-              (gs.period::date + (LEAST(l.due_day,
-                 EXTRACT(DAY FROM (gs.period + interval '1 month - 1 day'))::int) - 1))),
+            -- the move-in month is always billed, due no later than the lease end
+            LEAST(GREATEST(l.start_date, d.due), COALESCE(l.end_date, 'infinity'::date)),
             l.monthly_rent
        FROM leases l
        CROSS JOIN LATERAL generate_series(
               date_trunc('month', l.start_date),
               date_trunc('month', LEAST(COALESCE(l.end_date, ${TODAY}), ${TODAY})),
               interval '1 month') AS gs(period)
+       CROSS JOIN LATERAL (SELECT (gs.period::date + (LEAST(l.due_day,
+              EXTRACT(DAY FROM (gs.period + interval '1 month - 1 day'))::int) - 1)) AS due) AS d
       WHERE l.organization_id = $1
+        -- after the move-in month, skip months whose rent falls due after move-out
+        AND (gs.period = date_trunc('month', l.start_date) OR l.end_date IS NULL OR d.due <= l.end_date)
         AND l.lease_status <> 'cancelled'
         AND (l.lease_status = 'active' OR l.end_date IS NOT NULL)
         AND l.start_date <= ${TODAY}

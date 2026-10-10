@@ -21,6 +21,7 @@ services:
       # Without SMTP, accounts can't be verified in production mode.
       # Set SMTP_URL for real use; this flag is only for a local trial.
       REQUIRE_EMAIL_VERIFICATION: "false"
+      TRUST_PROXY: "0"
     ports: ["3000:3000"]
     volumes: [uploads:/data/storage]
 volumes:

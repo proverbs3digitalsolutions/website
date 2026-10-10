@@ -6,7 +6,7 @@
 const express = require('express');
 const { query, one } = require('../db');
 const { HttpError, ah } = require('../lib/http');
-const { isValidDate } = require('../lib/validate');
+const { isValidDate, UUID_RE } = require('../lib/validate');
 const { propertyScope } = require('../lib/access');
 const { syncCharges, CHARGE_STATUS_CTE, LEASE_BALANCE_CTE, TODAY } = require('../lib/ledger');
 
@@ -233,7 +233,7 @@ async function buildReport(user, from, to, propertyId) {
 
 router.get('/reports', ah(async (req, res) => {
   const { from, to } = range(req.query);
-  const propertyId = /^[0-9a-f-]{36}$/i.test(req.query.property_id || '') ? req.query.property_id : null;
+  const propertyId = UUID_RE.test(req.query.property_id || '') ? req.query.property_id : null;
   res.json(await buildReport(req.user, from, to, propertyId));
 }));
 
@@ -247,7 +247,7 @@ const csvRows = (rows) => rows.map((r) => r.map(csvCell).join(',')).join('\r\n')
 
 router.get('/reports/export', ah(async (req, res) => {
   const { from, to } = range(req.query);
-  const propertyId = /^[0-9a-f-]{36}$/i.test(req.query.property_id || '') ? req.query.property_id : null;
+  const propertyId = UUID_RE.test(req.query.property_id || '') ? req.query.property_id : null;
   const r = await buildReport(req.user, from, to, propertyId);
   const lines = [
     ['BalayHub financial report'], ['Workspace', req.user.organization_name], ['Period', `${from} to ${to}`],
