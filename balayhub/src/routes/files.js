@@ -1,0 +1,88 @@
+'use strict';
+
+// Private file storage for lease documents, receipts and maintenance photos.
+// Files live outside the web root and are only served after a permission check.
+
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const config = require('../config');
+const { query, one } = require('../db');
+const { HttpError, ah, notFound, forbidden } = require('../lib/http');
+const { uuidParam } = require('../lib/validate');
+const { audit } = require('../lib/audit');
+const { loadLease } = require('../lib/access');
+const { loadPayment, loadExpense } = require('./money');
+
+const router = express.Router();
+
+const ALLOWED = {
+  'application/pdf': { ext: 'pdf', magic: (b) => b.subarray(0, 4).toString('latin1') === '%PDF' },
+  'image/jpeg': { ext: 'jpg', magic: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
+  'image/png': { ext: 'png', magic: (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) },
+  'image/webp': { ext: 'webp', magic: (b) => b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP' },
+};
+
+// Confirm the user may attach to / read files of this record.
+async function checkRecord(user, type, id) {
+  switch (type) {
+    case 'lease':
+      if (user.role === 'staff') throw forbidden('Lease documents are limited to owners and property managers.');
+      return loadLease(user, id);
+    case 'payment': return loadPayment(user, id);
+    case 'expense': return loadExpense(user, id);
+    case 'maintenance': {
+      const { propertyScope } = require('../lib/access');
+      const params = [id];
+      const row = await one(`SELECT m.request_id FROM maintenance_requests m JOIN properties p ON p.property_id = m.property_id
+                              WHERE m.request_id = $1 AND ${propertyScope(user, params)}`, params);
+      if (!row) throw notFound();
+      return row;
+    }
+    default:
+      throw new HttpError(400, 'Unsupported attachment type.', { code: 'BAD_REQUEST' });
+  }
+}
+
+router.post('/files',
+  express.raw({ type: Object.keys(ALLOWED), limit: config.maxUploadBytes }),
+  ah(async (req, res) => {
+    const type = String(req.query.record_type || '');
+    const recordId = uuidParam(req.query.record_id);
+    await checkRecord(req.user, type, recordId);
+    const mime = String(req.get('Content-Type') || '').split(';')[0].trim();
+    const spec = ALLOWED[mime];
+    if (!spec || !Buffer.isBuffer(req.body) || !req.body.length) {
+      throw new HttpError(415, 'Upload a PDF, JPG, PNG or WEBP file up to 10 MB.', { code: 'UNSUPPORTED_FILE' });
+    }
+    if (!spec.magic(req.body)) throw new HttpError(415, "The file content doesn't match its type.", { code: 'UNSUPPORTED_FILE' });
+    const rawName = decodeURIComponent(String(req.get('X-File-Name') || `upload.${spec.ext}`));
+    const fileName = rawName.replace(/[^\w.\- ()]/g, '_').slice(0, 150) || `upload.${spec.ext}`;
+    const key = path.join(req.user.organization_id, `${crypto.randomUUID()}.${spec.ext}`);
+    const full = path.join(config.storageDir, key);
+    await fs.promises.mkdir(path.dirname(full), { recursive: true });
+    await fs.promises.writeFile(full, req.body, { mode: 0o600 });
+    const file = await one(
+      `INSERT INTO files (organization_id, related_record_type, related_record_id, storage_key, file_name, mime_type, size_bytes, uploaded_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING file_id, file_name, mime_type, size_bytes, uploaded_at`,
+      [req.user.organization_id, type, recordId, key, fileName, mime, req.body.length, req.user.user_id]);
+    await audit(null, req.user, 'file.uploaded', type, recordId, { file_id: file.file_id, name: fileName });
+    res.status(201).json({ file });
+  }));
+
+router.get('/files/:id', ah(async (req, res) => {
+  const id = uuidParam(req.params.id);
+  const file = await one('SELECT * FROM files WHERE file_id = $1 AND organization_id = $2', [id, req.user.organization_id]);
+  if (!file) throw notFound();
+  await checkRecord(req.user, file.related_record_type, file.related_record_id);
+  const full = path.join(config.storageDir, file.storage_key);
+  if (!full.startsWith(path.resolve(config.storageDir))) throw notFound();
+  if (file.related_record_type === 'lease') await audit(null, req.user, 'file.downloaded', 'lease', file.related_record_id, { file_id: id });
+  res.set('Content-Type', file.mime_type);
+  res.set('Cache-Control', 'private, no-store');
+  res.set('Content-Disposition', `${req.query.download ? 'attachment' : 'inline'}; filename="${file.file_name.replace(/"/g, '')}"`);
+  fs.createReadStream(full).on('error', () => res.status(404).end()).pipe(res);
+}));
+
+module.exports = router;

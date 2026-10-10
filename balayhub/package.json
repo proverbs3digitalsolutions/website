@@ -1,0 +1,21 @@
+{
+  "name": "balayhub",
+  "version": "1.0.0",
+  "private": true,
+  "description": "BalayHub — centralized rental property management for Filipino landlords and property managers.",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "migrate": "node scripts/migrate.js",
+    "seed": "node scripts/seed.js",
+    "test": "node --test --test-concurrency=1 test/*.test.js"
+  },
+  "dependencies": {
+    "express": "^4.22.3",
+    "nodemailer": "^10.0.16",
+    "pg": "^8.23.1"
+  }
+}
