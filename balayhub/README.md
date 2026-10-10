@@ -70,6 +70,9 @@ See `.env.example`. Important settings for production:
 
 ## Deploying
 
+**Hostinger VPS (or any Ubuntu server):** follow [`docs/DEPLOY-HOSTINGER.md`](docs/DEPLOY-HOSTINGER.md). It uses `docker-compose.prod.yml` (Caddy with automatic HTTPS, the app, and PostgreSQL) plus `deploy/backup.sh` and `deploy/update.sh`.
+
+
 `docker compose up --build` runs the app with PostgreSQL. To use a managed host (Render, Railway, Fly.io, a VPS), build the `Dockerfile` and set the environment variables. Before launch, also set up:
 
 1. Managed PostgreSQL with automated daily backups and point-in-time recovery.

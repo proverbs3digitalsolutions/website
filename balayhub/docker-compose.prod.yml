@@ -1,0 +1,56 @@
+# Production stack for a single VPS (e.g. Hostinger KVM):
+#   Caddy (automatic HTTPS) -> BalayHub app -> PostgreSQL
+# Settings come from deploy/.env (copy deploy/.env.production.example).
+# Start:  docker compose -f docker-compose.prod.yml --env-file deploy/.env up -d --build
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: balayhub
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in deploy/.env}
+      POSTGRES_DB: balayhub
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U balayhub"]
+      interval: 5s
+      retries: 20
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_URL: postgres://balayhub:${DB_PASSWORD}@db:5432/balayhub
+      APP_URL: https://${DOMAIN:?Set DOMAIN in deploy/.env}
+      SMTP_URL: ${SMTP_URL:-}
+      MAIL_FROM: ${MAIL_FROM:-BalayHub <no-reply@example.com>}
+      REQUIRE_EMAIL_VERIFICATION: ${REQUIRE_EMAIL_VERIFICATION:-true}
+      TRUST_PROXY: "1"
+      STORAGE_DIR: /data/storage
+    volumes:
+      - uploads:/data/storage
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [app]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  uploads:
+  caddy_data:
+  caddy_config:
