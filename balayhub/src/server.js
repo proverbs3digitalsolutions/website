@@ -52,7 +52,14 @@ function createApp() {
   // Private-by-token calendar feeds that Airbnb, Booking.com and Agoda poll.
   app.use(require('./routes/stays').publicRouter);
 
-  app.use(express.static(path.join(__dirname, '..', 'public'), { index: 'index.html', maxAge: config.isProd ? '1h' : 0 }));
+  // App code (html/js/css) is revalidated on every load (cheap 304s via ETag) so
+  // updates reach users immediately; fonts and images may be cached for a day.
+  app.use(express.static(path.join(__dirname, '..', 'public'), {
+    index: 'index.html',
+    setHeaders(res, filePath) {
+      res.set('Cache-Control', /\.(html|js|css)$/.test(filePath) ? 'no-cache' : 'public, max-age=86400');
+    },
+  }));
 
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {

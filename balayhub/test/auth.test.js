@@ -95,3 +95,11 @@ test('mutating requests without the CSRF header are rejected', async () => {
   });
   assert.equal(r.status, 403);
 });
+
+test('app code is revalidated on every load so updates show immediately', async () => {
+  for (const p of ['/', '/js/app.js', '/css/app.css']) {
+    const r = await fetch(srv.base + p);
+    assert.equal(r.headers.get('cache-control'), 'no-cache', p);
+    assert.ok(r.headers.get('etag'), p);
+  }
+});
