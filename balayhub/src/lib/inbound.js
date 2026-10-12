@@ -53,13 +53,14 @@ async function storeInbound(parsed) {
   const conv = await one('SELECT * FROM conversations WHERE reply_token = $1', [token]);
   if (!conv) return false;
   const from = parsed.from?.value?.[0] || {};
-  const body = stripQuoted(parsed.text || '').slice(0, 20000) || '(empty message)';
+  const clean = (v) => String(v || '').replace(/\u0000/g, ''); // PostgreSQL text can't hold NUL
+  const body = clean(stripQuoted(parsed.text || '')).slice(0, 20000) || '(empty message)';
   const { rowCount } = await query(
     `INSERT INTO messages (conversation_id, organization_id, direction, from_name, from_email, subject, body, status, sent_at, email_message_id)
      VALUES ($1,$2,'in',$3,$4,$5,$6,'received',$7,$8)
      ON CONFLICT (organization_id, email_message_id) WHERE direction = 'in' AND email_message_id IS NOT NULL DO NOTHING`,
-    [conv.conversation_id, conv.organization_id, (from.name || '').slice(0, 120), (from.address || '').slice(0, 254),
-      String(parsed.subject || '').slice(0, 200), body, parsed.date || new Date(), parsed.messageId || null]);
+    [conv.conversation_id, conv.organization_id, clean(from.name).slice(0, 120), clean(from.address).slice(0, 254),
+      clean(parsed.subject).slice(0, 200), body, parsed.date || new Date(), clean(parsed.messageId) || null]);
   if (rowCount) {
     await query(
       `UPDATE conversations SET unread = true, status = 'open', snoozed_until = NULL, last_message_at = now() WHERE conversation_id = $1`,
@@ -94,12 +95,17 @@ async function pollInbox() {
       let maxUid = last;
       for (const uid of (uids || []).filter((u) => u > last).sort((a, b) => a - b)) {
         maxUid = Math.max(maxUid, uid);
-        const env = await client.fetchOne(uid, { envelope: true }, { uid: true });
-        const rcpts = [...(env.envelope?.to || []), ...(env.envelope?.cc || [])].map((a) => a.address || '');
-        if (!rcpts.some((a) => TOKEN_RE.test(a))) continue;
-        const full = await client.fetchOne(uid, { source: true }, { uid: true });
-        const parsed = await simpleParser(full.source);
-        if (await storeInbound(parsed)) imported += 1;
+        try {
+          const env = await client.fetchOne(uid, { envelope: true }, { uid: true });
+          const rcpts = [...(env.envelope?.to || []), ...(env.envelope?.cc || [])].map((a) => a.address || '');
+          if (!rcpts.some((a) => TOKEN_RE.test(a))) continue;
+          const full = await client.fetchOne(uid, { source: true }, { uid: true });
+          const parsed = await simpleParser(full.source);
+          if (await storeInbound(parsed)) imported += 1;
+        } catch (err) {
+          // One unreadable email must not block every reply after it.
+          console.error(`[inbox] skipped message ${uid}: ${err.message}`);
+        }
       }
       await query(
         `INSERT INTO mail_sync_state (mailbox, uid_validity, last_uid, last_run_at, last_error) VALUES ($1,$2,$3,now(),NULL)

@@ -145,6 +145,10 @@ router.post('/properties/:id/archive', requireRole('owner'), ah(async (req, res)
 
 router.post('/properties/:id/restore', requireRole('owner'), ah(async (req, res) => {
   const property = await loadProperty(req.user, uuidParam(req.params.id));
+  if (property.status !== 'active') {
+    const { n } = await one(`SELECT COUNT(*)::int AS n FROM units WHERE property_id = $1 AND status = 'active' AND nightly_rate IS NOT NULL`, [property.property_id]);
+    await checkListingLimit(req.user, n);
+  }
   await query(`UPDATE properties SET status = 'active' WHERE property_id = $1`, [property.property_id]);
   await audit(null, req.user, 'property.restored', 'property', property.property_id);
   res.json({ ok: true });
@@ -169,13 +173,13 @@ router.get('/units', ah(async (req, res) => {
 }));
 
 // Plans limit the number of short-term listings (units with a nightly rate).
-async function checkListingLimit(user) {
+async function checkListingLimit(user, adding = 1) {
   const { planStatus } = require('../lib/plans');
   const s = planStatus(user);
   const { n } = await one(
     `SELECT COUNT(*)::int AS n FROM units u JOIN properties p ON p.property_id = u.property_id
       WHERE p.organization_id = $1 AND u.status = 'active' AND p.status = 'active' AND u.nightly_rate IS NOT NULL`, [user.organization_id]);
-  if (n >= s.listing_limit) {
+  if (adding > 0 && n + adding > s.listing_limit) {
     throw new HttpError(402, `Your ${s.name} plan includes up to ${s.listing_limit} listing${s.listing_limit === 1 ? '' : 's'}. Upgrade your plan in Settings to add more.`, { code: 'PLAN_LIMIT' });
   }
 }
@@ -211,6 +215,8 @@ router.post('/properties/:id/units', managers, ah(async (req, res) => {
 router.patch('/units/:id', managers, ah(async (req, res) => {
   const unit = await loadUnit(req.user, uuidParam(req.params.id));
   const body = validate(req.body, unitSpec, { partial: true });
+  // Giving a long-term unit a nightly rate turns it into a listing.
+  if (body.nightly_rate && !unit.nightly_rate && unit.status === 'active') await checkListingLimit(req.user);
   const keys = Object.keys(body).filter((k) => body[k] !== null
     || ['availability_date', 'nightly_rate', 'max_guests', 'wifi_name', 'wifi_password', 'checkin_instructions', 'house_rules'].includes(k));
   if (!keys.length) return res.json({ unit });

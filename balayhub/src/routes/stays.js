@@ -11,7 +11,7 @@ const { audit } = require('../lib/audit');
 const { requireRole } = require('../lib/auth');
 const { propertyScope, loadUnit } = require('../lib/access');
 const ical = require('../lib/ical');
-const { ensureTaskForBooking } = require('../lib/housekeeping');
+const { ensureTaskForBooking, syncOpenTasks } = require('../lib/housekeeping');
 const receipts = require('../lib/receipts');
 
 const router = express.Router();
@@ -315,6 +315,8 @@ router.post('/reservations', managers, ah(async (req, res) => {
         [req.user.organization_id, unit.unit_id, guestId, body.channel || 'direct', body.check_in, body.check_out, body.num_guests,
           accommodation, body.cleaning_fee ?? unit.cleaning_fee ?? '0.00', body.other_fees || '0.00', ical.randomCode('BH'), body.notes, req.user.user_id]);
       await audit(db, req.user, 'reservation.created', 'booking', b.booking_id, { code: b.confirmation_code, check_in: body.check_in, check_out: body.check_out });
+      // Claim the "on booking" automation now, so it can't also send the confirmation.
+      if (body.send_confirmation) await receipts.claimConfirmation(db, b.booking_id, req.user.organization_id);
       return b.booking_id;
     });
     const confirmation = body.send_confirmation ? await receipts.sendConfirmation(id, req.user) : null;
@@ -351,6 +353,7 @@ router.patch('/reservations/:id', managers, ah(async (req, res) => {
         [booking.booking_id, ...keys.map((k) => body[k])]);
       await audit(db, req.user, 'reservation.updated', 'booking', booking.booking_id, {
         before: Object.fromEntries(keys.map((k) => [k, booking[k]])), after: body });
+      await syncOpenTasks(booking.booking_id, db);
     });
   } catch (err) {
     if (err.constraint === 'bookings_no_overlap') throw await overlapError(merged.unit_id, merged.check_in, merged.check_out, booking.booking_id);

@@ -3,7 +3,7 @@
 // Guest acknowledgement receipts and booking confirmations, emailed through
 // the reservation's inbox conversation so they appear in the guest thread.
 
-const { one, query, tx } = require('../db');
+const { pool, one, query, tx } = require('../db');
 const { mailEnabled } = require('./mailer');
 const messaging = require('./messaging');
 
@@ -86,24 +86,34 @@ async function sendReceipt(paymentId, user) {
   return { sent: true };
 }
 
+// Mark "on booking" automations that use the confirmation template as done for
+// this stay, so the confirmation is never sent twice.
+async function claimConfirmation(db, bookingId, organizationId) {
+  await db.query(
+    `INSERT INTO automation_runs (automation_id, booking_id, skipped)
+     SELECT a.automation_id, $1, 'sent manually' FROM automations a JOIN message_templates t USING (template_id)
+      WHERE a.organization_id = $2 AND a.trigger_event = 'booking_created' AND t.system_key = 'confirmation'
+     ON CONFLICT DO NOTHING`, [bookingId, organizationId]);
+}
+
 // Email the booking confirmation (the workspace's "Booking confirmation" template).
 async function sendConfirmation(bookingId, user) {
   const ctx = await messaging.bookingContext(bookingId);
   if (!ctx) return { sent: false, error: 'Reservation not found.' };
-  const blocked = why({ guest_email: ctx.guest_email });
-  if (blocked) return { sent: false, error: blocked };
   await messaging.ensureDefaults(ctx.organization_id);
+  await claimConfirmation(pool, bookingId, ctx.organization_id);
+  const release = () => query(
+    `DELETE FROM automation_runs WHERE booking_id = $1 AND skipped = 'sent manually' AND message_id IS NULL`, [bookingId]);
+  const blocked = why({ guest_email: ctx.guest_email });
+  if (blocked) { await release(); return { sent: false, error: blocked }; }
   const t = await one(`SELECT template_id FROM message_templates WHERE organization_id = $1 AND system_key = 'confirmation'`, [ctx.organization_id]);
   const out = await messaging.renderTemplateFor(t.template_id, bookingId, user?.full_name);
-  // An automatic "on booking" message with the same template must not send it again.
-  await query(
-    `INSERT INTO automation_runs (automation_id, booking_id, skipped)
-     SELECT automation_id, $1, 'sent manually' FROM automations
-      WHERE organization_id = $2 AND trigger_event = 'booking_created' AND template_id = $3
-     ON CONFLICT DO NOTHING`, [bookingId, ctx.organization_id, t.template_id]);
   const res = await messaging.queueMessage({ bookingId, user, kind: 'confirmation', subject: out.subject, body: out.body });
-  if (res.message.status !== 'sent') return { sent: false, error: res.message.error || 'The email could not be sent.' };
+  if (res.message.status !== 'sent') {
+    await release(); // let the automatic message try later instead
+    return { sent: false, error: res.message.error || 'The email could not be sent.' };
+  }
   return { sent: true };
 }
 
-module.exports = { nextReceiptNumber, receiptData, receiptText, sendReceipt, sendConfirmation };
+module.exports = { claimConfirmation, nextReceiptNumber, receiptData, receiptText, sendReceipt, sendConfirmation };

@@ -119,3 +119,38 @@ test('public demo: one click in, read-only, never emails, dates stay current', a
   assert.deepEqual(after.map((r) => r.check_in), before.map((r) => plus3(r.check_in)));
   assert.equal(await demo.refreshDemo(), 0);
 });
+
+test('review fixes: listing limit can\'t be bypassed by PATCH or property restore', async () => {
+  const c = await ownerAccount(srv.base, 'limit@example.com', 'Limit Co');
+  await sql(`UPDATE organizations SET plan = 'starter' WHERE name = 'Limit Co'`);
+  const p1 = (await c.post('/api/properties', { property_name: 'One', property_type: 'condominium', address: 'First Street 1', city: 'Taguig', province: 'Metro Manila' })).data.property;
+  const p2 = (await c.post('/api/properties', { property_name: 'Two', property_type: 'condominium', address: 'Second Street 2', city: 'Taguig', province: 'Metro Manila' })).data.property;
+  const add = (p, name, extra = { nightly_rate: '1500' }) => c.post(`/api/properties/${p.property_id}/units`, { unit_name: name, unit_type: 'studio', ...extra });
+  assert.equal((await add(p1, 'A')).status, 201);
+  assert.equal((await add(p1, 'B')).status, 201);
+  const lt = (await add(p1, 'Room', { monthly_rent: '5000' })).data.unit;
+  assert.equal((await c.patch(`/api/units/${lt.unit_id}`, { nightly_rate: '1500' })).status, 402);
+  // Archive the property holding both listings, add two more, then try to restore it.
+  assert.equal((await c.post(`/api/properties/${p1.property_id}/archive`)).status, 200);
+  assert.equal((await add(p2, 'C')).status, 201);
+  assert.equal((await add(p2, 'D')).status, 201);
+  const r = await c.post(`/api/properties/${p1.property_id}/restore`);
+  assert.equal(r.status, 402);
+});
+
+test('review fixes: read-only workspaces send no scheduled or automatic messages', async () => {
+  const messaging = require('../src/lib/messaging');
+  const c = await ownerAccount(srv.base, 'lapsed@example.com', 'Lapsed Co');
+  const p = (await c.post('/api/properties', { property_name: 'P', property_type: 'condominium', address: 'Third Street 3', city: 'Taguig', province: 'Metro Manila' })).data.property;
+  const u = (await c.post(`/api/properties/${p.property_id}/units`, { unit_name: 'U', unit_type: 'studio', nightly_rate: '1500' })).data.unit;
+  const b = (await c.post('/api/reservations', { unit_id: u.unit_id, check_in: '2099-01-01', check_out: '2099-01-02', guest_name: 'G', guest_email: 'g@example.com' })).data.reservation;
+  const conv = (await c.post(`/api/reservations/${b.booking_id}/conversation`)).data.conversation_id;
+  const row = await sql(`SELECT organization_id FROM conversations WHERE conversation_id = $1`, [conv]);
+  const [m] = await sql(`INSERT INTO messages (conversation_id, organization_id, direction, body, status, scheduled_at, to_email)
+                         VALUES ($1,$2,'out','hi','scheduled', now() - interval '1 minute', 'g@example.com') RETURNING message_id`, [conv, row[0].organization_id]);
+  await sql(`UPDATE organizations SET plan = 'trial', trial_ends_at = now() - interval '1 day' WHERE name = 'Lapsed Co'`);
+  await messaging.sendDueMessages();
+  const after = await sql('SELECT status, error FROM messages WHERE message_id = $1', [m.message_id]);
+  assert.equal(after[0].status, 'failed');
+  assert.match(after[0].error, /plan is inactive/);
+});

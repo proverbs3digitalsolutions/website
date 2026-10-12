@@ -6,7 +6,7 @@
 
 const crypto = require('crypto');
 const config = require('../config');
-const { pool, one, query } = require('../db');
+const { pool, one, query, tx } = require('../db');
 const { sendMail, mailEnabled } = require('./mailer');
 
 // ---------------------------------------------------------------- default content
@@ -81,24 +81,28 @@ const DEFAULT_AUTOMATIONS = [
 
 // Create default templates and (disabled) automations the first time a workspace uses the inbox.
 async function ensureDefaults(organizationId) {
-  for (const t of DEFAULT_TEMPLATES) {
-    await query(
-      `INSERT INTO message_templates (organization_id, name, subject, body, system_key)
-       VALUES ($1,$2,$3,$4,$5) ON CONFLICT (organization_id, system_key) WHERE system_key IS NOT NULL DO NOTHING`,
-      [organizationId, t.name, t.subject, t.body, t.system_key]);
-  }
-  const existing = await one('SELECT COUNT(*) AS n FROM automations WHERE organization_id = $1', [organizationId]);
-  if (existing.n === 0) {
-    for (const a of DEFAULT_AUTOMATIONS) {
-      const tpl = await one('SELECT template_id FROM message_templates WHERE organization_id = $1 AND system_key = $2', [organizationId, a.key]);
-      if (tpl) {
-        await query(
-          `INSERT INTO automations (organization_id, template_id, name, trigger_event, offset_days, send_time, enabled)
-           VALUES ($1,$2,$3,$4,$5,$6,false)`,
-          [organizationId, tpl.template_id, a.name, a.trigger_event, a.offset_days, a.send_time || '10:00']);
+  // One workspace at a time, so two pages loading at once can't create the defaults twice.
+  await tx(async (db) => {
+    await db.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`defaults:${organizationId}`]);
+    for (const t of DEFAULT_TEMPLATES) {
+      await db.query(
+        `INSERT INTO message_templates (organization_id, name, subject, body, system_key)
+         VALUES ($1,$2,$3,$4,$5) ON CONFLICT (organization_id, system_key) WHERE system_key IS NOT NULL DO NOTHING`,
+        [organizationId, t.name, t.subject, t.body, t.system_key]);
+    }
+    const { rows: [existing] } = await db.query('SELECT COUNT(*)::int AS n FROM automations WHERE organization_id = $1', [organizationId]);
+    if (existing.n === 0) {
+      for (const a of DEFAULT_AUTOMATIONS) {
+        const { rows: [tpl] } = await db.query('SELECT template_id FROM message_templates WHERE organization_id = $1 AND system_key = $2', [organizationId, a.key]);
+        if (tpl) {
+          await db.query(
+            `INSERT INTO automations (organization_id, template_id, name, trigger_event, offset_days, send_time, enabled)
+             VALUES ($1,$2,$3,$4,$5,$6,false)`,
+            [organizationId, tpl.template_id, a.name, a.trigger_event, a.offset_days, a.send_time || '10:00']);
+        }
       }
     }
-  }
+  });
 }
 
 // ---------------------------------------------------------------- template rendering
@@ -189,7 +193,7 @@ function fromAddress() {
 // Send one queued/outgoing message row. Never throws; records the outcome.
 async function deliver(messageId) {
   const { rows: [m] } = await pool.query(
-    `UPDATE messages SET status = 'sending' WHERE message_id = $1 AND status IN ('scheduled', 'failed') RETURNING *`, [messageId]);
+    `UPDATE messages SET status = 'sending', sending_started_at = now() WHERE message_id = $1 AND status IN ('scheduled', 'failed') RETURNING *`, [messageId]);
   if (!m) return null;
   const conv = await one('SELECT c.*, o.name AS workspace_name, o.is_demo FROM conversations c JOIN organizations o USING (organization_id) WHERE c.conversation_id = $1', [m.conversation_id]);
   if (conv.is_demo) {
@@ -258,12 +262,24 @@ async function renderTemplateFor(templateId, bookingId, sender) {
 }
 
 // ---------------------------------------------------------------- scheduler work
+// Workspaces whose plan is inactive (demo, ended trial, overdue) send nothing.
+async function inactiveOrgIds() {
+  const { planStatus } = require('./plans');
+  const { rows } = await query('SELECT organization_id, plan, trial_ends_at, paid_until, is_demo FROM organizations');
+  return new Set(rows.filter((o) => planStatus(o).read_only).map((o) => o.organization_id));
+}
+
 async function sendDueMessages() {
   // A send interrupted by a restart is marked failed so the host can retry it.
   await query(`UPDATE messages SET status = 'failed', error = 'Sending was interrupted. Use Retry to send it again.'
-                WHERE status = 'sending' AND COALESCE(scheduled_at, created_at) < now() - interval '15 minutes'`);
-  const { rows } = await query(`SELECT message_id FROM messages WHERE status = 'scheduled' AND scheduled_at <= now() ORDER BY scheduled_at LIMIT 50`);
-  for (const r of rows) await deliver(r.message_id);
+                WHERE status = 'sending' AND sending_started_at < now() - interval '15 minutes'`);
+  const { rows } = await query(`SELECT message_id, organization_id FROM messages WHERE status = 'scheduled' AND scheduled_at <= now() ORDER BY scheduled_at LIMIT 50`);
+  const inactive = rows.length ? await inactiveOrgIds() : new Set();
+  for (const r of rows) {
+    if (inactive.has(r.organization_id)) {
+      await query(`UPDATE messages SET status = 'failed', error = 'Not sent: this workspace''s plan is inactive.' WHERE message_id = $1 AND status = 'scheduled'`, [r.message_id]);
+    } else await deliver(r.message_id);
+  }
   return rows.length;
 }
 
@@ -290,8 +306,10 @@ async function runAutomations() {
   const { rows: autos } = await query(
     `SELECT a.*, t.subject, t.body FROM automations a JOIN message_templates t USING (template_id)
       WHERE a.enabled AND NOT t.archived`);
+  const inactive = autos.length ? await inactiveOrgIds() : new Set();
   let sent = 0;
   for (const a of autos) {
+    if (inactive.has(a.organization_id)) continue;
     const { rows: bookings } = await query(
       `SELECT b.booking_id, b.check_in, b.check_out, b.created_at FROM bookings b
         WHERE b.organization_id = $1 AND b.kind = 'reservation' AND b.status = 'confirmed'

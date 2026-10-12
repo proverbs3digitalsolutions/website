@@ -112,3 +112,18 @@ test('owners assign tasks, add manual tasks and edit the checklist', async () =>
   assert.equal((await stranger.get(`/api/cleaning-tasks/${t.data.task.task_id}`)).status, 404);
   assert.equal((await stranger.post(`/api/cleaning-tasks/${t.data.task.task_id}/status`, { status: 'done' })).status, 404);
 });
+
+test('review fixes: extending or moving a stay updates its open cleaning task', async () => {
+  const r = (await owner.post('/api/reservations', { unit_id: unit.unit_id, check_in: d(9), check_out: d(10), guest_name: 'Extender' })).data.reservation;
+  await housekeeping.ensureTaskForBooking(r.booking_id);
+  assert.equal((await owner.patch(`/api/reservations/${r.booking_id}`, { check_out: d(13) })).status, 200);
+  let t = await sql('SELECT due_date::text, unit_id FROM cleaning_tasks WHERE booking_id = $1', [r.booking_id]);
+  assert.equal(t[0].due_date, d(13));
+  assert.equal((await owner.patch(`/api/reservations/${r.booking_id}`, { unit_id: unit2.unit_id })).status, 200);
+  t = await sql('SELECT unit_id FROM cleaning_tasks WHERE booking_id = $1', [r.booking_id]);
+  assert.equal(t[0].unit_id, unit2.unit_id);
+  // Changes made elsewhere (e.g. channel sync) are picked up by the scheduler.
+  await sql(`UPDATE bookings SET check_out = check_out + 1 WHERE booking_id = $1`, [r.booking_id]);
+  await housekeeping.createDueTasks();
+  assert.equal((await sql('SELECT due_date::text FROM cleaning_tasks WHERE booking_id = $1', [r.booking_id]))[0].due_date, d(14));
+});

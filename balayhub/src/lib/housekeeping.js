@@ -24,6 +24,20 @@ async function ensureTaskForBooking(bookingId, user = null, db = pool) {
   return t?.task_id || null;
 }
 
+// Keep open tasks in step with their stay (dates extended, moved to another unit).
+async function syncOpenTasks(bookingId = null, db = pool) {
+  await db.query(
+    `UPDATE cleaning_tasks t SET due_date = b.check_out, unit_id = b.unit_id,
+            next_check_in = (SELECT MIN(n.check_in) FROM bookings n WHERE n.unit_id = b.unit_id AND n.kind = 'reservation'
+                                AND n.status = 'confirmed' AND n.check_in >= b.check_out)
+       FROM bookings b
+      WHERE b.booking_id = t.booking_id AND t.status IN ('todo', 'in_progress') AND b.status = 'confirmed'
+        AND ($1::uuid IS NULL OR t.booking_id = $1)
+        AND (t.due_date <> b.check_out OR t.unit_id <> b.unit_id
+             OR t.next_check_in IS DISTINCT FROM (SELECT MIN(n.check_in) FROM bookings n WHERE n.unit_id = b.unit_id AND n.kind = 'reservation'
+                                AND n.status = 'confirmed' AND n.check_in >= b.check_out))`, [bookingId]);
+}
+
 // Scheduler: tasks for stays checking out today or tomorrow.
 async function createDueTasks() {
   const { rows } = await query(
@@ -33,6 +47,7 @@ async function createDueTasks() {
         AND b.check_out BETWEEN ${TODAY} AND ${TODAY} + 1
         AND NOT EXISTS (SELECT 1 FROM cleaning_tasks t WHERE t.booking_id = b.booking_id)`);
   for (const r of rows) await ensureTaskForBooking(r.booking_id);
+  await syncOpenTasks();
   // A cancelled stay's open task is no longer needed.
   await query(
     `UPDATE cleaning_tasks t SET status = 'cancelled'
@@ -40,4 +55,4 @@ async function createDueTasks() {
   return rows.length;
 }
 
-module.exports = { ensureTaskForBooking, createDueTasks };
+module.exports = { ensureTaskForBooking, createDueTasks, syncOpenTasks };

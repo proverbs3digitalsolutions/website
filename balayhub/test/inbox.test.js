@@ -325,3 +325,33 @@ test('receipts: numbered, emailed into the conversation, resendable; booking con
   const noMail = await owner.post(`/api/reservations/${resNoEmail.booking_id}/send-confirmation`);
   assert.ok([200, 409].includes(noMail.status));
 });
+
+test('review fixes: defaults created once under concurrency; stuck-send reset uses send start; NUL bytes stored safely', async () => {
+  const c = await ownerAccount(srv.base, 'race@example.com', 'Race Co');
+  await Promise.all([c.get('/api/message-templates'), c.get('/api/automations'), c.get('/api/inbox'), c.get('/api/automations')]);
+  const n = await sql(`SELECT COUNT(*)::int AS n FROM automations a JOIN organizations o USING (organization_id) WHERE o.name = 'Race Co'`);
+  assert.equal(n[0].n, 3);
+
+  // An old message being retried right now is not flipped back to failed.
+  const [m] = await sql(`INSERT INTO messages (conversation_id, organization_id, direction, body, status, scheduled_at, sending_started_at)
+     SELECT conversation_id, organization_id, 'out', 'x', 'sending', now() - interval '3 days', now() FROM conversations WHERE conversation_id = $1 RETURNING message_id`, [convA]);
+  await messaging.sendDueMessages();
+  assert.equal((await sql('SELECT status FROM messages WHERE message_id = $1', [m.message_id]))[0].status, 'sending');
+  await sql(`UPDATE messages SET sending_started_at = now() - interval '20 minutes' WHERE message_id = $1`, [m.message_id]);
+  await messaging.sendDueMessages();
+  assert.equal((await sql('SELECT status FROM messages WHERE message_id = $1', [m.message_id]))[0].status, 'failed');
+
+  const token = (await sql('SELECT reply_token FROM conversations WHERE conversation_id = $1', [convA]))[0].reply_token;
+  const ok = await inbound.storeInbound({ to: { value: [{ address: `host+bh-${token}@example.com` }] }, from: { value: [{ name: 'A\u0000B', address: 'r@example.com' }] },
+    subject: 'x\u0000', messageId: '<nul@x>', text: 'hello\u0000there', headers: new Map() });
+  assert.equal(ok, true);
+});
+
+test('review fixes: confirmation failure lets the automation try later', async () => {
+  outbox.length = 0;
+  const r = await owner.post('/api/reservations', { unit_id: unit2.unit_id, check_in: d(60), check_out: d(61), guest_name: 'Fail Confirm', guest_email: 'fail-me@example.com', send_confirmation: true });
+  assert.equal(r.status, 201);
+  assert.equal(r.data.confirmation.sent, false);
+  const runs = await sql(`SELECT COUNT(*)::int AS n FROM automation_runs WHERE booking_id = $1`, [r.data.reservation.booking_id]);
+  assert.equal(runs[0].n, 0);
+});
