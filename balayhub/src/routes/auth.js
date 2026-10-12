@@ -48,13 +48,15 @@ async function issueToken(userId, purpose, hours) {
 async function sendVerification(user) {
   const token = await issueToken(user.user_id, 'verify_email', 48);
   const link = `${config.appUrl}/#/verify?token=${encodeURIComponent(token)}`;
-  await sendMail({
+  const mail = await sendMail({
     to: user.email,
     subject: 'Verify your BalayHub email',
     text: `Hi ${user.full_name},\n\nConfirm your email to start using BalayHub:\n${link}\n\nThis link expires in 48 hours. If you didn't sign up, you can ignore this email.`,
   });
-  return config.exposeDevLinks ? link : undefined;
+  return { devLink: config.exposeDevLinks ? link : undefined, failed: Boolean(mail.error || mail.notConfigured) };
 }
+
+const EMAIL_FAILED_MSG = "We couldn't send the email. The BalayHub administrator needs to check the email settings on the server (docs/EMAIL-SETUP.md).";
 
 async function loadInvitation(token) {
   return one(
@@ -124,12 +126,12 @@ router.post('/auth/signup', ipLimiter, authLimiter, ah(async (req, res) => {
   });
 
   await createSession(res, user.user_id);
-  const devLink = !invite && config.requireEmailVerification ? await sendVerification(user) : undefined;
+  const sent = !invite && config.requireEmailVerification ? await sendVerification(user) : {};
   const me = await one(
     `SELECT u.*, o.name AS organization_name, o.business_type FROM users u LEFT JOIN organizations o USING (organization_id) WHERE u.user_id = $1`,
     [user.user_id],
   );
-  res.status(201).json({ user: publicUser(me), devVerificationLink: devLink });
+  res.status(201).json({ user: publicUser(me), devVerificationLink: sent.devLink, emailFailed: Boolean(sent.failed) || undefined });
 }));
 
 // ---------------------------------------------------------------- log in / out
@@ -178,8 +180,9 @@ router.post('/auth/verify-email', authLimiter, ah(async (req, res) => {
 
 router.post('/auth/resend-verification', requireAuth, emailLimiter, ah(async (req, res) => {
   if (req.user.email_verified_at) return res.json({ ok: true, alreadyVerified: true });
-  const devLink = await sendVerification(req.user);
-  res.json({ ok: true, devVerificationLink: devLink });
+  const sent = await sendVerification(req.user);
+  if (sent.failed) throw new HttpError(503, EMAIL_FAILED_MSG, { code: 'EMAIL_FAILED' });
+  res.json({ ok: true, devVerificationLink: sent.devLink });
 }));
 
 // ---------------------------------------------------------------- password reset

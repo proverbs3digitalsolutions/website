@@ -30,7 +30,8 @@ async function sendMail({ to, subject, text }) {
       return { delivered: false, error: true };
     }
   }
-  if (!config.isProd && process.env.NODE_ENV !== 'test') {
+  if (config.isProd) return { delivered: false, notConfigured: true };
+  if (process.env.NODE_ENV !== 'test') {
     console.log(`\n[mail] to=${to}\n[mail] subject=${subject}\n${text}\n`);
   }
   return { delivered: false };

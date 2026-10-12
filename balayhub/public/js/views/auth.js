@@ -105,6 +105,9 @@ export async function signupView(el, { query }) {
       if (res.devVerificationLink) {
         try { sessionStorage.setItem('bh-dev-verify', res.devVerificationLink); } catch { /* ignore */ }
       }
+      if (res.emailFailed) {
+        try { sessionStorage.setItem('bh-email-failed', '1'); } catch { /* ignore */ }
+      }
       afterLogin();
     },
   });
@@ -170,7 +173,10 @@ export async function verifyPendingView(el) {
   if (state.user.email_verified || !state.requireEmailVerification) { afterLogin(); return; }
   let stored = null;
   try { stored = sessionStorage.getItem('bh-dev-verify'); } catch { /* ignore */ }
-  const msg = h('div', null, devLink(stored, 'Verify my email'));
+  let emailFailed = false;
+  try { emailFailed = sessionStorage.getItem('bh-email-failed') === '1'; sessionStorage.removeItem('bh-email-failed'); } catch { /* ignore */ }
+  const msg = h('div', null, devLink(stored, 'Verify my email'),
+    emailFailed && h('div', { class: 'alert alert--error' }, "Your account was created, but we couldn't send the verification email. The BalayHub administrator needs to check the server's email settings. Try “Resend” once that's fixed."));
   const resend = h('button', {
     class: 'btn btn--secondary btn--block',
     onclick: async () => {
