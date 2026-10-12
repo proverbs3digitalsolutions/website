@@ -12,7 +12,7 @@ Status of each item from the specification. ✅ = implemented in the product; �
 | 6 | Data-subject rights | 🟡 | Owners can export a tenant's full record (JSON) and correct or archive it. **To do:** a written procedure for deletion and blocking requests, including legally required retention |
 | 7 | Retention & disposal | ⬜ | Define retention periods (for example, financial records kept for the BIR-required period) and a disposal job for closed workspaces and backups |
 | 8 | Incident response | 🟡 | Audit log and error logs exist. **To do:** monitoring and alerting, a breach-assessment procedure, and the NPC 72-hour notification playbook |
-| 9 | Vendor / processor agreements | ⬜ | Review DPAs for hosting, database, email (SMTP) and storage providers |
+| 9 | Vendor / processor agreements | ⬜ | Review DPAs for hosting (Hostinger), email (Google Workspace: sends guest messages and reads tagged replies over IMAP), and, if AI drafts are on, Anthropic (receives the conversation and reservation details when a host clicks "Draft reply with AI"). List them in the privacy notice. |
 | 10 | Privacy accountability | ⬜ | Appoint a DPO and assess whether NPC registration applies |
 
 **Before launch, a qualified Philippine privacy professional must review the actual data flows.**

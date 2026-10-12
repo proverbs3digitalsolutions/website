@@ -1,6 +1,6 @@
 # BalayHub for short-term rentals (Airbnb and staycation hosts)
 
-This is Phase 1 of the short-term module. It was built for individual hosts with 1–10 units: condo staycations, Airbnb studios and vacation houses.
+The short-term module was built for individual hosts with 1–10 units: condo staycations, Airbnb studios and vacation houses.
 
 ## What's included
 
@@ -9,18 +9,29 @@ This is Phase 1 of the short-term module. It was built for individual hosts with
 | **Home** | **Daily overview** for Today, Tomorrow or the next 7 days: check-ins, check-outs, turnovers, guests staying, and one-tap **Check in / Check out**. **Trends** for the next 7 or 30 days: check-ins, check-outs, turnovers and occupancy. **Revenue** by month: average daily rate and total revenue, compared with the previous month |
 | **Calendar** | All listings × dates. Bookings appear as colored bars by channel. Open nights show the nightly price. Tap an open night to **book**, **block** or **change the price** |
 | **Reservations** | Saved views: Upcoming, Currently hosting, Check-ins and check-outs today or tomorrow, Upcoming unpaid, Past, Cancelled, Recently created, All. Search, channel filter, CSV export. Each reservation shows the stay, guest, payments and balance, with check-in and check-out, edit and cancel |
-| **Listings** | Each unit's base nightly rate, cleaning fee, maximum guests and check-in/out times. **Cleaning status** (Clean / Dirty) and **channel connections** |
+| **Inbox** | Email guests from one place, one thread per reservation. Templates, scheduled and automatic messages, internal notes and ✨ AI reply drafts. Setup: [INBOX-SETUP.md](INBOX-SETUP.md) |
+| **Housekeeping** | A cleaning task for every check-out, with a checklist, photos and an assigned cleaner (see below) |
+| **Listings** | Each unit's base nightly rate, cleaning fee, maximum guests, check-in/out times, and the **guest info** (Wi-Fi, check-in instructions, house rules) used in messages. **Cleaning status** (Clean / Dirty) and **channel connections** |
 | **Guests** | Guest list with stay history |
 | **Expenses / Maintenance / Settings** | Shared with the long-term module |
 
 Built-in rules:
 - **No double bookings.** The database refuses overlapping stays or blocks on the same listing. A same-day turnover (one guest out, the next in) is allowed.
 - **Nightly price** comes from the listing's base rate unless you set a price for specific dates on the calendar.
-- **Checking a guest out** marks the listing **Dirty**. Mark it **Clean** from Listings when housekeeping is done.
+- **Checking a guest out** marks the listing **Dirty** and creates a cleaning task. Finishing the task (or marking the listing **Clean**) marks it clean again.
+- **Receipts:** every payment gets a receipt number (AR-000001, …). Tick **Email a receipt** when recording a payment, or open **Receipt** to print or save it as a PDF. These are acknowledgement receipts, not BIR official receipts.
+- **Booking confirmations:** tick the box on a new reservation, or use **Email booking confirmation** on the reservation. The text comes from the "Booking confirmation" template, which you can edit.
 - **Payments** can be partial and are never deleted, only voided with a reason. Double-tapping Save records a payment once.
 - **Revenue** spreads each stay's accommodation amount evenly across its nights. Cleaning and other fees count in the month of check-in.
 
 Each workspace chooses **Short-term**, **Long-term** or **Both** in **Settings**, and the menu changes to match.
+
+## Housekeeping
+- Cleaning tasks are created automatically for **today's and tomorrow's check-outs**, and when you check a guest out. **Add task** creates an extra one, such as a deep clean.
+- Each task shows when the **next guest arrives**. Same-day turnovers are shown in red.
+- **Assign** a task to a team member (invite your cleaner as **Staff**: they see only the properties you assign, without guest contact details or the Inbox) or just type the name of a cleaner who has no login. **Copy for cleaner** gives you the task and checklist as text to paste into Messenger or Viber.
+- Cleaners tick checklist items on their phone, upload photos (finished unit or damage found), and tap **Mark done**.
+- The owner can change the default checklist with **Edit checklist**.
 
 ## Connecting Airbnb, Booking.com and Agoda (calendar sync)
 
@@ -55,5 +66,5 @@ cd /opt/balayhub-src/balayhub
 ```
 This backs up your data, downloads the new version and restarts BalayHub. The database is upgraded automatically. Your existing workspace keeps its current type; to switch to short-term, go to **Settings → Modules for this workspace → Short-term stays → Save**.
 
-## Coming next (Phase 2–3)
-Cleaning tasks with assigned cleaners and checklists, owner statements, online payments (PayMongo/Xendit for GCash, Maya and cards), guest messages and email receipts, and AI helpers.
+## Coming next
+Owner statements for hosts who manage units for other owners, online payments (PayMongo/Xendit for GCash, Maya and cards), and a guest-facing booking page for direct bookings.

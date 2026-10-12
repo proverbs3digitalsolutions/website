@@ -21,16 +21,12 @@ npm test                                # API tests (uses the balayhub_test data
 In development, email isn't sent unless `SMTP_URL` is set. Verification and reset links are printed to the server log, and the UI shows them on screen. Both behaviours turn off when `NODE_ENV=production`.
 
 ## Short-term rentals (Airbnb / staycations)
+Multi-calendar with Airbnb, Booking.com and Agoda iCal sync, reservations, a guest inbox (email, templates, scheduled and automatic messages, AI reply drafts), housekeeping tasks, payments with emailed receipts, and revenue and occupancy reports. See:
+- [docs/SHORT-TERM-GUIDE.md](docs/SHORT-TERM-GUIDE.md): features and channel sync
+- [docs/INBOX-SETUP.md](docs/INBOX-SETUP.md): guest replies (IMAP) and AI drafts
+- [docs/SELLING.md](docs/SELLING.md): plans, free trial, live demo, platform admin
 
-Workspaces can run **short-term**, **long-term** or **both**. The short-term module includes:
-- a homepage with a daily overview, trends and revenue
-- a multi-calendar with nightly prices and blocks
-- reservations with saved views, payments and check-in/out
-- listings with cleaning status
-- guests
-- Airbnb/Booking.com/Agoda calendar (iCal) sync
-
-See [`docs/SHORT-TERM-GUIDE.md`](docs/SHORT-TERM-GUIDE.md).
+Browser journeys (need a running, seeded server and Playwright): `test/e2e-stays-browser.js`, `test/e2e-inbox-browser.js` (start the server with `SMTP_URL=test://`) and `test/e2e-selling-browser.js` (with `PLATFORM_ADMIN_EMAILS=stays@balayhub.test`).
 
 ## What's in the MVP (long-term)
 
@@ -79,6 +75,11 @@ See `.env.example`. Important settings for production:
 | `STORAGE_DIR` | Private directory for uploads. Use a persistent volume and back it up |
 | `TRUST_PROXY` | Number of reverse-proxy hops to trust (`1` behind a single HTTPS proxy). Keep `0` if the app is exposed directly |
 | `NODE_ENV=production` | Secure cookies, HSTS, and hides development links |
+| `IMAP_URL` | Optional. Reads guest replies into the Inbox ([INBOX-SETUP.md](docs/INBOX-SETUP.md)) |
+| `ANTHROPIC_API_KEY` / `AI_MODEL` | Optional. AI reply drafts in the Inbox |
+| `PLATFORM_ADMIN_EMAILS` | Emails that can open the platform Admin page ([SELLING.md](docs/SELLING.md)) |
+| `SALES_CONTACT_EMAIL` / `TRIAL_DAYS` | Contact shown on the landing page; free-trial length (default 14) |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Optional. "Continue with Google" ([GOOGLE-SIGNIN.md](docs/GOOGLE-SIGNIN.md)) |
 
 ## Deploying
 
