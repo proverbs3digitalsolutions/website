@@ -46,7 +46,7 @@ If the domain is managed elsewhere (Cloudflare, GoDaddy and so on), add the same
 
 ## Step 3: Connect to the VPS
 Pick one:
-- **In your browser:** hPanel → **VPS** in the left menu → click **Manage** next to your server → on the server's **Overview** page, click the **Browser terminal** button (usually top-right, beside Restart/Stop). If it asks for a login, the user is `root` and the password is the root password from Step 1. Hostinger moves buttons now and then; if you don't see it, use the option below.
+- **In your browser (easiest):** hPanel → **VPS** → **Manage** next to your server → on the **Overview** page, click **Web console** (top-right, next to **Reboot**). A black window opens already logged in as `root` (you'll see `root@srv…:~#`). **You don't need to type `ssh` here: you're already on the server.**
 - **From your computer:**
   - **Windows:** open **PowerShell**.
   - **Mac:** open **Terminal**.
