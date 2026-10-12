@@ -15,6 +15,7 @@ import { homeView } from './views/home.js';
 import { calendarView } from './views/calendar.js';
 import { reservationsView, reservationDetailView } from './views/reservations.js';
 import { listingsView, guestsView, guestDetailView } from './views/listings.js';
+import { inboxView, inboxSettingsView, unreadCount } from './views/inbox.js';
 
 export const state = { user: null, requireEmailVerification: true };
 
@@ -52,10 +53,14 @@ const routes = [
   ['/listings', listingsView, APP],
   ['/guests', guestsView, APP],
   ['/guests/:id', guestDetailView, APP],
+  ['/inbox', inboxView, APP],
+  ['/inbox/:id', inboxView, APP],
+  ['/inbox-settings', inboxSettingsView, APP],
 ];
 
 const NAV_SHORT = [
   ['/home', 'Home', 'home'],
+  ['/inbox', 'Inbox', 'inbox'],
   ['/calendar', 'Calendar', 'calendar'],
   ['/reservations', 'Reservations', 'bed'],
   ['/listings', 'Listings', 'building'],
@@ -75,6 +80,7 @@ const NAV_LONG = [
 ];
 const NAV_BOTH = [
   ['/home', 'Home', 'home'],
+  ['/inbox', 'Inbox', 'inbox'],
   ['/calendar', 'Calendar', 'calendar'],
   ['/reservations', 'Reservations', 'bed'],
   ['/listings', 'Listings', 'building'],
@@ -86,7 +92,9 @@ const NAV_BOTH = [
   ['/maintenance', 'Maintenance', 'wrench'],
   ['/settings', 'Settings', 'settings'],
 ];
-const navFor = () => ({ short_term: NAV_SHORT, both: NAV_BOTH }[state.user?.business_type] || NAV_LONG);
+// Staff don't see guest conversations.
+const navFor = () => ({ short_term: NAV_SHORT, both: NAV_BOTH }[state.user?.business_type] || NAV_LONG)
+  .filter(([p]) => p !== '/inbox' || state.user?.role !== 'staff');
 export const homeRoute = () => (state.user?.business_type === 'long_term' ? '#/dashboard' : '#/home');
 
 function parseHash() {
@@ -173,6 +181,11 @@ function buildShell(path) {
     h('nav', { class: 'bottomnav', 'aria-label': 'Main' },
       bottomKeys.map(([p, t, ic]) => h('a', { href: `#${p}`, 'aria-current': isCurrent(p, path) ? 'page' : null }, icon(ic), t === 'Rent & Expenses' ? 'Rent' : t)),
       h('button', { type: 'button', onclick: () => openMore(path), 'aria-current': NAV.slice(4).some(([p]) => isCurrent(p, path)) ? 'page' : null }, icon('more'), 'More')));
+  // Unread guest messages badge on the Inbox link.
+  unreadCount().then((n) => {
+    if (!n) return;
+    el.querySelectorAll('a[href="#/inbox"]').forEach((a) => a.append(h('span', { class: 'navbadge', 'aria-label': `${n} unread` }, n > 99 ? '99+' : String(n))));
+  });
   return { el, content };
 }
 

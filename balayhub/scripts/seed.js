@@ -148,8 +148,8 @@ async function seedStays() {
         const ci = dayOffset(cursor); const co = dayOffset(cursor + nights);
         const guest = names[n % names.length];
         const { rows: [g] } = await db.query(
-          `INSERT INTO guests (organization_id, full_name, phone, created_by) VALUES ($1,$2,$3,$4) RETURNING guest_id`,
-          [orgId, guest, `0917 555 ${String(1000 + n).slice(-4)}`, owner.user_id]);
+          `INSERT INTO guests (organization_id, full_name, phone, email, created_by) VALUES ($1,$2,$3,$4,$5) RETURNING guest_id`,
+          [orgId, guest, `0917 555 ${String(1000 + n).slice(-4)}`, `${guest.split(' ')[0].toLowerCase()}.${n}@example.com`, owner.user_id]);
         const channel = channels[n % channels.length];
         const accommodation = Math.round(u.rate * nights * (channel === 'direct' ? 1 : 1.1));
         const { rows: [b] } = await db.query(

@@ -98,7 +98,7 @@ router.get('/inbox', ah(async (req, res) => {
             (SELECT COUNT(*) FROM messages s WHERE s.conversation_id = c.conversation_id AND s.status = 'failed') AS failed_count
      ${CONV_FROM}
      LEFT JOIN LATERAL (SELECT m.body, m.direction, m.status FROM messages m WHERE m.conversation_id = c.conversation_id
-                          ORDER BY m.created_at DESC LIMIT 1) last ON true
+                          AND m.status <> 'cancelled' ORDER BY m.created_at DESC LIMIT 1) last ON true
      WHERE ${where.join(' AND ')}
      ORDER BY c.unread DESC, c.last_message_at DESC LIMIT 200`, params);
   for (const r of rows) r.last_body = r.last_body ? r.last_body.slice(0, 140) : '';
@@ -129,6 +129,14 @@ router.get('/inbox/status', ah(async (req, res) => {
     reply_address_ready: Boolean(messaging.replyAddress('test')),
     ai_drafts: Boolean(config.anthropicApiKey),
   });
+}));
+
+// People a conversation can be assigned to.
+router.get('/inbox/assignees', ah(async (req, res) => {
+  const { rows } = await query(
+    `SELECT user_id, full_name FROM users WHERE organization_id = $1 AND role IN ('owner', 'manager') AND account_status = 'active'
+      ORDER BY full_name`, [req.user.organization_id]);
+  res.json({ assignees: rows });
 }));
 
 // Start (or open) the conversation for a reservation.

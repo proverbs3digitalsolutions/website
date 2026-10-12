@@ -5,6 +5,7 @@ import {
   h, icon, peso, fmtDate, fmtDateTime, badge, options, field, formModal, confirmDialog, emptyState, searchBox, toast, todayManila, openModal,
 } from '../ui.js';
 import { state, navigate } from '../app.js';
+import { messageGuest } from './inbox.js';
 
 export const CHANNEL_LABEL = { direct: 'Direct', airbnb: 'Airbnb', booking: 'Booking.com', agoda: 'Agoda', other: 'Other' };
 const METHOD_LABEL = { cash: 'Cash', bank_transfer: 'Bank transfer', gcash: 'GCash', maya: 'Maya', card: 'Card', channel_payout: 'Channel payout', other: 'Other' };
@@ -227,6 +228,7 @@ export async function reservationDetailView(el, { params, rerender }) {
         h('h1', null, `${guestName} · ${r.unit_name}`),
         h('p', null, `${fmtDate(r.check_in)} – ${fmtDate(r.check_out)} · ${r.nights} night${r.nights > 1 ? 's' : ''} · ${r.confirmation_code}`)),
       h('div', { class: 'page-head__actions' }, stayButtons,
+        canManage && h('button', { class: 'btn btn--secondary', onclick: () => messageGuest(r.booking_id, navigate) }, icon('inbox'), 'Message guest'),
         canManage && confirmed && h('button', { class: 'btn btn--secondary', onclick: editDetails }, 'Edit'),
         canManage && confirmed && !r.ical_feed_id && h('button', { class: 'btn btn--danger', onclick: cancel }, 'Cancel'))),
     !confirmed && h('div', { class: 'alert alert--error', style: { marginBottom: '16px' } }, `Cancelled ${fmtDateTime(r.cancelled_at)}${r.cancel_reason ? `: ${r.cancel_reason}` : ''}`),

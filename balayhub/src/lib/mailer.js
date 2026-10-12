@@ -2,13 +2,13 @@
 
 const config = require('../config');
 
-// Messages "sent" when SMTP_URL=test:// (automated tests only).
+// Messages "sent" when SMTP_URL=test:// (tests and local development only; never in production).
 const outbox = [];
 
 // A mistyped SMTP_URL must never stop the app: log a clear message instead.
 let transport = null;
-if (config.smtpUrl === 'test://' && process.env.NODE_ENV === 'test') {
-  transport = { sendMail: async (msg) => { outbox.push(msg); if (/fail-me/.test(msg.to)) throw new Error('550 mailbox unavailable'); return { messageId: msg.messageId }; } };
+if (config.smtpUrl === 'test://' && !config.isProd) {
+  transport = { sendMail: async (msg) => { outbox.push(msg); if (outbox.length > 200) outbox.shift(); if (/fail-me/.test(msg.to)) throw new Error('550 mailbox unavailable'); return { messageId: msg.messageId }; } };
 } else if (config.smtpUrl) {
   if (!/^smtps?:\/\/[^\s:@]+:[^\s@]+@[^\s:@]+:\d+\/?$/.test(config.smtpUrl)) {
     console.error('[mail] SMTP_URL looks wrong. Expected smtps://EMAIL%40DOMAIN:APP_PASSWORD@smtp.gmail.com:465 '

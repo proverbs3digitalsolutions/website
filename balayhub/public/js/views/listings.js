@@ -24,6 +24,14 @@ function listingFields(u = {}) {
     h('div', { class: 'form-row form-row--2' },
       field({ name: 'checkin_time', label: 'Check-in time', type: 'time', value: u.checkin_time || '14:00' }),
       field({ name: 'checkout_time', label: 'Check-out time', type: 'time', value: u.checkout_time || '12:00' })),
+    h('hr', { class: 'divider' }),
+    h('h3', { class: 'subhead' }, 'Guest info (used in messages to guests)'),
+    h('div', { class: 'form-row form-row--2' },
+      field({ name: 'wifi_name', label: 'Wi-Fi name', value: u.wifi_name, maxlength: 100 }),
+      field({ name: 'wifi_password', label: 'Wi-Fi password', value: u.wifi_password, maxlength: 100 })),
+    field({ name: 'checkin_instructions', label: 'Check-in instructions', type: 'textarea', value: u.checkin_instructions, maxlength: 3000,
+      placeholder: 'e.g. Show your ID at the lobby, get the key from the guard, unit is on the 12th floor…' }),
+    field({ name: 'house_rules', label: 'House rules', type: 'textarea', value: u.house_rules, maxlength: 3000, placeholder: 'e.g. No smoking. No parties. Quiet hours 10 PM – 7 AM.' }),
   ];
 }
 
