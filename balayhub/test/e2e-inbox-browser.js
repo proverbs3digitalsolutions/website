@@ -94,6 +94,21 @@ const BASE = process.env.BASE_URL || 'http://localhost:3000';
     await page.getByText('Turned off.').waitFor();
     await page.screenshot({ path: SHOTS + 'i-settings.png', fullPage: true });
   });
+  await step('payment with emailed receipt, printable receipt', async () => {
+    await page.goto(resUrl);
+    await page.getByRole('button', { name: 'Record payment' }).click();
+    const d = page.locator('dialog');
+    await d.locator('[name=amount]').fill('100');
+    await d.locator('[name=send_receipt]').check();
+    await d.getByRole('button', { name: 'Save payment' }).click();
+    await page.getByText('Payment saved and receipt emailed.').waitFor();
+    await page.getByRole('link', { name: 'Receipt' }).first().click();
+    await page.getByRole('heading', { name: /^Receipt AR-/ }).waitFor();
+    await page.screenshot({ path: SHOTS + 'r-receipt.png' });
+    await page.goto(resUrl);
+    await page.getByRole('button', { name: 'Email booking confirmation' }).click();
+    await page.getByText(/Confirmation emailed to/).waitFor();
+  });
   await step('housekeeping: add task, tick, finish', async () => {
     await page.goto(BASE + '/#/housekeeping');
     await page.getByRole('heading', { name: 'Housekeeping', exact: true }).waitFor();

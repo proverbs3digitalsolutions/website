@@ -12,6 +12,7 @@ const { requireRole } = require('../lib/auth');
 const { propertyScope, loadUnit } = require('../lib/access');
 const ical = require('../lib/ical');
 const { ensureTaskForBooking } = require('../lib/housekeeping');
+const receipts = require('../lib/receipts');
 
 const router = express.Router();
 const managers = requireRole('owner', 'manager');
@@ -273,6 +274,7 @@ const reservationSpec = {
   cleaning_fee: { type: 'money', label: 'Cleaning fee' },
   other_fees: { type: 'money', label: 'Other fees' },
   notes: { type: 'text', max: 1000, label: 'Notes' },
+  send_confirmation: { type: 'bool', label: 'Email confirmation' },
 };
 
 function checkStay(body, unit) {
@@ -315,7 +317,8 @@ router.post('/reservations', managers, ah(async (req, res) => {
       await audit(db, req.user, 'reservation.created', 'booking', b.booking_id, { code: b.confirmation_code, check_in: body.check_in, check_out: body.check_out });
       return b.booking_id;
     });
-    res.status(201).json({ reservation: await loadBooking(req.user, id) });
+    const confirmation = body.send_confirmation ? await receipts.sendConfirmation(id, req.user) : null;
+    res.status(201).json({ reservation: await loadBooking(req.user, id), confirmation });
   } catch (err) {
     if (err.constraint === 'bookings_no_overlap') throw await overlapError(unit.unit_id, body.check_in, body.check_out);
     throw err;
@@ -406,6 +409,7 @@ router.post('/reservations/:id/payments', ah(async (req, res) => {
     payment_method: { type: 'enum', values: METHODS, required: true, label: 'Method' },
     reference_number: { type: 'string', max: 100, label: 'Reference number' },
     notes: { type: 'text', max: 500, label: 'Notes' },
+    send_receipt: { type: 'bool', label: 'Email receipt' },
   });
   if (body.payment_date > await today()) throw validationError({ payment_date: 'Payment date cannot be in the future.' });
   const key = req.get('Idempotency-Key');
@@ -413,19 +417,23 @@ router.post('/reservations/:id/payments', ah(async (req, res) => {
   const org = req.user.organization_id;
   const existing = key && await one('SELECT payment_id FROM booking_payments WHERE organization_id = $1 AND idempotency_key = $2', [org, key]);
   if (existing) return res.json({ duplicate: true, reservation: await loadBooking(req.user, booking.booking_id) });
+  let paymentId;
   try {
-    await tx(async (db) => {
+    paymentId = await tx(async (db) => {
+      const receiptNumber = await receipts.nextReceiptNumber(db, org);
       const { rows: [p] } = await db.query(
-        `INSERT INTO booking_payments (organization_id, booking_id, amount, payment_date, payment_method, reference_number, notes, recorded_by, idempotency_key)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING payment_id`,
-        [org, booking.booking_id, body.amount, body.payment_date, body.payment_method, body.reference_number, body.notes, req.user.user_id, key || null]);
-      await audit(db, req.user, 'reservation.payment_recorded', 'booking_payment', p.payment_id, { booking_id: booking.booking_id, amount: body.amount });
+        `INSERT INTO booking_payments (organization_id, booking_id, amount, payment_date, payment_method, reference_number, notes, recorded_by, idempotency_key, receipt_number)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING payment_id`,
+        [org, booking.booking_id, body.amount, body.payment_date, body.payment_method, body.reference_number, body.notes, req.user.user_id, key || null, receiptNumber]);
+      await audit(db, req.user, 'reservation.payment_recorded', 'booking_payment', p.payment_id, { booking_id: booking.booking_id, amount: body.amount, receipt: receiptNumber });
+      return p.payment_id;
     });
   } catch (err) {
     if (err.constraint !== 'booking_payments_idem_uq') throw err;
     return res.json({ duplicate: true, reservation: await loadBooking(req.user, booking.booking_id) });
   }
-  res.status(201).json({ reservation: await loadBooking(req.user, booking.booking_id) });
+  const receipt = body.send_receipt ? await receipts.sendReceipt(paymentId, req.user) : null;
+  res.status(201).json({ reservation: await loadBooking(req.user, booking.booking_id), payment_id: paymentId, receipt });
 }));
 
 router.post('/booking-payments/:id/void', managers, ah(async (req, res) => {
@@ -437,6 +445,37 @@ router.post('/booking-payments/:id/void', managers, ah(async (req, res) => {
   const { reason } = validate(req.body, { reason: { type: 'string', required: true, max: 300, label: 'Reason' } });
   await query('UPDATE booking_payments SET voided_at = now(), voided_by = $2, void_reason = $3 WHERE payment_id = $1', [id, req.user.user_id, reason]);
   await audit(null, req.user, 'reservation.payment_voided', 'booking_payment', id, { amount: p.amount, reason });
+  res.json({ ok: true });
+}));
+
+async function loadBookingPayment(user, id) {
+  const p = await one('SELECT * FROM booking_payments WHERE payment_id = $1 AND organization_id = $2', [id, user.organization_id]);
+  if (!p) throw notFound();
+  await loadBooking(user, p.booking_id);
+  return p;
+}
+
+// Printable acknowledgement receipt.
+router.get('/booking-payments/:id/receipt', ah(async (req, res) => {
+  const p = await loadBookingPayment(req.user, uuidParam(req.params.id));
+  const r = await receipts.receiptData(p.payment_id);
+  res.json({ receipt: redactGuest(req.user, r) });
+}));
+
+router.post('/booking-payments/:id/send-receipt', managers, ah(async (req, res) => {
+  const p = await loadBookingPayment(req.user, uuidParam(req.params.id));
+  const r = await receipts.sendReceipt(p.payment_id, req.user);
+  if (!r.sent) throw new HttpError(409, r.error, { code: 'NOT_SENT' });
+  await audit(null, req.user, 'reservation.receipt_sent', 'booking_payment', p.payment_id);
+  res.json({ ok: true });
+}));
+
+router.post('/reservations/:id/send-confirmation', managers, ah(async (req, res) => {
+  const booking = await loadBooking(req.user, uuidParam(req.params.id));
+  if (booking.kind !== 'reservation' || booking.status !== 'confirmed') throw new HttpError(409, 'Only confirmed reservations can be confirmed by email.', { code: 'CANCELLED' });
+  const r = await receipts.sendConfirmation(booking.booking_id, req.user);
+  if (!r.sent) throw new HttpError(409, r.error, { code: 'NOT_SENT' });
+  await audit(null, req.user, 'reservation.confirmation_sent', 'booking', booking.booking_id);
   res.json({ ok: true });
 }));
 

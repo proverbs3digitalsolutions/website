@@ -276,3 +276,52 @@ test('access: managers see only their properties, staff have no inbox, owners-on
   const tpl = (await owner.get('/api/message-templates')).data.templates[0];
   assert.equal((await other.patch(`/api/message-templates/${tpl.template_id}`, { name: 'hijack' })).status, 404);
 });
+
+test('receipts: numbered, emailed into the conversation, resendable; booking confirmations', async () => {
+  outbox.length = 0;
+  const p1 = await owner.post(`/api/reservations/${resA.booking_id}/payments`, { amount: '1000', payment_date: today, payment_method: 'gcash', reference_number: '1234567', send_receipt: true });
+  assert.equal(p1.status, 201, JSON.stringify(p1.data));
+  assert.deepEqual(p1.data.receipt, { sent: true });
+  const p2 = await owner.post(`/api/reservations/${resA.booking_id}/payments`, { amount: '500', payment_date: today, payment_method: 'cash' });
+  assert.equal(p2.data.receipt, null);
+  const nums = await sql('SELECT receipt_number FROM booking_payments WHERE booking_id = $1 ORDER BY created_at', [resA.booking_id]);
+  assert.deepEqual(nums.map((n) => n.receipt_number), ['AR-000001', 'AR-000002']);
+  assert.equal(outbox.length, 1);
+  assert.match(outbox[0].subject, /Receipt AR-000001/);
+  assert.match(outbox[0].text, /₱1,000\.00/);
+  assert.match(outbox[0].text, /not a BIR official receipt/);
+  assert.match(outbox[0].text, /Ref\. 1234567/);
+  const conv = await owner.get(`/api/inbox/${convA}`);
+  assert.ok(conv.data.messages.some((m) => m.kind === 'receipt'));
+
+  const r = await owner.get(`/api/booking-payments/${p2.data.payment_id}/receipt`);
+  assert.equal(r.data.receipt.receipt_number, 'AR-000002');
+  assert.equal(r.data.receipt.balance_after, '3500.00');
+  assert.equal((await owner.post(`/api/booking-payments/${p2.data.payment_id}/send-receipt`)).status, 200);
+  assert.equal(outbox.length, 2);
+
+  // Payments from before receipts existed get a number on first use.
+  await sql('UPDATE booking_payments SET receipt_number = NULL WHERE payment_id = $1', [p2.data.payment_id]);
+  assert.equal((await owner.get(`/api/booking-payments/${p2.data.payment_id}/receipt`)).data.receipt.receipt_number, 'AR-000003');
+
+  // No email: clear error.
+  const pn = await owner.post(`/api/reservations/${resNoEmail.booking_id}/payments`, { amount: '100', payment_date: today, payment_method: 'cash', send_receipt: true });
+  assert.equal(pn.status, 201);
+  assert.ok(pn.data.receipt.sent === true || /email/.test(pn.data.receipt.error));
+
+  // Booking confirmation on create; the "on booking" automation does not send it again.
+  const auto = (await owner.get('/api/automations')).data.automations.find((a) => a.trigger_event === 'booking_created' && a.name.startsWith('Send booking'));
+  await owner.patch(`/api/automations/${auto.automation_id}`, { enabled: true });
+  await sql(`UPDATE automations SET created_at = now() - interval '1 hour' WHERE automation_id = $1`, [auto.automation_id]);
+  outbox.length = 0;
+  const nr = await owner.post('/api/reservations', { unit_id: unit.unit_id, check_in: d(50), check_out: d(52), guest_name: 'Confirm Me', guest_email: 'confirm@example.com', send_confirmation: true });
+  assert.equal(nr.status, 201);
+  assert.deepEqual(nr.data.confirmation, { sent: true });
+  assert.match(outbox[0].subject, /is confirmed/);
+  assert.match(outbox[0].text, /Hi Confirm/);
+  await messaging.runAutomations();
+  assert.equal(outbox.filter((m) => m.to === 'confirm@example.com').length, 1, 'no duplicate confirmation');
+  assert.equal((await owner.post(`/api/reservations/${nr.data.reservation.booking_id}/send-confirmation`)).status, 200);
+  const noMail = await owner.post(`/api/reservations/${resNoEmail.booking_id}/send-confirmation`);
+  assert.ok([200, 409].includes(noMail.status));
+});

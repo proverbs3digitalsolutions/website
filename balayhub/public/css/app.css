@@ -542,3 +542,9 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .hk-checklist .check { font-size: 1rem; cursor: pointer; }
 .hk-checklist .check input { width: 24px; height: 24px; }
 .hk-checklist .check input:checked + span { text-decoration: line-through; color: var(--muted); }
+
+/* ================================================================ receipts */
+.receipt { max-width: 640px; }
+.receipt__head { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-bottom: 14px; margin-bottom: 14px; border-bottom: 2px solid var(--navy); }
+.receipt__no { text-align: right; }
+.receipt__amount { font-size: 1.3rem; }

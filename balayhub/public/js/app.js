@@ -13,7 +13,7 @@ import { settingsView } from './views/settings.js';
 import { privacyView } from './views/privacy.js';
 import { homeView } from './views/home.js';
 import { calendarView } from './views/calendar.js';
-import { reservationsView, reservationDetailView } from './views/reservations.js';
+import { reservationsView, reservationDetailView, receiptView } from './views/reservations.js';
 import { listingsView, guestsView, guestDetailView } from './views/listings.js';
 import { inboxView, inboxSettingsView, unreadCount } from './views/inbox.js';
 import { housekeepingView, housekeepingDetailView } from './views/housekeeping.js';
@@ -54,6 +54,7 @@ const routes = [
   ['/listings', listingsView, APP],
   ['/guests', guestsView, APP],
   ['/guests/:id', guestDetailView, APP],
+  ['/receipts/:id', receiptView, APP],
   ['/inbox', inboxView, APP],
   ['/inbox/:id', inboxView, APP],
   ['/inbox-settings', inboxSettingsView, APP],

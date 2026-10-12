@@ -64,10 +64,13 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
         field({ name: 'cleaning_fee', label: 'Cleaning fee', type: 'money' })),
       field({ name: 'other_fees', label: 'Other fees', type: 'money', placeholder: '0' }),
       field({ name: 'notes', label: 'Notes', type: 'textarea', maxlength: 1000, placeholder: 'Arrival time, special requests…' }),
+      field({ name: 'send_confirmation', label: 'Email a booking confirmation to the guest (needs their email)', type: 'checkbox', value: true }),
     ],
     onSubmit: async (data) => {
+      if (!data.guest_email) data.send_confirmation = false;
       const res = await post('/reservations', data);
-      toast(`Reservation ${res.reservation.confirmation_code} saved.`);
+      if (res.confirmation && !res.confirmation.sent) toast(`Reservation saved, but the confirmation was not emailed: ${res.confirmation.error}`, 'error');
+      else toast(`Reservation ${res.reservation.confirmation_code} saved${res.confirmation?.sent ? ' and confirmation emailed' : ''}.`);
       if (onSaved) onSaved(res.reservation); else navigate(`#/reservations/${res.reservation.booking_id}`);
     },
   });
@@ -186,8 +189,14 @@ export async function reservationDetailView(el, { params, rerender }) {
         field({ name: 'payment_date', label: 'Date received', type: 'date', required: true, value: today, max: today }),
         field({ name: 'payment_method', label: 'Method', type: 'select', required: true, value: r.channel === 'direct' ? 'gcash' : 'channel_payout', placeholderOption: false, options: Object.entries(METHOD_LABEL) })),
       field({ name: 'reference_number', label: 'Reference no.', maxlength: 100 }),
+      r.guest_email && field({ name: 'send_receipt', label: `Email a receipt to ${r.guest_email}`, type: 'checkbox', value: true }),
     ],
-    onSubmit: async (d, { idempotencyKey }) => { await post(`/reservations/${r.booking_id}/payments`, d, { idempotencyKey }); toast('Payment saved.'); rerender(); },
+    onSubmit: async (d, { idempotencyKey }) => {
+      const res = await post(`/reservations/${r.booking_id}/payments`, d, { idempotencyKey });
+      if (res.receipt && !res.receipt.sent) toast(`Payment saved, but the receipt was not emailed: ${res.receipt.error}`, 'error');
+      else toast(res.receipt?.sent ? 'Payment saved and receipt emailed.' : 'Payment saved.');
+      rerender();
+    },
   });
 
   const editDetails = () => formModal({
@@ -221,6 +230,13 @@ export async function reservationDetailView(el, { params, rerender }) {
     try { await post(`/booking-payments/${p.payment_id}/void`, { reason }); toast('Payment voided.'); rerender(); } catch (err) { toast(err.message, 'error'); }
   };
 
+  const emailReceipt = async (p) => {
+    try { await post(`/booking-payments/${p.payment_id}/send-receipt`); toast(`Receipt emailed to ${r.guest_email}.`); rerender(); } catch (err) { toast(err.message, 'error'); }
+  };
+  const emailConfirmation = async () => {
+    try { await post(`/reservations/${r.booking_id}/send-confirmation`); toast(`Confirmation emailed to ${r.guest_email}.`); } catch (err) { toast(err.message, 'error'); }
+  };
+
   el.replaceChildren(
     h('a', { class: 'back', href: '#/reservations' }, '‹ Reservations'),
     h('div', { class: 'page-head' },
@@ -248,6 +264,7 @@ export async function reservationDetailView(el, { params, rerender }) {
             h('dt', null, 'Name'), h('dd', null, guestName),
             !r.limited && [h('dt', null, 'Mobile'), h('dd', null, r.guest_phone ? h('a', { href: `tel:${r.guest_phone.replace(/[^\d+]/g, '')}` }, r.guest_phone) : '—'),
               h('dt', null, 'Email'), h('dd', null, r.guest_email ? h('a', { href: `mailto:${r.guest_email}` }, r.guest_email) : '—')]),
+          canManage && confirmed && r.guest_email && h('button', { class: 'btn btn--secondary btn--sm', style: { marginTop: '12px' }, onclick: emailConfirmation }, 'Email booking confirmation'),
           r.ical_feed_id && h('p', { class: 'muted small', style: { marginTop: '10px' } }, `Imported from ${CHANNEL_LABEL[r.channel]}. Guest details stay on ${CHANNEL_LABEL[r.channel]}.`))),
       h('div', { class: 'stack' },
         h('div', { class: 'card' },
@@ -263,8 +280,36 @@ export async function reservationDetailView(el, { params, rerender }) {
           payments.length ? h('ul', { class: 'list' }, payments.map((p) => h('li', null, h('div', { class: 'row' },
             h('div', { class: 'row__main' },
               h('span', { class: `row__title${p.voided_at ? ' strike' : ''}` }, `${peso(p.amount)} · ${METHOD_LABEL[p.payment_method]}`),
-              h('span', { class: 'row__sub' }, `${fmtDate(p.payment_date)}${p.reference_number ? ` · Ref ${p.reference_number}` : ''} · by ${p.recorded_by_name}`),
+              h('span', { class: 'row__sub' }, `${fmtDate(p.payment_date)}${p.reference_number ? ` · Ref ${p.reference_number}` : ''} · by ${p.recorded_by_name}${p.receipt_number ? ` · ${p.receipt_number}` : ''}${p.receipt_sent_at ? ' · receipt emailed' : ''}`),
               p.voided_at && h('span', { class: 'row__sub' }, `Voided: ${p.void_reason}`)),
-            h('div', { class: 'row__end' }, p.voided_at ? badge('voided', 'Voided') : (canManage && h('button', { class: 'btn btn--ghost btn--sm', onclick: () => voidPayment(p) }, 'Void')))))))
+            h('div', { class: 'row__end' }, p.voided_at ? badge('voided', 'Voided') : h('div', { class: 'chips' },
+              h('a', { class: 'btn btn--ghost btn--sm', href: `#/receipts/${p.payment_id}` }, 'Receipt'),
+              canManage && r.guest_email && h('button', { class: 'btn btn--ghost btn--sm', onclick: () => emailReceipt(p) }, p.receipt_sent_at ? 'Email again' : 'Email'),
+              canManage && h('button', { class: 'btn btn--ghost btn--sm', onclick: () => voidPayment(p) }, 'Void')))))))
             : h('p', { class: 'muted small' }, 'No payments recorded yet.')))));
+}
+
+// ---------------------------------------------------------------- printable receipt
+export async function receiptView(el, { params }) {
+  const { receipt: r } = await get(`/booking-payments/${params.id}/receipt`);
+  el.replaceChildren(
+    h('a', { class: 'back no-print', href: `#/reservations/${r.booking_id}` }, '‹ Reservation'),
+    h('div', { class: 'page-head no-print' },
+      h('div', { class: 'page-head__title' }, h('h1', null, `Receipt ${r.receipt_number}`)),
+      h('div', { class: 'page-head__actions' }, h('button', { class: 'btn btn--primary', onclick: () => window.print() }, 'Print / save as PDF'))),
+    h('div', { class: 'card receipt' },
+      r.voided_at && h('div', { class: 'alert alert--error' }, `VOIDED ${fmtDateTime(r.voided_at)}: ${r.void_reason || ''}`),
+      h('div', { class: 'receipt__head' },
+        h('div', null, h('h2', null, r.workspace_name), h('div', { class: 'muted small' }, r.property_name)),
+        h('div', { class: 'receipt__no' }, h('div', { class: 'subhead' }, 'Acknowledgement receipt'), h('strong', null, r.receipt_number))),
+      h('dl', { class: 'dl' },
+        h('dt', null, 'Received from'), h('dd', null, r.guest_name),
+        h('dt', null, 'Amount'), h('dd', null, h('strong', { class: 'receipt__amount' }, peso(r.amount))),
+        h('dt', null, 'Date received'), h('dd', null, fmtDate(r.payment_date)),
+        h('dt', null, 'Payment method'), h('dd', null, `${METHOD_LABEL[r.payment_method] || r.payment_method}${r.reference_number ? ` · Ref. ${r.reference_number}` : ''}`),
+        h('dt', null, 'For'), h('dd', null, `${r.unit_name}, ${fmtDate(r.check_in)} – ${fmtDate(r.check_out)} (booking ${r.confirmation_code})`),
+        h('dt', null, 'Booking total'), h('dd', null, peso(r.total_amount)),
+        h('dt', null, 'Remaining balance'), h('dd', null, peso(Math.max(0, Number(r.balance_after)))),
+        h('dt', null, 'Received by'), h('dd', null, r.recorded_by_name || '—')),
+      h('p', { class: 'muted small', style: { marginTop: '18px' } }, 'This is an acknowledgement receipt for your records, not a BIR official receipt.')));
 }
