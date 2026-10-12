@@ -71,3 +71,36 @@ Other issues the QA stage found and fixed: a single available choice is now pres
 2. Configure SMTP so email verification and password reset work.
 3. Complete the privacy organizational items and legal review.
 4. Run a moderated test with 3–5 real landlords, plus a Safari/iOS pass.
+
+---
+
+# Short-term module (Phase 1): Review and QA
+
+## Code Critic findings, all fixed with regression tests (`test/stays.test.js`)
+| # | Severity | Finding | Fix |
+|---|---|---|---|
+| 1 | Critical | Fetching real Airbnb/Booking.com calendars failed on Node 22 because the address-checking lookup returned the wrong format | The lookup now handles both formats and still rejects any private address. Covered by a test that uses the real downloader |
+| 2 | High | A calendar with a repeated event ID stopped the whole sync and left no status | Duplicate IDs are imported once, and every sync result or failure is recorded on the feed |
+| 3 | High | Cancelling an imported channel stay was undone by the next sync | Channel stays are cancelled on the channel; only stays the sync itself removed come back |
+| 4 | Medium | IPv6 address links got past the private-network check | Raw IP addresses are rejected; NAT64 and 6to4 ranges are blocked |
+| 5 | Medium | Payments could be recorded on cancelled reservations | Now refused with a clear message |
+| 6 | Low | An invalid month in the revenue view returned an error | It falls back to the current month |
+| 7 | Low | Archiving a listing erased its past revenue; occupancy ignored blocked nights | Revenue keeps archived listings; capacity subtracts blocks |
+
+## Tests
+- API tests: **40 / 40 passing** (long-term and short-term), covering:
+  - no double bookings, with same-day turnovers allowed
+  - blocks, nightly price overrides and quotes
+  - partial and idempotent payments
+  - check-in/out marking the listing dirty
+  - overview, trends and revenue
+  - iCal export without guest data, and import, update, cancel and conflict handling
+  - private-network link protection
+  - workspace isolation and staff limits
+  - CSV export
+- Browser walkthroughs: long-term **28/28** (`test/e2e-browser.js`) and short-term **13/13** (`test/e2e-stays-browser.js`, desktop and phone)
+
+## Known limits (by design for Phase 1)
+- Calendar links carry dates only. Guest names and amounts for imported stays are added by hand.
+- Booking.com and Agoda calendar events are all imported as reservations.
+- Channels refresh imported calendars on their own schedule, so last-minute double bookings remain possible.
