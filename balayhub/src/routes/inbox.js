@@ -231,6 +231,21 @@ router.post('/inbox/:id/messages', ah(async (req, res) => {
   res.status(201).json({ message: { message_id: m.message_id, status: m.status, error: m.error, scheduled_at: m.scheduled_at, sent_at: m.sent_at } });
 }));
 
+// AI reply draft (only when ANTHROPIC_API_KEY is set). Never sent automatically.
+router.post('/inbox/:id/ai-draft', ah(async (req, res) => {
+  const conv = await loadConversation(req.user, uuidParam(req.params.id));
+  const { instructions } = validate(req.body, { instructions: { type: 'text', max: 500, label: 'Instructions' } });
+  const { draftReply, AiError } = require('../lib/ai');
+  try {
+    const draft = await draftReply({ conversation: { ...conv, organization_id: req.user.organization_id }, user: req.user, instructions });
+    await audit(null, req.user, 'inbox.ai_draft', 'conversation', conv.conversation_id);
+    res.json({ draft });
+  } catch (err) {
+    if (err instanceof AiError) throw new HttpError(err.status, err.message, { code: 'AI_FAILED' });
+    throw err;
+  }
+}));
+
 async function loadMessage(user, id) {
   const params = [id];
   const row = await one(

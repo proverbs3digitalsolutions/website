@@ -2,6 +2,20 @@
 
 process.env.SMTP_URL = 'test://';
 process.env.MAIL_FROM = 'Reyes Staycations <host@example.com>';
+process.env.ANTHROPIC_API_KEY = 'test-key';
+
+// Fake the Anthropic API; everything else (the test client) goes through.
+const realFetch = globalThis.fetch;
+const aiCalls = [];
+let aiStatus = 200;
+globalThis.fetch = async (url, opts) => {
+  if (String(url).startsWith('https://api.anthropic.com/')) {
+    aiCalls.push({ headers: opts.headers, body: JSON.parse(opts.body) });
+    if (aiStatus !== 200) return new Response(JSON.stringify({ error: { message: 'nope' } }), { status: aiStatus, headers: { 'content-type': 'application/json' } });
+    return new Response(JSON.stringify({ content: [{ type: 'text', text: 'Hi Rafael! Check-in is from 2:00 PM.\n\nMaria' }] }), { headers: { 'content-type': 'application/json' } });
+  }
+  return realFetch(url, opts);
+};
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -105,6 +119,27 @@ test('guest replies are matched to the conversation (and only once)', async () =
   assert.equal(last.direction, 'in');
   assert.equal(last.body, 'What time can we check in?');
   assert.equal(Number((await owner.get('/api/inbox/counts')).data.counts.unread), 0, 'opening marks it read');
+});
+
+test('AI reply drafts use the reservation and conversation, and fail gracefully', async () => {
+  assert.equal((await owner.get('/api/inbox/status')).data.ai_drafts, true);
+  const r = await owner.post(`/api/inbox/${convA}/ai-draft`, { instructions: 'mention parking is free' });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.match(r.data.draft, /Check-in is from 2:00 PM/);
+  const call = aiCalls.at(-1);
+  assert.equal(call.headers['x-api-key'], 'test-key');
+  const prompt = call.body.messages[0].content;
+  assert.match(prompt, /What time can we check in\?/);
+  assert.match(prompt, /beach-please/);
+  assert.match(prompt, /mention parking is free/);
+  assert.match(call.body.system, /same language/);
+  // Nothing was sent or stored.
+  assert.ok(!(await owner.get(`/api/inbox/${convA}`)).data.messages.some((m) => /Check-in is from/.test(m.body)));
+  aiStatus = 401;
+  const bad = await owner.post(`/api/inbox/${convA}/ai-draft`, {});
+  assert.equal(bad.status, 502);
+  assert.match(bad.data.error, /ANTHROPIC_API_KEY/);
+  aiStatus = 200;
 });
 
 test('stripQuoted and findToken handle common reply formats', () => {

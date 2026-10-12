@@ -33,6 +33,12 @@ services:
       TRUST_PROXY: "1"
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      IMAP_URL: ${IMAP_URL:-}
+      INBOUND_ADDRESS: ${INBOUND_ADDRESS:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-claude-haiku-5-5}
+      PLATFORM_ADMIN_EMAILS: ${PLATFORM_ADMIN_EMAILS:-}
+      TRIAL_DAYS: ${TRIAL_DAYS:-14}
       STORAGE_DIR: /data/storage
     volumes:
       - uploads:/data/storage
