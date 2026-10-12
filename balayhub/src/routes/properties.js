@@ -168,8 +168,21 @@ router.get('/units', ah(async (req, res) => {
   res.json({ units: rows });
 }));
 
+// Plans limit the number of short-term listings (units with a nightly rate).
+async function checkListingLimit(user) {
+  const { planStatus } = require('../lib/plans');
+  const s = planStatus(user);
+  const { n } = await one(
+    `SELECT COUNT(*)::int AS n FROM units u JOIN properties p ON p.property_id = u.property_id
+      WHERE p.organization_id = $1 AND u.status = 'active' AND p.status = 'active' AND u.nightly_rate IS NOT NULL`, [user.organization_id]);
+  if (n >= s.listing_limit) {
+    throw new HttpError(402, `Your ${s.name} plan includes up to ${s.listing_limit} listing${s.listing_limit === 1 ? '' : 's'}. Upgrade your plan in Settings to add more.`, { code: 'PLAN_LIMIT' });
+  }
+}
+
 router.post('/properties/:id/units', managers, ah(async (req, res) => {
   const property = await loadProperty(req.user, uuidParam(req.params.id));
+  if (req.body?.nightly_rate) await checkListingLimit(req.user);
   if (property.status !== 'active') throw new HttpError(409, 'Restore this property before adding units.', { code: 'ARCHIVED' });
   const body = validate(req.body, unitSpec);
   try {
@@ -232,6 +245,7 @@ router.post('/units/:id/restore', managers, ah(async (req, res) => {
   const unit = await loadUnit(req.user, uuidParam(req.params.id));
   if (unit.property_status !== 'active') throw forbidden('Restore the property first.');
   try {
+    if (unit.nightly_rate) await checkListingLimit(req.user);
     await query(`UPDATE units SET status = 'active' WHERE unit_id = $1`, [unit.unit_id]);
   } catch (err) {
     if (err.code === '23505') throw new HttpError(409, 'Another active unit already uses this name. Rename one of them first.', { code: 'DUPLICATE' });

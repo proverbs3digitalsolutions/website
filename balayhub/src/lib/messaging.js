@@ -191,7 +191,11 @@ async function deliver(messageId) {
   const { rows: [m] } = await pool.query(
     `UPDATE messages SET status = 'sending' WHERE message_id = $1 AND status IN ('scheduled', 'failed') RETURNING *`, [messageId]);
   if (!m) return null;
-  const conv = await one('SELECT c.*, o.name AS workspace_name FROM conversations c JOIN organizations o USING (organization_id) WHERE c.conversation_id = $1', [m.conversation_id]);
+  const conv = await one('SELECT c.*, o.name AS workspace_name, o.is_demo FROM conversations c JOIN organizations o USING (organization_id) WHERE c.conversation_id = $1', [m.conversation_id]);
+  if (conv.is_demo) {
+    await query(`UPDATE messages SET status = 'failed', error = 'The demo workspace never sends email.' WHERE message_id = $1`, [messageId]);
+    return { ok: false, error: 'The demo workspace never sends email.' };
+  }
   if (!m.to_email) {
     await query(`UPDATE messages SET status = 'failed', error = 'The guest has no email address.' WHERE message_id = $1`, [messageId]);
     return { ok: false, error: 'The guest has no email address.' };

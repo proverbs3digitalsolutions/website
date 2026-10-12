@@ -4,7 +4,7 @@ const express = require('express');
 const path = require('path');
 const config = require('./config');
 const { HttpError } = require('./lib/http');
-const { loadSession, requireWorkspace } = require('./lib/auth');
+const { loadSession, requireWorkspace, planGuard } = require('./lib/auth');
 
 function createApp() {
   const app = express();
@@ -36,9 +36,11 @@ function createApp() {
     next();
   });
   api.use(loadSession);
+  api.use(planGuard);
   api.get('/health', (req, res) => res.json({ ok: true }));
   api.use(require('./routes/auth'));
   api.use(require('./routes/google'));
+  api.use(require('./routes/admin'));
   api.use(requireWorkspace);
   api.use(require('./routes/team'));
   api.use(require('./routes/properties'));

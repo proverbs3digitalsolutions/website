@@ -75,7 +75,8 @@ async function loadSession(req, res, next) {
     if (!token) return next();
     const row = await one(
       `SELECT s.token_hash, s.last_seen_at, u.user_id, u.full_name, u.email, u.phone, u.organization_id, u.role,
-              u.account_status, u.email_verified_at, o.name AS organization_name, o.business_type
+              u.account_status, u.email_verified_at, o.name AS organization_name, o.business_type,
+              o.plan, o.trial_ends_at, o.paid_until, o.is_demo
          FROM sessions s
          JOIN users u ON u.user_id = s.user_id
          LEFT JOIN organizations o ON o.organization_id = u.organization_id
@@ -114,6 +115,22 @@ function requireWorkspace(req, res, next) {
   });
 }
 
+// Read-only workspaces (the public demo, an ended trial, an overdue plan) can
+// view and export everything but not change anything.
+const PLAN_EXEMPT = /^\/(auth\/|admin\/|invitations\/)/;
+function planGuard(req, res, next) {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) || !req.user?.organization_id) return next();
+  const { planStatus, READ_ONLY_MSG } = require('./plans');
+  const s = planStatus(req.user);
+  if (!s.read_only) return next();
+  if (s.reason === 'demo') {
+    if (/^\/auth\/(logout|login|signup|demo)$/.test(req.path)) return next();
+    return next(new HttpError(403, READ_ONLY_MSG.demo, { code: 'DEMO_READ_ONLY' }));
+  }
+  if (PLAN_EXEMPT.test(req.path)) return next();
+  return next(new HttpError(402, READ_ONLY_MSG[s.reason], { code: 'PLAN_READ_ONLY' }));
+}
+
 const requireRole = (...roles) => (req, res, next) =>
   (roles.includes(req.user?.role) ? next() : next(forbidden()));
 
@@ -140,5 +157,5 @@ function rateLimit({ windowMs, max, key }) {
 
 module.exports = {
   hashPassword, verifyPassword, burnPasswordCheck, newToken, hashToken,
-  createSession, destroySession, loadSession, requireAuth, requireWorkspace, requireRole, rateLimit,
+  createSession, destroySession, loadSession, requireAuth, requireWorkspace, requireRole, rateLimit, planGuard,
 };

@@ -15,6 +15,7 @@ const { mailEnabled } = require('../lib/mailer');
 const messaging = require('../lib/messaging');
 const { inboxStatus } = require('../lib/inbound');
 const config = require('../config');
+const { planStatus } = require('../lib/plans');
 
 const router = express.Router();
 const managers = requireRole('owner', 'manager');
@@ -127,7 +128,8 @@ router.get('/inbox/status', ah(async (req, res) => {
     sending: mailEnabled(),
     replies,
     reply_address_ready: Boolean(messaging.replyAddress('test')),
-    ai_drafts: Boolean(config.anthropicApiKey),
+    ai_drafts: Boolean(config.anthropicApiKey) && planStatus(req.user).ai,
+    ai_needs_upgrade: Boolean(config.anthropicApiKey) && !planStatus(req.user).ai,
   });
 }));
 
@@ -235,6 +237,7 @@ router.post('/inbox/:id/messages', ah(async (req, res) => {
 router.post('/inbox/:id/ai-draft', ah(async (req, res) => {
   const conv = await loadConversation(req.user, uuidParam(req.params.id));
   const { instructions } = validate(req.body, { instructions: { type: 'text', max: 500, label: 'Instructions' } });
+  if (!planStatus(req.user).ai) throw new HttpError(402, 'AI reply drafts are included in the Growth and Pro plans.', { code: 'PLAN_LIMIT' });
   const { draftReply, AiError } = require('../lib/ai');
   try {
     const draft = await draftReply({ conversation: { ...conv, organization_id: req.user.organization_id }, user: req.user, instructions });

@@ -22,6 +22,9 @@ const authLimiter = rateLimit({
 const ipLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 60, key: (req) => `ip|${req.ip}` });
 const emailLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, key: (req) => `mail|${req.ip}` });
 
+const { planStatus } = require('../lib/plans');
+const isPlatformAdmin = (u) => Boolean(u.email_verified_at) && config.platformAdmins.includes(String(u.email).toLowerCase());
+
 function publicUser(u) {
   return {
     user_id: u.user_id,
@@ -32,6 +35,8 @@ function publicUser(u) {
     organization_name: u.organization_name || null,
     business_type: u.business_type || null,
     email_verified: Boolean(u.email_verified_at),
+    plan: u.organization_id ? planStatus(u) : null,
+    is_platform_admin: isPlatformAdmin(u),
   };
 }
 
@@ -155,6 +160,15 @@ router.post('/auth/login', ipLimiter, authLimiter, ah(async (req, res) => {
   res.json({ user: publicUser(user) });
 }));
 
+// "Try the demo": sign in to the shared, read-only demo workspace.
+const demoLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 30, key: (req) => `demo|${req.ip}` });
+router.post('/auth/demo', demoLimiter, ah(async (req, res) => {
+  const { ensureDemo } = require('../lib/demo');
+  const userId = await ensureDemo();
+  await createSession(res, userId);
+  res.json({ ok: true });
+}));
+
 router.post('/auth/logout', ah(async (req, res) => {
   await destroySession(req, res);
   res.json({ ok: true });
@@ -238,7 +252,8 @@ router.post('/workspace', requireAuth, ah(async (req, res) => {
     business_type: { type: 'enum', values: ['short_term', 'long_term', 'both'], label: 'Type of rentals' },
   });
   const org = await tx(async (db) => {
-    const { rows: [o] } = await db.query('INSERT INTO organizations (name, business_type) VALUES ($1, $2) RETURNING *', [name, businessType || 'short_term']);
+    const { rows: [o] } = await db.query(`INSERT INTO organizations (name, business_type, plan, trial_ends_at)
+       VALUES ($1, $2, 'trial', now() + make_interval(days => $3)) RETURNING *`, [name, businessType || 'short_term', config.trialDays]);
     await db.query(`UPDATE users SET organization_id = $1, role = 'owner' WHERE user_id = $2`, [o.organization_id, req.user.user_id]);
     await audit(db, { ...req.user, organization_id: o.organization_id }, 'workspace.created', 'organization', o.organization_id);
     return o;

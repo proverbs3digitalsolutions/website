@@ -31,6 +31,8 @@ function startScheduler() {
   every(2 * 60 * 1000, 'inbox', pollInbox, 30 * 1000);
   // Cleaning tasks for today's and tomorrow's departures.
   every(15 * 60 * 1000, 'housekeeping', housekeeping.createDueTasks, 40 * 1000);
+  // Keep the public demo's dates current.
+  every(60 * 60 * 1000, 'demo', require('./demo').refreshDemo, 50 * 1000);
 }
 
 module.exports = { startScheduler, every };
