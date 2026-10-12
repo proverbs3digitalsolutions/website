@@ -2,7 +2,7 @@
 
 import { get, post, patch } from '../api.js';
 import { h, icon, label, field, formModal, confirmDialog, emptyState, pageHead, toast, fmtDateTime, openModal } from '../ui.js';
-import { state } from '../app.js';
+import { state, refreshUser } from '../app.js';
 
 function propertyChecks(properties, selected = []) {
   return h('fieldset', { class: 'field', dataset: { field: 'property_ids' }, style: { border: 0, padding: 0, margin: 0 } },
@@ -30,7 +30,18 @@ export async function settingsView(el, { rerender }) {
       h('dt', null, 'Email'), h('dd', null, u.email),
       h('dt', null, 'Workspace'), h('dd', null, u.organization_name),
       h('dt', null, 'Role'), h('dd', null, label(u.role))),
-    h('p', { class: 'muted small', style: { marginTop: '12px' } }, 'To change your password, log out and use “Forgot password”.')));
+    h('p', { class: 'muted small', style: { marginTop: '12px' } }, 'To change your password, log out and use “Forgot password”.'),
+    u.role === 'owner' && h('div', { class: 'form', style: { marginTop: '14px' } },
+      field({ name: 'business_type', label: 'Modules for this workspace', type: 'select', value: u.business_type, placeholderOption: false, options: [
+        ['short_term', 'Short-term stays (Airbnb, staycations)'], ['long_term', 'Long-term rentals (leases, monthly rent)'], ['both', 'Both'],
+      ] }),
+      h('div', null, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: async (e) => {
+        const v = e.target.closest('.form').querySelector('select').value;
+        await patch('/workspace', { business_type: v });
+        await refreshUser();
+        toast('Workspace updated.');
+        rerender();
+      } }, 'Save')))));
 
   if (u.role === 'owner') {
     const [{ members, invitations }, { properties }] = await Promise.all([get('/team'), get('/properties')]);

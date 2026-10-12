@@ -196,13 +196,20 @@ export async function setupView(el) {
   if (state.user.organization_id) { afterLogin(); return; }
   const form = makeForm({
     submitText: 'Create workspace',
-    fields: [field({ name: 'name', label: 'Business or workspace name', required: true, maxlength: 120, placeholder: 'e.g. Santos Rentals', hint: 'You can invite property managers and staff to this workspace later.' })],
+    fields: [
+      field({ name: 'name', label: 'Business or workspace name', required: true, maxlength: 120, placeholder: 'e.g. Santos Staycations', hint: 'You can invite co-hosts, managers and staff later.' }),
+      field({ name: 'business_type', label: 'What do you rent out?', type: 'select', required: true, value: 'short_term', placeholderOption: false, options: [
+        ['short_term', 'Short-term stays (Airbnb, staycations, per night)'],
+        ['long_term', 'Long-term rentals (monthly tenants, leases)'],
+        ['both', 'Both'],
+      ], hint: 'You can change this later in Settings.' }),
+    ],
     onSubmit: async (data) => {
       await post('/workspace', data);
       await refreshUser();
-      navigate('#/properties?new=1', { replace: true });
+      navigate(data.business_type === 'long_term' ? '#/properties?new=1' : '#/listings?new=1', { replace: true });
     },
   });
   el.append(publicPage(authCard(`Welcome, ${state.user.full_name.split(' ')[0]}!`,
-    "Let's set up your rental business. Next, you'll add your first property and its units.", form)));
+    "Let's set up your rental business. Next, you'll add your first listing or property.", form)));
 }

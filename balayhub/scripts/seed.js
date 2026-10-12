@@ -23,7 +23,7 @@ function monthsAgo(n, day = 1) {
 async function main() {
   await migrate({ quiet: true });
   const exists = await pool.query('SELECT 1 FROM users WHERE email = $1', [EMAIL]);
-  if (exists.rowCount) { console.log(`Demo account already exists: ${EMAIL} / demo-password-1`); return; }
+  if (exists.rowCount) { console.log(`Demo account already exists: ${EMAIL} / demo-password-1`); await seedStays(); return; }
 
   const passwordHash = await hashPassword('demo-password-1');
   await tx(async (db) => {
@@ -101,6 +101,85 @@ async function main() {
     await syncCharges(orgId, db);
   });
   console.log(`Seeded demo workspace. Log in with ${EMAIL} / demo-password-1`);
+  await seedStays();
+}
+
+// Short-term demo: a Metro Manila staycation host with 5 condo listings.
+const STAY_EMAIL = 'stays@balayhub.test';
+async function seedStays() {
+  const exists = await pool.query('SELECT 1 FROM users WHERE email = $1', [STAY_EMAIL]);
+  if (exists.rowCount) { console.log(`Short-term demo already exists: ${STAY_EMAIL} / demo-password-1`); return; }
+  const passwordHash = await hashPassword('demo-password-1');
+  const dayOffset = (n) => { const d = new Date(Date.now() + 8 * 3600 * 1000); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  const code = () => `BH-${Math.random().toString(36).slice(2, 9).toUpperCase()}`;
+  await tx(async (db) => {
+    const { rows: [org] } = await db.query(`INSERT INTO organizations (name, business_type) VALUES ('Reyes Staycations', 'short_term') RETURNING organization_id`);
+    const orgId = org.organization_id;
+    const { rows: [owner] } = await db.query(
+      `INSERT INTO users (full_name, email, password_hash, organization_id, role, email_verified_at)
+       VALUES ('Bea Reyes', $1, $2, $3, 'owner', now()) RETURNING user_id`, [STAY_EMAIL, passwordHash, orgId]);
+    await db.query(`INSERT INTO consent_records (user_id, consent_type, policy_version) VALUES ($1, 'privacy_notice', $2)`, [owner.user_id, config.privacyPolicyVersion]);
+    const buildings = [
+      ['Azure Urban Residences', 'Parañaque', [['Paris 1208', 2800, 600, 4], ['Rio 2210', 2500, 500, 3]]],
+      ['SMDC Grass Residences', 'Quezon City', [['Tower 3 - 1815', 1900, 400, 2], ['Tower 4 - 0912', 2100, 400, 4]]],
+      ['Pine Suites Tagaytay', 'Tagaytay', [['Loft A', 4200, 800, 6]]],
+    ];
+    const units = [];
+    for (const [name, city, us] of buildings) {
+      const { rows: [p] } = await db.query(
+        `INSERT INTO properties (organization_id, property_name, property_type, address, city, province) VALUES ($1,$2,'condominium',$3,$4,$5) RETURNING property_id`,
+        [orgId, name, `${name}, ${city}`, city, city === 'Tagaytay' ? 'Cavite' : 'Metro Manila']);
+      for (const [un, rate, fee, guests] of us) {
+        const { rows: [u] } = await db.query(
+          `INSERT INTO units (property_id, unit_name, unit_type, nightly_rate, cleaning_fee, max_guests) VALUES ($1,$2,'studio',$3,$4,$5) RETURNING unit_id`,
+          [p.property_id, un, rate, fee, guests]);
+        units.push({ ...u, rate, fee });
+      }
+    }
+    const names = ['Rafael Diaz', 'Emily Lim', 'Katherine Santos', 'Peter Tan', 'Laura Garcia', 'Archer Cruz', 'Mika Villanueva', 'Joseph Ramos', 'Stephanie Uy', 'Carlo Mendoza', 'Ana Dela Cruz', 'Ken Navarro'];
+    const channels = ['direct', 'airbnb', 'airbnb', 'booking', 'direct', 'agoda', 'airbnb'];
+    let n = 0;
+    for (const [ui, u] of units.entries()) {
+      // Back-to-back stays from ~40 days ago to ~30 days ahead, with gaps.
+      let cursor = -40 + ui * 2;
+      while (cursor < 30) {
+        const nights = 1 + ((n * 7 + ui) % 4);
+        const gap = (n + ui) % 3;
+        const ci = dayOffset(cursor); const co = dayOffset(cursor + nights);
+        const guest = names[n % names.length];
+        const { rows: [g] } = await db.query(
+          `INSERT INTO guests (organization_id, full_name, phone, created_by) VALUES ($1,$2,$3,$4) RETURNING guest_id`,
+          [orgId, guest, `0917 555 ${String(1000 + n).slice(-4)}`, owner.user_id]);
+        const channel = channels[n % channels.length];
+        const accommodation = Math.round(u.rate * nights * (channel === 'direct' ? 1 : 1.1));
+        const { rows: [b] } = await db.query(
+          `INSERT INTO bookings (organization_id, unit_id, kind, guest_id, channel, check_in, check_out, num_guests, accommodation_total, cleaning_fee,
+                                 confirmation_code, checked_in_at, checked_out_at, created_by)
+           VALUES ($1,$2,'reservation',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING booking_id`,
+          [orgId, u.unit_id, g.guest_id, channel, ci, co, 1 + (n % 3), accommodation, u.fee, code(),
+            cursor <= 0 ? new Date() : null, cursor + nights <= 0 ? new Date() : null, owner.user_id]);
+        if (cursor < 5) {
+          const total = accommodation + u.fee;
+          const paid = cursor + nights <= 0 || n % 4 !== 0 ? total : Math.round(total / 2);
+          await db.query(
+            `INSERT INTO booking_payments (organization_id, booking_id, amount, payment_date, payment_method, recorded_by) VALUES ($1,$2,$3,$4,$5,$6)`,
+            [orgId, b.booking_id, paid, dayOffset(Math.min(cursor, 0)), channel === 'direct' ? 'gcash' : 'channel_payout', owner.user_id]);
+        }
+        cursor += nights + gap;
+        n += 1;
+      }
+    }
+    await db.query(`UPDATE units SET cleaning_status = 'dirty' WHERE unit_id = ANY($1)`, [[units[1].unit_id, units[3].unit_id]]);
+    await db.query(`INSERT INTO nightly_rates (unit_id, rate_date, price) SELECT $1, d::date, 5200 FROM generate_series($2::date, $3::date, interval '1 day') d
+                    ON CONFLICT DO NOTHING`, [units[4].unit_id, dayOffset(31), dayOffset(40)]);
+    const expenses = [[0, 'cleaning', 'Housekeeping (weekly)', 3500, 3], [0, 'utilities', 'Meralco', 2850.4, 8], [1, 'association_dues', 'Condo dues', 4200, 12], [2, 'supplies', 'Toiletries & linens', 2600, 5]];
+    const { rows: props } = await db.query('SELECT property_id FROM properties WHERE organization_id = $1 ORDER BY created_at', [orgId]);
+    for (const [pi, cat, desc, amt, ago] of expenses) {
+      await db.query(`INSERT INTO expenses (organization_id, property_id, category, description, amount, expense_date, recorded_by) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [orgId, props[pi].property_id, cat, desc, amt, dayOffset(-ago), owner.user_id]);
+    }
+  });
+  console.log(`Seeded short-term demo. Log in with ${STAY_EMAIL} / demo-password-1`);
 }
 
 main().then(() => pool.end()).catch((err) => { console.error(err); process.exit(1); });

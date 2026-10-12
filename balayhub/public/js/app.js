@@ -11,6 +11,10 @@ import { reportsView } from './views/reports.js';
 import { maintenanceView, maintenanceDetailView } from './views/maintenance.js';
 import { settingsView } from './views/settings.js';
 import { privacyView } from './views/privacy.js';
+import { homeView } from './views/home.js';
+import { calendarView } from './views/calendar.js';
+import { reservationsView, reservationDetailView } from './views/reservations.js';
+import { listingsView, guestsView, guestDetailView } from './views/listings.js';
 
 export const state = { user: null, requireEmailVerification: true };
 
@@ -41,9 +45,26 @@ const routes = [
   ['/maintenance', maintenanceView, APP],
   ['/maintenance/:id', maintenanceDetailView, APP],
   ['/settings', settingsView, APP],
+  ['/home', homeView, APP],
+  ['/calendar', calendarView, APP],
+  ['/reservations', reservationsView, APP],
+  ['/reservations/:id', reservationDetailView, APP],
+  ['/listings', listingsView, APP],
+  ['/guests', guestsView, APP],
+  ['/guests/:id', guestDetailView, APP],
 ];
 
-const NAV = [
+const NAV_SHORT = [
+  ['/home', 'Home', 'home'],
+  ['/calendar', 'Calendar', 'calendar'],
+  ['/reservations', 'Reservations', 'bed'],
+  ['/listings', 'Listings', 'building'],
+  ['/guests', 'Guests', 'users'],
+  ['/rent?tab=expenses', 'Expenses', 'wallet'],
+  ['/maintenance', 'Maintenance', 'wrench'],
+  ['/settings', 'Settings', 'settings'],
+];
+const NAV_LONG = [
   ['/dashboard', 'Dashboard', 'home'],
   ['/properties', 'Properties', 'building'],
   ['/tenants', 'Tenants', 'users'],
@@ -52,6 +73,21 @@ const NAV = [
   ['/maintenance', 'Maintenance', 'wrench'],
   ['/settings', 'Settings', 'settings'],
 ];
+const NAV_BOTH = [
+  ['/home', 'Home', 'home'],
+  ['/calendar', 'Calendar', 'calendar'],
+  ['/reservations', 'Reservations', 'bed'],
+  ['/listings', 'Listings', 'building'],
+  ['/dashboard', 'Long-term rentals', 'chart'],
+  ['/tenants', 'Tenants', 'users'],
+  ['/rent', 'Rent & Expenses', 'wallet'],
+  ['/reports', 'Reports', 'chart'],
+  ['/guests', 'Guests', 'users'],
+  ['/maintenance', 'Maintenance', 'wrench'],
+  ['/settings', 'Settings', 'settings'],
+];
+const navFor = () => ({ short_term: NAV_SHORT, both: NAV_BOTH }[state.user?.business_type] || NAV_LONG);
+export const homeRoute = () => (state.user?.business_type === 'long_term' ? '#/dashboard' : '#/home');
 
 function parseHash() {
   const raw = location.hash.replace(/^#/, '') || '/';
@@ -98,8 +134,9 @@ function setupRedirect() {
 // ---------------------------------------------------------------- shell
 let shell = null;
 
+const isCurrent = (path, current) => current === path.split('?')[0] || current.startsWith(`${path.split('?')[0]}/`);
 function navLink([path, text, ic], current) {
-  return h('a', { href: `#${path}`, 'aria-current': current.startsWith(path) ? 'page' : null }, icon(ic), h('span', null, text));
+  return h('a', { href: `#${path}`, 'aria-current': isCurrent(path, current) ? 'page' : null }, icon(ic), h('span', null, text));
 }
 
 async function logout() {
@@ -113,7 +150,7 @@ function openMore(current) {
   const close = () => sheet.remove();
   const sheet = h('div', { class: 'morenav', onclick: (e) => { if (e.target === sheet) close(); } },
     h('div', { class: 'morenav__sheet', role: 'menu' },
-      NAV.slice(4).map(([p, t, ic]) => h('a', { href: `#${p}`, onclick: close, 'aria-current': current.startsWith(p) ? 'page' : null }, icon(ic), t)),
+      navFor().slice(4).map(([p, t, ic]) => h('a', { href: `#${p}`, onclick: close, 'aria-current': isCurrent(p, current) ? 'page' : null }, icon(ic), t)),
       h('button', { onclick: () => { close(); logout(); } }, icon('logout'), 'Log out')));
   document.body.append(sheet);
 }
@@ -121,20 +158,21 @@ function openMore(current) {
 function buildShell(path) {
   const u = state.user;
   const content = h('main', { class: 'content', id: 'main' });
+  const NAV = navFor();
   const bottomKeys = NAV.slice(0, 4);
   const el = h('div', { class: 'shell' },
     h('aside', { class: 'sidebar' },
-      brand('#/dashboard'),
+      brand(homeRoute()),
       h('nav', { 'aria-label': 'Main' }, NAV.map((n) => navLink(n, path))),
       h('div', { class: 'sidebar__foot' },
         h('strong', null, u.full_name),
         h('span', null, `${u.organization_name} · ${({ owner: 'Owner', manager: 'Manager', staff: 'Staff' })[u.role]}`),
         h('button', { class: 'btn btn--secondary btn--sm btn--block', onclick: logout }, 'Log out'))),
-    h('header', { class: 'topbar' }, brand('#/dashboard'), h('span', { class: 'topbar__org' }, u.organization_name)),
+    h('header', { class: 'topbar' }, brand(homeRoute()), h('span', { class: 'topbar__org' }, u.organization_name)),
     content,
     h('nav', { class: 'bottomnav', 'aria-label': 'Main' },
-      bottomKeys.map(([p, t, ic]) => h('a', { href: `#${p}`, 'aria-current': path.startsWith(p) ? 'page' : null }, icon(ic), t === 'Rent & Expenses' ? 'Rent' : t)),
-      h('button', { type: 'button', onclick: () => openMore(path), 'aria-current': NAV.slice(4).some(([p]) => path.startsWith(p)) ? 'page' : null }, icon('more'), 'More')));
+      bottomKeys.map(([p, t, ic]) => h('a', { href: `#${p}`, 'aria-current': isCurrent(p, path) ? 'page' : null }, icon(ic), t === 'Rent & Expenses' ? 'Rent' : t)),
+      h('button', { type: 'button', onclick: () => openMore(path), 'aria-current': NAV.slice(4).some(([p]) => isCurrent(p, path)) ? 'page' : null }, icon('more'), 'More')));
   return { el, content };
 }
 
@@ -145,9 +183,9 @@ export async function render() {
   const { path, query } = parseHash();
   const app = document.getElementById('app');
   const route = match(path);
-  if (!route) { navigate(state.user ? '#/dashboard' : '#/', { replace: true }); return; }
+  if (!route) { navigate(state.user ? homeRoute() : '#/', { replace: true }); return; }
 
-  if (route.access === PUBLIC && isReady(state.user)) { navigate('#/dashboard', { replace: true }); return; }
+  if (route.access === PUBLIC && isReady(state.user)) { navigate(homeRoute(), { replace: true }); return; }
   if (route.access === SIGNED_IN && !state.user) { navigate('#/login', { replace: true }); return; }
   if (route.access === APP && !isReady(state.user)) {
     if (!state.user) { try { sessionStorage.setItem('bh-return', location.hash); } catch { /* ignore */ } }
@@ -192,14 +230,14 @@ onAuthLost(async (err) => {
     navigate('#/login?expired=1', { replace: true });
   } else {
     await refreshUser();
-    navigate(setupRedirect() || '#/dashboard', { replace: true });
+    navigate(setupRedirect() || homeRoute(), { replace: true });
   }
 });
 
 export function afterLogin() {
   let ret = null;
   try { ret = sessionStorage.getItem('bh-return'); sessionStorage.removeItem('bh-return'); } catch { /* ignore */ }
-  const next = setupRedirect() || (ret && ret.startsWith('#/') && !/^#\/(login|signup|$)/.test(ret) ? ret : '#/dashboard');
+  const next = setupRedirect() || (ret && ret.startsWith('#/') && !/^#\/(login|signup|$)/.test(ret) ? ret : homeRoute());
   navigate(next, { replace: true });
 }
 

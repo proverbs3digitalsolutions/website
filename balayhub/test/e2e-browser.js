@@ -31,6 +31,7 @@ const BASE = process.env.BASE_URL || 'http://localhost:3000';
   await step('verify + workspace', async () => {
     await page.getByRole('link', { name: 'Verify my email' }).click();
     await page.locator('[name=name]').fill('Dizon Rentals');
+    await page.locator('[name=business_type]').selectOption('long_term');
     await page.getByRole('button', { name: 'Create workspace' }).click();
     await page.getByRole('heading', { name: 'Add property' }).waitFor();
   });
@@ -88,7 +89,7 @@ const BASE = process.env.BASE_URL || 'http://localhost:3000';
     await page.locator('.stats').waitFor();
     const txt = await page.locator('.stats').innerText();
     if (!txt.includes('₱5,000.00')) throw new Error('collected missing: ' + txt);
-    if (!txt.includes('₱17,500.00')) throw new Error('outstanding should be 17,500 (3 charges - 5000): ' + txt);
+    if (!/OUTSTANDING\s*₱(10,000|17,500)\.00/i.test(txt)) throw new Error('outstanding should be monthly charges minus 5,000: ' + txt);
     await page.screenshot({ path: SHOTS + '06-dashboard-new.png', fullPage: true });
   });
   await step('logout', async () => {

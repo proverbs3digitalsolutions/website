@@ -137,7 +137,8 @@ export async function addExpenseModal({ onSaved, expense } = {}) {
 
 // ---------------------------------------------------------------- Screen 6
 export async function rentView(el, { query }) {
-  const tab = ['payments', 'expenses'].includes(query.tab) ? query.tab : 'rent';
+  const stayOnly = state.user.business_type === 'short_term';
+  const tab = stayOnly ? 'expenses' : (['payments', 'expenses'].includes(query.tab) ? query.tab : 'rent');
   const filters = { tab, status: query.status || (tab === 'rent' ? 'outstanding' : ''), q: query.q || '', property_id: query.property_id || '', month: query.month || '' };
   const { properties } = await get('/properties');
   const body = h('div');
@@ -225,12 +226,13 @@ export async function rentView(el, { query }) {
   await load();
   el.replaceChildren(
     pageHead({
-      title: 'Rent & Expenses', sub: 'What’s due, what’s been paid, and what it costs to run your rentals',
+      title: stayOnly ? 'Expenses' : 'Rent & Expenses',
+      sub: stayOnly ? 'Cleaning, utilities, dues and other costs of running your listings' : 'What’s due, what’s been paid, and what it costs to run your rentals',
       actions: [
-        h('button', { class: 'btn btn--primary', onclick: () => recordPaymentModal({ onSaved: reload }) }, icon('cash'), 'Record Payment'),
-        h('button', { class: 'btn btn--secondary', onclick: () => addExpenseModal({ onSaved: reload }) }, icon('plus'), 'Add Expense')],
+        !stayOnly && h('button', { class: 'btn btn--primary', onclick: () => recordPaymentModal({ onSaved: reload }) }, icon('cash'), 'Record Payment'),
+        h('button', { class: stayOnly ? 'btn btn--primary' : 'btn btn--secondary', onclick: () => addExpenseModal({ onSaved: reload }) }, icon('plus'), 'Add Expense')],
     }),
-    mainTabs,
+    !stayOnly && mainTabs,
     h('div', { class: 'toolbar' }, search, propertySelect),
     statusTabs, summary, body);
 }
