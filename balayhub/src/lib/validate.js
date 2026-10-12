@@ -87,6 +87,10 @@ function validate(body, spec, { partial = false } = {}) {
         if (typeof v !== 'string' || !isValidDate(v)) { fields[key] = `${label} must be a valid date.`; break; }
         out[key] = v;
         break;
+      case 'time':
+        if (typeof v !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(v)) { fields[key] = `${label} must be a time like 14:00.`; break; }
+        out[key] = v;
+        break;
       case 'enum':
         if (!rule.values.includes(v)) { fields[key] = `${label} has an invalid value.`; break; }
         out[key] = v;

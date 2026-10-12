@@ -75,7 +75,7 @@ async function loadSession(req, res, next) {
     if (!token) return next();
     const row = await one(
       `SELECT s.token_hash, s.last_seen_at, u.user_id, u.full_name, u.email, u.phone, u.organization_id, u.role,
-              u.account_status, u.email_verified_at, o.name AS organization_name
+              u.account_status, u.email_verified_at, o.name AS organization_name, o.business_type
          FROM sessions s
          JOIN users u ON u.user_id = s.user_id
          LEFT JOIN organizations o ON o.organization_id = u.organization_id

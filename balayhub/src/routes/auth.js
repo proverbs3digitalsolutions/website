@@ -30,6 +30,7 @@ function publicUser(u) {
     role: u.role,
     organization_id: u.organization_id,
     organization_name: u.organization_name || null,
+    business_type: u.business_type || null,
     email_verified: Boolean(u.email_verified_at),
   };
 }
@@ -125,7 +126,7 @@ router.post('/auth/signup', ipLimiter, authLimiter, ah(async (req, res) => {
   await createSession(res, user.user_id);
   const devLink = !invite && config.requireEmailVerification ? await sendVerification(user) : undefined;
   const me = await one(
-    `SELECT u.*, o.name AS organization_name FROM users u LEFT JOIN organizations o USING (organization_id) WHERE u.user_id = $1`,
+    `SELECT u.*, o.name AS organization_name, o.business_type FROM users u LEFT JOIN organizations o USING (organization_id) WHERE u.user_id = $1`,
     [user.user_id],
   );
   res.status(201).json({ user: publicUser(me), devVerificationLink: devLink });
@@ -138,7 +139,7 @@ router.post('/auth/login', ipLimiter, authLimiter, ah(async (req, res) => {
     password: { type: 'string', required: true, max: 200, label: 'Password' },
   });
   const user = await one(
-    `SELECT u.*, o.name AS organization_name FROM users u LEFT JOIN organizations o USING (organization_id)
+    `SELECT u.*, o.name AS organization_name, o.business_type FROM users u LEFT JOIN organizations o USING (organization_id)
       WHERE lower(u.email) = $1`,
     [body.email],
   );
@@ -229,14 +230,33 @@ router.post('/workspace', requireAuth, ah(async (req, res) => {
     throw new HttpError(403, 'Please verify your email address first.', { code: 'EMAIL_UNVERIFIED' });
   }
   if (req.user.organization_id) throw new HttpError(409, 'You already belong to a workspace.', { code: 'HAS_WORKSPACE' });
-  const { name } = validate(req.body, { name: { type: 'string', required: true, max: 120, label: 'Business or workspace name' } });
+  const { name, business_type: businessType } = validate(req.body, {
+    name: { type: 'string', required: true, max: 120, label: 'Business or workspace name' },
+    business_type: { type: 'enum', values: ['short_term', 'long_term', 'both'], label: 'Type of rentals' },
+  });
   const org = await tx(async (db) => {
-    const { rows: [o] } = await db.query('INSERT INTO organizations (name) VALUES ($1) RETURNING *', [name]);
+    const { rows: [o] } = await db.query('INSERT INTO organizations (name, business_type) VALUES ($1, $2) RETURNING *', [name, businessType || 'short_term']);
     await db.query(`UPDATE users SET organization_id = $1, role = 'owner' WHERE user_id = $2`, [o.organization_id, req.user.user_id]);
     await audit(db, { ...req.user, organization_id: o.organization_id }, 'workspace.created', 'organization', o.organization_id);
     return o;
   });
   res.status(201).json({ organization: org });
+}));
+
+// Owners can rename the workspace or change which modules it uses.
+router.patch('/workspace', requireAuth, ah(async (req, res) => {
+  if (req.user.role !== 'owner') throw new HttpError(403, "You don't have permission to do that.", { code: 'FORBIDDEN' });
+  const body = validate(req.body, {
+    name: { type: 'string', max: 120, label: 'Business or workspace name' },
+    business_type: { type: 'enum', values: ['short_term', 'long_term', 'both'], label: 'Type of rentals' },
+  }, { partial: true });
+  const keys = Object.keys(body).filter((k) => body[k]);
+  if (keys.length) {
+    await query(`UPDATE organizations SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')} WHERE organization_id = $1`,
+      [req.user.organization_id, ...keys.map((k) => body[k])]);
+    await audit(null, req.user, 'workspace.updated', 'organization', req.user.organization_id, body);
+  }
+  res.json({ ok: true });
 }));
 
 router.get('/invitations/:token', ah(async (req, res) => {

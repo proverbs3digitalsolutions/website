@@ -27,7 +27,12 @@ const propertySpec = {
 const unitSpec = {
   unit_name: { type: 'string', required: true, max: 60, label: 'Unit name or number' },
   unit_type: { type: 'enum', values: UNIT_TYPES, required: true, label: 'Unit type' },
-  monthly_rent: { type: 'money', required: true, label: 'Monthly rent' },
+  monthly_rent: { type: 'money', label: 'Monthly rent' },
+  nightly_rate: { type: 'money', label: 'Nightly rate' },
+  cleaning_fee: { type: 'money', label: 'Cleaning fee' },
+  max_guests: { type: 'int', min: 1, max: 50, label: 'Maximum guests' },
+  checkin_time: { type: 'time', label: 'Check-in time' },
+  checkout_time: { type: 'time', label: 'Check-out time' },
   security_deposit_amount: { type: 'money', label: 'Security deposit' },
   availability: { type: 'enum', values: ['available', 'unavailable'], label: 'Availability' },
   availability_date: { type: 'date', label: 'Available from' },
@@ -37,6 +42,8 @@ const unitSpec = {
 const UNIT_SELECT = `
   SELECT u.unit_id, u.property_id, u.unit_name, u.unit_type, u.monthly_rent, u.security_deposit_amount,
          u.availability, u.availability_date, u.status, u.created_at,
+         u.nightly_rate, u.cleaning_fee, u.max_guests, to_char(u.checkin_time, 'HH24:MI') AS checkin_time,
+         to_char(u.checkout_time, 'HH24:MI') AS checkout_time, u.cleaning_status,
          l.lease_id AS active_lease_id, l.end_date AS lease_end_date, t.tenant_id, t.full_name AS tenant_name,
          CASE WHEN u.status = 'archived' THEN 'archived'
               WHEN l.lease_id IS NOT NULL THEN 'occupied'
@@ -163,10 +170,12 @@ router.post('/properties/:id/units', managers, ah(async (req, res) => {
   try {
     const unit = await tx(async (db) => {
       const { rows: [u] } = await db.query(
-        `INSERT INTO units (property_id, unit_name, unit_type, monthly_rent, security_deposit_amount, availability, availability_date)
-         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-        [property.property_id, body.unit_name, body.unit_type, body.monthly_rent, body.security_deposit_amount || '0.00',
-          body.availability || 'available', body.availability_date]);
+        `INSERT INTO units (property_id, unit_name, unit_type, monthly_rent, security_deposit_amount, availability, availability_date,
+                            nightly_rate, cleaning_fee, max_guests, checkin_time, checkout_time)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,COALESCE($11::time, '14:00'),COALESCE($12::time, '12:00')) RETURNING *`,
+        [property.property_id, body.unit_name, body.unit_type, body.monthly_rent || '0.00', body.security_deposit_amount || '0.00',
+          body.availability || 'available', body.availability_date, body.nightly_rate, body.cleaning_fee || '0.00',
+          body.max_guests, body.checkin_time, body.checkout_time]);
       await audit(db, req.user, 'unit.created', 'unit', u.unit_id, { property_id: property.property_id, name: u.unit_name });
       return u;
     });
@@ -182,7 +191,7 @@ router.post('/properties/:id/units', managers, ah(async (req, res) => {
 router.patch('/units/:id', managers, ah(async (req, res) => {
   const unit = await loadUnit(req.user, uuidParam(req.params.id));
   const body = validate(req.body, unitSpec, { partial: true });
-  const keys = Object.keys(body).filter((k) => body[k] !== null || ['availability_date'].includes(k));
+  const keys = Object.keys(body).filter((k) => body[k] !== null || ['availability_date', 'nightly_rate', 'max_guests'].includes(k));
   if (!keys.length) return res.json({ unit });
   const sets = keys.map((k, i) => `${k} = $${i + 2}`);
   try {
