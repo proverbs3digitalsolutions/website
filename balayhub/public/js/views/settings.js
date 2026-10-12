@@ -43,6 +43,8 @@ export async function settingsView(el, { rerender }) {
         rerender();
       } }, 'Save')))));
 
+  if (u.role === 'owner' && u.plan && !u.plan.is_demo) sections.push(await planCard(u));
+
   if (u.role === 'owner') {
     const [{ members, invitations }, { properties }] = await Promise.all([get('/team'), get('/properties')]);
     const propName = (id) => properties.find((p) => p.property_id === id)?.property_name || 'Archived property';
@@ -136,4 +138,30 @@ function summarize(details) {
   }
   if (details.reason) parts.push(`reason: ${details.reason}`);
   return [...new Set(parts)].join(' · ').slice(0, 160);
+}
+
+// ---------------------------------------------------------------- plan
+async function planCard(u) {
+  const p = u.plan;
+  let pub = { plans: [], contact_email: '' };
+  try { pub = await get('/public/plans'); } catch { /* ignore */ }
+  let listings = [];
+  try { ({ listings } = await get('/listings')); } catch { /* ignore */ }
+  const status = p.read_only
+    ? h('div', { class: 'alert alert--error' }, p.reason === 'trial_ended' ? 'Your free trial has ended. Your workspace is view-only until you choose a plan.' : 'Your payment is overdue. Your workspace is view-only until you renew.')
+    : p.plan === 'trial' ? h('div', { class: 'alert alert--info' }, `Free trial: ${p.trial_days_left} day${p.trial_days_left === 1 ? '' : 's'} left. All features are included.`)
+      : p.reason === 'grace' ? h('div', { class: 'alert alert--warn' }, `Your plan was paid until ${p.paid_until}. Please renew within 7 days to avoid interruption.`) : null;
+  return h('div', { class: 'card' },
+    h('div', { class: 'card__head' }, h('h2', null, 'Plan & billing'), h('span', { class: 'badge badge--paid' }, p.name)),
+    status,
+    h('dl', { class: 'dl', style: { marginTop: '12px' } },
+      h('dt', null, 'Current plan'), h('dd', null, p.price ? `${p.name} — ₱${p.price.toLocaleString('en-PH')} / month` : p.name),
+      h('dt', null, 'Listings'), h('dd', null, `${listings.length} of ${p.listing_limit >= 1000 ? 'unlimited' : p.listing_limit}`),
+      p.paid_until && [h('dt', null, 'Paid until'), h('dd', null, p.paid_until)]),
+    pub.plans.length > 0 && h('div', { class: 'plan-mini' }, pub.plans.map((x) => h('div', { class: `plan-mini__item${x.key === p.plan ? ' is-current' : ''}` },
+      h('strong', null, x.name), h('span', null, `₱${x.price.toLocaleString('en-PH')}/mo`), h('span', { class: 'muted small' }, `Up to ${x.listings} listings${x.ai ? ' · AI drafts' : ''}`)))),
+    h('p', { class: 'small', style: { marginTop: '12px' } },
+      'To choose or renew a plan, pay by GCash, Maya or bank transfer and ',
+      pub.contact_email ? h('a', { href: `mailto:${pub.contact_email}?subject=${encodeURIComponent(`BalayHub plan for ${u.organization_name}`)}` }, `email us at ${pub.contact_email}`) : 'contact us',
+      ' with your workspace name. We activate it the same day.'));
 }

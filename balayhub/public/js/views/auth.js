@@ -4,6 +4,7 @@
 import { get, post, ApiError } from '../api.js';
 import { h, brand, field, makeForm, badge, toast } from '../ui.js';
 import { state, navigate, refreshUser, afterLogin } from '../app.js';
+import { tryDemo } from './landing.js';
 
 function publicPage(...children) {
   return h('div', { class: 'public' },
@@ -109,7 +110,8 @@ export async function loginView(el, { query }) {
     await googleButton('Log in with Google'),
     h('div', { class: 'auth-card__foot' },
       h('p', null, h('a', { href: '#/forgot' }, 'Forgot password?')),
-      h('p', null, 'New to BalayHub? ', h('a', { href: '#/signup' }, 'Create an account'))))));
+      h('p', null, 'New to BalayHub? ', h('a', { href: '#/signup' }, 'Create an account')),
+      h('p', null, 'Just looking? ', h('button', { class: 'linkbtn', type: 'button', onclick: tryDemo }, 'Try the live demo'))))));
 }
 
 // ---------------------------------------------------------------- Screen 2: Sign up

@@ -17,6 +17,8 @@ import { reservationsView, reservationDetailView, receiptView } from './views/re
 import { listingsView, guestsView, guestDetailView } from './views/listings.js';
 import { inboxView, inboxSettingsView, unreadCount } from './views/inbox.js';
 import { housekeepingView, housekeepingDetailView } from './views/housekeeping.js';
+import { landingView } from './views/landing.js';
+import { adminView } from './views/admin.js';
 
 export const state = { user: null, requireEmailVerification: true };
 
@@ -26,7 +28,7 @@ const SIGNED_IN = 'signed-in'; // signed in, setup may be incomplete
 const APP = 'app';            // fully set up workspace member
 
 const routes = [
-  ['/', authViews.welcomeView, PUBLIC],
+  ['/', landingView, PUBLIC],
   ['/login', authViews.loginView, PUBLIC],
   ['/signup', authViews.signupView, PUBLIC],
   ['/forgot', authViews.forgotView, PUBLIC],
@@ -55,6 +57,7 @@ const routes = [
   ['/guests', guestsView, APP],
   ['/guests/:id', guestDetailView, APP],
   ['/receipts/:id', receiptView, APP],
+  ['/admin', adminView, APP],
   ['/inbox', inboxView, APP],
   ['/inbox/:id', inboxView, APP],
   ['/inbox-settings', inboxSettingsView, APP],
@@ -98,9 +101,36 @@ const NAV_BOTH = [
   ['/maintenance', 'Maintenance', 'wrench'],
   ['/settings', 'Settings', 'settings'],
 ];
-// Staff don't see guest conversations.
-const navFor = () => ({ short_term: NAV_SHORT, both: NAV_BOTH }[state.user?.business_type] || NAV_LONG)
-  .filter(([p]) => p !== '/inbox' || state.user?.role !== 'staff');
+// Staff don't see guest conversations; the platform admin gets an Admin link.
+const navFor = () => [...({ short_term: NAV_SHORT, both: NAV_BOTH }[state.user?.business_type] || NAV_LONG)
+  .filter(([p]) => p !== '/inbox' || state.user?.role !== 'staff'),
+...(state.user?.is_platform_admin ? [['/admin', 'Admin', 'shield']] : [])];
+
+// Trial / read-only / demo notice at the top of every app page.
+function planBanner() {
+  const p = state.user?.plan;
+  if (!p) return null;
+  if (p.is_demo) {
+    return h('div', { class: 'planbar planbar--demo' },
+      h('span', null, "You're exploring the demo. Changes are turned off."),
+      h('button', { class: 'btn btn--primary btn--sm', onclick: async () => { try { await post('/auth/logout'); } catch { /* ignore */ } state.user = null; navigate('#/signup', { replace: true }); } }, 'Start your free trial'));
+  }
+  const owner = state.user.role === 'owner';
+  if (p.read_only) {
+    return h('div', { class: 'planbar planbar--bad', role: 'status' },
+      h('span', null, p.reason === 'trial_ended' ? 'Your free trial has ended. Your data is safe and view-only.' : 'Your plan payment is overdue. Your workspace is view-only.'),
+      owner ? h('a', { class: 'btn btn--primary btn--sm', href: '#/settings' }, 'Choose a plan') : h('span', null, 'Ask the workspace owner to renew.'));
+  }
+  if (p.plan === 'trial' && p.trial_days_left <= 14) {
+    return h('div', { class: 'planbar' },
+      h('span', null, `Free trial: ${p.trial_days_left} day${p.trial_days_left === 1 ? '' : 's'} left`),
+      owner && h('a', { href: '#/settings' }, 'See plans'));
+  }
+  if (p.reason === 'grace' && owner) {
+    return h('div', { class: 'planbar planbar--warn' }, h('span', null, `Your plan was paid until ${p.paid_until}. Please renew soon.`), h('a', { href: '#/settings' }, 'Renew'));
+  }
+  return null;
+}
 export const homeRoute = () => (state.user?.business_type === 'long_term' ? '#/dashboard' : '#/home');
 
 function parseHash() {
@@ -183,7 +213,7 @@ function buildShell(path) {
         h('span', null, `${u.organization_name} · ${({ owner: 'Owner', manager: 'Manager', staff: 'Staff' })[u.role]}`),
         h('button', { class: 'btn btn--secondary btn--sm btn--block', onclick: logout }, 'Log out'))),
     h('header', { class: 'topbar' }, brand(homeRoute()), h('span', { class: 'topbar__org' }, u.organization_name)),
-    content,
+    h('div', { class: 'shell__main' }, planBanner(), content),
     h('nav', { class: 'bottomnav', 'aria-label': 'Main' },
       bottomKeys.map(([p, t, ic]) => h('a', { href: `#${p}`, 'aria-current': isCurrent(p, path) ? 'page' : null }, icon(ic), t === 'Rent & Expenses' ? 'Rent' : t)),
       h('button', { type: 'button', onclick: () => openMore(path), 'aria-current': NAV.slice(4).some(([p]) => isCurrent(p, path)) ? 'page' : null }, icon('more'), 'More')));

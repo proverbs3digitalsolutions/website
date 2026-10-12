@@ -16,8 +16,10 @@ const router = express.Router();
 
 // Prices for the landing page.
 router.get('/public/plans', (req, res) => {
+  const contact = config.salesContactEmail || config.inboundAddress || ((/<([^>]+)>/.exec(config.mailFrom) || [])[1] || '');
   res.json({
     trial_days: config.trialDays,
+    contact_email: contact.endsWith('.local') ? '' : contact,
     plans: PUBLIC_PLANS.map((k) => ({ key: k, name: PLANS[k].name, price: PLANS[k].price, listings: PLANS[k].listings, ai: PLANS[k].ai })),
   });
 });

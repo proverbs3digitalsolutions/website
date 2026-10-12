@@ -35,6 +35,7 @@ const config = {
   // Comma-separated emails allowed to open the platform admin page (plans/trials).
   platformAdmins: (env.PLATFORM_ADMIN_EMAILS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
   trialDays: Number(env.TRIAL_DAYS || 14),
+  salesContactEmail: env.SALES_CONTACT_EMAIL || '',
   privacyPolicyVersion: '2026-10-01',
   timezone: 'Asia/Manila',
 };
