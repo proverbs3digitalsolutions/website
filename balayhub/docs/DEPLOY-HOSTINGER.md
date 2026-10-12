@@ -90,21 +90,19 @@ Copy the whole line it prints (it starts with `ssh-ed25519`).
 2. **Title:** `Hostinger VPS`. **Key:** paste the line. Leave **"Allow write access" unchecked**.
 3. Click **Add key**.
 
-**5c. Tell the server to use the key, then download the code:**
+**5c. Download the code (paste one line at a time):**
 ```bash
-cat >> ~/.ssh/config <<'EOF'
-Host github.com
-  IdentityFile ~/.ssh/github_balayhub
-  IdentitiesOnly yes
-EOF
-
 cd /opt
-git clone git@github.com:proverbs3digitalsolutions/website.git balayhub-src
+git clone -c core.sshCommand="ssh -i ~/.ssh/github_balayhub -o IdentitiesOnly=yes" git@github.com:proverbs3digitalsolutions/website.git balayhub-src
 cd /opt/balayhub-src
 git checkout claude/trusting-hopper-lyg8vu     # skip this line once the branch is merged into main
-cd balayhub
+cd balayhub && ls
 ```
-> Type `yes` if asked "Are you sure you want to continue connecting".
+> Type `yes` if asked "Are you sure you want to continue connecting". The last command should list `Dockerfile`, `docker-compose.prod.yml`, `deploy`, `docs`, and so on.
+>
+> - **`Permission denied (publickey)`:** the deploy key is missing or was copied incompletely. Re-add it in 5b.
+> - **`destination path already exists`:** run `rm -rf /opt/balayhub-src` and repeat 5c.
+> - **Can't copy the key out of the Web console:** connect from your computer's Terminal instead (`ssh root@YOUR_IP`), run `cat ~/.ssh/github_balayhub.pub`, and copy it there.
 
 ## Step 6: Create your settings file
 ```bash
