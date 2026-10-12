@@ -102,7 +102,7 @@ for (const [addr, prefix] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10
   ['172.16.0.0', 12], ['192.0.0.0', 24], ['192.168.0.0', 16], ['198.18.0.0', 15], ['224.0.0.0', 4], ['240.0.0.0', 4]]) {
   blocked.addSubnet(addr, prefix, 'ipv4');
 }
-for (const [addr, prefix] of [['::', 128], ['::1', 128], ['fc00::', 7], ['fe80::', 10], ['ff00::', 8]]) {
+for (const [addr, prefix] of [['::', 128], ['::1', 128], ['fc00::', 7], ['fe80::', 10], ['ff00::', 8], ['64:ff9b::', 96], ['2002::', 16]]) {
   blocked.addSubnet(addr, prefix, 'ipv6');
 }
 function isPublicAddress(address, family) {
@@ -112,11 +112,17 @@ function isPublicAddress(address, family) {
 }
 
 // DNS lookup that refuses private/internal addresses, checked at connect time.
+// Every resolved address must be public. Supports both callback shapes Node
+// uses (single address, or `all: true` with autoSelectFamily).
 function guardedLookup(hostname, options, callback) {
-  dns.lookup(hostname, { ...options, all: false }, (err, address, family) => {
+  const opts = typeof options === 'object' && options ? options : {};
+  dns.lookup(hostname, { ...opts, all: true }, (err, addrs) => {
     if (err) return callback(err);
-    if (!isPublicAddress(address, family)) return callback(new Error('Calendar address points to a private network.'));
-    callback(null, address, family);
+    if (!addrs.length || addrs.some((a) => !isPublicAddress(a.address, a.family))) {
+      return callback(new Error('Calendar address points to a private network.'));
+    }
+    if (opts.all) return callback(null, addrs);
+    callback(null, addrs[0].address, addrs[0].family);
   });
 }
 
@@ -125,7 +131,7 @@ function validateFeedUrl(raw) {
   try { url = new URL(String(raw).trim()); } catch { return null; }
   if (url.protocol !== 'https:' || url.username || url.password) return null;
   if (url.port && url.port !== '443') return null;
-  if (net.isIP(url.hostname)) return null;
+  if (net.isIP(url.hostname.replace(/^\[|\]$/g, ''))) return null; // no raw IP addresses (v4 or [v6])
   return url;
 }
 
@@ -195,13 +201,17 @@ async function syncFeed(feedId, { fetcher = fetchText } = {}) {
     const byUid = new Map(existing.map((b) => [b.external_uid, b]));
     const seen = new Set();
     for (const ev of events) {
+      if (seen.has(ev.uid)) continue; // repeated UID (recurrence overrides): keep the first
       seen.add(ev.uid);
       const kind = classify(ev, feed.channel);
       const prev = byUid.get(ev.uid);
       await client.query('SAVEPOINT ev');
       try {
         if (prev) {
-          if (prev.check_in !== ev.start || prev.check_out !== ev.end || prev.status !== 'confirmed') {
+          const syncCancelled = prev.status === 'cancelled' && /^Removed from /.test(prev.cancel_reason || '');
+          if (prev.status === 'cancelled' && !syncCancelled) {
+            // Cancelled by the host in BalayHub: leave it cancelled.
+          } else if (prev.check_in !== ev.start || prev.check_out !== ev.end || syncCancelled) {
             await client.query(
               `UPDATE bookings SET check_in = $2, check_out = $3, status = 'confirmed', cancelled_at = NULL, cancel_reason = NULL, updated_at = now()
                 WHERE booking_id = $1`, [prev.booking_id, ev.start, ev.end]);
@@ -220,7 +230,7 @@ async function syncFeed(feedId, { fetcher = fetchText } = {}) {
         await client.query('RELEASE SAVEPOINT ev');
       } catch (err) {
         await client.query('ROLLBACK TO SAVEPOINT ev');
-        if (err.constraint === 'bookings_no_overlap' || err.constraint === 'bookings_code_uq') {
+        if (['bookings_no_overlap', 'bookings_code_uq', 'bookings_feed_uid_uq'].includes(err.constraint)) {
           counts.conflicts.push(`${ev.start} to ${ev.end}`);
         } else throw err;
       }
@@ -248,7 +258,10 @@ async function syncFeed(feedId, { fetcher = fetchText } = {}) {
     return { ok: true, message, ...counts };
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
-    throw err;
+    const message = `Sync failed: ${String(err.message || err).slice(0, 250)}`;
+    await pool.query(`UPDATE ical_feeds SET last_synced_at = now(), last_status = 'error', last_message = $2 WHERE feed_id = $1`, [feedId, message]).catch(() => {});
+    console.error('[ical] sync error', feedId, err);
+    return { ok: false, message };
   } finally {
     client.release();
   }
@@ -261,4 +274,4 @@ async function syncAllFeeds() {
   }
 }
 
-module.exports = { buildCalendar, newFeedToken, parseEvents, classify, validateFeedUrl, isPublicAddress, syncFeed, syncAllFeeds, addDays, randomCode };
+module.exports = { guardedLookup, fetchText, buildCalendar, newFeedToken, parseEvents, classify, validateFeedUrl, isPublicAddress, syncFeed, syncAllFeeds, addDays, randomCode };

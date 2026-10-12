@@ -353,6 +353,9 @@ router.post('/reservations/:id/cancel', managers, ah(async (req, res) => {
   const booking = await loadBooking(req.user, uuidParam(req.params.id));
   if (booking.kind !== 'reservation') throw notFound();
   if (booking.status === 'cancelled') throw new HttpError(409, 'This reservation is already cancelled.', { code: 'CANCELLED' });
+  if (booking.ical_feed_id) {
+    throw new HttpError(409, 'This stay comes from a channel calendar. Cancel it on the channel; BalayHub updates on the next sync.', { code: 'CHANNEL_MANAGED' });
+  }
   const { reason } = validate(req.body, { reason: { type: 'string', required: true, max: 300, label: 'Reason' } });
   await query(`UPDATE bookings SET status = 'cancelled', cancelled_at = now(), cancel_reason = $2, updated_at = now() WHERE booking_id = $1`,
     [booking.booking_id, reason]);
@@ -386,6 +389,7 @@ router.post('/reservations/:id/stay-status', ah(async (req, res) => {
 router.post('/reservations/:id/payments', ah(async (req, res) => {
   const booking = await loadBooking(req.user, uuidParam(req.params.id));
   if (booking.kind !== 'reservation') throw notFound();
+  if (booking.status !== 'confirmed') throw new HttpError(409, 'This reservation is cancelled. Payments cannot be recorded on it.', { code: 'CANCELLED' });
   const body = validate(req.body, {
     amount: { type: 'money', required: true, positive: true, label: 'Amount' },
     payment_date: { type: 'date', required: true, label: 'Payment date' },
@@ -580,7 +584,11 @@ async function monthRevenue(user, monthStart) {
   const scope = propertyScope(user, params);
   const { rows: [m] } = await query(
     `WITH bounds AS (SELECT $1::date AS s, ($1::date + interval '1 month')::date AS e),
-     listing AS (SELECT u.unit_id FROM units u JOIN properties p ON p.property_id = u.property_id WHERE ${scope} AND u.status = 'active'),
+     listing AS (SELECT u.unit_id, (u.status = 'active' AND p.status = 'active') AS active
+                   FROM units u JOIN properties p ON p.property_id = u.property_id WHERE ${scope}),
+     blocked AS (SELECT COUNT(*) AS n FROM bookings b JOIN listing l ON l.unit_id = b.unit_id AND l.active, bounds,
+                   generate_series(GREATEST(b.check_in, bounds.s), LEAST(b.check_out, bounds.e) - 1, interval '1 day') g
+                  WHERE b.kind = 'block' AND b.status = 'confirmed' AND b.check_in < bounds.e AND b.check_out > bounds.s),
      res AS (SELECT b.* FROM bookings b JOIN listing l ON l.unit_id = b.unit_id, bounds
               WHERE b.kind = 'reservation' AND b.status = 'confirmed' AND b.check_in < bounds.e AND b.check_out > bounds.s),
      nights AS (SELECT r.booking_id, n::date AS night, r.accommodation_total / (r.check_out - r.check_in) AS rate
@@ -588,7 +596,7 @@ async function monthRevenue(user, monthStart) {
      SELECT (SELECT COALESCE(SUM(rate), 0) FROM nights) AS accommodation,
             (SELECT COUNT(*) FROM nights) AS booked_nights,
             (SELECT COALESCE(SUM(cleaning_fee + other_fees), 0) FROM res, bounds WHERE check_in >= bounds.s AND check_in < bounds.e) AS fees,
-            (SELECT COUNT(*) FROM listing) * (SELECT e - s FROM bounds) AS capacity_nights,
+            GREATEST(0, (SELECT COUNT(*) FROM listing WHERE active) * (SELECT e - s FROM bounds) - (SELECT n FROM blocked)) AS capacity_nights,
             (SELECT e - s FROM bounds) AS days_in_month,
             (SELECT json_agg(json_build_object('day', EXTRACT(DAY FROM night)::int, 'adr', round(avg_rate, 2)) ORDER BY night)
                FROM (SELECT night, AVG(rate) AS avg_rate FROM nights GROUP BY night) x) AS daily_adr,
@@ -612,7 +620,7 @@ async function monthRevenue(user, monthStart) {
 
 router.get('/stays/revenue', ah(async (req, res) => {
   const d = await today();
-  const month = /^\d{4}-\d{2}$/.test(req.query.month || '') ? req.query.month : d.slice(0, 7);
+  const month = /^\d{4}-\d{2}$/.test(req.query.month || '') && isValidDate(`${req.query.month}-01`) ? req.query.month : d.slice(0, 7);
   const start = `${month}-01`;
   const [y, mo] = month.split('-').map(Number);
   const prev = new Date(Date.UTC(y, mo - 2, 1)).toISOString().slice(0, 10);

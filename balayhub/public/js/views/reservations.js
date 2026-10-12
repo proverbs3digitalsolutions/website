@@ -228,7 +228,7 @@ export async function reservationDetailView(el, { params, rerender }) {
         h('p', null, `${fmtDate(r.check_in)} – ${fmtDate(r.check_out)} · ${r.nights} night${r.nights > 1 ? 's' : ''} · ${r.confirmation_code}`)),
       h('div', { class: 'page-head__actions' }, stayButtons,
         canManage && confirmed && h('button', { class: 'btn btn--secondary', onclick: editDetails }, 'Edit'),
-        canManage && confirmed && h('button', { class: 'btn btn--danger', onclick: cancel }, 'Cancel'))),
+        canManage && confirmed && !r.ical_feed_id && h('button', { class: 'btn btn--danger', onclick: cancel }, 'Cancel'))),
     !confirmed && h('div', { class: 'alert alert--error', style: { marginBottom: '16px' } }, `Cancelled ${fmtDateTime(r.cancelled_at)}${r.cancel_reason ? `: ${r.cancel_reason}` : ''}`),
     h('div', { class: 'grid grid--2' },
       h('div', { class: 'stack' },

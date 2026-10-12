@@ -204,3 +204,84 @@ test('reservation CSV export', async () => {
   assert.match(r.data, /Confirmation code,Check-in/);
   assert.match(r.data, /Rafael Diaz/);
 });
+
+// ---------------------------------------------------------------- review regressions
+const dns = require('dns');
+
+test('guarded DNS lookup works with Node 22 autoSelectFamily (all: true) and the single form', async () => {
+  const real = dns.lookup;
+  dns.lookup = (host, opts, cb) => cb(null, host === 'evil.test'
+    ? [{ address: '93.184.215.14', family: 4 }, { address: '10.0.0.5', family: 4 }]
+    : [{ address: '93.184.215.14', family: 4 }]);
+  try {
+    const all = await new Promise((res, rej) => ical.guardedLookup('public.test', { all: true }, (e, a) => (e ? rej(e) : res(a))));
+    assert.deepEqual(all, [{ address: '93.184.215.14', family: 4 }]);
+    const one = await new Promise((res, rej) => ical.guardedLookup('public.test', {}, (e, a, f) => (e ? rej(e) : res([a, f]))));
+    assert.deepEqual(one, ['93.184.215.14', 4]);
+    await assert.rejects(new Promise((res, rej) => ical.guardedLookup('evil.test', { all: true }, (e, a) => (e ? rej(e) : res(a)))), /private network/);
+    // Through a real https request: must get past address selection (no ERR_INVALID_IP_ADDRESS).
+    dns.lookup = (host, opts, cb) => cb(null, [{ address: '203.0.113.9', family: 4 }]);
+    const err = await ical.fetchText('https://public.test/cal.ics').then(() => null, (e) => e);
+    assert.ok(err, 'connection to a TEST-NET address should fail');
+    assert.notEqual(err.code, 'ERR_INVALID_IP_ADDRESS', err.message);
+    assert.doesNotMatch(err.message, /private network/);
+  } finally {
+    dns.lookup = real;
+  }
+});
+
+test('IPv6 literal and NAT64/6to4 calendar addresses are rejected', () => {
+  for (const u of ['https://[::1]/a.ics', 'https://[::ffff:127.0.0.1]/a.ics', 'https://[::ffff:7f00:1]/a.ics', 'https://[2001:db8::1]/a.ics']) {
+    assert.equal(ical.validateFeedUrl(u), null, u);
+  }
+  assert.equal(ical.isPublicAddress('64:ff9b::a00:1', 6), false);
+  assert.equal(ical.isPublicAddress('2002:a00:1::1', 6), false);
+});
+
+test('feeds with repeated UIDs import once; failures always update feed status', async () => {
+  const unit3 = (await owner.post(`/api/properties/${prop.property_id}/units`, { unit_name: 'Tower 3 - 101', unit_type: 'studio', nightly_rate: '1500' })).data.unit;
+  const [{ feed_id: feedId }] = await sql(
+    `INSERT INTO ical_feeds (organization_id, unit_id, channel, url) VALUES ($1,$2,'other','https://calendar.example.com/x.ics') RETURNING feed_id`,
+    [prop.organization_id, unit3.unit_id]);
+  const ev = (uid, s, e) => ['BEGIN:VEVENT', `UID:${uid}`, `DTSTART;VALUE=DATE:${s.replace(/-/g, '')}`, `DTEND;VALUE=DATE:${e.replace(/-/g, '')}`, 'SUMMARY:Booked', 'END:VEVENT'];
+  const r = await ical.syncFeed(feedId, { fetcher: async () => ['BEGIN:VCALENDAR', ...ev('dup', d(1), d(2)), ...ev('dup', d(5), d(6)), ...ev('ok', d(8), d(9)), 'END:VCALENDAR'].join('\r\n') });
+  assert.equal(r.ok, true);
+  assert.equal(r.added, 2);
+  const failed = await ical.syncFeed(feedId, { fetcher: async () => { throw new Error('boom'); } });
+  assert.equal(failed.ok, false);
+  const [f] = await sql('SELECT last_status, last_message FROM ical_feeds WHERE feed_id = $1', [feedId]);
+  assert.equal(f.last_status, 'error');
+});
+
+test('channel stays cannot be cancelled by hand; sync-cancelled stays come back if they reappear', async () => {
+  const [b] = await sql(`SELECT booking_id, ical_feed_id, external_uid, check_in, check_out FROM bookings WHERE external_uid = 'ok'`);
+  const c = await owner.post(`/api/reservations/${b.booking_id}/cancel`, { reason: 'test' });
+  assert.equal(c.status, 409);
+  assert.equal(c.data.code, 'CHANNEL_MANAGED');
+  // Host-cancelled (e.g. legacy data) stays cancelled after a sync.
+  await sql(`UPDATE bookings SET status = 'cancelled', cancelled_at = now(), cancel_reason = 'Guest no-show' WHERE booking_id = $1`, [b.booking_id]);
+  const ev = ['BEGIN:VCALENDAR', 'BEGIN:VEVENT', 'UID:ok', `DTSTART;VALUE=DATE:${b.check_in.replace(/-/g, '')}`, `DTEND;VALUE=DATE:${b.check_out.replace(/-/g, '')}`, 'SUMMARY:Booked', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+  await ical.syncFeed(b.ical_feed_id, { fetcher: async () => ev });
+  assert.equal((await sql('SELECT status FROM bookings WHERE booking_id = $1', [b.booking_id]))[0].status, 'cancelled');
+  // Sync-cancelled stays are restored when the channel shows them again.
+  await sql(`UPDATE bookings SET cancel_reason = 'Removed from Channel calendar' WHERE booking_id = $1`, [b.booking_id]);
+  await ical.syncFeed(b.ical_feed_id, { fetcher: async () => ev });
+  assert.equal((await sql('SELECT status FROM bookings WHERE booking_id = $1', [b.booking_id]))[0].status, 'confirmed');
+});
+
+test('no payments on cancelled reservations; invalid month falls back', async () => {
+  const r = await owner.post('/api/reservations', { unit_id: unit2.unit_id, check_in: d(60), check_out: d(61), guest_name: 'Cancel Me', accommodation_total: '1800' });
+  await owner.post(`/api/reservations/${r.data.reservation.booking_id}/cancel`, { reason: 'Changed plans' });
+  const p = await owner.post(`/api/reservations/${r.data.reservation.booking_id}/payments`, { amount: '100', payment_date: today, payment_method: 'cash' });
+  assert.equal(p.status, 409);
+  const m = await owner.get('/api/stays/revenue?month=2026-13');
+  assert.equal(m.status, 200);
+});
+
+test('archiving a listing keeps its past revenue', async () => {
+  const before = (await owner.get('/api/stays/revenue')).data.current.total_revenue;
+  await sql(`UPDATE units SET status = 'archived' WHERE unit_id = $1`, [unit.unit_id]);
+  const after = (await owner.get('/api/stays/revenue')).data.current.total_revenue;
+  await sql(`UPDATE units SET status = 'active' WHERE unit_id = $1`, [unit.unit_id]);
+  assert.equal(after, before);
+});

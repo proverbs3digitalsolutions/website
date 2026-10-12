@@ -3,7 +3,7 @@
 const { chromium } = require(process.env.PLAYWRIGHT_PATH || 'playwright');
 const SHOTS = (process.env.SHOTS_DIR || require('os').tmpdir()) + '/';
 const BASE = process.env.BASE_URL || 'http://localhost:3000';
-const OFF = 120 + Math.floor(Math.random() * 200);
+const OFF = 400 + (Math.floor(Date.now() / 60000) % 5000) * 4; // unique future dates per run
 (async () => {
   const browser = await chromium.launch();
   const errors = [];
