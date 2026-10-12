@@ -40,6 +40,14 @@ async function checkRecord(user, type, id) {
       if (!row) throw notFound();
       return row;
     }
+    case 'cleaning': {
+      const { propertyScope } = require('../lib/access');
+      const params = [id];
+      const row = await one(`SELECT t.task_id FROM cleaning_tasks t JOIN units u ON u.unit_id = t.unit_id JOIN properties p ON p.property_id = u.property_id
+                              WHERE t.task_id = $1 AND ${propertyScope(user, params)}`, params);
+      if (!row) throw notFound();
+      return row;
+    }
     default:
       throw new HttpError(400, 'Unsupported attachment type.', { code: 'BAD_REQUEST' });
   }

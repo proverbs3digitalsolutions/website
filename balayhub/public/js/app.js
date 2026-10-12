@@ -16,6 +16,7 @@ import { calendarView } from './views/calendar.js';
 import { reservationsView, reservationDetailView } from './views/reservations.js';
 import { listingsView, guestsView, guestDetailView } from './views/listings.js';
 import { inboxView, inboxSettingsView, unreadCount } from './views/inbox.js';
+import { housekeepingView, housekeepingDetailView } from './views/housekeeping.js';
 
 export const state = { user: null, requireEmailVerification: true };
 
@@ -56,6 +57,8 @@ const routes = [
   ['/inbox', inboxView, APP],
   ['/inbox/:id', inboxView, APP],
   ['/inbox-settings', inboxSettingsView, APP],
+  ['/housekeeping', housekeepingView, APP],
+  ['/housekeeping/:id', housekeepingDetailView, APP],
 ];
 
 const NAV_SHORT = [
@@ -63,6 +66,7 @@ const NAV_SHORT = [
   ['/inbox', 'Inbox', 'inbox'],
   ['/calendar', 'Calendar', 'calendar'],
   ['/reservations', 'Reservations', 'bed'],
+  ['/housekeeping', 'Housekeeping', 'sparkle'],
   ['/listings', 'Listings', 'building'],
   ['/guests', 'Guests', 'users'],
   ['/rent?tab=expenses', 'Expenses', 'wallet'],
@@ -83,6 +87,7 @@ const NAV_BOTH = [
   ['/inbox', 'Inbox', 'inbox'],
   ['/calendar', 'Calendar', 'calendar'],
   ['/reservations', 'Reservations', 'bed'],
+  ['/housekeeping', 'Housekeeping', 'sparkle'],
   ['/listings', 'Listings', 'building'],
   ['/dashboard', 'Long-term rentals', 'chart'],
   ['/tenants', 'Tenants', 'users'],

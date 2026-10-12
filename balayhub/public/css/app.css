@@ -129,7 +129,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .topbar .brand { color: #fff; font-size: 1.1rem; }
 .topbar .brand b { color: #5fd3b8; }
 .topbar__org { font-size: .8rem; opacity: .8; max-width: 45vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.content { padding: 16px 16px calc(96px + env(safe-area-inset-bottom)); max-width: 1180px; margin: 0 auto; }
+.content { padding: 16px 16px calc(96px + env(safe-area-inset-bottom)); max-width: 1180px; width: 100%; min-width: 0; margin: 0 auto; }
 
 .bottomnav {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 40; background: var(--surface);
@@ -526,3 +526,19 @@ dialog.modal::backdrop { background: rgba(10, 20, 35, .45); }
 .inbox__summary .dl { grid-template-columns: 90px 1fr; font-size: .88rem; }
 code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; border-radius: 6px; background: var(--gray-soft); font-size: .78rem; }
 .center { text-align: center; }
+
+/* ================================================================ housekeeping */
+.hk-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.hk-grid > .card { margin-top: 0; }
+.hk-card { display: grid; gap: 8px; color: var(--text); text-decoration: none; border: 1px solid transparent; }
+.hk-card:hover { border-color: var(--line-2); }
+.hk-card--late { border-color: var(--red-soft); box-shadow: inset 3px 0 0 var(--red), var(--shadow); }
+.hk-card__top { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+.hk-card__due { font-weight: 750; }
+.hk-card--late .hk-card__due { color: var(--red); }
+.hk-checklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.hk-checklist li { padding: 10px 4px; border-bottom: 1px solid var(--line); }
+.hk-checklist li:last-child { border-bottom: 0; }
+.hk-checklist .check { font-size: 1rem; cursor: pointer; }
+.hk-checklist .check input { width: 24px; height: 24px; }
+.hk-checklist .check input:checked + span { text-decoration: line-through; color: var(--muted); }

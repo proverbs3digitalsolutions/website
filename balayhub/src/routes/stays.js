@@ -11,6 +11,7 @@ const { audit } = require('../lib/audit');
 const { requireRole } = require('../lib/auth');
 const { propertyScope, loadUnit } = require('../lib/access');
 const ical = require('../lib/ical');
+const { ensureTaskForBooking } = require('../lib/housekeeping');
 
 const router = express.Router();
 const managers = requireRole('owner', 'manager');
@@ -118,6 +119,12 @@ router.post('/units/:id/cleaning', ah(async (req, res) => {
   const unit = await loadUnit(req.user, uuidParam(req.params.id));
   const { status } = validate(req.body, { status: { type: 'enum', values: ['clean', 'dirty'], required: true, label: 'Status' } });
   await query('UPDATE units SET cleaning_status = $2, cleaning_updated_at = now() WHERE unit_id = $1', [unit.unit_id, status]);
+  if (status === 'clean') {
+    // Marking the listing clean finishes its open cleaning tasks that are due.
+    await query(
+      `UPDATE cleaning_tasks SET status = 'done', completed_at = now(), completed_by = $2, started_at = COALESCE(started_at, now())
+        WHERE unit_id = $1 AND status IN ('todo', 'in_progress') AND due_date <= ${TODAY}`, [unit.unit_id, req.user.user_id]);
+  }
   await audit(null, req.user, `cleaning.${status}`, 'unit', unit.unit_id);
   res.json({ ok: true });
 }));
@@ -379,7 +386,10 @@ router.post('/reservations/:id/stay-status', ah(async (req, res) => {
       undo_check_out: 'checked_out_at = NULL',
     }[action];
     await db.query(`UPDATE bookings SET ${set}, updated_at = now() WHERE booking_id = $1`, [booking.booking_id]);
-    if (action === 'check_out') await db.query(`UPDATE units SET cleaning_status = 'dirty', cleaning_updated_at = now() WHERE unit_id = $1`, [booking.unit_id]);
+    if (action === 'check_out') {
+      await db.query(`UPDATE units SET cleaning_status = 'dirty', cleaning_updated_at = now() WHERE unit_id = $1`, [booking.unit_id]);
+      await ensureTaskForBooking(booking.booking_id, req.user, db);
+    }
     await audit(db, req.user, `reservation.${action}`, 'booking', booking.booking_id);
   });
   res.json({ ok: true });
