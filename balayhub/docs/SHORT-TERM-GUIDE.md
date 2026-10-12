@@ -1,0 +1,59 @@
+# BalayHub for short-term rentals (Airbnb and staycation hosts)
+
+This is Phase 1 of the short-term module. It was built for individual hosts with 1–10 units: condo staycations, Airbnb studios and vacation houses.
+
+## What's included
+
+| Screen | What you can do |
+|---|---|
+| **Home** | **Daily overview** for Today, Tomorrow or the next 7 days: check-ins, check-outs, turnovers, guests staying, and one-tap **Check in / Check out**. **Trends** for the next 7 or 30 days: check-ins, check-outs, turnovers and occupancy. **Revenue** by month: average daily rate and total revenue, compared with the previous month |
+| **Calendar** | All listings × dates. Bookings appear as colored bars by channel. Open nights show the nightly price. Tap an open night to **book**, **block** or **change the price** |
+| **Reservations** | Saved views: Upcoming, Currently hosting, Check-ins and check-outs today or tomorrow, Upcoming unpaid, Past, Cancelled, Recently created, All. Search, channel filter, CSV export. Each reservation shows the stay, guest, payments and balance, with check-in and check-out, edit and cancel |
+| **Listings** | Each unit's base nightly rate, cleaning fee, maximum guests and check-in/out times. **Cleaning status** (Clean / Dirty) and **channel connections** |
+| **Guests** | Guest list with stay history |
+| **Expenses / Maintenance / Settings** | Shared with the long-term module |
+
+Built-in rules:
+- **No double bookings.** The database refuses overlapping stays or blocks on the same listing. A same-day turnover (one guest out, the next in) is allowed.
+- **Nightly price** comes from the listing's base rate unless you set a price for specific dates on the calendar.
+- **Checking a guest out** marks the listing **Dirty**. Mark it **Clean** from Listings when housekeeping is done.
+- **Payments** can be partial and are never deleted, only voided with a reason. Double-tapping Save records a payment once.
+- **Revenue** spreads each stay's accommodation amount evenly across its nights. Cleaning and other fees count in the month of check-in.
+
+Each workspace chooses **Short-term**, **Long-term** or **Both** in **Settings**, and the menu changes to match.
+
+## Connecting Airbnb, Booking.com and Agoda (calendar sync)
+
+BalayHub syncs with the channels through **calendar (iCal) links**. These are free and work for any host. Sync goes both ways.
+
+**1. Stop double bookings on the channels.** In BalayHub, go to **Listings → Channels** on a listing and copy *"Your BalayHub calendar"* link. Paste it into each channel:
+- **Airbnb:** Calendar → choose the listing → Availability → **Connect to another website** (also called "Import calendar")
+- **Booking.com:** Rates & Availability → **Sync calendars** → Import calendar
+- **Agoda (YCS):** Calendar → **iCal / Calendar sync** → Import
+
+  _Channels rename these menus from time to time. If a step looks different, search their help center for "import calendar" or "iCal"._
+
+**2. Bring channel bookings into BalayHub.** On each channel, copy its **Export calendar** link. Then in BalayHub open **Listings → Channels → "Bring in bookings from your channels"**, choose the channel, paste the link and click **Connect calendar**.
+
+BalayHub then checks each connected calendar **every 30 minutes**, and also when you click **Sync now**.
+
+**What calendar links can and can't do**
+- ✅ They sync dates: new bookings, changed dates, cancellations and blocked nights.
+- ❌ They don't include guest names, phone numbers, prices or messages. Imported stays show as *"Airbnb guest"* with ₱0. Open the reservation and click **Edit** to add the amount, so it counts in your revenue.
+- Channels refresh imported calendars on their own schedule, roughly every 15 minutes to 3 hours. A booking made in the gap could still double-book, so for last-minute dates, block the night on the other channels too.
+- On **Airbnb**, "Reserved" events become reservations and "Not available" events become blocks. **Booking.com** and **Agoda** don't mark the difference, so all their events are imported as reservations.
+- If an imported stay overlaps a booking already in BalayHub, it's **skipped and reported** under Channels (shown in red). Nothing is overwritten.
+
+Full two-way connections (guest names, prices, messages) require official partner API access from each channel. That's planned for a later phase.
+
+## Updating your live server (Hostinger VPS)
+
+In the Hostinger **Web console**:
+```bash
+cd /opt/balayhub-src/balayhub
+./deploy/update.sh
+```
+This backs up your data, downloads the new version and restarts BalayHub. The database is upgraded automatically. Your existing workspace keeps its current type; to switch to short-term, go to **Settings → Modules for this workspace → Short-term stays → Save**.
+
+## Coming next (Phase 2–3)
+Cleaning tasks with assigned cleaners and checklists, owner statements, online payments (PayMongo/Xendit for GCash, Maya and cards), guest messages and email receipts, and AI helpers.

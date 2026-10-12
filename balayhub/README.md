@@ -20,7 +20,19 @@ npm test                                # API tests (uses the balayhub_test data
 
 In development, email isn't sent unless `SMTP_URL` is set. Verification and reset links are printed to the server log, and the UI shows them on screen. Both behaviours turn off when `NODE_ENV=production`.
 
-## What's in the MVP
+## Short-term rentals (Airbnb / staycations)
+
+Workspaces can run **short-term**, **long-term** or **both**. The short-term module includes:
+- a homepage with a daily overview, trends and revenue
+- a multi-calendar with nightly prices and blocks
+- reservations with saved views, payments and check-in/out
+- listings with cleaning status
+- guests
+- Airbnb/Booking.com/Agoda calendar (iCal) sync
+
+See [`docs/SHORT-TERM-GUIDE.md`](docs/SHORT-TERM-GUIDE.md).
+
+## What's in the MVP (long-term)
 
 | Screen | What it does |
 |---|---|
