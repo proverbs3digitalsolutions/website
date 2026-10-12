@@ -127,25 +127,7 @@ Save and exit: press **Ctrl + O**, then **Enter**, then **Ctrl + X**.
 ## Step 7: Set up email (verification and password reset)
 BalayHub emails people to verify accounts, reset passwords and accept team invitations.
 
-1. hPanel → **Emails** → choose your domain → **Create email account**, for example `no-reply@proverbs3digitalsolutions.com`, with a strong password.
-2. Build your `SMTP_URL`:
-   ```
-   smtps://EMAIL:PASSWORD@smtp.hostinger.com:465
-   ```
-   - In the email address, replace `@` with `%40`, so `no-reply@proverbs3digitalsolutions.com` becomes `no-reply%40proverbs3digitalsolutions.com`.
-   - If the password contains special characters, encode them too:
-
-     | Character | `@` | `:` | `/` | `#` | `?` | `%` | `&` | `+` | space |
-     |---|---|---|---|---|---|---|---|---|---|
-     | Write as | `%40` | `%3A` | `%2F` | `%23` | `%3F` | `%25` | `%26` | `%2B` | `%20` |
-
-   - Example:
-     ```
-     SMTP_URL=smtps://no-reply%40proverbs3digitalsolutions.com:MyPass%23123@smtp.hostinger.com:465
-     ```
-3. Put that line in `deploy/.env` (`nano deploy/.env`), and set `REQUIRE_EMAIL_VERIFICATION=true`.
-
-> Hostinger's SMTP server is `smtp.hostinger.com`, port `465` (SSL). If your email is hosted somewhere else, such as Google Workspace, use that provider's SMTP details instead.
+**Follow [`docs/EMAIL-SETUP.md`](EMAIL-SETUP.md).** It covers Google Workspace/Gmail (with an App Password) and Hostinger Email. Use the provider your domain **already** uses; switching your domain's mail to Hostinger would break an existing Gmail inbox.
 
 ## Step 8: Start BalayHub
 Make sure Step 2's DNS check shows your VPS IP first. Caddy needs it to get the HTTPS certificate.
