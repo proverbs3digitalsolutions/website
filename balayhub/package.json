@@ -5,7 +5,9 @@
   "description": "BalayHub — centralized rental property management for Filipino landlords and property managers.",
   "main": "src/index.js",
   "type": "commonjs",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
@@ -15,6 +17,8 @@
   },
   "dependencies": {
     "express": "^4.22.3",
+    "imapflow": "^2.4.0",
+    "mailparser": "^3.9.38",
     "nodemailer": "^10.0.16",
     "pg": "^8.23.1"
   }

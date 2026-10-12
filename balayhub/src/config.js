@@ -24,6 +24,17 @@ const config = {
   // Sign in with Google (OAuth). Both must be set for the button to appear.
   googleClientId: env.GOOGLE_CLIENT_ID || '',
   googleClientSecret: env.GOOGLE_CLIENT_SECRET || '',
+  // Inbox: guest replies go to INBOUND_ADDRESS with a "+bh-<token>" tag (defaults to the
+  // MAIL_FROM address; Gmail and most providers support plus-addressing). IMAP_URL lets
+  // BalayHub read those replies, e.g. imaps://you%40domain.com:APP_PASSWORD@imap.gmail.com:993
+  inboundAddress: env.INBOUND_ADDRESS || ((/<([^>]+)>/.exec(env.MAIL_FROM || '') || [])[1] || ''),
+  imapUrl: env.IMAP_URL || '',
+  // AI reply drafts (optional).
+  anthropicApiKey: env.ANTHROPIC_API_KEY || '',
+  aiModel: env.AI_MODEL || 'claude-haiku-5-5',
+  // Comma-separated emails allowed to open the platform admin page (plans/trials).
+  platformAdmins: (env.PLATFORM_ADMIN_EMAILS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
+  trialDays: Number(env.TRIAL_DAYS || 14),
   privacyPolicyVersion: '2026-10-01',
   timezone: 'Asia/Manila',
 };
