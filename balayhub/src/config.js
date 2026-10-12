@@ -21,6 +21,9 @@ const config = {
   maxUploadBytes: 10 * 1024 * 1024,
   // Number of reverse-proxy hops to trust for client IPs (0 = none). Set to 1 behind a single HTTPS proxy.
   trustProxy: Number(env.TRUST_PROXY || 0),
+  // Sign in with Google (OAuth). Both must be set for the button to appear.
+  googleClientId: env.GOOGLE_CLIENT_ID || '',
+  googleClientSecret: env.GOOGLE_CLIENT_SECRET || '',
   privacyPolicyVersion: '2026-10-01',
   timezone: 'Asia/Manila',
 };

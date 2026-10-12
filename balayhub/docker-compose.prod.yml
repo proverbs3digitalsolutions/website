@@ -31,6 +31,8 @@ services:
       MAIL_FROM: ${MAIL_FROM:-BalayHub <no-reply@example.com>}
       REQUIRE_EMAIL_VERIFICATION: ${REQUIRE_EMAIL_VERIFICATION:-true}
       TRUST_PROXY: "1"
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       STORAGE_DIR: /data/storage
     volumes:
       - uploads:/data/storage

@@ -38,6 +38,7 @@ function createApp() {
   api.use(loadSession);
   api.get('/health', (req, res) => res.json({ ok: true }));
   api.use(require('./routes/auth'));
+  api.use(require('./routes/google'));
   api.use(requireWorkspace);
   api.use(require('./routes/team'));
   api.use(require('./routes/properties'));

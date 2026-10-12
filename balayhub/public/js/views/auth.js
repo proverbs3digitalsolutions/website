@@ -15,6 +15,43 @@ function authCard(title, lead, ...body) {
   return h('div', { class: 'auth-card' }, h('h1', null, title), lead && h('p', { class: 'lead' }, lead), body);
 }
 
+// Login / sign-up: form on the left, a living-room image on the right (hidden on phones).
+function splitPage(...children) {
+  return h('div', { class: 'auth-split' },
+    h('div', { class: 'auth-split__form' },
+      h('header', { class: 'public__top' }, brand('#/')),
+      h('main', { class: 'auth-split__main', id: 'main' }, children)),
+    h('aside', { class: 'auth-split__art', 'aria-hidden': 'true' },
+      h('img', { src: '/img/auth-living-room.svg', alt: '' }),
+      h('div', { class: 'auth-split__caption' },
+        h('strong', null, 'Every stay, tenant and peso — in one place.'),
+        h('span', null, 'Calendar, reservations, rent, cleaning and reports for Filipino hosts and landlords.'))));
+}
+
+let googleEnabled = null;
+async function googleButton(label, invite) {
+  if (googleEnabled === null) {
+    try { googleEnabled = (await get('/auth/options')).google; } catch { googleEnabled = false; }
+  }
+  if (!googleEnabled) return null;
+  const href = `/api/auth/google/start${invite ? `?invite=${encodeURIComponent(invite)}` : ''}`;
+  return h('div', { class: 'google-block' },
+    h('div', { class: 'or-divider' }, h('span', null, 'OR')),
+    h('a', { class: 'btn btn--secondary btn--block btn--google', href },
+      h('img', { src: '/img/google-g.svg', alt: '', width: 18, height: 18 }), label));
+}
+
+const GOOGLE_ERRORS = {
+  not_configured: 'Google sign-in is not set up yet. Use your email and password.',
+  cancelled: 'Google sign-in was cancelled.',
+  expired: 'The Google sign-in took too long or was opened in another tab. Please try again.',
+  google_failed: "We couldn't reach Google. Please try again.",
+  email_unverified: 'Your Google email address is not verified.',
+  revoked: 'This account no longer has access. Contact your workspace owner.',
+  mismatch: 'This email is linked to a different Google account. Log in with your password instead.',
+  invite_email: 'Sign in with the Google account that matches the email the invitation was sent to.',
+};
+
 const devLink = (url, text) => url && h('div', { class: 'alert alert--info' },
   'Development mode — email is not configured, so here is the link: ', h('a', { href: url.slice(url.indexOf('#')) }, text));
 
@@ -64,10 +101,12 @@ export async function loginView(el, { query }) {
     },
   });
   form.querySelector('.form-actions .btn').classList.add('btn--block');
-  el.append(publicPage(authCard('Welcome back', 'Log in to manage your rentals.',
+  el.append(splitPage(authCard('Welcome back!', 'Please enter your details to log in.',
     query.expired && h('div', { class: 'alert alert--warn' }, 'Your session expired. Log in again to continue — unsaved form input on this device is kept.'),
     query.reset && h('div', { class: 'alert alert--ok' }, 'Password updated. Log in with your new password.'),
+    query.google_error && h('div', { class: 'alert alert--error' }, GOOGLE_ERRORS[query.google_error] || 'Google sign-in failed. Please try again.'),
     form,
+    await googleButton('Log in with Google'),
     h('div', { class: 'auth-card__foot' },
       h('p', null, h('a', { href: '#/forgot' }, 'Forgot password?')),
       h('p', null, 'New to BalayHub? ', h('a', { href: '#/signup' }, 'Create an account'))))));
@@ -112,10 +151,13 @@ export async function signupView(el, { query }) {
     },
   });
   form.querySelector('.form-actions .btn').classList.add('btn--block');
-  el.append(publicPage(authCard(
+  const google = await googleButton('Sign up with Google', query.invite);
+  el.append(splitPage(authCard(
     invite ? `Join ${invite.organization_name}` : 'Create your account',
     invite ? `You were invited as ${invite.role === 'manager' ? 'a property manager' : 'staff'}. Create your login to get started.` : 'Free to start. Set up your first property in a few minutes.',
     form,
+    google, google && h('p', { class: 'small muted', style: { marginTop: '8px', textAlign: 'center' } },
+      'By continuing with Google you accept the ', h('a', { href: '#/privacy', target: '_blank' }, 'Privacy Notice'), '.'),
     h('div', { class: 'auth-card__foot' }, 'Already have an account? ', h('a', { href: '#/login' }, 'Log in')))));
 }
 
@@ -130,7 +172,7 @@ export async function forgotView(el) {
       result.replaceChildren(h('div', { class: 'alert alert--ok' }, res.message), devLink(res.devResetLink, 'Reset password'));
     },
   });
-  el.append(publicPage(authCard('Reset your password', "Enter your account email and we'll send a link to choose a new password.",
+  el.append(splitPage(authCard('Reset your password', "Enter your account email and we'll send a link to choose a new password.",
     result, form, h('div', { class: 'auth-card__foot' }, h('a', { href: '#/login' }, '‹ Back to log in')))));
 }
 
