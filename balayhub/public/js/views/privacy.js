@@ -25,7 +25,7 @@ export async function privacyView(el) {
       ...section('Lawful basis',
         'We process account data to perform our agreement with you. Landlords process tenant data for the legitimate purpose of managing a lease and keeping financial records, and must have their own lawful basis under the Data Privacy Act of 2012 (Republic Act No. 10173). Where consent is the basis for an activity, we will ask for it specifically and you can withdraw it.'),
       ...section('Who can see it',
-        'Only members of your workspace, according to their role. Property managers and staff see only the properties assigned to them; staff do not see tenant contact details or lease documents. Our hosting, database, storage and email providers process data only to run the service, under agreements that require them to protect it.'),
+        'Only members of your workspace, according to their role. Property managers and staff see only the properties assigned to them; staff do not see tenant contact details or lease documents. Our hosting, database, storage and email providers process data only to run the service, under agreements that require them to protect it. If a host uses AI reply drafts, that guest conversation and its reservation details are sent to our AI provider (Anthropic) to write the draft; they are not used to train AI models.'),
       ...section('How we protect it',
         'Encrypted connections, hashed passwords, server-enforced access controls on every request, private file storage with permission-checked downloads, audit logs of important changes, and regular backups.'),
       ...section('How long we keep it',
