@@ -58,7 +58,7 @@ async function loadContext(unitId, from, to, db, today) {
   const { rows: seasons } = await run(
     `SELECT season_id, unit_id, name, start_date::text AS start_date, end_date::text AS end_date, nightly_rate, adjust_pct, min_nights
        FROM seasons WHERE organization_id = $1 AND (unit_id IS NULL OR unit_id = $2) AND start_date < $4 AND end_date >= $3
-      ORDER BY (unit_id IS NULL), start_date DESC`, [unit.organization_id, unitId, from, to]);
+      ORDER BY (unit_id IS NULL), start_date DESC, created_at DESC, season_id`, [unit.organization_id, unitId, from, to]);
   const { rows: rules } = await run(
     `SELECT kind, unit_id, days, adjust_pct, active FROM pricing_rules WHERE organization_id = $1 AND (unit_id IS NULL OR unit_id = $2)`,
     [unit.organization_id, unitId]);

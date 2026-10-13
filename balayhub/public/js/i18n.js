@@ -2,7 +2,7 @@
 // guest pages; a guest's own choice (toggle) is remembered on their device.
 // Text is looked up by its English wording; anything missing stays in English.
 
-import { h } from './ui.js';
+import { h, manilaDay } from './ui.js';
 
 const TL = {
   // shared
@@ -242,7 +242,7 @@ export function t(en, vars) {
 }
 
 export function fmtDateL(d) {
-  return d ? new Date(`${String(d).slice(0, 10)}T00:00:00Z`).toLocaleDateString(locale(), { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '';
+  return d ? new Date(`${manilaDay(d)}T00:00:00Z`).toLocaleDateString(locale(), { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '';
 }
 
 export function setGuestLang(l) {

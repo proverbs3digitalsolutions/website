@@ -17,6 +17,7 @@ const { planStatus } = require('../lib/plans');
 const { quote, nightlyPrices } = require('../lib/pricing');
 const { applyCode } = require('../lib/discounts');
 const { addDays } = require('../lib/holidays');
+const { leasedListings } = require('../lib/leases');
 const secretbox = require('../lib/secretbox');
 const paymongo = require('../lib/paymongo');
 const storage = require('../lib/storage');
@@ -262,7 +263,8 @@ publicRouter.get('/public/book/:slug/units/:unitId/availability', ah(async (req,
     `SELECT d::date::text AS date,
             EXISTS (SELECT 1 FROM bookings b WHERE b.unit_id = $1 AND b.status = 'confirmed' AND d::date >= b.check_in AND d::date < b.check_out)
          OR EXISTS (SELECT 1 FROM direct_checkouts c WHERE c.unit_id = $1 AND c.status = 'pending' AND c.hold_until > now()
-                      AND d::date >= c.check_in AND d::date < c.check_out) AS taken
+                      AND d::date >= c.check_in AND d::date < c.check_out)
+         OR EXISTS (SELECT 1 FROM leases l WHERE l.unit_id = $1 AND l.lease_status = 'active' AND d::date >= l.start_date AND (l.end_date IS NULL OR d::date <= l.end_date)) AS taken
        FROM generate_series($2::date, $3::date, interval '1 day') d
       ORDER BY d`, [u.unit_id, from, to]);
   const prices = new Map((await nightlyPrices(u.unit_id, from, addDays(to, 1))).map((n) => [n.night, n]));
@@ -313,7 +315,8 @@ async function isFree(unitId, checkIn, checkOut, exceptRef, db) {
                 AND c.checkout_ref IS DISTINCT FROM $4 AND daterange(c.check_in, c.check_out) && daterange($2::date, $3::date)) AS taken`;
   const params = [unitId, checkIn, checkOut, exceptRef || null];
   const row = db ? (await db.query(sql, params)).rows[0] : await one(sql, params);
-  return !row.taken;
+  // A unit on an active monthly lease isn't open for short stays either.
+  return !row.taken && !(await leasedListings([unitId], checkIn, checkOut, db || undefined)).size;
 }
 
 publicRouter.get('/public/book/:slug/units/:unitId/quote', ah(async (req, res) => {
@@ -334,23 +337,34 @@ publicRouter.post('/public/book/:slug/units/:unitId/checkout', checkoutLimiter, 
   if (host.is_demo) throw new HttpError(403, 'This is a demo booking page, so it can\'t take real bookings.', { code: 'DEMO_READ_ONLY' });
   if (!host.accepting) throw new HttpError(409, 'This host is not taking online bookings right now. Please contact them directly.', { code: 'NOT_ACCEPTING' });
   const u = await loadPublicUnit(host, req.params.unitId);
-  const body = validate(req.body, {
-    check_in: { type: 'date', required: true, label: 'Check-in' },
-    check_out: { type: 'date', required: true, label: 'Check-out' },
-    num_guests: { type: 'int', required: true, min: 1, max: 50, label: 'Guests' },
-    name: { type: 'string', required: true, max: 120, label: 'Full name' },
-    email: { type: 'email', required: true, label: 'Email' },
-    phone: { type: 'phone', required: true, label: 'Mobile number' },
-    notes: { type: 'text', max: 1000, label: 'Message to the host' },
-    pay: { type: 'enum', values: ['full', 'deposit'], required: true, label: 'Payment' },
-    code: { type: 'string', max: 40, label: 'Discount code' },
+  // Consent and house rules are collected with the other field errors, so one 400 names every missing field.
+  const rules = u.house_rules && u.house_rules.trim() ? u.house_rules : null;
+  const agreed = validate(req.body, {
     consent: { type: 'bool', label: 'Consent' },
     accept_rules: { type: 'bool', label: 'House rules' },
   });
-  if (!body.consent) throw validationError({ consent: 'Please agree to continue.' });
+  const fields = {};
+  if (!agreed.consent) fields.consent = 'Please agree to continue.';
+  if (rules && !agreed.accept_rules) fields.accept_rules = 'Please read and agree to the house rules.';
+  let body;
+  try {
+    body = validate(req.body, {
+      check_in: { type: 'date', required: true, label: 'Check-in' },
+      check_out: { type: 'date', required: true, label: 'Check-out' },
+      num_guests: { type: 'int', required: true, min: 1, max: 50, label: 'Guests' },
+      name: { type: 'string', required: true, max: 120, label: 'Full name' },
+      email: { type: 'email', required: true, label: 'Email' },
+      phone: { type: 'phone', required: true, label: 'Mobile number' },
+      notes: { type: 'text', max: 1000, label: 'Message to the host' },
+      pay: { type: 'enum', values: ['full', 'deposit'], required: true, label: 'Payment' },
+      code: { type: 'string', max: 40, label: 'Discount code' },
+    });
+  } catch (err) {
+    if (!err.extra?.fields) throw err;
+    Object.assign(fields, err.extra.fields);
+  }
+  if (Object.keys(fields).length) throw validationError(fields);
   if (u.max_guests && body.num_guests > u.max_guests) throw validationError({ num_guests: `This place allows up to ${u.max_guests} guests.` });
-  const rules = u.house_rules && u.house_rules.trim() ? u.house_rules : null;
-  if (rules && !body.accept_rules) throw validationError({ accept_rules: 'Please read and agree to the house rules.' });
   const price = await priceStay(u, body.check_in, body.check_out, { orgId: host.organization_id, code: body.code, email: body.email, name: body.name, strict: true });
   if ((body.pay === 'deposit' && !price.deposit_allowed) || (body.pay === 'full' && !price.full_allowed)) {
     throw validationError({ pay: body.pay === 'deposit' && u.payment_option !== 'full'

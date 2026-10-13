@@ -66,7 +66,7 @@ class AiError extends Error {
 }
 
 async function draftReply({ conversation, user, instructions }) {
-  if (!config.anthropicApiKey) throw new AiError('AI drafts are not set up on the server.', 409);
+  if (!config.anthropicApiKey) throw new AiError('AI drafts are not available right now. Try again later.', 409);
   if (!allow(conversation.organization_id)) throw new AiError('AI draft limit reached for this hour. Please try again later.', 429);
   const ctx = await one(
     `SELECT b.*, u.unit_name, u.checkin_time, u.checkout_time, u.wifi_name, u.wifi_password, u.checkin_instructions, u.house_rules,
@@ -108,7 +108,10 @@ async function draftReply({ conversation, user, instructions }) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     console.error(`[ai] ${res.status}: ${data?.error?.message || ''}`);
-    if (res.status === 401) throw new AiError('The AI key on the server was rejected. Check ANTHROPIC_API_KEY.');
+    if (res.status === 401 || res.status === 403) {
+      console.error('[ai] the server AI key was rejected: check ANTHROPIC_API_KEY');
+      throw new AiError('AI drafts are not available right now. Try again later.');
+    }
     if (res.status === 429 || res.status === 529) throw new AiError('The AI service is busy. Please try again in a minute.');
     throw new AiError('The AI service could not write a draft right now. Please try again.');
   }

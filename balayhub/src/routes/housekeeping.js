@@ -300,7 +300,7 @@ router.post('/cleaning-tasks/:id/status', ah(async (req, res) => {
     const set = {
       todo: 'status = \'todo\', started_at = NULL, completed_at = NULL, completed_by = NULL',
       in_progress: 'status = \'in_progress\', started_at = COALESCE(started_at, now()), completed_at = NULL, completed_by = NULL',
-      done: `status = 'done', started_at = COALESCE(started_at, now()), completed_at = now(), completed_by = $2,
+      done: `status = 'done', completed_at = now(), completed_by = $2,
              assigned_to = CASE WHEN assigned_to IS NULL AND assignee_name IS NULL THEN $2 ELSE assigned_to END`,
       cancelled: 'status = \'cancelled\'',
     }[status];
@@ -348,7 +348,7 @@ router.post('/cleaning-tasks/:id/inspect', managers, ah(async (req, res) => {
   const score = Math.round((passedCount / items.length) * 100);
   const passed = passedCount === items.length;
   const inspection = await tx(async (db) => {
-    const { rows: [cur] } = await db.query('SELECT status, pay_status FROM cleaning_tasks WHERE task_id = $1 FOR UPDATE', [task.task_id]);
+    const { rows: [cur] } = await db.query('SELECT status, pay_status, pay_amount FROM cleaning_tasks WHERE task_id = $1 FOR UPDATE', [task.task_id]);
     if (cur.status !== 'done') throw new HttpError(409, 'Only a finished clean can be inspected.', { code: 'NOT_DONE' });
     if (!passed && cur.pay_status === 'paid') {
       throw new HttpError(409, "This clean is already paid, so a failed inspection can't reopen it.", { code: 'PAID' });
@@ -368,10 +368,12 @@ router.post('/cleaning-tasks/:id/inspect', managers, ah(async (req, res) => {
       await db.query(`UPDATE units SET cleaning_status = 'dirty', cleaning_updated_at = now() WHERE unit_id = $1`, [task.unit_id]);
     }
     await audit(db, req.user, 'cleaning.inspected', 'cleaning_task', task.task_id, { score, passed });
-    return ins;
+    return { ...ins, payCleared: !passed && cur.pay_amount != null };
   });
   res.status(201).json({
     inspection: { inspection_id: inspection.inspection_id, passed, score },
+    // A failed inspection reopens the clean and clears its pay (it is priced again when finished).
+    pay_cleared: inspection.payCleared,
     task: await loadTask(req.user, task.task_id),
   });
 }));

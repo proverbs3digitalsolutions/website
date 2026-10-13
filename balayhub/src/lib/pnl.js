@@ -5,7 +5,7 @@
 
 const { query, one } = require('../db');
 const { propertyScope } = require('./access');
-const { monthBounds } = require('./statements');
+const { monthBounds, refundsBeyondOverpayment } = require('./statements');
 
 const cents = (v) => Math.round(Number(v || 0) * 100);
 const money = (c) => (c / 100).toFixed(2);
@@ -58,21 +58,17 @@ async function unitPnl(orgId, month, { unitIds, user, propertyId } = {}) {
     Object.assign(byUnit.get(s.unit_id), { stays: s.stays, nights: s.nights, gross: cents(s.gross), channel: cents(s.channel_fees) });
   }
 
-  // Refunds dated in the month. Copy of the rule in statements.js (D-32): refunding an overpayment does not
-  // reduce income, only the part beyond it does. Keep the two in step.
+  // Refunds dated in the month. Same rule as the statements (D-32): refunding an overpayment does not
+  // reduce income, only the part beyond it does.
   const { rows: refunds } = await query(
-    `SELECT b.booking_id, b.unit_id, b.total_amount, SUM(r.amount) AS in_period,
+    `SELECT b.booking_id, b.unit_id, b.total_amount, b.channel_fee, SUM(r.amount) AS in_period,
             COALESCE((SELECT SUM(p.amount) FROM booking_payments p WHERE p.booking_id = b.booking_id AND p.voided_at IS NULL), 0) AS paid,
             COALESCE((SELECT SUM(x.amount) FROM booking_refunds x WHERE x.booking_id = b.booking_id AND x.voided_at IS NULL AND x.refund_date < $2), 0) AS before_period
        FROM booking_refunds r JOIN bookings b ON b.booking_id = r.booking_id
       WHERE b.unit_id = ANY($1) AND b.kind = 'reservation' AND b.status = 'confirmed'
         AND r.voided_at IS NULL AND r.refund_date >= $2 AND r.refund_date < $3
-      GROUP BY b.booking_id, b.unit_id, b.total_amount`, [ids, start, end]);
-  for (const r of refunds) {
-    const over = Math.max(0, cents(r.paid) - cents(r.total_amount));
-    const before = cents(r.before_period);
-    byUnit.get(r.unit_id).refunds += Math.max(0, before + cents(r.in_period) - over) - Math.max(0, before - over);
-  }
+      GROUP BY b.booking_id, b.unit_id, b.total_amount, b.channel_fee`, [ids, start, end]);
+  for (const r of refunds) byUnit.get(r.unit_id).refunds += refundsBeyondOverpayment(r);
 
   const { rows: unitExpenses } = await query(
     `SELECT e.unit_id, SUM(e.amount) AS amount FROM expenses e

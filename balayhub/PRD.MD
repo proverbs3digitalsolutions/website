@@ -611,6 +611,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - Statements show receipts for expenses. The review list shows each owner's status, payout, paid amount and sent date.
 - Payouts: record and void (with a reason). Methods: GCash, Maya, bank transfer, cash, other.
 - Repairs reserve: target and monthly top-up per owner. Top-ups come out of the payout on publish. Withdrawals are recorded by hand with a note.
+- A payout that would take a month's payouts above the statement's payout asks the host to confirm first (never blocked); the statement then shows "Overpaid by". The owner portal's profit and loss for a published month shows the frozen statement numbers, labelled (D-76).
 - Reminder: on the 3rd of each month (Manila time), each workspace owner is emailed "n statements ready to review". Once per workspace per month. Nothing is published or sent by the reminder.
 
 **Done looks like:**
@@ -714,6 +715,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 **What it does:**
 - Per property: item name, unit label, par level and on-hand count.
 - Movements (count, restock, used) update on hand and are kept in a history.
+- Owners and managers can open a per-item History of the last 20 movements (what, how many, who, when, note). Staff and cleaners can't. "Take stock out" is now called "Record use".
 - Low stock (on hand below par) shows on Home and on the supplies page.
 - On a job, record what was used or restocked.
 
@@ -794,6 +796,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - Guests pay for add-ons in full, up front, with their deposit. The deposit percentage counts the stay only.
 - Each add-on bought shows as an extra charge on the reservation, in the bill, receipt, balance, P&L and owner statement.
 - Archiving hides an add-on. Past stays keep it.
+- Two active add-ons can't share a name (case ignored). The add-ons page has a search and status filter bar.
 
 **Done looks like:** The booking total equals accommodation plus cleaning plus add-ons, to the centavo. An add-on bought twice by a retried request is recorded once.
 

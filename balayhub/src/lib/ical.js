@@ -9,6 +9,7 @@ const dns = require('dns');
 const net = require('net');
 const crypto = require('crypto');
 const { pool } = require('../db');
+const { leasedListings } = require('./leases');
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const TIMEOUT_MS = 15000;
@@ -195,6 +196,8 @@ async function syncFeed(feedId, { fetcher = fetchText } = {}) {
   events = events.filter((e) => e.end >= horizon);
   const counts = { added: 0, updated: 0, removed: 0, conflicts: [] };
   const newStays = []; // for a notification (not on a feed's first import)
+  const freshOverlaps = []; // overlaps that are new, or back after being resolved: alerted once
+  let result;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -203,7 +206,6 @@ async function syncFeed(feedId, { fetcher = fetchText } = {}) {
     const { rows: priorConflicts } = await client.query('SELECT external_uid, resolved_at FROM ical_conflicts WHERE feed_id = $1', [feedId]);
     const openBefore = new Set(priorConflicts.filter((c) => !c.resolved_at).map((c) => c.external_uid));
     const overlaps = new Map(); // uid -> event skipped because its dates are taken in BalayHub
-    const freshOverlaps = []; // overlaps that are new, or back after being resolved: alerted once
     const seen = new Set();
     for (const ev of events) {
       if (seen.has(ev.uid)) continue; // repeated UID (recurrence overrides): keep the first
@@ -217,12 +219,14 @@ async function syncFeed(feedId, { fetcher = fetchText } = {}) {
           if (prev.status === 'cancelled' && !syncCancelled) {
             // Cancelled by the host in BalayHub: leave it cancelled.
           } else if (prev.check_in !== ev.start || prev.check_out !== ev.end || syncCancelled) {
+            if (kind === 'reservation') await assertNotLeased(client, feed, ev);
             await client.query(
               `UPDATE bookings SET check_in = $2, check_out = $3, status = 'confirmed', cancelled_at = NULL, cancel_reason = NULL, updated_at = now()
                 WHERE booking_id = $1`, [prev.booking_id, ev.start, ev.end]);
             counts.updated += 1;
           }
         } else {
+          if (kind === 'reservation') await assertNotLeased(client, feed, ev);
           await client.query(
             `INSERT INTO bookings (organization_id, unit_id, kind, guest_label, channel, check_in, check_out, confirmation_code,
                                    block_reason, notes, ical_feed_id, external_uid)
@@ -274,9 +278,7 @@ async function syncFeed(feedId, { fetcher = fetchText } = {}) {
       `UPDATE ical_feeds SET last_synced_at = now(), last_status = $2, last_message = $3 WHERE feed_id = $1`,
       [feedId, counts.conflicts.length ? 'error' : 'ok', message]);
     await client.query('COMMIT');
-    if (newStays.length) notifyNewStays(feed, label, newStays).catch(() => {});
-    if (freshOverlaps.length) alertOverlaps(feed, label, freshOverlaps).catch(() => {});
-    return { ok: true, message, ...counts };
+    result = { ok: true, message, ...counts };
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     const message = `Sync failed: ${String(err.message || err).slice(0, 250)}`;
@@ -286,6 +288,11 @@ async function syncFeed(feedId, { fetcher = fetchText } = {}) {
   } finally {
     client.release();
   }
+  // Sent after the connection is back in the pool, so a slow push service cannot hold it.
+  // Both are still awaited, so they finish before the sync resolves.
+  if (newStays.length) await notifyNewStays(feed, label, newStays).catch(() => {});
+  if (freshOverlaps.length) await alertOverlaps(feed, label, freshOverlaps).catch(() => {});
+  return result;
 }
 
 const fmtDay = (dd) => new Date(`${dd}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', timeZone: 'UTC' });
@@ -299,6 +306,13 @@ async function notifyNewStays(feed, label, stays) {
     url: '/#/reservations?view=recent',
     propertyId: u.property_id,
   });
+}
+
+// A stay can't be imported over an active monthly lease: it is skipped and recorded as an overlap, like a clash with another stay.
+async function assertNotLeased(client, feed, ev) {
+  if ((await leasedListings([feed.unit_id], ev.start, ev.end, client)).size) {
+    throw Object.assign(new Error('Overlaps a monthly lease'), { constraint: 'bookings_no_overlap' });
+  }
 }
 
 // An event skipped because its dates are taken in BalayHub (D-73). `fresh` marks a new problem, which gets an alert.

@@ -2,7 +2,7 @@
 
 import { get, post, patch, api, uploadFile, qs, ApiError } from '../api.js';
 import {
-  h, icon, fmtDate, fmtDateTime, badge, field, formModal, confirmDialog, emptyState, errorState, toast, todayManila, filesList, openModal, peso,
+  h, icon, manilaDay, fmtDate, fmtDateTime, badge, field, formModal, confirmDialog, emptyState, errorState, toast, todayManila, filesList, openModal, peso,
 } from '../ui.js';
 import { t, initGuestLang, extendTranslations } from '../i18n.js';
 import { state } from '../app.js';
@@ -147,7 +147,15 @@ async function newTaskModal(onSaved) {
       field({ name: 'assignee_name', label: 'Or a cleaner without a login', maxlength: 80 }),
       field({ name: 'notes', label: 'Notes', type: 'textarea', maxlength: 1000, placeholder: 'e.g. Deep clean, change curtains' }),
     ],
-    onSubmit: async (d) => { await post('/cleaning-tasks', d); toast('Cleaning task added.'); onSaved(); },
+    onSubmit: async (d) => {
+      // A past date is allowed (recording a clean already done) but asked about first.
+      if (d.due_date && d.due_date < todayManila()
+        && !(await confirmDialog({ title: 'Date is in the past', text: `${fmtDate(d.due_date)} has already passed, so this task will show as overdue. Add it anyway?`, confirmText: 'Add task' }))) {
+        const msg = 'Change the date, or press Add task again and confirm.';
+        throw new ApiError(msg, { status: 400, fields: { due_date: msg } });
+      }
+      await post('/cleaning-tasks', d); toast('Cleaning task added.'); onSaved();
+    },
   });
 }
 
@@ -304,7 +312,7 @@ async function boardTab(box) {
               ? h('a', { href: `#/housekeeping/${u.open_task.task_id}` }, `${T(STATUS[u.open_task.status]?.[1] || 'To do')}${u.open_task.assignee ? ` · ${u.open_task.assignee}` : ''}`)
               : h('span', { class: 'muted' }, T('No open cleaning task'))),
             u.last_inspection && [h('dt', null, T('Last inspection')),
-              h('dd', null, `${u.last_inspection.score}% · ${u.last_inspection.passed ? 'Passed' : 'Failed'} · ${fmtDate(String(u.last_inspection.at).slice(0, 10))}`)]))))
+              h('dd', null, `${u.last_inspection.score}% · ${u.last_inspection.passed ? 'Passed' : 'Failed'} · ${fmtDate(manilaDay(u.last_inspection.at))}`)]))))
         : h('div', { class: 'card' }, emptyState({ title: T('No units to show.'), iconName: 'home' })));
   }
   box.replaceChildren(pick && h('div', { class: 'hk-toolbar' }, pick), grid);
@@ -492,7 +500,8 @@ function inspectModal(task, onSaved) {
     onSubmit: async (d) => {
       const r = await post(`/cleaning-tasks/${task.task_id}/inspect`, { items: rows.map((x) => ({ index: x.i, pass: x.box.checked })), notes: d.notes || null });
       await attachPhoto('inspection', r.inspection?.inspection_id, photo);
-      toast(r.inspection?.passed ? 'Inspection passed. Listing marked inspected.' : 'Sent back for re-cleaning');
+      toast(r.inspection?.passed ? 'Inspection passed. Listing marked inspected.'
+        : `Sent back for re-cleaning${r.pay_cleared ? '. The pay you set was cleared; it is set again when the clean is finished.' : ''}`);
       onSaved();
     },
   });
@@ -555,7 +564,7 @@ export async function housekeepingDetailView(el, { params, rerender }) {
   const payCard = isManager
     ? (t.status === 'done' || t.pay_amount != null) && h('div', { class: 'card' },
       h('div', { class: 'card__head' }, h('h2', null, 'Cleaner pay'), t.pay_status && badge(t.pay_status === 'paid' ? 'paid' : 'unpaid', t.pay_status === 'paid' ? 'Paid' : 'Unpaid')),
-      h('p', null, t.pay_amount != null ? h('strong', null, peso(t.pay_amount)) : h('span', { class: 'muted' }, 'No rate set for this cleaner yet.')),
+      h('p', null, t.pay_amount != null ? h('strong', null, peso(t.pay_amount)) : h('span', { class: 'muted' }, 'Pay not set — add the hours, or set the amount.')),
       t.pay_status !== 'paid' && h('button', { class: 'btn btn--secondary', onclick: () => payModal(t, rerender) }, t.pay_amount != null ? 'Edit pay' : 'Set pay'))
     : t.pay_amount != null && h('div', { class: 'card' },
       h('div', { class: 'card__head' }, h('h2', null, T('Your pay for this clean')), badge(t.pay_status === 'paid' ? 'paid' : 'unpaid', T(t.pay_status === 'paid' ? 'Paid' : 'Not paid yet'))),

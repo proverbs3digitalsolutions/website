@@ -1,11 +1,14 @@
 // Terms of Service. Draft text — to be reviewed by a Philippine lawyer before
 // launch (see docs/PRIVACY-CHECKLIST.md).
 
+import { get } from '../api.js';
 import { h, brand } from '../ui.js';
 import { state } from '../app.js';
 
 export async function termsView(el) {
-  const section = (title, ...paras) => [h('h2', null, title), ...paras.map((p) => (Array.isArray(p) ? h('ul', null, p.map((li) => h('li', null, li))) : h('p', null, p)))];
+  let contact = '';
+  try { contact = (await get('/public/plans')).contact_email || ''; } catch { /* ignore */ }
+  const section = (title, ...paras) => [h('h2', null, title), ...paras.map((p) => (Array.isArray(p) ? h('ul', null, p.map((li) => h('li', null, li))) : typeof p === 'string' ? h('p', null, p) : p))];
   el.append(h('div', { class: 'public' },
     h('header', { class: 'public__top' }, brand(state.user ? '#/home' : '#/'), h('a', { class: 'btn btn--secondary btn--sm', href: state.user ? '#/settings' : '#/signup' }, 'Back')),
     h('main', { class: 'content', id: 'main' }, h('article', { class: 'card prose' },
@@ -43,5 +46,7 @@ export async function termsView(el) {
       ...section('11. Governing law',
         'These terms are governed by the laws of the Republic of the Philippines. Disputes will be handled by the proper courts of the Philippines.'),
       ...section('12. Contact',
-        'Questions about these terms: [contact email — to be set before launch].')))));
+        contact
+          ? h('p', null, 'Questions about these terms: ', h('a', { href: `mailto:${contact}` }, contact), '.')
+          : h('p', null, 'Questions about these terms? Use ', h('a', { href: '#/help' }, 'Help & support'), '.'))))));
 }

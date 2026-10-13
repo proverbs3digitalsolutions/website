@@ -43,6 +43,7 @@ import { quoteView } from './views/quote.js';
 import { guideView } from './views/guide.js';
 import { addonsView } from './views/addons.js';
 import { quotesView, quoteDetailView } from './views/quotes.js';
+import { routeAllowed } from './routeaccess.js';
 import { registerServiceWorker, forgetThisDevice } from './notifications.js';
 import { themeSwitch } from './themeswitch.js';
 import { assistantButton, resetAssistant } from './assistant.js';
@@ -342,6 +343,7 @@ function buildShell(path) {
 }
 
 // ---------------------------------------------------------------- render
+const PUBLIC_TITLES = { '/login': 'Log in', '/signup': 'Sign up', '/forgot': 'Forgot password' };
 let renderSeq = 0;
 export async function render() {
   const seq = ++renderSeq;
@@ -360,6 +362,9 @@ export async function render() {
 
   // A cleaner opening anything that isn't theirs goes to their jobs, not an error page.
   if (route.access === APP && state.user?.role === 'cleaner' && !isCleanerPath(path)) { navigate('#/housekeeping', { replace: true }); return; }
+
+  // Pages this role or workspace module can't use go home instead of opening by URL.
+  if (route.access === APP && !routeAllowed(path, state.user)) { toast("That page isn't available for your role or workspace.", 'error'); navigate(homeRoute(), { replace: true }); return; }
 
   document.querySelectorAll('dialog.modal, .morenav').forEach((d) => d.remove());
   const ctx = { params: route.params, query, state, navigate, rerender: render };
@@ -387,8 +392,22 @@ export async function render() {
     app.replaceChildren(mount);
     document.title = 'BalayHub — Rental Property Management';
     try { await route.view(mount, ctx); } catch (err) { mount.replaceChildren(errorState(err, render)); }
+    // Landing keeps the site title; sign-in pages have friendly h1s, so name them; others use their h1 (minus a leading brand name).
+    const title = path === '/' ? '' : PUBLIC_TITLES[path] || mount.querySelector('h1')?.textContent.replace(/^BalayHub /, '').replace(/^Terms of Service/, 'Terms of service');
+    if (seq === renderSeq && title) document.title = `${title} — BalayHub`;
   }
 }
+
+// Keyboard users can only scroll a table box that can take focus.
+function labelTableWraps(root) {
+  root.querySelectorAll('.table-wrap:not([role])').forEach((w) => {
+    const heading = w.closest('.card, section, main')?.querySelector('h1, h2, h3');
+    w.setAttribute('role', 'region');
+    w.setAttribute('tabindex', '0');
+    w.setAttribute('aria-label', `${heading?.textContent.trim() || 'Table'} (scrollable)`);
+  });
+}
+new MutationObserver(() => labelTableWraps(document.getElementById('app'))).observe(document.getElementById('app'), { childList: true, subtree: true });
 
 // ---------------------------------------------------------------- session events
 onAuthLost(async (err) => {

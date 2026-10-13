@@ -2,7 +2,7 @@
 
 import { get, post, ApiError } from '../api.js';
 import { h, brand, field, readForm, clearErrors, showErrors } from '../ui.js';
-import { t, tServer, tFields, initGuestLang, langToggle, extendTranslations, fmtDateL as fmtDate } from '../i18n.js';
+import { t, tServer, tFields, guestLang, initGuestLang, langToggle, extendTranslations, fmtDateL as fmtDate } from '../i18n.js';
 
 extendTranslations({
   'Your quote': 'Quote mo',
@@ -139,7 +139,10 @@ export async function quoteView(el, { params }) {
         row(t('Guests'), String(q.num_guests)),
         row(t('Accommodation'), peso(q.accommodation_total)),
         Number(q.cleaning_fee) > 0 && row(t('Cleaning fee'), peso(q.cleaning_fee)),
-        ...addons.map((a) => row(`${a.name}${Number(a.quantity) > 1 ? ` × ${a.quantity}` : ''}`, peso(a.amount))),
+        ...addons.map((a) => {
+          const name = (guestLang() === 'tl' && a.name_tl) || a.name;
+          return row(`${name}${Number(a.quantity) > 1 ? ` × ${a.quantity}` : ''}`, peso(a.amount));
+        }),
         Number(q.discount_amount) > 0 && row(t('Discount'), `− ${peso(q.discount_amount)}`),
         row(t('Total'), peso(total), true),
         row(t('Due now'), peso(due), true),

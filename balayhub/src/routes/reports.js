@@ -256,6 +256,12 @@ function csvCell(v) {
 }
 const csvRows = (rows) => rows.map((r) => r.map(csvCell).join(',')).join('\r\n');
 
+// The names the reports screen shows for each expense category (LABELS in public/js/ui.js). Keep them in step.
+const EXPENSE_CATEGORY_LABELS = {
+  repairs: 'Repairs & maintenance', utilities: 'Utilities', taxes: 'Taxes & permits', insurance: 'Insurance',
+  association_dues: 'Association dues', supplies: 'Supplies', salaries: 'Salaries & caretaker', cleaning: 'Cleaning', other: 'Other',
+};
+
 router.get('/reports/export', ah(async (req, res) => {
   const { from, to } = range(req.query);
   const { propertyId, propertyType } = reportFilters(req.query);
@@ -271,7 +277,7 @@ router.get('/reports/export', ah(async (req, res) => {
     [], ['By month'], ['Month', 'Collected', 'Expenses', 'Net'],
     ...r.monthly.map((m) => [m.month.slice(0, 7), m.collected, m.expenses, m.net]),
     [], ['Expenses by category'], ['Category', 'Amount', 'Entries'],
-    ...r.by_category.map((c) => [c.category, c.amount, c.count]),
+    ...r.by_category.map((c) => [EXPENSE_CATEGORY_LABELS[c.category] || c.category, c.amount, c.count]),
     [], ['Outstanding balances'], ['Tenant', 'Property', 'Unit', 'Outstanding', 'Overdue', 'Oldest overdue due date'],
     ...r.outstanding.map((o) => [o.tenant_name, o.property_name, o.unit_name, o.outstanding, o.overdue, o.oldest_overdue]),
   ];

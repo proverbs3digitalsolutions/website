@@ -2,11 +2,12 @@
 
 import { get, post, patch, qs, ApiError } from '../api.js';
 import {
-  h, icon, peso, fmtDate, fmtDateTime, badge, options, field, formModal, confirmDialog, emptyState, searchBox, toast, todayManila, openModal,
+  h, icon, peso, fmtDate, fmtDateTime, badge, options, field, formModal, confirmDialog, emptyState, searchBox, toast, todayManila, manilaDay, openModal,
 } from '../ui.js';
 import { state, navigate } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 import { messageGuest } from './inbox.js';
+import { copyText } from './quotes.js';
 import { checkinCard } from './checkin.js';
 import { stars } from './guestcare.js';
 import { gatepassCard } from './gatepass.js';
@@ -177,7 +178,8 @@ export async function reservationsView(el, { query }) {
 
   async function load() {
     history.replaceState(null, '', `#/reservations${qs(changed(filters, { ...defaults, view: '' }))}`);
-    exportLink.href = `/api/reservations/export${qs(changed(filters, defaults))}&view=${filters.view}`;
+    // Same query as the list below, so the export matches what is on screen. view is always sent, once.
+    exportLink.href = `/api/reservations/export${qs(changed(filters, { ...defaults, view: '' }))}`;
     viewSelect.value = filters.view;
     side.replaceChildren(...VIEWS.map(([v, t]) => h('button', { type: 'button', 'aria-current': v === filters.view ? 'true' : null, onclick: () => { filters.view = v; rememberFilters('reservations', filters); load(); } }, t)));
     const { reservations } = await get(`/reservations${qs(changed(filters, { ...defaults, view: '' }))}`);
@@ -197,7 +199,7 @@ export async function reservationsView(el, { query }) {
       h('p', { class: 'muted small' }, `Showing ${reservations.length} reservation${reservations.length === 1 ? '' : 's'}${canManage ? ` · ${peso(total)} booked · ${peso(due)} still to collect` : ''}`),
       h('div', { class: 'table-wrap res-table' }, h('table', { class: 'table' },
         h('thead', null, h('tr', null, ['Check-in', 'Check-out', 'Guest', 'Listing', 'Channel', 'Code'].map((t) => h('th', null, t)), h('th', { class: 'num' }, 'Total'), h('th', { class: 'num' }, 'Balance'))),
-        h('tbody', null, reservations.map((r) => h('tr', { class: 'row-link', tabindex: 0, onclick: () => navigate(`#/reservations/${r.booking_id}`), onkeydown: (e) => { if (e.key === 'Enter') navigate(`#/reservations/${r.booking_id}`); } },
+        h('tbody', null, reservations.map((r) => h('tr', { class: 'row-link', tabindex: 0, onclick: () => navigate(`#/reservations/${r.booking_id}`), onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`#/reservations/${r.booking_id}`); } } },
           h('td', null, fmtDate(r.check_in), h('div', { class: 'muted small' }, `${r.nights} night${r.nights > 1 ? 's' : ''}`)),
           h('td', null, fmtDate(r.check_out)),
           h('td', null, h('strong', null, r.guest_name || r.guest_label || 'Guest'), r.guest_vip ? ' ⭐' : null, r.num_guests ? h('div', { class: 'muted small' }, `${r.num_guests} guest${r.num_guests > 1 ? 's' : ''}`) : null),
@@ -276,7 +278,7 @@ async function damageCard(r, rerender) {
       return h('li', null, h('div', { class: 'row' },
         h('div', { class: 'row__main' },
           h('span', { class: 'row__title' }, x.description),
-          h('span', { class: 'row__sub' }, `${x.estimated_cost ? `Estimated ${peso(x.estimated_cost)} · ` : ''}${fmtDate(String(x.created_at).slice(0, 10))}${x.resolution_note ? ` · ${x.resolution_note}` : ''}`)),
+          h('span', { class: 'row__sub' }, `${x.estimated_cost ? `Estimated ${peso(x.estimated_cost)} · ` : ''}${fmtDate(manilaDay(x.created_at))}${x.resolution_note ? ` · ${x.resolution_note}` : ''}`)),
         h('div', { class: 'row__end' }, badge(cls, text))),
       x.status === 'open' && h('div', { class: 'chips', style: { margin: '4px 0 10px' } },
         h('button', { class: 'btn btn--primary btn--sm', type: 'button', onclick: () => charge(x) }, 'Charge the guest'),
@@ -427,23 +429,29 @@ export async function reservationDetailView(el, { params, rerender }) {
   const lostFound = canManage ? await card(lostFoundCard) : null;
   const activity = canManage ? await activityCard(r).catch(() => null) : null;
   const grp = r.group;
-  const overpaid = canManage && Number(r.balance) < 0 ? Math.abs(Number(r.balance)) : 0;
+  // Overpaid and "You keep" apply to live bookings only. A cancelled booking that still holds money points to the Refunds card instead.
+  const overpaid = canManage && confirmed && Number(r.balance) < 0 ? Math.abs(Number(r.balance)) : 0;
+  const heldInfo = canManage && !confirmed ? await get(`/reservations/${r.booking_id}/refunds`).catch(() => null) : null;
+  const stillToRefund = heldInfo ? Number(heldInfo.refundable) : 0;
   const keep = Number(r.total_amount) - Number(r.channel_fee);
   const feeSaved = r.channel === 'direct' ? Math.round(Number(r.accommodation_total) * 15) / 100 : 0;
+
+  // Scrolls to the Refunds card; the links keep the #refunds-card anchor.
+  const goRefunds = (e) => { e.preventDefault(); document.getElementById('refunds-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
 
   // Private link where the guest pays the balance online (host's PayMongo).
   const copyPayLink = async () => {
     try {
       const l = await get(`/reservations/${r.booking_id}/payment-link`);
       if (!l.available) { toast(l.reason, 'error'); return; }
-      try { await navigator.clipboard.writeText(l.link); toast(`Payment link for ${peso(l.balance)} copied. Send it to the guest.`); } catch { window.prompt('Copy the payment link:', l.link); }
+      await copyText(l.link, `Payment link for ${peso(l.balance)} copied. Send it to the guest.`, 'Copy the payment link');
     } catch (err) { toast(err.message, 'error'); }
   };
 
   const copyGuideLink = async () => {
     try {
       const { url } = await post(`/reservations/${r.booking_id}/guide-link`);
-      try { await navigator.clipboard.writeText(url); toast('Guidebook link copied. Send it to the guest.'); } catch { window.prompt('Copy the guidebook link:', url); }
+      await copyText(url, 'Guidebook link copied. Send it to the guest.', 'Copy the guidebook link');
     } catch (err) { toast(err.message, 'error'); }
   };
   const emailReceipt = async (p) => {
@@ -497,7 +505,10 @@ export async function reservationDetailView(el, { params, rerender }) {
         h('div', { class: 'card', id: 'payment-card' },
           overpaid > 0 && h('div', { class: 'alert alert--warn', role: 'alert', style: { marginBottom: '12px' } },
             `Guest overpaid by ${peso(overpaid)} — `,
-            h('a', { href: '#refunds-card', onclick: (e) => { e.preventDefault(); document.getElementById('refunds-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, 'record a refund')),
+            h('a', { href: '#refunds-card', onclick: goRefunds }, 'record a refund')),
+          stillToRefund > 0 && h('div', { class: 'alert alert--warn', role: 'alert', style: { marginBottom: '12px' } },
+            `Cancelled: ${peso(stillToRefund)} still to refund — `,
+            h('a', { href: '#refunds-card', onclick: goRefunds }, 'see the Refunds card')),
           h('div', { class: 'card__head' }, h('h2', null, 'Payment'), h('div', { class: 'chips' },
             canManage && confirmed && Number(r.balance) > 0 && h('button', { class: 'btn btn--secondary btn--sm', onclick: copyPayLink }, 'Copy payment link'),
             confirmed && h('button', { class: 'btn btn--primary btn--sm', onclick: recordPayment }, 'Record payment'))),
@@ -509,7 +520,7 @@ export async function reservationDetailView(el, { params, rerender }) {
             Number(r.channel_fee) > 0 && [h('dt', null, 'Channel fee'), h('dd', { class: 'muted' }, `− ${peso(r.channel_fee)}`)],
             h('dt', null, 'Paid'), h('dd', null, peso(r.amount_paid)),
             h('dt', null, 'Balance'), h('dd', { class: Number(r.balance) > 0 ? 'amount--neg' : '' }, h('strong', null, peso(r.balance)))),
-          canManage && h('div', { class: 'keep-line' },
+          canManage && confirmed && h('div', { class: 'keep-line' },
             h('div', null, 'You keep ', h('strong', null, peso(keep))),
             feeSaved > 0 && h('div', { class: 'keep-line__save' }, `No channel fee — about ${peso(feeSaved)} saved vs a 15% channel fee`),
             r.channel !== 'direct' && Number(r.channel_fee) === 0 && h('div', { class: 'muted small' }, 'Enter the channel fee (Edit) to see what you keep.')),

@@ -1,7 +1,7 @@
 // Short-term homepage: daily overview, trends and revenue.
 
 import { get, post, qs } from '../api.js';
-import { h, icon, peso, fmtDate, fmtMonth, badge, emptyState, toast, todayManila } from '../ui.js';
+import { h, icon, peso, fmtDate, fmtMonth, manilaDay, badge, emptyState, toast, todayManila } from '../ui.js';
 import { state, navigate } from '../app.js';
 import { barChart, lineChart, SERIES } from '../charts.js';
 import { launchpadReminder } from './launchpad.js';
@@ -175,8 +175,8 @@ async function assignedAlert() {
 }
 
 const SYNC_TEXT = {
-  stale: (p) => `${p.unit_name}: the ${label(p.channel)} calendar hasn’t updated since ${fmtDate(String(p.since).slice(0, 10))}. Bookings may be out of date.`,
-  failing: (p) => `${p.unit_name}: the ${label(p.channel)} calendar can’t be read (${p.message}). Check the link.`,
+  stale: (p) => `${p.unit_name}: the ${label(p.channel)} calendar hasn’t updated since ${fmtDate(manilaDay(p.since))}. Bookings may be out of date.`,
+  failing: (p) => (p.channel ? `${p.unit_name} (${label(p.channel)}): ${p.message}` : `${p.unit_name}: ${p.message}`),
   overlap: (p) => `${p.unit_name}: a ${label(p.channel)} booking overlaps another (${fmtDate(p.check_in)} to ${fmtDate(p.check_out)}). Fix it to avoid a double booking.`,
 };
 // Owners and managers: calendar sync problems.

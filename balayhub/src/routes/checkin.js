@@ -106,23 +106,32 @@ publicRouter.post('/public/checkin/:token', express.json({ limit: '50kb' }), ah(
   const b = await loadByToken(req.params.token);
   if (b.closed) throw new HttpError(409, 'This stay has ended or was cancelled, so the form is closed.', { code: 'CLOSED' });
   if (b.is_demo) throw new HttpError(403, 'This is a demo.', { code: 'DEMO_READ_ONLY' });
-  const body = validate(req.body, {
-    lead_name: { type: 'string', required: true, max: 120, label: 'Your full name' },
-    phone: { type: 'phone', required: true, label: 'Mobile number' },
-    email: { type: 'email', label: 'Email' },
-    arrival_time: { type: 'time', label: 'Arrival time' },
-    vehicle_plate: { type: 'string', max: 20, label: 'Plate number' },
-    notes: { type: 'text', max: 1000, label: 'Notes' },
-    consent: { type: 'bool', label: 'Consent' },
-    accept_rules: { type: 'bool', label: 'House rules' },
-  });
-  if (!body.consent) throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { consent: 'Please agree so your host can register you with the building.' } });
   // The guest agrees to the house rules once; the time and the exact text are kept (D-58).
   const houseRules = typeof b.house_rules === 'string' && b.house_rules.trim() ? b.house_rules : null;
   const acceptsRules = Boolean(houseRules) && !b.rules_accepted_at;
-  if (acceptsRules && !body.accept_rules) {
-    throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { accept_rules: 'Please agree to the house rules.' } });
+  // Consent and house rules are checked with the other fields, so one 400 names every missing field.
+  const agreed = validate(req.body, {
+    consent: { type: 'bool', label: 'Consent' },
+    accept_rules: { type: 'bool', label: 'House rules' },
+  });
+  const fields = {};
+  if (!agreed.consent) fields.consent = 'Please agree so your host can register you with the building.';
+  if (acceptsRules && !agreed.accept_rules) fields.accept_rules = 'Please agree to the house rules.';
+  let body;
+  try {
+    body = validate(req.body, {
+      lead_name: { type: 'string', required: true, max: 120, label: 'Your full name' },
+      phone: { type: 'phone', required: true, label: 'Mobile number' },
+      email: { type: 'email', label: 'Email' },
+      arrival_time: { type: 'time', label: 'Arrival time' },
+      vehicle_plate: { type: 'string', max: 20, label: 'Plate number' },
+      notes: { type: 'text', max: 1000, label: 'Notes' },
+    });
+  } catch (err) {
+    if (!err.extra?.fields) throw err;
+    Object.assign(fields, err.extra.fields);
   }
+  if (Object.keys(fields).length) throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields });
   const raw = Array.isArray(req.body.guests) ? req.body.guests : [];
   const guests = raw.map((g) => (typeof g === 'string' ? g.trim().slice(0, 120) : '')).filter(Boolean);
   if (guests.length + 1 > (b.max_guests || 20)) {

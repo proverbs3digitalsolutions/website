@@ -22,6 +22,7 @@ const managers = requireRole('owner', 'manager');
 const MAX_LISTINGS = 50;
 const MAX_DAYS = 366;
 const PREVIEW_ROWS = 500;
+const MAX_PRICE = 1000000;
 const PRICE_ACTIONS = ['set', 'percent', 'clear'];
 const BLOCK_ACTIONS = ['block', 'unblock'];
 
@@ -141,10 +142,15 @@ router.post('/bulk/prices', managers, ah(async (req, res) => {
   checkTargets(body);
   if (body.action === 'set' && !body.price) throw validationError({ price: 'Enter the nightly price to set.' });
   if (body.action === 'percent' && body.percent === null) throw validationError({ percent: 'Enter the percentage to change by.' });
+  if (body.action === 'percent' && body.percent === 0) throw validationError({ percent: 'Choose a change other than 0%.' });
   await checkDates(body);
   const { listings, changes, skipped } = await tx(async (db) => {
     const units = await listingsFor(req.user, body, db, { lock: !body.dry_run });
     const plan = await priceChanges(db, units, body);
+    // A set price and a percentage change both end here, so the cap is checked once, for preview and apply alike.
+    if (plan.changes.some((c) => c.to_price !== null && Number(c.to_price) > MAX_PRICE)) {
+      throw validationError({ [body.action === 'set' ? 'price' : 'percent']: `A nightly price can't be more than ₱${MAX_PRICE.toLocaleString('en-PH')}.` });
+    }
     if (!body.dry_run) await writePrices(db, req.user, body, units, plan.changes);
     return { listings: units.length, ...plan };
   });
@@ -215,7 +221,7 @@ async function writeBlocks(db, user, body, units, plan) {
       await db.query(
         `INSERT INTO bookings (organization_id, unit_id, kind, check_in, check_out, block_reason, confirmation_code, created_by)
          VALUES ($1,$2,'block',$3,$4,$5,$6,$7)`,
-        [user.organization_id, c.unit_id, c.check_in, c.check_out, body.reason || 'Blocked', ical.randomCode('BL'), user.user_id]);
+        [user.organization_id, c.unit_id, c.check_in, c.check_out, body.reason, ical.randomCode('BL'), user.user_id]);
     }
   } else if (plan.ids.length) {
     // Same as removing one block by hand (POST /blocks/:id/remove).
@@ -233,6 +239,7 @@ router.post('/bulk/blocks', managers, ah(async (req, res) => {
   });
   checkTargets(body);
   await checkDates(body);
+  if (body.action === 'block' && !body.reason) throw validationError({ reason: 'Add a reason for the block.' });
   const checkOut = ical.addDays(body.to, 1);
   let plan;
   try {

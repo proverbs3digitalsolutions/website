@@ -2,7 +2,7 @@
 // mark them paid; owners also set rates. `myPayView` is the cleaner's own phone-first list.
 
 import { get, post, patch, api, qs } from '../api.js';
-import { h, peso, fmtDate, field, formModal, confirmDialog, emptyState, pageHead, toast, todayManila, options, label, errorState, skeleton } from '../ui.js';
+import { h, peso, manilaDay, fmtDate, field, formModal, confirmDialog, emptyState, pageHead, toast, todayManila, options, label, errorState, skeleton } from '../ui.js';
 import { state } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 import { t, initGuestLang, extendTranslations, fmtDateL } from '../i18n.js';
@@ -13,7 +13,7 @@ const fromCents = (c) => c / 100;
 const monthOk = (m) => /^\d{4}-(0[1-9]|1[0-2])$/.test(m || '');
 const whoOf = (x) => x.cleaner_name || 'Not assigned';
 const unitOf = (x) => `${x.unit_name || 'Unit'}${x.property_name ? ` · ${x.property_name}` : ''}`;
-const doneDay = (x) => String(x.completed_at || x.cleaning_date || x.due_date || '').slice(0, 10);
+const doneDay = (x) => manilaDay(x.completed_at || x.cleaning_date || x.due_date);
 
 function stat(lbl, value, sub, cls = '') {
   return h('div', { class: `stat stat--flat ${cls}` }, h('div', { class: 'stat__value' }, value), h('div', { class: 'stat__label' }, lbl), sub && h('div', { class: 'muted small' }, sub));
@@ -116,7 +116,7 @@ export async function cleanerPayView(el, { query = {} } = {}) {
         stat('Cleans done', String(data.tasks.length), perCleaner.length ? `${perCleaner.length} cleaner${perCleaner.length === 1 ? '' : 's'}` : null)),
       perCleaner.length > 1 && h('div', { class: 'card ops-card' }, h('h2', null, 'By cleaner'),
         h('ul', { class: 'list' }, perCleaner.map((c) => h('li', { class: 'ops-line' },
-          h('span', { class: 'ops-line__main' }, h('strong', null, c.name || 'Not assigned'), h('span', { class: 'muted small' }, ` ${c.count} clean${c.count === 1 ? '' : 's'}${c.unpriced ? `, ${c.unpriced} with no rate set` : ''}`)),
+          h('span', { class: 'ops-line__main' }, h('strong', null, c.name || 'Not assigned'), h('span', { class: 'muted small' }, ` ${c.count} clean${c.count === 1 ? '' : 's'}${c.unpriced ? `, ${c.unpriced} with pay not set` : ''}`)),
           h('span', { class: 'ops-line__end' }, cents(c.unpaid) ? `${peso(c.unpaid)} to pay` : 'All paid', cents(c.paid) ? h('span', { class: 'muted small' }, ` · ${peso(c.paid)} paid`) : null))))),
       rows.length
         ? h('div', { class: 'card card--flush' },
@@ -133,9 +133,9 @@ export async function cleanerPayView(el, { query = {} } = {}) {
                 h('td', { dataset: { label: 'Date' } }, fmtDate(doneDay(x))),
                 h('td', { dataset: { label: 'Unit' } }, unitOf(x)),
                 h('td', { dataset: { label: 'Cleaner' } }, whoOf(x)),
-                h('td', { class: 'num', dataset: { label: 'Pay' } }, x.pay_amount == null ? h('span', { class: 'muted' }, 'No rate set') : peso(x.pay_amount)),
+                h('td', { class: 'num', dataset: { label: 'Pay' } }, x.pay_amount == null ? h('span', { class: 'muted' }, 'Pay not set — add the hours') : peso(x.pay_amount)),
                 h('td', { dataset: { label: 'Status' } }, x.pay_status === 'paid'
-                  ? h('span', null, h('span', { class: 'badge badge--paid' }, 'Paid'), h('span', { class: 'muted small ops-note' }, ` ${x.paid_on ? fmtDate(String(x.paid_on).slice(0, 10)) : ''}${x.paid_method ? ` · ${label(x.paid_method)}` : ''}`))
+                  ? h('span', null, h('span', { class: 'badge badge--paid' }, 'Paid'), h('span', { class: 'muted small ops-note' }, ` ${x.paid_on ? fmtDate(manilaDay(x.paid_on)) : ''}${x.paid_method ? ` · ${label(x.paid_method)}` : ''}`))
                   : h('span', { class: 'badge badge--unpaid' }, 'Unpaid')),
                 h('td', { class: 'ops-actions' },
                   x.pay_status === 'unpaid' && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => editPay(x) }, x.pay_amount == null ? 'Set pay' : 'Edit pay'),
@@ -224,7 +224,7 @@ extendTranslations({
   'Paid on {date}': 'Binayaran noong {date}',
   'No cleans finished this month': 'Walang natapos na linis ngayong buwan',
   'When you finish a clean, your pay shows up here.': 'Kapag natapos mo ang isang linis, lalabas dito ang sahod mo.',
-  'Pay will be set soon': 'Itatakda pa ang sahod',
+  'Pay not set yet': 'Hindi pa naitatakda ang sahod',
   "Couldn't load your pay": 'Hindi ma-load ang sahod mo',
   'Try again': 'Subukan ulit',
   'Loading…': 'Naglo-load…',
@@ -255,11 +255,11 @@ export async function myPayView(el, { query = {} } = {}) {
         ? h('ul', { class: 'list mypay__list' }, tasks.map((x) => h('li', { class: 'mypay__item' },
           h('div', { class: 'mypay__main' }, h('span', { class: 'row__title' }, unitOf(x)), h('span', { class: 'row__sub' }, fmtDateL(doneDay(x)))),
           h('div', { class: 'mypay__end' },
-            h('strong', null, x.pay_amount == null ? t('Pay will be set soon') : peso(x.pay_amount)),
+            h('strong', null, x.pay_amount == null ? t('Pay not set yet') : peso(x.pay_amount)),
             x.pay_amount != null && (x.pay_status === 'paid'
               ? h('span', { class: 'badge badge--paid' }, t('Paid'))
               : h('span', { class: 'badge badge--unpaid' }, t('Not paid yet'))),
-            x.pay_status === 'paid' && x.paid_on && h('span', { class: 'row__sub' }, t('Paid on {date}', { date: fmtDateL(String(x.paid_on).slice(0, 10)) }))))))
+            x.pay_status === 'paid' && x.paid_on && h('span', { class: 'row__sub' }, t('Paid on {date}', { date: fmtDateL(manilaDay(x.paid_on)) }))))))
         : h('div', { class: 'card' }, emptyState({ iconName: 'inbox', title: t('No cleans finished this month'), text: t('When you finish a clean, your pay shows up here.') })));
   }
 

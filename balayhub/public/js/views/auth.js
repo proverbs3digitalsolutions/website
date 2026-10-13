@@ -201,6 +201,10 @@ export async function resetView(el, { query }) {
 export async function verifyView(el, { query }) {
   const card = authCard('Verifying your email…', null);
   el.append(publicPage(card));
+  const fail = (message) => card.replaceChildren(h('h1', null, "Couldn't verify"), h('div', { class: 'alert alert--error' }, message),
+    h('p', { class: 'auth-card__foot' }, h('a', { href: state.user ? '#/verify-pending' : '#/login' }, 'Request a new link')));
+  // A link with no token can't be checked. Say so, rather than sending an empty token and showing the server's generic message.
+  if (!query.token) { fail('This verification link is missing or incomplete. Log in to request a new one.'); return; }
   try {
     await post('/auth/verify-email', { token: query.token || '' });
     try { sessionStorage.removeItem('bh-dev-verify'); } catch { /* ignore */ }
@@ -209,8 +213,7 @@ export async function verifyView(el, { query }) {
     if (state.user) afterLogin();
     else card.replaceChildren(h('h1', null, 'Email verified'), h('p', { class: 'lead' }, 'You can now log in.'), h('a', { class: 'btn btn--primary btn--block', href: '#/login' }, 'Log in'));
   } catch (err) {
-    card.replaceChildren(h('h1', null, "Couldn't verify"), h('div', { class: 'alert alert--error' }, err.message),
-      h('p', { class: 'auth-card__foot' }, h('a', { href: state.user ? '#/verify-pending' : '#/login' }, 'Request a new link')));
+    fail(err.message);
   }
 }
 

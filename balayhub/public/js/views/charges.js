@@ -5,6 +5,7 @@
 import { get, post } from '../api.js';
 import { h, peso, fmtDateTime, field, makeForm, openModal, confirmDialog, toast } from '../ui.js';
 import { state } from '../app.js';
+import { copyText } from './quotes.js';
 
 const CATEGORY = {
   early_checkin: 'Early check-in',
@@ -25,8 +26,7 @@ async function sendPayLink(reservationId) {
   try {
     const l = await get(`/reservations/${reservationId}/payment-link`);
     if (!l.available) { toast(l.reason, 'error'); return; }
-    try { await navigator.clipboard.writeText(l.link); toast(`Payment link for ${peso(l.balance)} copied. Send it to the guest.`); }
-    catch { window.prompt('Copy the payment link:', l.link); }
+    await copyText(l.link, `Payment link for ${peso(l.balance)} copied. Send it to the guest.`, 'Copy the payment link');
   } catch (err) { toast(err.message, 'error'); }
 }
 

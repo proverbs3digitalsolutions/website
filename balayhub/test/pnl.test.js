@@ -80,8 +80,11 @@ test.before(async () => {
   // Payments: stay 1 paid in full; stay 2 overpaid by 200.
   await sql(`INSERT INTO booking_payments (organization_id, booking_id, amount, payment_date, payment_method, recorded_by) VALUES ($1, $2, '4500.00', $3, 'cash', $4)`, [hostOrg, stay1.booking_id, day(11), hostUser]);
   await sql(`INSERT INTO booking_payments (organization_id, booking_id, amount, payment_date, payment_method, recorded_by) VALUES ($1, $2, '2700.00', $3, 'cash', $4)`, [hostOrg, stay2.booking_id, day(20), hostUser]);
-  // Refunds: stay 1 gives back 200 in the month, all of it counted. On stay 2, 150 went back before the month,
-  // which uses up part of its 200 overpayment, so the month's 300 counts only 250 (the other 50 is covered).
+  // Refunds count only the part beyond the overpayment, where overpayment = paid - (total - channel fee) (D-37, D-44).
+  // Stay 1: paid 4,500, total 4,500, channel fee 600, so the overpayment is 4,500 - 3,900 = 600. Its 200 refund in
+  // the month only returns that overpayment, so none of it counts.
+  // Stay 2: paid 2,700, total 2,500, no channel fee, so the overpayment is 2,700 - 2,500 = 200. 150 went back before
+  // the month and uses up part of it, leaving 50. The month's refunds (200 + 100 = 300) count 250; the other 50 is covered.
   // A voided refund is ignored.
   await refund(stay2.booking_id, '150.00', day(25, PREV));
   await refund(stay1.booking_id, '200.00', day(15));
@@ -134,9 +137,10 @@ test('owner report: every unit, the refunds rule, unlinked expenses; cancelled, 
   assert.equal(r.status, 200, JSON.stringify(r.data));
   assert.equal(r.data.month, M);
   const row = (id) => r.data.rows.find((x) => x.unit_id === id);
+  // Unit 1201: net = 7,000 gross - 600 channel fees - 250 refunds - 800 expenses = 5,350. Refunds are 250 (stay 2 only, see above).
   assert.deepEqual(row(unitA.unit_id), {
     unit_id: unitA.unit_id, unit_name: '1201', property_name: 'Azure', stays: 2, nights: 3,
-    gross: '7000.00', channel_fees: '600.00', refunds: '450.00', expenses: '800.00', net: '5150.00',
+    gross: '7000.00', channel_fees: '600.00', refunds: '250.00', expenses: '800.00', net: '5350.00',
   });
   assert.deepEqual(row(unitB.unit_id), {
     unit_id: unitB.unit_id, unit_name: '805', property_name: 'Azure', stays: 0, nights: 0,
@@ -150,8 +154,9 @@ test('owner report: every unit, the refunds rule, unlinked expenses; cancelled, 
     unit_id: null, unit_name: 'Not linked to a unit', property_name: null, stays: 0, nights: 0,
     gross: '0.00', channel_fees: '0.00', refunds: '0.00', expenses: '225.00', net: '-225.00',
   });
+  // Totals: expenses 800 + 500 + 225 = 1,525; net = 7,000 - 600 - 250 - 1,525 = 4,625 (unit 301's -500 and the unlinked -225 included).
   assert.deepEqual(r.data.totals, {
-    stays: 2, nights: 3, gross: '7000.00', channel_fees: '600.00', refunds: '450.00', expenses: '1525.00', net: '4425.00',
+    stays: 2, nights: 3, gross: '7000.00', channel_fees: '600.00', refunds: '250.00', expenses: '1525.00', net: '4625.00',
   });
 });
 
@@ -169,8 +174,9 @@ test('a manager sees only assigned properties; other workspaces get 404', async 
   assert.equal(r.status, 200, JSON.stringify(r.data));
   assert.deepEqual(r.data.rows.map((x) => x.unit_name), ['1201', '805', 'Not linked to a unit']);
   assert.equal(r.data.rows[2].expenses, '150.00', 'the unlinked row covers only the assigned property');
+  // Manager totals: net = 7,000 - 600 - 250 - 950 (800 for 1201 plus the unlinked 150 at Azure) = 5,200.
   assert.deepEqual(r.data.totals, {
-    stays: 2, nights: 3, gross: '7000.00', channel_fees: '600.00', refunds: '450.00', expenses: '950.00', net: '5000.00',
+    stays: 2, nights: 3, gross: '7000.00', channel_fees: '600.00', refunds: '250.00', expenses: '950.00', net: '5200.00',
   });
   assert.equal((await manager.get(`/api/reports/pnl?month=${M}&property_id=${p2.property_id}`)).status, 404);
   assert.equal((await other.get(`/api/reports/pnl?month=${M}&property_id=${p1.property_id}`)).status, 404);
@@ -191,16 +197,16 @@ test('CSV download has the same rows and totals as the screen', async () => {
   assert.match(csv.headers.get('content-type'), /^text\/csv/);
   assert.match(csv.headers.get('content-disposition'), new RegExp(`balayhub-pnl-${M}\\.csv`));
   assert.ok(csv.data.startsWith('BalayHub profit and loss\r\n'));
-  assert.ok(csv.data.includes('Azure,1201,2,3,7000.00,600.00,450.00,800.00,5150.00'));
+  assert.ok(csv.data.includes('Azure,1201,2,3,7000.00,600.00,250.00,800.00,5350.00'));
   assert.ok(csv.data.includes(',Not linked to a unit,0,0,0.00,0.00,0.00,225.00,-225.00'));
-  assert.ok(csv.data.includes('Total,,2,3,7000.00,600.00,450.00,1525.00,4425.00'));
+  assert.ok(csv.data.includes('Total,,2,3,7000.00,600.00,250.00,1525.00,4625.00'));
 });
 
 test('the owner-portal call (unitIds) leaves out other units and the unlinked row', async () => {
   const scoped = await unitPnl(hostOrg, M, { unitIds: [unitA.unit_id, unitB.unit_id] });
   assert.deepEqual(scoped.rows.map((x) => x.unit_name), ['1201', '805']);
   assert.deepEqual(scoped.totals, {
-    stays: 2, nights: 3, gross: '7000.00', channel_fees: '600.00', refunds: '450.00', expenses: '800.00', net: '5150.00',
+    stays: 2, nights: 3, gross: '7000.00', channel_fees: '600.00', refunds: '250.00', expenses: '800.00', net: '5350.00',
   });
 });
 

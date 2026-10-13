@@ -168,6 +168,10 @@ extendTranslations({
   'Please fill in the highlighted fields.': 'Pakisagutan ang mga naka-highlight.',
   'More than 10': 'Higit 10',
   'BalayHub is made for 1 to 10 units. For more, we\'ll set up a custom plan with you after your trial.': 'Para sa 1 hanggang 10 unit ang BalayHub. Kung higit pa, gagawa tayo ng custom plan pagkatapos ng trial mo.',
+  // contact fallback, used when no contact email is set (Help & support instead)
+  'Ask ': 'Magtanong sa ', 'Help & support': 'Help & support',
+  'Monthly, by GCash, Maya or bank transfer. Ask Help & support when you\'re ready and we\'ll activate your plan.':
+    'Buwanan, sa GCash, Maya o bank transfer. Magtanong sa Help & support kapag handa ka na at ia-activate namin ang plan mo.',
 });
 
 export async function tryDemo(e) {
@@ -253,6 +257,11 @@ const NEWS = [
 ];
 
 const UNIT_BANDS = [['1-3', '1–3 units'], ['4-10', '4–10 units'], ['10+', 'More than 10']];
+
+// Where a guest sends a question: the team's email when one is set, otherwise Help & support.
+const askNodes = (pricing) => (pricing.contact_email
+  ? [h('a', { href: `mailto:${pricing.contact_email}` }, t('Talk to us')), t(' about a custom plan.')]
+  : [t('Ask '), h('a', { href: '#/help' }, t('Help & support')), t(' about a custom plan.')]);
 
 // ---------------------------------------------------------------- language menu
 function langMenu(onChange) {
@@ -488,7 +497,7 @@ export async function landingView(el) {
               h('li', { class: p.ai ? '' : 'lp-no' }, p.ai ? t('AI reply drafts') : t('No AI reply drafts')),
               h('li', null, t('Unlimited team members'))),
             h('button', { class: `btn ${p.key === 'growth' ? 'btn--primary' : 'btn--secondary'} btn--block`, type: 'button', onclick: getStarted() }, t('Start free trial'))))),
-          pricing.contact_email && h('p', { class: 'lp-note' }, t('More than 10 units or managing for owners? '), h('a', { href: `mailto:${pricing.contact_email}` }, t('Talk to us')), t(' about a custom plan.')))),
+          h('p', { class: 'lp-note' }, t('More than 10 units or managing for owners? '), askNodes(pricing)))),
       h('section', { class: 'lp-section lp-section--alt', id: 'faq' },
         h('div', { class: 'lp-wrap lp-faq' },
           h('h2', { class: 'lp-h2' }, t('Questions hosts ask')),
@@ -499,7 +508,9 @@ export async function landingView(el) {
             ['What happens when the free trial ends?', 'Nothing is deleted. Your workspace becomes view-only until you choose a plan, so you can still see and export everything.'],
             ['How do I pay for BalayHub?', pricing.online_payments
               ? 'Online with GCash, Maya, card or GrabPay, for 1, 3 or 12 months (12 months gets 2 months free). Your plan activates right away.'
-              : 'Monthly, by GCash, Maya or bank transfer. Message us when you\'re ready and we\'ll activate your plan.'],
+              : pricing.contact_email
+                ? 'Monthly, by GCash, Maya or bank transfer. Message us when you\'re ready and we\'ll activate your plan.'
+                : 'Monthly, by GCash, Maya or bank transfer. Ask Help & support when you\'re ready and we\'ll activate your plan.'],
             ['Can my co-host or cleaner use it?', 'Yes. Invite a manager, staff member or cleaner and choose which properties they can see. Cleaners see only their own cleaning jobs and pay, in English or Taglish. Staff never see guests\' phone numbers or email addresses.'],
             ['Do owners get their own login?', 'Yes. You invite an owner and they sign in with a one-time link sent to their email. They see only their own units: published statements, payouts, repairs reserve and profit and loss. They never see your other units.'],
             ['Do I need to install anything?', 'No. BalayHub runs in your phone or computer browser. On a phone you can add it to your home screen like an app and get notifications.'],
@@ -515,6 +526,6 @@ export async function landingView(el) {
         h('span', null, `© ${new Date().getFullYear()} BalayHub`),
         h('a', { href: '#/terms' }, t('Terms of service')),
         h('a', { href: '#/privacy' }, t('Privacy notice')),
-        pricing.contact_email && h('a', { href: `mailto:${pricing.contact_email}` }, pricing.contact_email),
+        pricing.contact_email ? h('a', { href: `mailto:${pricing.contact_email}` }, pricing.contact_email) : h('a', { href: '#/help' }, t('Help & support')),
         themeSwitch({ compact: true })))));
 }

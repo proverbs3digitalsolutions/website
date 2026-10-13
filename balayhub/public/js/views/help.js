@@ -8,6 +8,7 @@ import {
 import { state, navigate } from '../app.js';
 import { currentTheme } from '../themeswitch.js';
 import { assistantEnabled, openAssistant } from '../assistant.js';
+import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 
 const TOPICS = [
   ['question', 'Question — how do I…?'],
@@ -29,8 +30,11 @@ function articleCard(a, open = false) {
 }
 
 // ---------------------------------------------------------------- help center
+const TICKETS_KEY = 'help-tickets';
+const TICKET_DEFAULTS = { view: 'open', tq: '' };
 export async function helpView(el, { query }) {
-  const filters = { q: query.q || '', view: query.view || 'open', tq: query.tq || '' };
+  const filters = { q: query.q || '' };
+  const ticketFilters = initFilters(TICKETS_KEY, query, TICKET_DEFAULTS);
   const { categories, articles } = await get('/help/articles');
   const articlesBox = h('div', { class: 'stack' });
   const ticketsBox = h('div');
@@ -52,9 +56,10 @@ export async function helpView(el, { query }) {
   }
 
   async function drawTickets() {
+    sync();
     tabs.replaceChildren(...[['open', 'Open'], ['resolved', 'Resolved'], ['all', 'All']].map(([v, t]) =>
-      h('button', { role: 'tab', 'aria-selected': String(filters.view === v), onclick: () => { filters.view = v; sync(); drawTickets(); } }, t)));
-    const { tickets } = await get(`/support/tickets${qs({ view: filters.view, q: filters.tq })}`);
+      h('button', { role: 'tab', 'aria-selected': String(ticketFilters.view === v), onclick: () => { ticketFilters.view = v; rememberFilters(TICKETS_KEY, ticketFilters); drawTickets(); } }, t)));
+    const { tickets } = await get(`/support/tickets${qs({ view: ticketFilters.view, q: ticketFilters.tq })}`);
     ticketsBox.replaceChildren(tickets.length
       ? h('ul', { class: 'list' }, tickets.map((t) => h('li', null, h('a', { class: 'row', href: `#/help/tickets/${t.ticket_id}` },
         h('div', { class: 'row__main' },
@@ -62,12 +67,15 @@ export async function helpView(el, { query }) {
           h('span', { class: 'row__sub' }, `${t.number} · ${t.category_label} · updated ${fmtDateTime(t.updated_at)}`),
           state.user.role === 'owner' && t.created_by_name && h('span', { class: 'row__sub' }, `Opened by ${t.created_by_name}`)),
         h('div', { class: 'row__end' }, t.priority === 'urgent' && badge('urgent'), statusBadge(t))))))
-      : h('p', { class: 'muted', style: { padding: '8px 2px' } }, filters.tq ? 'No tickets match your search.' : filters.view === 'open' ? 'No open tickets. If something is wrong, contact support and we’ll help.' : 'No tickets yet.'));
+      : h('p', { class: 'muted', style: { padding: '8px 2px' } }, ticketFilters.tq ? 'No tickets match your search.' : ticketFilters.view === 'open' ? 'No open tickets. If something is wrong, contact support and we’ll help.' : 'No tickets yet.'));
   }
 
-  const sync = () => history.replaceState(null, '', `#/help${qs({ q: filters.q, view: filters.view === 'open' ? '' : filters.view, tq: filters.tq })}`);
+  const sync = () => history.replaceState(null, '', `#/help${qs({ q: filters.q, ...changed(ticketFilters, TICKET_DEFAULTS) })}`);
   const articleSearch = searchBox({ value: filters.q, placeholder: 'Search help — e.g. connect Airbnb, refund, gate pass', onSearch: (q) => { filters.q = q; sync(); drawArticles(); } });
   articleSearch.classList.add('search--wide');
+  // The status tabs ride inside the bar; Clear all resets only the search (same as the rent page).
+  const ticketBar = filterBar({ key: TICKETS_KEY, values: ticketFilters, defaults: { tq: '' }, extra: tabs, onChange: drawTickets,
+    search: { name: 'tq', placeholder: 'Search ticket subject or number' } });
   const [aiOn] = await Promise.all([assistantEnabled(), drawArticles(), drawTickets()]);
   const askInput = h('input', { class: 'input', maxlength: 2000, placeholder: 'e.g. Paano i-connect ang Airbnb calendar ko?', 'aria-label': 'Ask the assistant' });
   const askCard = aiOn && h('form', { class: 'card help-ask', onsubmit: (e) => { e.preventDefault(); openAssistant(askInput.value.trim() || undefined); askInput.value = ''; } },
@@ -86,8 +94,7 @@ export async function helpView(el, { query }) {
       h('div', { class: 'stack' },
         h('div', { class: 'card' },
           h('div', { class: 'card__head' }, h('h2', null, state.user.role === 'owner' ? 'Support tickets' : 'Your tickets')),
-          tabs,
-          h('div', { class: 'toolbar' }, searchBox({ value: filters.tq, placeholder: 'Search ticket subject or number', onSearch: (q) => { filters.tq = q; sync(); drawTickets(); } })),
+          ticketBar,
           ticketsBox),
         h('div', { class: 'card help-howit' },
           h('div', { class: 'card__head' }, h('h2', null, 'How support works')),
@@ -269,31 +276,35 @@ export async function helpTicketView(el, { params, rerender }) {
 }
 
 // ---------------------------------------------------------------- BalayHub support queue
+const QUEUE_KEY = 'support-queue';
 export async function adminSupportView(el, { query }) {
   if (!state.user.is_platform_admin) {
     el.replaceChildren(h('div', { class: 'card' }, emptyState({ title: 'Not found', text: "This page doesn't exist." })));
     return;
   }
-  const filters = { status: query.status ?? 'open', category: query.category || '', priority: query.priority || '', mine: query.mine || '', q: query.q || '' };
+  // The status tabs are not part of Clear all, so Clear all keeps the tab you are on (same as the rent page).
+  const queueFields = { category: '', priority: '', mine: '', q: '' };
+  const filters = initFilters(QUEUE_KEY, query, { status: 'open', ...queueFields });
   const listCard = h('div', { class: 'card card--flush' });
   const tabs = h('div', { class: 'tabs', role: 'tablist' });
-  const cat = h('select', { class: 'input', 'aria-label': 'Topic' }, h('option', { value: '' }, 'All topics'), TOPICS.map(([k, v]) => h('option', { value: k, selected: k === filters.category }, v.split(' — ')[0])));
-  const pri = h('select', { class: 'input', 'aria-label': 'Priority' }, h('option', { value: '' }, 'Any priority'), h('option', { value: 'urgent', selected: filters.priority === 'urgent' }, 'Urgent only'));
-  const mine = h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: filters.mine === '1' }), h('span', null, 'Assigned to me'));
-  cat.addEventListener('change', () => { filters.category = cat.value; load(); });
-  pri.addEventListener('change', () => { filters.priority = pri.value; load(); });
-  mine.querySelector('input').addEventListener('change', (e) => { filters.mine = e.target.checked ? '1' : ''; load(); });
+  const bar = filterBar({ key: QUEUE_KEY, values: filters, defaults: queueFields, extra: tabs, onChange: load,
+    search: { placeholder: 'Search subject, ticket no., workspace or email' },
+    quick: [
+      { name: 'category', label: 'Topic', all: 'All topics', options: TOPICS.map(([k, v]) => [k, v.split(' — ')[0]]) },
+      { name: 'priority', label: 'Priority', all: 'Any priority', options: [['urgent', 'Urgent only']] },
+      { name: 'mine', label: 'Assigned to me', type: 'check' },
+    ] });
 
   async function load() {
     history.replaceState(null, '', `#/admin/support${qs(filters)}`);
     const { tickets, counts } = await get(`/admin/support/tickets${qs(filters)}`);
     const n = (k) => (counts[k] ? ` (${counts[k]})` : '');
     tabs.replaceChildren(...[['open', 'All open'], ['new', `New${n('new')}`], ['in_progress', `In progress${n('in_progress')}`], ['waiting_on_customer', `Waiting on customer${n('waiting_on_customer')}`], ['resolved', 'Resolved'], ['closed', 'Closed'], ['', 'All']].map(([s, text]) =>
-      h('button', { role: 'tab', 'aria-selected': String(filters.status === s), onclick: () => { filters.status = s; load(); } }, text)));
+      h('button', { role: 'tab', 'aria-selected': String(filters.status === s), onclick: () => { filters.status = s; rememberFilters(QUEUE_KEY, filters); load(); } }, text)));
     listCard.replaceChildren(tickets.length
       ? h('div', { class: 'table-wrap' }, h('table', { class: 'table' },
         h('thead', null, h('tr', null, ['Ticket', 'Workspace', 'Topic', 'Status', 'Assigned', 'Updated'].map((x) => h('th', null, x)))),
-        h('tbody', null, tickets.map((t) => h('tr', { class: 'row-link', tabindex: 0, onclick: () => navigate(`#/admin/support/${t.ticket_id}`), onkeydown: (e) => { if (e.key === 'Enter') navigate(`#/admin/support/${t.ticket_id}`); } },
+        h('tbody', null, tickets.map((t) => h('tr', { class: 'row-link', tabindex: 0, onclick: () => navigate(`#/admin/support/${t.ticket_id}`), onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`#/admin/support/${t.ticket_id}`); } } },
           h('td', null, h('strong', null, t.subject), h('div', { class: 'muted small' }, `${t.number} · ${t.created_by_name || '—'} · ${t.created_by_email || ''}`)),
           h('td', null, t.workspace),
           h('td', null, t.category_label),
@@ -305,8 +316,7 @@ export async function adminSupportView(el, { query }) {
   await load();
   el.replaceChildren(
     pageHead({ title: 'Support queue', sub: 'Tickets from every workspace. Urgent and new tickets are listed first.', back: { href: '#/admin', label: 'Platform admin' } }),
-    h('div', { class: 'toolbar' }, searchBox({ value: filters.q, placeholder: 'Search subject, ticket no., workspace or email', onSearch: (q) => { filters.q = q; load(); } }), cat, pri, mine),
-    tabs, listCard);
+    bar, listCard);
 }
 
 export async function adminSupportTicketView(el, { params, rerender }) {

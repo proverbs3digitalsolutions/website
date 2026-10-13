@@ -1,12 +1,13 @@
 // Listings (units rented per night), cleaning status and channel connections.
 
-import { get, post, patch, qs, api } from '../api.js';
+import { get, post, patch, qs, api, ApiError } from '../api.js';
 import {
-  h, icon, peso, fmtDate, fmtDateTime, badge, field, formModal, makeForm, openModal, confirmDialog, emptyState, toast, options, todayManila,
+  h, icon, peso, fmtDate, fmtDateTime, badge, field, formModal, makeForm, openModal, confirmDialog, emptyState, toast, options, todayManila, manilaDay,
 } from '../ui.js';
 import { state } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 import { CHANNEL_LABEL, SOURCE_LABEL, addDays } from './reservations.js';
+import { copyText } from './quotes.js';
 
 const UNIT_TYPES = ['studio', 'apartment', 'room', 'house', 'other'];
 const PROPERTY_TYPES = ['condominium', 'apartment', 'house', 'boarding_house', 'other'];
@@ -51,6 +52,8 @@ async function roomTypeNames() {
 function prepUnit(d) {
   return { ...d, tags: d.tags ? d.tags.split(',').filter(Boolean) : [], min_price: d.min_price === '' ? null : d.min_price, room_type: d.room_type?.trim() || null };
 }
+
+const BUILDING_SAVED = 'The building was saved; fix the listing details and save again.';
 
 function listingFields(u = {}, roomTypes = []) {
   return [
@@ -124,6 +127,7 @@ function listingFields(u = {}, roomTypes = []) {
 async function addListingModal(onSaved) {
   const [{ properties }, roomTypes] = await Promise.all([get('/properties'), roomTypeNames()]);
   const isOwner = state.user.role === 'owner';
+  let savedPropertyId = null; // the building this form saved, reused if the listing save fails and is retried
   const newProp = h('div', { class: 'form', hidden: properties.length > 0 },
     field({ name: 'property_name', label: 'Building / property name', placeholder: 'e.g. Azure Urban Residences', maxlength: 120 }),
     field({ name: 'property_type', label: 'Property type', type: 'select', value: 'condominium', placeholderOption: false, options: options(PROPERTY_TYPES) }),
@@ -144,10 +148,31 @@ async function addListingModal(onSaved) {
       const d = prepUnit(raw);
       let propertyId = d.property_id;
       if (!propertyId || propertyId === '__new') {
-        const res = await post('/properties', { property_name: d.property_name, property_type: d.property_type, address: d.address, city: d.city, province: d.province });
-        propertyId = res.property.property_id;
+        // A building saved by an earlier try in this form is reused, never posted twice.
+        if (!savedPropertyId) {
+          const res = await post('/properties', { property_name: d.property_name, property_type: d.property_type, address: d.address, city: d.city, province: d.province });
+          savedPropertyId = res.property.property_id;
+          // The form now points at the saved building, so the new-building fields are no longer used.
+          const sel = propSelect?.querySelector('select');
+          if (sel) {
+            sel.querySelector('option[value="__new"]')?.remove();
+            sel.append(h('option', { value: savedPropertyId }, d.property_name));
+            sel.value = savedPropertyId;
+            sel.dispatchEvent(new Event('input', { bubbles: true })); // keeps the saved draft in step
+          }
+          newProp.hidden = true;
+        }
+        propertyId = savedPropertyId;
       }
-      await post(`/properties/${propertyId}/units`, d);
+      try {
+        await post(`/properties/${propertyId}/units`, d);
+      } catch (err) {
+        if (propertyId === savedPropertyId && err instanceof ApiError) {
+          if (err.offline) throw new ApiError(BUILDING_SAVED, { status: 0 });
+          err.onRender = (box) => box.append(h('div', { class: 'alert alert--warn' }, BUILDING_SAVED));
+        }
+        throw err;
+      }
       toast('Listing added. Next: connect your Airbnb or Booking.com calendar.');
       onSaved();
     },
@@ -210,7 +235,9 @@ async function channelsModal(listing, onChange) {
     h('div', { class: 'row__main' },
       h('span', { class: 'row__title' }, CHANNEL_LABEL[f.channel]),
       h('span', { class: 'row__sub', style: { wordBreak: 'break-all' } }, f.url),
-      h('span', { class: `row__sub ${f.last_status === 'error' ? 'amount--neg' : ''}` }, f.last_synced_at ? `${fmtDateTime(f.last_synced_at)} — ${f.last_message || ''}` : 'Not synced yet')),
+      h('span', { class: `row__sub ${f.last_status === 'error' ? 'amount--neg' : ''}` }, f.last_synced_at ? `${fmtDateTime(f.last_synced_at)} — ${f.problem_message || f.last_message || ''}` : 'Not synced yet'),
+      // Support still needs the raw text, so it stays under a muted label when a plain message replaced it.
+      f.problem_message && f.last_message && h('span', { class: 'row__sub muted small' }, `Technical details: ${f.last_message}`)),
     h('div', { class: 'row__end' }, h('div', { class: 'chips' },
       h('button', { class: 'btn btn--secondary btn--sm', onclick: async (e) => {
         e.target.disabled = true;
@@ -315,7 +342,6 @@ async function guestPagesModal(listing) {
   const src = h('select', { class: 'input', 'aria-label': 'Where will you share it?' }, Object.entries(SOURCE_LABEL).filter(([k]) => k !== 'quote').map(([k, t]) => h('option', { value: k }, t)));
   const shareUrl = () => `${booking.url.replace(/#.*$/, '')}#/book/${booking.slug}/${listing.unit_id}?src=${src.value}`;
   const out = h('input', { class: 'input', readonly: true, 'aria-label': 'Share link' });
-  const copy = async (text) => { try { await navigator.clipboard.writeText(text); toast('Link copied.'); } catch { window.prompt('Copy the link:', text); } };
   function drawLinks() {
     const live = booking?.slug && booking.enabled && listing.bookable_online;
     const pageUrl = booking?.slug && unit.public_slug ? `${location.origin}/stay/${booking.slug}/${unit.public_slug}` : null;
@@ -325,7 +351,7 @@ async function guestPagesModal(listing) {
         : h('p', { class: 'muted small' }, 'Set your booking page address in Settings and a page address here to get a public page.'),
       !live && h('div', { class: 'alert alert--warn' }, 'This listing is not live on your booking page yet. Turn on your booking page in Settings and tick "Show this listing on my booking page" in Edit.'),
       booking?.url ? h('div', { class: 'field' }, h('label', null, 'Share link for'), src,
-        h('div', { class: 'hp-copy' }, out, h('button', { class: 'btn btn--primary btn--sm', type: 'button', onclick: () => copy(out.value) }, 'Copy')),
+        h('div', { class: 'hp-copy' }, out, h('button', { class: 'btn btn--primary btn--sm', type: 'button', onclick: () => copyText(out.value) }, 'Copy')),
         h('div', { class: 'hint' }, 'Bookings made from this link are tagged with where it was shared, so Reports can show what works.'))
         : h('p', { class: 'muted small' }, 'Set up your booking page in Settings to get share links.'));
   }
@@ -548,5 +574,5 @@ export async function guestDetailView(el, { params, rerender }) {
     reviews.length > 0 && h('div', { class: 'card', style: { marginTop: '16px' } }, h('h2', null, 'Their reviews (private)'),
       h('ul', { class: 'list' }, reviews.map((r) => h('li', null, h('a', { class: 'row', href: `#/reservations/${r.booking_id}` },
         h('div', { class: 'row__main' }, h('span', { class: 'row__title rating' }, '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating)), r.comment && h('span', { class: 'row__sub' }, `“${r.comment}”`)),
-        h('div', { class: 'row__end' }, h('span', { class: 'muted small' }, fmtDate(r.created_at.slice(0, 10))))))))));
+        h('div', { class: 'row__end' }, h('span', { class: 'muted small' }, fmtDate(manilaDay(r.created_at))))))))));
 }

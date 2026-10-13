@@ -1,11 +1,17 @@
 // Platform admin: every workspace, its plan and trial; activate a plan after payment.
 
 import { get, patch, qs } from '../api.js';
-import { h, fmtDate, fmtDateTime, badge, field, formModal, emptyState, toast } from '../ui.js';
+import { h, fmtDate, fmtDateTime, manilaDay, badge, field, makeForm, openModal, confirmDialog, todayManila, emptyState, toast } from '../ui.js';
 import { state } from '../app.js';
 import { initFilters, filterBar, changed } from '../filters.js';
 
 const BUSINESS = { short_term: 'Short-term stays', long_term: 'Monthly rentals', both: 'Both' };
+
+// The server stores a trial end as the start of the next Manila day (src/routes/admin.js), so the day the
+// admin entered is the day before. Showing that day means a save with no change sends back the same date.
+export function trialLastDay(endsAt) {
+  return endsAt ? manilaDay(new Date(new Date(endsAt).getTime() - 1)) : '';
+}
 
 function statusBadge(w) {
   const s = w.status;
@@ -32,26 +38,38 @@ export async function adminView(el, { rerender, query = {} }) {
     lapsed: summary.trial_ended + summary.overdue + summary.deleting,
   };
 
-  const edit = (w) => formModal({
-    title: `${w.name}`,
-    submitText: 'Save',
-    fields: [
-      h('p', { class: 'muted small' }, `${w.owner_name || '—'} · ${w.owner_email || '—'} · ${w.unit_count} units · ${w.member_count} members`),
-      field({ name: 'plan', label: 'Plan', type: 'select', required: true, value: w.plan, placeholderOption: false,
-        options: plans.map((p) => [p.key, `${p.name}${p.price ? ` — ₱${p.price}/mo` : ''} (${p.listings >= 1000 ? 'unlimited' : `${p.listings} listings`})`]) }),
-      field({ name: 'paid_until', label: 'Paid until (paid plans)', type: 'date', value: w.paid_until ? String(w.paid_until).slice(0, 10) : '',
-        hint: 'Last day covered by the payment. The workspace becomes view-only 7 days after this date.' }),
-      field({ name: 'trial_ends_at', label: 'Trial ends (trial plan)', type: 'date', value: w.trial_ends_at ? new Date(w.trial_ends_at).toISOString().slice(0, 10) : '' }),
-      field({ name: 'plan_note', label: 'Note', type: 'textarea', value: w.plan_note, maxlength: 1000, placeholder: 'e.g. GCash ref 1234567, paid Oct–Dec' }),
-    ],
-    onSubmit: async (d) => {
-      await patch(`/admin/workspaces/${w.organization_id}`, {
-        plan: d.plan, paid_until: d.paid_until || null, plan_note: d.plan_note || null, ...(d.trial_ends_at ? { trial_ends_at: d.trial_ends_at } : {}),
-      });
-      toast('Workspace updated.');
-      rerender();
-    },
-  });
+  const edit = (w) => {
+    const paidUntil = w.paid_until ? String(w.paid_until).slice(0, 10) : '';
+    const trialDay = trialLastDay(w.trial_ends_at);
+    let modal;
+    const form = makeForm({
+      submitText: 'Save',
+      cancel: () => modal.close(),
+      fields: [
+        h('p', { class: 'muted small' }, `${w.owner_name || '—'} · ${w.owner_email || '—'} · ${w.unit_count} units · ${w.member_count} members`),
+        field({ name: 'plan', label: 'Plan', type: 'select', required: true, value: w.plan, placeholderOption: false,
+          options: plans.map((p) => [p.key, `${p.name}${p.price ? ` — ₱${p.price}/mo` : ''} (${p.listings >= 1000 ? 'unlimited' : `${p.listings} listings`})`]) }),
+        field({ name: 'paid_until', label: 'Paid until (paid plans)', type: 'date', value: paidUntil,
+          hint: 'Last day covered by the payment. The workspace becomes view-only 7 days after this date.' }),
+        field({ name: 'trial_ends_at', label: 'Trial ends (trial plan)', type: 'date', value: trialDay }),
+        field({ name: 'plan_note', label: 'Note', type: 'textarea', value: w.plan_note, maxlength: 1000, placeholder: 'e.g. GCash ref 1234567, paid Oct–Dec' }),
+      ],
+      onSubmit: async (d) => {
+        // Warn only when this save sets a past date (Manila day); an unchanged old date is not asked about again.
+        if (d.paid_until && d.paid_until !== paidUntil && d.paid_until < todayManila()) {
+          const ok = await confirmDialog({ title: 'Paid until is in the past', text: 'This date is in the past; the workspace may become view-only. Save anyway?', confirmText: 'Save anyway' });
+          if (!ok) return;
+        }
+        await patch(`/admin/workspaces/${w.organization_id}`, {
+          plan: d.plan, paid_until: d.paid_until || null, plan_note: d.plan_note || null, ...(d.trial_ends_at && d.trial_ends_at !== trialDay ? { trial_ends_at: d.trial_ends_at } : {}),
+        });
+        toast('Workspace updated.');
+        rerender();
+        modal.close();
+      },
+    });
+    modal = openModal({ title: `${w.name}`, body: form });
+  };
 
   const tbody = h('tbody');
   const count = h('p', { class: 'muted small' });
@@ -62,8 +80,11 @@ export async function adminView(el, { rerender, query = {} }) {
       tbody.replaceChildren(h('tr', null, h('td', { colspan: 7 }, emptyState({ title: 'No results found', text: 'No workspace matches these filters. Try removing a filter.' }))));
       return;
     }
-    tbody.replaceChildren(...workspaces.map((w) => h('tr', { class: w.is_demo ? '' : 'row-link', tabindex: w.is_demo ? null : 0, onclick: () => { if (!w.is_demo) edit(w); } },
-      h('td', null, h('strong', null, w.name), h('div', { class: 'muted small' }, w.owner_email || '—')),
+    tbody.replaceChildren(...workspaces.map((w) => h('tr', { class: w.is_demo ? '' : 'row-link', onclick: () => { if (!w.is_demo) edit(w); } },
+      h('td', null,
+        // A real button, so Enter and Space work too: the key press sends the same click up to the row.
+        w.is_demo ? h('strong', null, w.name) : h('button', { type: 'button', 'aria-haspopup': 'dialog', style: { background: 'none', border: '0', padding: '0', font: 'inherit', color: 'inherit', cursor: 'pointer' } }, h('strong', null, w.name)),
+        h('div', { class: 'muted small' }, w.owner_email || '—')),
       h('td', null, statusBadge(w), h('div', { class: 'muted small' }, BUSINESS[w.business_type] || '')),
       h('td', null, w.paid_until ? fmtDate(w.paid_until) : '—'),
       h('td', { class: 'num' }, String(w.unit_count)),

@@ -165,7 +165,12 @@ const requireRole = (...roles) => (req, res, next) =>
   (roles.includes(req.user?.role) ? next() : next(forbidden()));
 
 // Very small in-memory fixed-window limiter (per process).
-function rateLimit({ windowMs, max, key }) {
+// Every request is counted on arrival, so a burst of parallel requests can't slip past the cap.
+// failedOnly: when the response finishes below 400 the count is given back, so successful
+// requests from a shared IP never lock anyone out.
+// silent: over the cap, don't answer 429 - set req.rateLimited and carry on, so the route can
+// quietly skip its side effect (an email) without telling anyone else's spam apart from the real thing.
+function rateLimit({ windowMs, max, key, failedOnly = false, silent = false }) {
   const hits = new Map();
   setInterval(() => {
     const now = Date.now();
@@ -178,9 +183,11 @@ function rateLimit({ windowMs, max, key }) {
     if (!h || h.reset < now) { h = { count: 0, reset: now + windowMs }; hits.set(k, h); }
     h.count += 1;
     if (h.count > max) {
+      if (silent) { req.rateLimited = true; return next(); }
       res.set('Retry-After', Math.ceil((h.reset - now) / 1000));
       return next(new HttpError(429, 'Too many attempts. Please wait a few minutes and try again.', { code: 'RATE_LIMITED' }));
     }
+    if (failedOnly) res.on('finish', () => { if (res.statusCode < 400) h.count = Math.max(0, h.count - 1); });
     next();
   };
 }

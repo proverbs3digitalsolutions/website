@@ -248,7 +248,7 @@ async function checkNextDue(nextDue) {
   }
 }
 
-router.get('/maintenance-schedules', ah(async (req, res) => {
+router.get('/maintenance-schedules', managers, ah(async (req, res) => {
   const params = [];
   const { rows } = await query(
     `${SCHEDULE_SELECT} WHERE ${propertyScope(req.user, params)} ORDER BY s.active DESC, s.next_due, s.title`, params);

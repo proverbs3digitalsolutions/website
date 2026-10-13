@@ -10,6 +10,7 @@ const { HttpError, ah, notFound } = require('../lib/http');
 const { validate, uuidParam } = require('../lib/validate');
 const { audit } = require('../lib/audit');
 const { requireRole } = require('../lib/auth');
+const { ownerStatement } = require('../lib/statements');
 
 const router = express.Router();
 const ownersOnly = requireRole('owner');
@@ -20,6 +21,8 @@ const manilaToday = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().s
 const validationError = (fields) => new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields });
 const centavos = (s) => Math.round(Number(s) * 100);
 const money = (c) => (c / 100).toFixed(2);
+// ₱1,234.00 for messages (centavos in).
+const peso = (c) => `₱${(c / 100).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 function monthParam(v) {
   if (typeof v !== 'string' || !MONTH_RE.test(v)) throw validationError({ month: 'Choose a month.' });
@@ -60,6 +63,7 @@ const PAYOUT_SPEC = {
   reference_number: { type: 'string', max: 100, label: 'Reference number' },
   note: { type: 'text', max: 500, label: 'Note' },
   month: { type: 'string', max: 7, label: 'Month' },
+  confirm_over: { type: 'bool' },
 };
 
 router.post('/unit-owners/:id/payouts', ownersOnly, ah(async (req, res) => {
@@ -88,6 +92,23 @@ router.post('/unit-owners/:id/payouts', ownersOnly, ah(async (req, res) => {
       if (key) {
         const again = await replay(db);
         if (again) return again;
+      }
+      // Paying more than the month's statement is allowed, but only when the request says it was meant.
+      if (body.month && !body.confirm_over) {
+        const { rows: [saved] } = await db.query(
+          "SELECT snapshot FROM owner_statements WHERE owner_id = $1 AND month = $2 AND status = 'published'", [o.owner_id, body.month]);
+        // Due = the published copy's payout, or the live payout for a draft (skipped when the owner has no units to report on).
+        const stmt = saved ? saved.snapshot : await ownerStatement(org, o.owner_id, body.month, db);
+        if (stmt && (saved || stmt.units.length)) {
+          const { rows: [{ paid }] } = await db.query(
+            'SELECT COALESCE(SUM(amount), 0) AS paid FROM owner_payouts WHERE owner_id = $1 AND month = $2 AND voided_at IS NULL', [o.owner_id, body.month]);
+          const due = centavos(stmt.totals.payout);
+          const total = centavos(paid) + centavos(body.amount);
+          if (total > due) {
+            throw new HttpError(409, `This takes the ${body.month} payouts to ${peso(total)}, more than the ${peso(due)} due. Confirm to record it anyway.`,
+              { code: 'PAYOUT_OVER_DUE', due: money(due), paid: money(centavos(paid)) });
+          }
+        }
       }
       const { rows: [p] } = await db.query(
         `INSERT INTO owner_payouts (organization_id, owner_id, month, amount, paid_on, method, reference_number, note, recorded_by, idempotency_key)
@@ -153,7 +174,7 @@ router.post('/unit-owners/:id/reserve/withdrawals', ownersOnly, ah(async (req, r
     const { rows: entries } = await db.query(`${ENTRY_SELECT} WHERE e.owner_id = $1`, [o.owner_id]);
     const left = reserveCents(entries);
     if (centavos(body.amount) > left) {
-      throw new HttpError(409, left > 0 ? `Only ₱${money(left)} is in the repairs reserve.` : 'The repairs reserve is empty.', { code: 'INSUFFICIENT_RESERVE' });
+      throw new HttpError(409, left > 0 ? `Only ${peso(left)} is in the repairs reserve.` : 'The repairs reserve is empty.', { code: 'INSUFFICIENT_RESERVE' });
     }
     const { rows: [r] } = await db.query(
       `INSERT INTO owner_reserve_entries (organization_id, owner_id, kind, amount, entry_date, note, recorded_by)

@@ -133,7 +133,12 @@ function addonsCard(token, reload) {
       const name = (guestLang() === 'tl' && a.name_tl) || a.name;
       const max = Math.max(1, Number(a.max_quantity) || 1);
       const input = h('input', { class: 'input', type: 'number', min: 0, max, value: 0, inputmode: 'numeric', id: `addon-${a.addon_id}`, 'aria-label': t('Quantity for {name}', { name }) });
-      input.addEventListener('input', () => { qty[a.addon_id] = Math.max(0, Math.min(max, Math.floor(Number(input.value) || 0))); });
+      // The box shows the number that will be bought: an entry over the maximum or below zero is clamped and written back.
+      input.addEventListener('input', () => {
+        const n = Math.max(0, Math.min(max, Math.floor(Number(input.value) || 0)));
+        qty[a.addon_id] = n;
+        if (input.value !== '' && Number(input.value) !== n) input.value = String(n);
+      });
       return h('div', { class: 'gp-addon' },
         h('div', null, h('strong', null, name), a.description && h('div', { class: 'muted small' }, a.description)),
         h('div', { class: 'gp-addon__price' }, `${peso(a.price)} `, h('span', { class: 'muted small' }, t(PRICING_TEXT[a.pricing] || ''))),

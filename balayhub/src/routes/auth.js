@@ -14,13 +14,23 @@ const {
 
 const router = express.Router();
 
+const normEmail = (req) => String(req.body?.email || '').trim().toLowerCase();
+// Only FAILED attempts count, so people sharing one IP (office, mobile carrier) don't lock each other out.
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, max: 20,
-  key: (req) => `${req.ip}|${String(req.body?.email || '').toLowerCase()}`,
+  windowMs: 15 * 60 * 1000, max: 20, failedOnly: true,
+  key: (req) => `${req.ip}|${normEmail(req)}`,
 });
 // Per-IP cap regardless of email, against password spraying.
-const ipLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 60, key: (req) => `ip|${req.ip}` });
-const emailLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, key: (req) => `mail|${req.ip}` });
+const ipLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 60, failedOnly: true, key: (req) => `ip|${req.ip}` });
+// Email-sending routes. Resend-verification is capped per signed-in user. Forgot-password is
+// capped visibly per IP+email (and per IP), while the per-email cap is silent (same 200, no mail),
+// so a stranger can't use it to show the real owner an error or block their reset emails.
+const emailLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, key: (req) => `mail|${req.user?.user_id || req.ip}` });
+const emailIpLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, key: (req) => `mailip|${req.ip}` });
+const forgotPairLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, key: (req) => `forgot|${req.ip}|${normEmail(req)}` });
+const forgotEmailLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, silent: true, key: (req) => `forgotmail|${normEmail(req) || req.ip}` });
+// Signup sends a verification email to any address, so EVERY attempt counts toward a per-IP cap.
+const signupLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 10, key: (req) => `signup|${req.ip}` });
 
 const { planStatus } = require('../lib/plans');
 const isPlatformAdmin = (u) => Boolean(u.email_verified_at) && config.platformAdmins.includes(String(u.email).toLowerCase());
@@ -74,7 +84,7 @@ async function loadInvitation(token) {
 }
 
 // ---------------------------------------------------------------- sign up
-router.post('/auth/signup', ipLimiter, authLimiter, ah(async (req, res) => {
+router.post('/auth/signup', signupLimiter, ipLimiter, authLimiter, ah(async (req, res) => {
   const body = validate(req.body, {
     full_name: { type: 'string', required: true, max: 120, label: 'Full name' },
     email: { type: 'email', required: true, label: 'Email' },
@@ -193,7 +203,7 @@ router.post('/auth/verify-email', authLimiter, ah(async (req, res) => {
   res.json({ ok: true });
 }));
 
-router.post('/auth/resend-verification', requireAuth, emailLimiter, ah(async (req, res) => {
+router.post('/auth/resend-verification', requireAuth, emailIpLimiter, emailLimiter, ah(async (req, res) => {
   if (req.user.email_verified_at) return res.json({ ok: true, alreadyVerified: true });
   const sent = await sendVerification(req.user);
   if (sent.failed) throw new HttpError(503, EMAIL_FAILED_MSG, { code: 'EMAIL_FAILED' });
@@ -201,11 +211,11 @@ router.post('/auth/resend-verification', requireAuth, emailLimiter, ah(async (re
 }));
 
 // ---------------------------------------------------------------- password reset
-router.post('/auth/forgot-password', emailLimiter, ah(async (req, res) => {
+router.post('/auth/forgot-password', emailIpLimiter, forgotPairLimiter, forgotEmailLimiter, ah(async (req, res) => {
   const { email } = validate(req.body, { email: { type: 'email', required: true, label: 'Email' } });
   const user = await one(`SELECT * FROM users WHERE lower(email) = $1 AND account_status = 'active'`, [email]);
   let devLink;
-  if (user) {
+  if (user && !req.rateLimited) {
     const token = await issueToken(user.user_id, 'reset_password', 1);
     const link = `${config.appUrl}/#/reset-password?token=${encodeURIComponent(token)}`;
     await sendMail({

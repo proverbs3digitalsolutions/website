@@ -23,6 +23,8 @@ const validationError = (fields) => new HttpError(400, 'Please check the highlig
 // Money as whole centavos, so sums and caps are exact. pg returns NUMERIC as strings.
 const centavos = (s) => Math.round(Number(s) * 100);
 const money = (c) => (c / 100).toFixed(2);
+// Pesos for messages the host reads, grouped like the rest of the app: "₱1,000.00".
+const peso = (c) => `₱${(c / 100).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 // A reservation with its policy, and what is paid and refunded (voided rows excluded).
 async function loadRefundBooking(user, id, db) {
@@ -96,9 +98,11 @@ router.post('/reservations/:id/refunds', managers, ah(async (req, res) => {
       const b = await loadRefundBooking(req.user, id, db);
       const left = centavos(b.paid) - centavos(b.refunded);
       if (centavos(body.amount) > left) {
+        const paid = peso(centavos(b.paid));
+        const refunded = peso(centavos(b.refunded));
         throw validationError({ amount: left > 0
-          ? `Only ₱${money(left)} is left to refund (₱${b.paid} paid, ₱${b.refunded} already refunded).`
-          : `Nothing is left to refund (₱${b.paid} paid, ₱${b.refunded} already refunded).` });
+          ? `Only ${peso(left)} is left to refund (${paid} paid, ${refunded} already refunded).`
+          : `Nothing is left to refund (${paid} paid, ${refunded} already refunded).` });
       }
       const { rows: [r] } = await db.query(
         `INSERT INTO booking_refunds (organization_id, booking_id, amount, refund_date, method, reference_number, reason, recorded_by, idempotency_key)

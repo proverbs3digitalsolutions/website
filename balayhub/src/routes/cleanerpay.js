@@ -114,7 +114,7 @@ router.put('/cleaner-rates', owners, ah(async (req, res) => {
     user_id: { type: 'uuid', label: 'Cleaner' },
     assignee_name: { type: 'string', max: 120, label: 'Name' },
     rate_type: { type: 'enum', values: ['per_clean', 'per_hour'], required: true, label: 'Paid' },
-    amount: { type: 'money', required: true, label: 'Amount' },
+    amount: { type: 'money', required: true, positive: true, label: 'Amount' },
   });
   if (Boolean(body.user_id) === Boolean(body.assignee_name)) {
     throw validationError({ assignee_name: 'Choose a team member, or type the name of an outside cleaner. Not both.' });

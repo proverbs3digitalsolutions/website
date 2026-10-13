@@ -246,18 +246,51 @@ publicRouter.get('/owner-portal/activity', requireOwnerSession, ah(async (req, r
 }));
 
 // Profit and loss for the owner's units only. Loaded on first use.
+// D-41: a month with a published statement shows that frozen copy, so this page agrees with the statement.
+// Other months are worked out live.
 publicRouter.get('/owner-portal/pnl', requireOwnerSession, ah(async (req, res) => {
   const o = req.portalOwner;
   const month = req.query.month === undefined ? manilaToday().slice(0, 7) : monthParam(req.query.month);
   const { rows: units } = await query(OWNED_UNITS_SQL, [o.owner_id]);
   // An empty list must not reach unitPnl, where it could read as "no filter".
-  if (!units.length) return res.json({ month, rows: [], totals: EMPTY_TOTALS });
+  if (!units.length) return res.json({ month, source: 'live', rows: [], totals: EMPTY_TOTALS });
+  const stmt = await one(
+    `SELECT snapshot, published_at FROM owner_statements WHERE owner_id = $1 AND organization_id = $2 AND month = $3 AND status = 'published'`,
+    [o.owner_id, o.organization_id, month]);
+  if (stmt) return res.json({ month, source: 'published', published_at: stmt.published_at, ...await publishedPnl(o, stmt.snapshot) });
   const unitIds = units.map((u) => u.unit_id);
   const { unitPnl } = require('../lib/pnl');
   const pnl = await unitPnl(o.organization_id, month, { unitIds });
   const mine = new Set(unitIds);
-  res.json({ month, rows: pnl.rows.filter((r) => mine.has(r.unit_id)), totals: pnl.totals });
+  res.json({ month, source: 'live', rows: pnl.rows.filter((r) => mine.has(r.unit_id)), totals: pnl.totals });
 }));
+
+// P&L rows from a statement snapshot, in the same shape unitPnl gives. The snapshot has refunds as one total
+// (not per unit), so they get their own row. Its expenses name the unit but not its id, so ids come from the expense rows.
+async function publishedPnl(o, snap) {
+  const cents = (v) => Math.round(Number(v || 0) * 100);
+  const money = (c) => (c / 100).toFixed(2);
+  const ids = (snap.expenses || []).map((e) => e.expense_id);
+  const { rows: ex } = await query('SELECT expense_id, unit_id FROM expenses WHERE expense_id = ANY($1::uuid[]) AND organization_id = $2', [ids, o.organization_id]);
+  const unitOf = new Map(ex.map((e) => [e.expense_id, e.unit_id]));
+  const zero = () => ({ stays: 0, nights: 0, gross: 0, channel: 0, refunds: 0, expenses: 0 });
+  const byUnit = new Map(snap.units.map((u) => [u.unit_id, { meta: { unit_id: u.unit_id, unit_name: u.unit_name, property_name: u.property_name }, a: zero() }]));
+  for (const s of snap.stays || []) {
+    const a = byUnit.get(s.unit_id)?.a;
+    if (!a) continue;
+    a.stays += 1; a.nights += Number(s.nights); a.gross += cents(s.total_amount); a.channel += cents(s.channel_fee);
+  }
+  for (const e of snap.expenses || []) {
+    const a = byUnit.get(unitOf.get(e.expense_id))?.a;
+    if (a) a.expenses += cents(e.amount);
+  }
+  const lines = [...byUnit.values()];
+  if (cents(snap.refunded)) lines.push({ meta: { unit_id: null, unit_name: 'Refunds (all units)', property_name: null }, a: { ...zero(), refunds: cents(snap.refunded) } });
+  const out = ({ meta, a }) => ({ ...meta, stays: a.stays, nights: a.nights, gross: money(a.gross), channel_fees: money(a.channel), refunds: money(a.refunds), expenses: money(a.expenses), net: money(a.gross - a.channel - a.refunds - a.expenses) });
+  const total = zero();
+  for (const { a } of lines) for (const k of Object.keys(total)) total[k] += a[k];
+  return { rows: lines.map(out), totals: out({ meta: {}, a: total }) };
+}
 
 // ---------------------------------------------------------------- receipts
 // Only receipts of expenses on the owner's unit that appear in one of their published statements.

@@ -89,14 +89,17 @@ test('each fee model, to the centavo', async () => {
     ['4500.00', '600.00', '500.00', '3400.00', '680.00', '2720.00', 'Management fee (20% of net)']);
   assert.deepEqual(s.reserve, { balance: '0.00', target: '0.00', monthly: '0.00', topup: '0.00' }, 'no reserve set, so no top-up');
 
-  // Gross: 3,000 gross, 300 channel fee, 500 refunded. The fee is 15% of the 2,500 left after the refund.
+  // Gross: 3,000 gross, 300 channel fee, 3,000 paid, 500 refunded. The overpayment is paid - (gross - channel fee)
+  // = 3,000 - 2,700 = 300, so 300 of the refund only returns it and 200 counts (D-37, D-44).
+  // Net: 3,000 - 300 - 200 = 2,500. The fee is 15% of the 2,800 left after the counted refund (3,000 - 200) = 420.
+  // Payout: 2,500 - 420 = 2,080.
   const g = await stay(U.gross, '2026-08-10', '2026-08-12', { channel: 'airbnb', channel_fee: '300' });
   await pay(g, '3000.00', '2026-08-10');
   await refund(g, '500.00', '2026-08-11');
   s = (await view(O.gross, AUG)).statement;
   assert.deepEqual(
     [s.totals.gross, s.totals.net_rental, s.totals.management_fee, s.totals.payout, s.refunded, s.fee_label],
-    ['3000.00', '2200.00', '375.00', '1825.00', '500.00', 'Management fee (15% of gross)']);
+    ['3000.00', '2500.00', '420.00', '2080.00', '200.00', 'Management fee (15% of gross)']);
 
   // Flat: a stay-free August still pays the 1,000 for having a unit; a 4,000 September stay pays that same 1,000.
   s = (await view(O.flat, AUG)).statement;

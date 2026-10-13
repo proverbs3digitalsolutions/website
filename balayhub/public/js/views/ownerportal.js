@@ -390,6 +390,9 @@ export const ownerPnlView = portalScreen('pnl', 'Profit and loss', async (body, 
       h('div', { class: 'op__head' }, h('h1', null, 'Profit and loss'),
         h('input', { class: 'input input--sm', type: 'month', value: month, max: monthNow(), 'aria-label': 'Month',
           onchange: (e) => { if (e.target.value) { month = e.target.value; draw(); } } })),
+      r.ok && rows.length ? h('p', { class: 'muted small' }, d.source === 'published'
+        ? `From your published statement${d.published_at ? `, ${manilaDay(d.published_at)}` : ''}. Later changes don't show here.`
+        : 'Live numbers. They can still change until the statement is published.') : null,
       !r.ok ? sectionError(r)
         : rows.length ? h('div', { class: 'card' }, h('div', { class: 'table-wrap' }, h('table', { class: 'table table--compact op-pnl' },
           h('caption', { class: 'sr-only' }, `Profit and loss by unit for ${fmtMonth(month)}`),

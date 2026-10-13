@@ -1,8 +1,9 @@
 // Add-ons: paid extras guests can add on the booking page and before arrival (owners edit; managers read only).
 
-import { get, post, patch } from '../api.js';
+import { get, post, patch, qs } from '../api.js';
 import { h, icon, peso, badge, field, formModal, confirmDialog, emptyState, errorState, pageHead, toast, skeleton } from '../ui.js';
 import { state } from '../app.js';
+import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 
 const PRICING = {
   per_stay: 'per stay', per_night: 'per night', per_guest: 'per guest', per_guest_night: 'per guest, per night',
@@ -46,8 +47,10 @@ function addonModal(a, listings, onSaved) {
   });
 }
 
-export async function addonsView(el, { rerender }) {
+export async function addonsView(el, { query = {}, rerender }) {
   const isOwner = state.user.role === 'owner';
+  const defaults = { q: '', status: '' };
+  const filters = initFilters('addons', query, defaults);
   el.replaceChildren(pageHead({ title: 'Add-ons', sub: 'Paid extras guests can add to a stay' }), skeleton(3));
   let addons; let listings;
   try { [{ addons }, { listings }] = await Promise.all([get('/addons'), get('/listings')]); } catch (err) { el.replaceChildren(pageHead({ title: 'Add-ons' }), errorState(err, rerender)); return; }
@@ -64,11 +67,22 @@ export async function addonsView(el, { rerender }) {
         if (!await confirmDialog({ title: `Archive ${a.name}?`, text: 'Guests will no longer see it. Past bookings keep their charges.', confirmText: 'Archive' })) return;
         try { await post(`/addons/${a.addon_id}/archive`); toast('Add-on archived.'); rerender(); } catch (err) { toast(err.message, 'error'); }
       } }, 'Archive')))));
+  const box = h('div', { class: 'card' });
+  function load() {
+    history.replaceState(null, '', `#/addons${qs(changed(filters, defaults))}`);
+    rememberFilters('addons', filters);
+    const q = filters.q.toLowerCase();
+    const shown = addons.filter((a) => (!q || a.name.toLowerCase().includes(q)) && (!filters.status || (filters.status === 'active') === a.active));
+    box.replaceChildren(shown.length ? h('ul', { class: 'list' }, shown.map(row))
+      : addons.length ? emptyState({ iconName: 'inbox', title: 'No results found', text: 'Try another search or status.' })
+        : emptyState({ iconName: 'plus', title: 'No add-ons yet', text: 'Offer airport pickup, early check-in, an extra bed or breakfast, and get paid with the booking.',
+          action: isOwner && h('button', { class: 'btn btn--primary', onclick: () => addonModal(null, listings, rerender) }, 'Add your first add-on') }));
+  }
+  const bar = filterBar({ key: 'addons', values: filters, defaults, onChange: load, search: { placeholder: 'Search add-ons' },
+    quick: [{ name: 'status', label: 'Status', all: 'All add-ons', options: [['active', 'Active'], ['archived', 'Archived']] }] });
   el.replaceChildren(
     pageHead({ title: 'Add-ons', sub: 'Paid extras guests can add to a stay', actions: isOwner && h('button', { class: 'btn btn--primary', onclick: () => addonModal(null, listings, rerender) }, icon('plus'), 'Add add-on') }),
     !isOwner && h('p', { class: 'muted small' }, 'Only the workspace owner can change add-ons.'),
-    h('div', { class: 'card' }, addons.length
-      ? h('ul', { class: 'list' }, addons.map(row))
-      : emptyState({ iconName: 'plus', title: 'No add-ons yet', text: 'Offer airport pickup, early check-in, an extra bed or breakfast, and get paid with the booking.',
-        action: isOwner && h('button', { class: 'btn btn--primary', onclick: () => addonModal(null, listings, rerender) }, 'Add your first add-on') })));
+    bar, box);
+  load();
 }

@@ -11,8 +11,14 @@ const quoteUrl = (q) => q.url;
 const money = (v) => Math.round((Number(String(v ?? '').replace(/,/g, '')) || 0) * 100) / 100;
 const nightsBetween = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
 
-async function copyText(text, msg = 'Link copied.') {
-  try { await navigator.clipboard.writeText(text); toast(msg); } catch { window.prompt('Copy the link:', text); }
+// Shared by the host pages (quotes, reservations, listings, charges, check-in). If the browser blocks the clipboard,
+// the text opens selected in a read-only box, so the host can copy it by hand.
+export async function copyText(text, msg = 'Link copied.', title = 'Copy the link') {
+  try { await navigator.clipboard.writeText(text); toast(msg); } catch {
+    const box = h(text.includes('\n') ? 'textarea' : 'input', { class: 'input', readonly: true, value: text, 'aria-label': 'Text to copy' });
+    openModal({ title, body: h('div', { class: 'form' }, box, h('p', { class: 'muted small' }, 'Press Ctrl+C (Cmd+C on a Mac) to copy it.')) });
+    box.select();
+  }
 }
 
 function addonCost(a, nights, guests, qty) {
@@ -44,7 +50,8 @@ async function newQuoteModal(listings, onSaved) {
       field({ name: 'accommodation_total', label: 'Accommodation', type: 'money', required: true }),
       field({ name: 'cleaning_fee', label: 'Cleaning fee', type: 'money' }),
       field({ name: 'discount_amount', label: 'Discount', type: 'money', hint: 'Taken off the total.' })),
-    addons.length > 0 && h('fieldset', { class: 'field hp-fieldset' }, h('legend', null, 'Add-ons'), addonBox),
+    // The error slot shows the server's add-on message (for example, a quantity over the limit) next to the list.
+    addons.length > 0 && h('fieldset', { class: 'field hp-fieldset', dataset: { field: 'addons' } }, h('legend', null, 'Add-ons'), addonBox, h('div', { class: 'error', role: 'alert' })),
     totalLine,
     h('div', { class: 'form-row form-row--2' },
       field({ name: 'pay_type', label: 'Guest pays', type: 'select', value: 'full', placeholderOption: false, options: [['full', 'Full amount'], ['deposit', 'Deposit (as set on the listing)']] }),
@@ -59,12 +66,15 @@ async function newQuoteModal(listings, onSaved) {
     onSubmit: async (d) => {
       const n = nightsBetween(d.check_in, d.check_out);
       if (!(n > 0)) { throw new ApiError('Check-out must be after check-in.', { status: 400, fields: { check_out: 'Check-out must be after check-in.' } }); }
+      // An empty box means the 48-hour default; anything typed must be at least 1 hour (0 is not silently replaced).
+      const hours = String(d.expires_in_hours).trim() === '' ? 48 : Number(d.expires_in_hours);
+      if (!(hours >= 1)) { throw new ApiError('Valid for at least 1 hour.', { status: 400, fields: { expires_in_hours: 'Valid for at least 1 hour.' } }); }
       const selections = [...picks].map(([addon_id, input]) => ({ addon_id, quantity: Number(input.value) || 0 })).filter((s) => s.quantity > 0);
       const body = {
         unit_id: d.unit_id, check_in: d.check_in, check_out: d.check_out, num_guests: Number(d.num_guests),
         guest_name: d.guest_name, guest_email: d.guest_email || undefined, guest_phone: d.guest_phone || undefined,
         accommodation_total: money(d.accommodation_total), cleaning_fee: money(d.cleaning_fee), discount_amount: money(d.discount_amount),
-        addons: selections, pay_type: d.pay_type, expires_in_hours: Number(d.expires_in_hours) || 48, note: d.note || undefined,
+        addons: selections, pay_type: d.pay_type, expires_in_hours: hours, note: d.note || undefined,
       };
       const r = await post('/quotes', body);
       toast('Quote created.');
@@ -89,7 +99,12 @@ async function newQuoteModal(listings, onSaved) {
     picks.clear();
     addonBox.replaceChildren(...addons.filter((a) => !a.unit_ids?.length || a.unit_ids.includes(unit)).map((a) => {
       const qty = h('input', { class: 'input hp-qty', type: 'number', min: 0, max: a.max_quantity, value: 0, inputmode: 'numeric', 'aria-label': `${a.name} quantity` });
-      qty.addEventListener('input', drawTotal);
+      // Clamp as the host types, so the box never holds more than the add-on allows (or a negative count).
+      qty.addEventListener('input', () => {
+        if (Number(qty.value) > a.max_quantity) qty.value = a.max_quantity;
+        if (Number(qty.value) < 0) qty.value = 0;
+        drawTotal();
+      });
       picks.set(a.addon_id, qty);
       return h('div', { class: 'hp-addon' }, h('span', null, h('strong', null, a.name), h('span', { class: 'muted small' }, ` ${peso(a.price)}`)), qty);
     }));

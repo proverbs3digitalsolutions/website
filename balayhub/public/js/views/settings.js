@@ -1,7 +1,7 @@
 // Settings: account, team access (owner), audit history and privacy.
 
 import { get, post, patch, ApiError } from '../api.js';
-import { h, icon, label, field, formModal, confirmDialog, emptyState, pageHead, toast, fmtDateTime, openModal } from '../ui.js';
+import { h, icon, label, field, formModal, confirmDialog, emptyState, pageHead, toast, fmtDateTime, openModal, clearErrors, showErrors } from '../ui.js';
 import { state, refreshUser } from '../app.js';
 import { notificationsCard } from '../notifications.js';
 import { themeSwitch } from '../themeswitch.js';
@@ -160,7 +160,7 @@ export async function settingsView(el, { rerender, query = {} }) {
         h('tbody', null, entries.slice(0, 100).map((a) => h('tr', null,
           h('td', null, fmtDateTime(a.created_at)),
           h('td', null, a.actor_name || '—'),
-          h('td', null, a.action.replace(/[._]/g, ' ')),
+          h('td', null, actionText(a.action)),
           h('td', { class: 'small muted' }, summarize(a.details)))))))
         : emptyState({ title: 'No activity yet', text: 'Important changes to records and access are logged here.' })));
   }
@@ -175,6 +175,68 @@ export async function settingsView(el, { rerender, query = {} }) {
   el.replaceChildren(pageHead({ title: 'Settings', sub: u.organization_name }), h('div', { class: 'stack' }, sections));
 }
 
+// Audit actions in plain words. My account shows the same labels (it imports actionText from here).
+const ACTIONS = {
+  'auth.login': 'Signed in', 'auth.password_changed': 'Changed your password', 'auth.password_reset': 'Reset a password', 'auth.signed_out_others': 'Signed out your other devices',
+  'user.profile_updated': 'Updated your profile', 'user.notify_prefs_updated': 'Changed notification settings',
+  'reservation.created': 'Added a reservation', 'reservation.updated': 'Edited a reservation', 'reservation.cancelled': 'Cancelled a reservation',
+  'reservation.confirmation_sent': 'Sent a booking confirmation', 'reservation.receipt_sent': 'Sent a receipt', 'reservation.payment_recorded': 'Recorded a guest payment',
+  'reservation.payment_voided': 'Voided a guest payment', 'reservation.charge_added': 'Added a charge to a reservation', 'reservation.charge_voided': 'Removed a charge from a reservation',
+  'reservation.refund_recorded': 'Recorded a refund', 'reservation.refund_voided': 'Voided a refund', 'booking_group.updated': 'Edited a booking group',
+  'deposit.received': 'Recorded a security deposit', 'deposit.settled': 'Returned or settled a deposit', 'deposit.reopened': 'Reopened a deposit',
+  'damage.reported': 'Reported damage', 'damage.charged': 'Charged a guest for damage', 'damage.deducted': 'Deducted damage from a deposit', 'damage.waived': 'Waived a damage charge',
+  'calendar.blocked': 'Blocked dates', 'calendar.unblocked': 'Unblocked dates', 'rates.updated': 'Changed nightly prices',
+  'bulk.blocks': 'Blocked or unblocked dates in bulk', 'bulk.prices': 'Changed prices in bulk',
+  'pricing_rule.created': 'Added a pricing rule', 'pricing_rule.updated': 'Edited a pricing rule', 'pricing_rule.removed': 'Removed a pricing rule',
+  'season.created': 'Added a season price', 'season.removed': 'Removed a season price',
+  'cleaning.task_created': 'Added a cleaning task', 'cleaning.task_updated': 'Updated a cleaning task', 'cleaning.checklist_updated': 'Edited the cleaning checklist', 'cleaning.inspected': 'Inspected a cleaning',
+  'cleaner_rate.saved': 'Saved a cleaner rate', 'cleaner_rate.deleted': 'Removed a cleaner rate', 'cleaner_pay.paid': 'Marked a cleaner’s pay as paid', 'cleaner_pay.unpaid': 'Marked a cleaner’s pay as unpaid',
+  'daily_close.saved': 'Saved a daily close',
+  'guest.created': 'Added a guest', 'guest.updated': 'Updated a guest', 'checkin.link_replaced': 'Made a new check-in link',
+  'file.uploaded': 'Uploaded a file', 'file.downloaded': 'Downloaded a file',
+  'guide.link_shared': 'Shared a guest guide link', 'guide.updated': 'Edited the guest guide',
+  'inbox.ai_draft': 'Used an AI reply draft', 'inbox.message_sent': 'Sent a message', 'inbox.message_scheduled': 'Scheduled a message',
+  'inbox.message_cancelled': 'Cancelled a scheduled message', 'inbox.note_added': 'Added an internal note',
+  'template.created': 'Added a message template', 'template.updated': 'Edited a message template', 'template.archived': 'Removed a message template',
+  'template.language_switched': 'Switched message templates’ language',
+  'automation.created': 'Added an automatic message', 'automation.updated': 'Edited an automatic message', 'automation.removed': 'Removed an automatic message',
+  'ical.feed_added': 'Connected a channel calendar', 'ical.feed_removed': 'Disconnected a channel calendar', 'ical.export_rotated': 'Made a new calendar export link',
+  'discount_code.created': 'Added a discount code', 'discount_code.enabled': 'Turned on a discount code', 'discount_code.disabled': 'Turned off a discount code',
+  'direct_booking.settings_changed': 'Changed booking page settings', 'workspace.manual_payments_updated': 'Changed manual payment settings',
+  'workspace.guest_settings_updated': 'Changed guest experience settings',
+  'property.created': 'Added a property', 'property.updated': 'Edited a property', 'property.archived': 'Archived a property', 'property.restored': 'Restored a property',
+  'property.gatepass_updated': 'Changed gate pass settings',
+  'unit.created': 'Added a listing/unit', 'unit.updated': 'Edited a listing/unit', 'unit.archived': 'Archived a listing/unit', 'unit.restored': 'Restored a listing/unit',
+  'unit_owner.created': 'Added a unit owner', 'unit_owner.updated': 'Edited a unit owner', 'unit_owner.archived': 'Archived a unit owner', 'unit_owner.statement_sent': 'Sent an owner statement',
+  'unit_owner.statement_published': 'Published an owner statement', 'unit_owner.statement_unpublished': 'Unpublished an owner statement',
+  'owner_payout.recorded': 'Recorded an owner payout', 'owner_payout.voided': 'Voided an owner payout',
+  'owner_reserve.withdrawal_recorded': 'Recorded an owner reserve withdrawal', 'owner_reserve.withdrawal_voided': 'Voided an owner reserve withdrawal',
+  'owner_portal.invited': 'Invited an owner to the portal', 'owner_portal.disabled': 'Turned off the owner portal',
+  'owner_portal.block_created': 'Blocked dates for an owner', 'owner_portal.block_cancelled': 'Cancelled an owner block',
+  'tenant.created': 'Added a tenant', 'tenant.updated': 'Edited a tenant', 'tenant.archived': 'Archived a tenant', 'tenant.restored': 'Restored a tenant', 'tenant.exported': 'Exported a tenant’s data',
+  'lease.created': 'Added a lease', 'lease.updated': 'Edited a lease', 'lease.cancelled': 'Cancelled a lease',
+  'payment.recorded': 'Recorded a rent payment', 'payment.voided': 'Voided a rent payment',
+  'expense.recorded': 'Added an expense', 'expense.corrected': 'Corrected an expense', 'expense.voided': 'Voided an expense',
+  'maintenance.created': 'Logged a repair request', 'maintenance.updated': 'Edited a repair request', 'maintenance.scheduled': 'Scheduled a repair',
+  'maintenance.status_changed': 'Changed a repair’s status', 'maintenance.schedule_created': 'Added a maintenance schedule',
+  'maintenance.schedule_updated': 'Edited a maintenance schedule', 'maintenance.schedule_paused': 'Paused a maintenance schedule',
+  'lost_found.reported': 'Logged a lost item', 'lost_found.updated': 'Edited a lost item',
+  'supply.created': 'Added a supply', 'supply.updated': 'Edited a supply', 'supply.movement': 'Recorded a supply movement', 'supply.archived': 'Archived a supply',
+  'payment_proof.submitted': 'Received a payment screenshot', 'payment_proof.image_added': 'Added a payment screenshot', 'payment_proof.rejected': 'Rejected a payment screenshot',
+  'quote.created': 'Created a quote', 'quote.sent': 'Sent a quote', 'quote.cancelled': 'Cancelled a quote',
+  'addon.created': 'Added an add-on', 'addon.updated': 'Edited an add-on', 'addon.archived': 'Archived an add-on',
+  'member.invited': 'Invited a team member', 'member.joined': 'Joined the workspace', 'member.updated': 'Changed a team member’s access',
+  'member.removed': 'Removed a team member', 'member.invite_revoked': 'Cancelled an invitation', 'gatepass.sent': 'Sent a gate pass',
+  'billing.checkout_started': 'Started a plan payment', 'billing.paid': 'Plan payment received', 'platform.plan_changed': 'Changed the workspace plan',
+  'workspace.created': 'Created the workspace', 'workspace.updated': 'Changed workspace settings', 'workspace.exported': 'Exported all workspace data',
+  'workspace.deletion_requested': 'Asked to delete the workspace', 'workspace.deletion_cancelled': 'Cancelled the workspace deletion',
+};
+export function actionText(action) {
+  if (ACTIONS[action]) return ACTIONS[action];
+  const t = action.replace(/[._]/g, ' ');
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
 function summarize(details) {
   if (!details) return '';
   const parts = [];
@@ -183,7 +245,9 @@ function summarize(details) {
     parts.push(`${k.replace(/_/g, ' ')}: ${v}`);
   }
   if (details.reason) parts.push(`reason: ${details.reason}`);
-  return [...new Set(parts)].join(' · ').slice(0, 160);
+  const text = [...new Set(parts)].join(' · ');
+  // Cut long details with an ellipsis so it is clear the text goes on.
+  return text.length > 160 ? `${text.slice(0, 159)}…` : text;
 }
 
 // ---------------------------------------------------------------- plan
@@ -343,23 +407,30 @@ async function manualPaymentsCard(rerender) {
   try { m = await get('/workspace/manual-payments'); } catch { return null; }
   const enabled = h('input', { type: 'checkbox', checked: m.enabled });
   const details = h('textarea', {
-    class: 'input', rows: 4, maxlength: 1000, value: m.instructions || '', 'aria-label': 'Payment details for guests',
+    class: 'input', rows: 4, maxlength: 1000, value: m.instructions || '', 'aria-label': 'Payment details for guests', 'aria-describedby': 'mp-details-err',
     placeholder: 'e.g. GCash 0917 123 4567 (Maria Santos)\nBDO savings 0012 3456 7890 (Maria Santos)',
   });
-  const save = async () => {
+  const save = async (e) => {
+    const form = e.currentTarget.closest('.form');
+    clearErrors(form);
     try {
       await patch('/workspace/manual-payments', { enabled: enabled.checked, instructions: details.value });
       toast('Manual payments saved.');
       rerender();
-    } catch (err) { toast(err.message, 'error'); }
+    } catch (err) {
+      // Put the server's reason on the Payment details box and highlight it.
+      const unplaced = showErrors(form, err.fields);
+      toast(unplaced.length ? unplaced.join(' ') : (err.summary || err.message), 'error');
+    }
   };
   return h('div', { class: 'card' },
     h('div', { class: 'card__head' }, h('h2', null, 'Manual payments')),
     h('p', { class: 'muted small' }, 'Let guests pay by GCash, Maya or bank transfer. They send you a screenshot from their payment page; you check it and confirm it, which records the payment on the reservation. BalayHub does not check the money for you.'),
     h('div', { class: 'form' },
       h('label', { class: 'check' }, enabled, h('span', null, 'Accept manual payments on the payment page')),
-      h('div', { class: 'field' }, h('label', null, 'Payment details guests should use'), details,
-        h('div', { class: 'hint' }, 'Shown on the payment page, up to 1,000 characters. Add the GCash number, bank name and account name.')),
+      h('div', { class: 'field', dataset: { field: 'instructions' } }, h('label', null, 'Payment details guests should use'), details,
+        h('div', { class: 'hint' }, 'Shown on the payment page, up to 1,000 characters. Add the GCash number, bank name and account name.'),
+        h('div', { class: 'error', id: 'mp-details-err', role: 'alert' })),
       h('div', null, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: save }, 'Save'))));
 }
 
@@ -388,9 +459,22 @@ async function bookingCard(rerender) {
       field({ name: 'slug', label: 'Page address', value: b.slug, required: true, maxlength: 40, hint: `Your page: ${location.origin}/#/book/<this>. Letters, numbers and dashes.` }),
       field({ name: 'intro', label: 'Welcome text', type: 'textarea', value: b.intro, maxlength: 1500, placeholder: 'e.g. Book directly with us for the best rate!' }),
     ],
-    onSubmit: async (d) => { await patch('/direct-booking', d); toast('Saved.'); rerender(); },
+    onSubmit: async (d) => {
+      await patch('/direct-booking', d);
+      // The server tidies the address (lower case, letters, numbers and dashes), so say what it was saved as.
+      const { slug } = await get('/direct-booking').catch(() => ({}));
+      toast(slug && slug !== d.slug ? `Saved as ${slug}.` : 'Saved.');
+      rerender();
+    },
   });
-  const copy = async () => { try { await navigator.clipboard.writeText(b.url); toast('Link copied. Share it on Facebook, Instagram or Messenger.'); } catch { window.prompt('Copy your booking link:', b.url); } };
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(b.url); toast('Link copied. Share it on Facebook, Instagram or Messenger.'); } catch {
+      // No clipboard access: show the link selected in a box so the host can copy it by hand.
+      const input = h('input', { class: 'input', readonly: true, value: b.url, 'aria-label': 'Your booking link' });
+      openModal({ title: 'Copy your booking link', body: h('div', { class: 'form' }, input, h('p', { class: 'muted small' }, 'Press Ctrl+C (Cmd+C on a Mac) to copy it.')) });
+      input.select();
+    }
+  };
   return h('div', { class: 'card' },
     h('div', { class: 'card__head' }, h('h2', null, 'Direct booking page'),
       b.enabled ? h('span', { class: 'badge badge--paid' }, 'Live') : h('span', { class: 'badge badge--archived' }, 'Off')),

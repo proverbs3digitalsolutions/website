@@ -12,7 +12,7 @@ const { isOwner, propertyScope } = require('../lib/access');
 const { HttpError, ah } = require('../lib/http');
 const { validate } = require('../lib/validate');
 const { audit } = require('../lib/audit');
-const { feedProblem, STALE_MS } = require('../lib/synchealth');
+const { feedProblem, problemText, STALE_MS } = require('../lib/synchealth');
 const { CHANNEL_LABEL } = require('../lib/ical');
 const { query, tx } = require('../db');
 
@@ -180,7 +180,7 @@ async function checklist(user, date) {
         const kind = feedProblem(r, cutoff);
         if (!kind) return [];
         return [item(`${r.unit_name} · ${CHANNEL_LABEL[r.channel] || 'Channel'}`, '#/calendar',
-          kind === 'failing' ? 'The last sync failed.' : 'Not updated for over 3 hours.')];
+          problemText(r, kind).message)];
       }),
       ...conflicts.map((r) => item(`${r.unit_name} · ${CHANNEL_LABEL[r.channel] || 'Channel'}`, '#/calendar',
         `Overlapping dates ${r.check_in} to ${r.check_out}`)),

@@ -7,6 +7,7 @@
 //
 // Field: { name, label, type: 'select' | 'date' | 'daterange' | 'number' | 'check', options: [[value, text]], all: 'All …' }
 // A daterange field uses `${name}_from` / `${name}_to` (or from/to keys given as `keys`).
+// A range that ends before it starts is flagged inline and never applied.
 
 import { h, fmtDate } from './ui.js';
 import { state } from './app.js';
@@ -37,15 +38,30 @@ export function changed(values, defaults) {
 
 function rangeKeys(f) { return f.keys || [`${f.name}_from`, `${f.name}_to`]; }
 
-function control(f, values, emit) {
+const BACKWARDS = 'The end date is before the start date.';
+
+function control(f, values, emit, defaults = {}) {
   const id = `flt-${f.name}-${Math.random().toString(36).slice(2, 6)}`;
   if (f.type === 'daterange') {
     const [a, b] = rangeKeys(f);
-    const from = h('input', { class: 'input', type: 'date', id, value: values[a] || '', 'aria-label': `${f.label} from` });
-    const to = h('input', { class: 'input', type: 'date', value: values[b] || '', 'aria-label': `${f.label} to` });
-    from.addEventListener('change', () => { values[a] = from.value; emit(); });
-    to.addEventListener('change', () => { values[b] = to.value; emit(); });
-    return { el: h('div', { class: 'flt__field flt__field--range' }, h('label', { for: id }, f.label), h('div', { class: 'flt__range' }, from, h('span', { 'aria-hidden': 'true' }, '–'), to)), sync: () => { from.value = values[a] || ''; to.value = values[b] || ''; } };
+    const errId = `${id}-err`;
+    const from = h('input', { class: 'input', type: 'date', id, value: values[a] || '', 'aria-label': `${f.label} from`, 'aria-describedby': errId });
+    const to = h('input', { class: 'input', type: 'date', value: values[b] || '', 'aria-label': `${f.label} to`, 'aria-describedby': errId });
+    const err = h('div', { id: errId, role: 'alert', style: { color: 'var(--red)', fontSize: '.84rem', fontWeight: '650' } }, BACKWARDS);
+    // Dates are YYYY-MM-DD, so string order is calendar order. A backwards range is flagged, never written.
+    const check = () => {
+      const bad = Boolean(from.value && to.value && to.value < from.value);
+      err.hidden = !bad;
+      for (const input of [from, to]) { if (bad) input.setAttribute('aria-invalid', 'true'); else input.removeAttribute('aria-invalid'); }
+      return bad;
+    };
+    const apply = () => { if (!check()) { values[a] = from.value; values[b] = to.value; emit(); } };
+    from.addEventListener('change', apply);
+    to.addEventListener('change', apply);
+    // From a shared link or an old saved filter: keep the dates on screen with the message, but do not apply them.
+    const invalid = check();
+    if (invalid) { values[a] = defaults[a] ?? ''; values[b] = defaults[b] ?? ''; }
+    return { el: h('div', { class: 'flt__field flt__field--range' }, h('label', { for: id }, f.label), h('div', { class: 'flt__range' }, from, h('span', { 'aria-hidden': 'true' }, '–'), to), err), sync: () => { from.value = values[a] || ''; to.value = values[b] || ''; check(); }, invalid };
   }
   if (f.type === 'check') {
     const box = h('input', { type: 'checkbox', id, checked: values[f.name] === '1' });
@@ -120,12 +136,13 @@ export function filterBar({ key, values, defaults, search, quick = [], more = []
     searchInput.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { values[search.name || 'q'] = searchInput.value.trim(); emit(); }, 300); });
     searchEl = h('div', { class: 'search' }, searchInput);
   }
-  const quickEls = quick.map((f) => { const c = control({ ...f, inline: f.type === 'select' || !f.type }, values, emit); controls.push(c); return c.el; });
+  const quickEls = quick.map((f) => { const c = control({ ...f, inline: f.type === 'select' || !f.type }, values, emit, defaults); controls.push(c); return c.el; });
   if (panel) {
-    panel.append(h('div', { class: 'flt__grid' }, more.map((f) => { const c = control({ type: 'select', ...f }, values, emit); controls.push(c); return c.el; })),
+    const moreCtrls = more.map((f) => { const c = control({ type: 'select', ...f }, values, emit, defaults); controls.push(c); return c; });
+    panel.append(h('div', { class: 'flt__grid' }, moreCtrls.map((c) => c.el)),
       h('div', { class: 'flt__actions' }, h('button', { type: 'button', class: 'btn btn--secondary btn--sm', onclick: () => clearAll() }, 'Reset filters'),
         h('button', { type: 'button', class: 'btn btn--primary btn--sm', onclick: () => toggle(false) }, 'Done')));
-    if (activeMore()) panel.hidden = false;
+    if (activeMore() || moreCtrls.some((c) => c.invalid)) panel.hidden = false;
   }
   function toggle(open) {
     panel.hidden = !open;

@@ -41,6 +41,12 @@ export async function api(method, url, body, { idempotencyKey, rawBody, headers 
   }
   if (!res.ok) {
     const err = new ApiError(data.error || `Request failed (${res.status}).`, { status: res.status, code: data.code, fields: data.fields, data });
+    // The generic "check the highlighted fields" text hides the reason when the field isn't on screen:
+    // lead with the server's own field messages and keep the generic text as err.summary.
+    if (data.code === 'VALIDATION' && err.fields && Object.keys(err.fields).length) {
+      err.summary = err.message;
+      err.message = [...new Set(Object.values(err.fields).map(String))].join(' ');
+    }
     // Owner-portal 401s (OWNER_SIGNED_OUT) are handled by the portal screens, not the team login.
     if (res.status === 401 && !url.startsWith('/auth/') && !url.startsWith('/owner-portal/')) listeners.forEach((fn) => fn(err));
     if (res.status === 403 && ['EMAIL_UNVERIFIED', 'NO_WORKSPACE'].includes(data.code)) listeners.forEach((fn) => fn(err));

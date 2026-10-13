@@ -4,6 +4,7 @@
 import { get, post, api, ApiError } from '../api.js';
 import { h, brand, field, fmtDateTime, toast, clearErrors, showErrors, readForm, confirmDialog } from '../ui.js';
 import { t, tServer, tFields, extendTranslations, initGuestLang, langToggle, fmtDateL, fmtDateTimeL } from '../i18n.js';
+import { copyText } from './quotes.js';
 
 const fmtTime = (t) => {
   if (!t) return '';
@@ -16,11 +17,18 @@ extendTranslations({
   'I have read and agree to the house rules.': 'Nabasa ko at sumasang-ayon ako sa mga patakaran sa bahay.',
   'Please accept the house rules to continue.': 'Pakisang-ayunan ang mga patakaran sa bahay para magpatuloy.',
   'You accepted the house rules on {when}.': 'Sinang-ayunan mo ang mga patakaran sa bahay noong {when}.',
+  'Please check the highlighted fields.': 'Pakitingnan ang mga naka-highlight.',
+  'Please enter your full name, as on your ID.': 'Pakilagay ang buong pangalan mo, gaya ng nasa ID.',
+  'Please enter your mobile number.': 'Pakilagay ang mobile number mo.',
+  'Your ID must be a JPG, PNG or WEBP photo.': 'Dapat JPG, PNG o WEBP na litrato ang ID mo.',
+  'Please agree so your host can register you with the building.': 'Paki-agree para ma-register ka ng host sa building.',
 });
+
+// The ID photo types the server accepts (src/routes/checkin.js). Checked before anything is sent.
+const ID_PHOTO_TYPE = /^image\/(jpeg|png|webp)$/;
 
 // Shrink phone photos (often 4–8 MB) to about 1600 px JPEG before upload.
 async function shrinkImage(file) {
-  if (!/^image\/(jpeg|png|webp)$/.test(file.type) && !/^image\//.test(file.type)) throw new Error(t('Please choose a photo.'));
   try {
     const bitmap = await createImageBitmap(file);
     const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
@@ -111,9 +119,9 @@ export async function guestCheckinView(el, { params }) {
       field({ name: 'vehicle_plate', label: t('Car plate number (if parking)'), value: r?.vehicle_plate || '', maxlength: 20, placeholder: 'e.g. ABC 1234' })),
     field({ name: 'notes', label: t('Anything we should know?'), type: 'textarea', value: r?.notes || '', maxlength: 1000, placeholder: t('Special requests, late arrival, celebrating something…') }),
     h('h2', null, t('Valid ID')),
-    h('div', { class: 'field' },
+    h('div', { class: 'field', dataset: { field: 'id_photos' } },
       h('p', { class: 'hint' }, `${t("A photo of a valid government ID for each adult (driver's license, passport, UMID, PhilID…). ")}${r?.id_count ? t('Photos you already sent are kept; add more only if needed.') : ''}`),
-      photos, progress),
+      photos, progress, h('div', { class: 'error', role: 'alert' })),
     rules && h('h2', null, t('House rules')),
     rules && h('div', { class: 'gp-rules', tabindex: 0, role: 'region', 'aria-label': t('House rules') }, rules),
     rules && (rulesAt
@@ -121,8 +129,9 @@ export async function guestCheckinView(el, { params }) {
       : h('div', { class: 'field', dataset: { field: 'accept_rules' } },
         h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'accept_rules' }), h('span', null, t('I have read and agree to the house rules.'))),
         h('div', { class: 'error', role: 'alert' }))),
+    // Never pre-ticked, even when the form is reopened: the guest agrees again on every save.
     h('div', { class: 'field', dataset: { field: 'consent' } },
-      h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'consent', checked: Boolean(r) }),
+      h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'consent' }),
         h('span', null, t("I agree that {host} may use these details and ID photos to register our stay with the building, as required under the Data Privacy Act. BalayHub deletes the ID photos {days} days after check-out; copies given to the building follow the building's own rules.", { host: s.workspace_name, days: s.id_retention_days }))),
       h('div', { class: 'error', role: 'alert' })),
     submit);
@@ -134,15 +143,23 @@ export async function guestCheckinView(el, { params }) {
     busy = true;
     clearErrors(form);
     formError.replaceChildren();
-    submit.disabled = true;
+    const picked = [...photos.files]; // the photos checked here are the ones uploaded below
     const d = readForm(form);
-    if (rules && !rulesAt && !form.elements.accept_rules.checked) {
-      showErrors(form, { accept_rules: t('Please accept the house rules to continue.') });
-      form.elements.accept_rules.focus();
+    // Every required field, box and photo type is checked in one pass, before anything is sent.
+    // Keys go in form order, so the first one focused is the first problem on screen.
+    const problems = {};
+    if (!d.lead_name.trim()) problems.lead_name = t('Please enter your full name, as on your ID.');
+    if (!d.phone.trim()) problems.phone = t('Please enter your mobile number.');
+    if (picked.some((f) => !ID_PHOTO_TYPE.test(f.type))) problems.id_photos = t('Your ID must be a JPG, PNG or WEBP photo.');
+    if (rules && !rulesAt && !form.elements.accept_rules.checked) problems.accept_rules = t('Please accept the house rules to continue.');
+    if (!form.elements.consent.checked) problems.consent = t('Please agree so your host can register you with the building.');
+    if (Object.keys(problems).length) {
+      formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, t('Please check the highlighted fields.')));
+      showErrors(form, problems);
       busy = false;
-      submit.disabled = false;
       return;
     }
+    submit.disabled = true;
     const payload = {
       lead_name: d.lead_name, phone: d.phone, email: d.email, arrival_time: d.arrival_time, vehicle_plate: d.vehicle_plate,
       notes: d.notes, consent: Boolean(form.elements.consent.checked),
@@ -152,7 +169,7 @@ export async function guestCheckinView(el, { params }) {
     try {
       submit.textContent = t('Saving…');
       await post(`/public/checkin/${encodeURIComponent(token)}`, payload);
-      const files = [...photos.files].filter((f) => !uploaded.has(f));
+      const files = picked.filter((f) => !uploaded.has(f));
       for (const [i, f] of files.entries()) {
         progress.textContent = t('Uploading ID photo {i} of {n}…', { i: i + 1, n: files.length });
         const blob = await shrinkImage(f);
@@ -186,9 +203,6 @@ export async function checkinCard(bookingId, rerender) {
   let d;
   try { d = await get(`/reservations/${bookingId}/checkin`); } catch { return null; }
   const r = d.registration;
-  const copy = async (text, msg) => {
-    try { await navigator.clipboard.writeText(text); toast(msg); } catch { window.prompt('Copy this:', text); }
-  };
   const adminText = r && [
     `Guest registration — ${r.lead_name}`,
     `Guests (${(r.guests?.length || 0) + 1}): ${[r.lead_name, ...(r.guests || [])].join(', ')}`,
@@ -205,8 +219,8 @@ export async function checkinCard(bookingId, rerender) {
       r ? h('span', { class: 'badge badge--paid' }, 'Submitted') : h('span', { class: 'badge badge--unpaid' }, 'Not yet')),
     !r && h('p', { class: 'muted small' }, 'Send this private link to the guest so they can register everyone and upload IDs before arrival. It is also included in the {{checkin_link}} message variable.'),
     h('div', { class: 'chips' },
-      h('button', { class: 'btn btn--secondary btn--sm', onclick: () => copy(d.link, 'Check-in link copied.') }, 'Copy link'),
-      r && h('button', { class: 'btn btn--secondary btn--sm', onclick: () => copy(adminText, 'Copied. Paste it to your building admin.') }, 'Copy for building admin'),
+      h('button', { class: 'btn btn--secondary btn--sm', onclick: () => copyText(d.link, 'Check-in link copied.', 'Copy the check-in link') }, 'Copy link'),
+      r && h('button', { class: 'btn btn--secondary btn--sm', onclick: () => copyText(adminText, 'Copied. Paste it to your building admin.', 'Copy the registration details') }, 'Copy for building admin'),
       h('button', { class: 'btn btn--ghost btn--sm', onclick: newLink }, 'New link')),
     r && h('dl', { class: 'dl', style: { marginTop: '12px' } },
       h('dt', null, 'Main guest'), h('dd', null, r.lead_name),

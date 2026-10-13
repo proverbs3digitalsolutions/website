@@ -29,7 +29,7 @@ function duplicateError(err, describe, retry) {
   err.onRender = (box) => box.append(h('div', { class: 'alert alert--warn' },
     h('p', null, 'Possible duplicate:'),
     h('ul', null, err.data.duplicates.map((d) => h('li', null, describe(d)))),
-    h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: retry }, 'It’s different — save anyway')));
+    h('button', { class: 'btn btn--secondary', type: 'button', onclick: retry }, 'It’s different — save anyway')));
   return err;
 }
 
@@ -174,7 +174,7 @@ export async function propertyDetailView(el, { params, query, rerender }) {
   const unitRow = (u) => {
     const actions = [];
     if (canManage && u.status === 'active' && !archived) {
-      if (u.occupancy_status === 'vacant') actions.push(h('button', { class: 'btn btn--primary btn--sm', onclick: () => assignTenantModal({ unit: { ...u, property_name: property.property_name }, onSaved: rerender }) }, 'Assign Tenant'));
+      if (u.occupancy_status === 'vacant') actions.push(h('button', { class: 'btn btn--primary', onclick: () => assignTenantModal({ unit: { ...u, property_name: property.property_name }, onSaved: rerender }) }, 'Assign Tenant'));
       actions.push(h('button', { class: 'btn btn--ghost btn--sm', onclick: () => unitModal(property, u, rerender) }, 'Edit'));
       if (u.occupancy_status !== 'occupied') {
         actions.push(h('button', {

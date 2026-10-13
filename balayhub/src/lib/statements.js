@@ -14,6 +14,16 @@ const manilaToday = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().s
 const cents = (v) => Math.round(Number(v || 0) * 100);
 const money = (c) => (c / 100).toFixed(2);
 
+// Centavos of a booking's refunds in the period that go beyond its overpayment (D-32, D-37, D-44).
+// The overpayment follows the app's balance rule, total - channel fee - payments, so it is
+// paid - (total - channel fee). Refunding it doesn't reduce income; `before_period` refunds use it up first.
+// `r` is a row with total_amount, channel_fee, paid, in_period and before_period (NUMERIC strings).
+const refundsBeyondOverpayment = (r) => {
+  const over = Math.max(0, cents(r.paid) - (cents(r.total_amount) - cents(r.channel_fee)));
+  const before = cents(r.before_period);
+  return Math.max(0, before + cents(r.in_period) - over) - Math.max(0, before - over);
+};
+
 function monthBounds(month) {
   const [y, m] = month.split('-').map(Number);
   const start = `${month}-01`;
@@ -83,18 +93,14 @@ async function ownerStatement(orgId, ownerId, month, db = { query }) {
   // the owner's income: the bill already dropped by that amount when the charge was voided (D-32).
   // So each booking loses only the refunds that go beyond its overpayment.
   const { rows: refundRows } = await db.query(
-    `SELECT b.booking_id, b.total_amount, SUM(r.amount) AS in_period,
+    `SELECT b.booking_id, b.total_amount, b.channel_fee, SUM(r.amount) AS in_period,
             COALESCE((SELECT SUM(p.amount) FROM booking_payments p WHERE p.booking_id = b.booking_id AND p.voided_at IS NULL), 0) AS paid,
             COALESCE((SELECT SUM(x.amount) FROM booking_refunds x WHERE x.booking_id = b.booking_id AND x.voided_at IS NULL AND x.refund_date < $2), 0) AS before_period
        FROM booking_refunds r JOIN bookings b ON b.booking_id = r.booking_id
       WHERE b.unit_id = ANY($1) AND b.kind = 'reservation' AND b.status = 'confirmed'
         AND r.voided_at IS NULL AND r.refund_date >= $2 AND r.refund_date < $3
-      GROUP BY b.booking_id, b.total_amount`, [ids, start, end]);
-  const refunds = refundRows.reduce((s, r) => {
-    const over = Math.max(0, cents(r.paid) - cents(r.total_amount));
-    const before = cents(r.before_period);
-    return s + Math.max(0, before + cents(r.in_period) - over) - Math.max(0, before - over);
-  }, 0);
+      GROUP BY b.booking_id, b.total_amount, b.channel_fee`, [ids, start, end]);
+  const refunds = refundRows.reduce((s, r) => s + refundsBeyondOverpayment(r), 0);
 
   let gross = 0; let channelFees = 0; let cleaning = 0;
   const lines = stays.map((s) => {
@@ -181,4 +187,4 @@ function statementText(s, monthLabel) {
   ].join('\n');
 }
 
-module.exports = { ownerStatement, statementText, monthBounds, monthHasEnded, reserveBalance, draftMonth };
+module.exports = { refundsBeyondOverpayment, ownerStatement, statementText, monthBounds, monthHasEnded, reserveBalance, draftMonth };

@@ -105,6 +105,7 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 - The income summary shows payments received, refunds (by refund date) and net received.
 - Owner statements include extras in the owner's gross, as other fees already are, and have a "Less refunds" line for refunds on the owner's confirmed stays in that month. A refund that only returns an overpayment doesn't reduce the owner.
 - The management fee is worked out after refunds.
+- *Amended by D-76 (2026-10-13):* "returns an overpayment" is measured after the channel fee. The overpayment is paid minus (total minus channel fee), not paid minus total. Supersedes the earlier wording; nothing above is deleted.
 
 *Why:* this follows the existing logic, and owners shouldn't be paid for money that went back to guests. These choices are open to founder change (see BLOCKERS, owner fees).
 
@@ -166,6 +167,7 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 - Expenses with no unit appear as one "Not linked to a unit" row. This row is left out of the owner portal.
 - Owners and managers see it (managers only for their properties). Staff get 403. The CSV has the same table.
 - Owners see their own units only in the portal.
+- *Amended by D-76 (2026-10-13):* the refund overpayment rule here uses the same after-channel-fee measure as the statements. Building-wide expenses staying off owner statements is unchanged, and is still an open question in BLOCKERS.MD.
 
 *Why:* hosts want to know which unit makes money, and expenses that are not linked to a unit must not disappear.
 
@@ -388,3 +390,35 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 - **Prices:** stacked percentage changes (season, last-minute or far-out, gap night) can't take a night below 10% of its usual price. Custom calendar prices, including those written by bulk changes, are still used exactly as set.
 - **Sync warnings:** they reach owners and managers through the new "Calendar sync problems" notification type. Archived listings don't raise them. Conversations can't be assigned to a manager who can't see that property.
 - **Correction to D-74:** sync warnings are also shown on each listing card in Listings.
+
+**D-76 · 2026-10-13 · QA round 1 calls (2026-10-13).** The first QA sweep found problems that needed a product decision. These are the calls made while fixing them.
+
+*Money*
+- **Per-hour cleaner pay with no start time is "pay not set", not 0.** If Start was never pressed (or start equals finish), the pay stays empty. Mark paid is refused for a clean with no pay until the host sets it. *Why:* a silent 0 looked like a real amount and let someone mark a clean as paid for nothing.
+- **A payout above the amount due asks first.** The server answers `PAYOUT_OVER_DUE` (409) and the screen asks "Pay more than the statement?"; a confirmed retry sends `confirm_over`. The statement shows "Overpaid by ₱…". *Why:* overpaying can be deliberate (an advance), so warn, never block.
+- **The owner portal profit and loss for a month with a published statement shows the frozen statement numbers, labelled** "From your published statement, <date>. Later changes don't show here." Other months are live and say so. *Why:* the portal and the statement the owner already has must agree.
+- **Refund overpayment is measured after the channel fee** for the statements and the unit profit and loss (amends D-37 and D-44, see the notes there). *Why:* the app's own balance rule is total minus channel fee minus payments, so a refund of that excess isn't lost income.
+- **Failed inspection clears the pay.** The clean reopens, the pay is cleared and the screen says so; it is priced again when the clean is finished. *Why:* the host shouldn't pay for a clean that was sent back.
+
+*Prices and rules*
+- **Zero is refused** for nightly, weekend and holiday rates, the lowest price, season fixed prices, cleaner rates and monthly rent. The cleaning fee may still be 0. *Why:* a 0 price was accepted by mistake and sold nights for free.
+- **Bulk changes:** a 0% change is refused, and a nightly price (set or from a percentage change) can't go above ₱1,000,000. Bulk blocks need a reason. *Why:* a 0% change does nothing, and the cap stops typing errors (an extra zero).
+- **Overlapping seasons are allowed with a warning.** The season that starts later wins the shared nights; two seasons with the same start: the one created later wins. A season that only sets a minimum stay never prices a night. *Why:* hosts layer a holiday over a long season on purpose, so we explain instead of refusing.
+- **Staff may view pricing, including the price preview**, for their assigned properties. Writes stay with managers and owners. *Why:* D-10 lets staff see prices, and BACKEND-SCHEMA section 6.3 said the opposite; the page also half-failed for staff.
+- **Add-on names are unique among active add-ons** (case and end spaces ignored), checked in the app only. There is no database index. *Why:* live data may already hold duplicate names and a unique index would make the deploy fail. The small gap (two creates at the same instant) is accepted and noted in the code.
+
+*Access and bookings*
+- **Pages outside a person's role or workspace type redirect to their home page** with a short message, instead of opening by typed address.
+- **Long-term-only workspaces can't create stays,** and **no short stay may overlap an active monthly lease.** One shared rule (`src/lib/leases.js`) is used by manual reservations, moving a reservation, room-type and group bookings, the public booking page and iCal import. *Why:* a unit can't be both leased and let by the night.
+- **The public booking page is not gated on business type.** It is off unless the owner turns it on, so that switch is the gate; the lease rule applies there too.
+- **Guests re-tick the data-privacy consent on every check-in save.** The box is never pre-ticked. *Why:* consent should be a fresh act each time the form is sent.
+- **Sign-in limits:** the per-IP limit counts failed attempts only. Forgot-password and resend-verification are limited per email address (or signed-in user) with a looser per-IP backstop of 30 per 15 minutes. *Why:* mobile carriers and offices put many people behind one IP, and successful logins locked them out.
+
+*Small screens and wording*
+- **A past-date cleaning task asks "Add it anyway?"** (recording a clean already done is allowed).
+- **Supplies:** managers get "Record use" (renamed from "Take stock out") and a per-item History of the last 20 movements (owners and managers only). An archived item's history can't be opened from the app, but its records are kept.
+- **Sync problems are shown in plain words** (`problem_message`); the raw technical text stays under "Technical details" on the listing card.
+- **Audit history labels** cover every action code; the dashboard shows unit names as "Unit 101".
+- **Maintenance schedules stay owner and manager only;** staff get 403 (confirms BACKEND-SCHEMA 6.1).
+
+*Why:* each call picks the safest reading of the existing decisions and keeps the founder's money rules exact. The open questions that remain are in BLOCKERS.MD.

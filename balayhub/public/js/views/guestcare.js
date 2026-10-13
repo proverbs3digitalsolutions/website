@@ -1,7 +1,7 @@
 // Guest reviews (private) and direct-booking discount codes.
 
 import { get, post, qs } from '../api.js';
-import { h, peso, fmtDate, field, formModal, emptyState, pageHead, toast, badge } from '../ui.js';
+import { h, peso, fmtDate, manilaDay, field, formModal, emptyState, pageHead, toast, badge } from '../ui.js';
 import { state } from '../app.js';
 import { initFilters, filterBar, changed } from '../filters.js';
 
@@ -33,7 +33,7 @@ export async function reviewsView(el, { query = {} } = {}) {
           h('span', { class: 'row__title' }, stars(r.rating), ' ', r.guest_name || 'Guest'),
           h('span', { class: 'row__sub' }, `${r.unit_name}${properties.length > 1 ? ` · ${r.property_name}` : ''} · ${fmtDate(r.check_in)} – ${fmtDate(r.check_out)}${r.cleanliness ? ` · cleanliness ${r.cleanliness}/5` : ''}`),
           r.comment && h('span', { class: 'row__sub' }, `“${r.comment}”`)),
-        h('div', { class: 'row__end' }, h('span', { class: 'muted small' }, fmtDate(r.created_at.slice(0, 10)))))))));
+        h('div', { class: 'row__end' }, h('span', { class: 'muted small' }, fmtDate(manilaDay(r.created_at)))))))));
   }
   const bar = filterBar({
     key: 'reviews', values: filters, defaults, onChange: load,

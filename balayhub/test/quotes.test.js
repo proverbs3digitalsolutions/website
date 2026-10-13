@@ -181,7 +181,7 @@ test('checkout: rules must be accepted; a new attempt ends the older payment pag
   const details = { name: 'Juan Dela Cruz', email: 'juan@example.com', phone: '09171234567', accept_rules: true, consent: true };
   const bare = await g.post(pay1, {});
   assert.equal(bare.status, 400);
-  assert.deepEqual(Object.keys(bare.data.fields), ['consent'], 'the privacy notice must be agreed to');
+  assert.deepEqual(Object.keys(bare.data.fields).sort(), ['accept_rules', 'consent'], 'consent and house rules named together');
   assert.deepEqual(Object.keys((await g.post(pay1, { ...details, consent: false })).data.fields), ['consent']);
   const noRules = await g.post(pay1, { ...details, accept_rules: false });
   assert.ok(noRules.data.fields.accept_rules, 'house rules are required');

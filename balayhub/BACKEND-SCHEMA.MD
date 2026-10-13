@@ -805,9 +805,10 @@ The cleaner role is denied by default in code (`cleanerGuard`, D-48). Any row no
 | Expenses made by mark paid | Yes | Yes (assigned) | No | No |
 | Supplies: list | Full | Assigned | Assigned | Names and counts only (assigned). No costs exist |
 | Supplies: add, edit, archive, count, restock | Yes | Yes (assigned) | No | No |
+| Supplies: movement history (`GET /supplies/:id/movements`, last 20) | Yes | Yes (assigned) | No | No |
 | Supplies: record used or restocked on a job | Yes | Yes | Yes (jobs they can see) | Yes, on own and unassigned jobs |
 | Work orders (maintenance requests from a job) | Full | Assigned | As section 6 | Create only. Cannot read the Maintenance page or repair costs. No photos |
-| Maintenance schedules | Full | Create, edit, pause (assigned) | No | No |
+| Maintenance schedules | Full | Create, edit, pause (assigned) | No (403) | No |
 | Files on cleaning records | Full | Assigned | Assigned | Own and unassigned jobs |
 | Files on damage and lost-and-found records | Full | Assigned | Assigned | Only records they filed |
 | Files on inspections | Full | Assigned | No | No |
@@ -849,10 +850,10 @@ Cleaners are denied by `cleanerGuard` on every Phase 5 route. "Assigned" means t
 
 | Data area | Owner | Manager | Staff | Cleaner | Public |
 |---|---|---|---|---|---|
-| Pricing rules: read | All | Workspace-wide rules, and rules for assigned listings | No | No | No |
+| Pricing rules: read | All | Workspace-wide rules, and rules for assigned listings | View (assigned) | No | No |
 | Pricing rules and seasons for every listing: create, change, remove | Yes | No (403) | No | No | No |
 | Pricing rules and seasons for one listing: create, change, remove | Yes | Yes (assigned) | No | No | No |
-| Price preview | Yes | Yes (assigned) | No | No | No |
+| Price preview (`GET /pricing/preview`) | Yes | Yes (assigned) | View (assigned; archived listings are 404) | No | No |
 | Bulk prices and blocks (preview and apply) | Yes | Yes (assigned listings only; a tag covers only those) | No | No | No |
 | Tags and room types: read | Yes | Yes (assigned) | Yes (assigned; the app shows the filter to owners and managers) | No | No |
 | Tags, room type, lowest price, fourteen-night discount on a listing | Yes | Yes (assigned) | No | No | No |
@@ -875,11 +876,11 @@ Cleaners are denied by `cleanerGuard` on every Phase 5 route. "Assigned" means t
 
 | # | Finding | Where |
 |---|---|---|
-| 1 | **Staff can reach guest contact details through the check-in link.** `redactGuest` removes email, phone, notes, `review_token` and `pay_token`, but not `checkin_token`. Reservation responses use `SELECT b.*`, so staff receive the check-in token. Opening `/api/public/checkin/<token>` returns the guest's form, including phone and email, and lets them edit it | `src/routes/stays.js` (`redactGuest`, `BOOKING_SELECT`), `src/routes/checkin.js` |
+| 1 | ~~**Staff can reach guest contact details through the check-in link.** `redactGuest` removes email, phone, notes, `review_token` and `pay_token`, but not `checkin_token`. Reservation responses use `SELECT b.*`, so staff receive the check-in token. Opening `/api/public/checkin/<token>` returns the guest's form, including phone and email, and lets them edit it~~ Fixed (checked 2026-10-13): `redactGuest` now also removes `checkin_token` (and `guide_token`), so staff don't receive the check-in link | `src/routes/stays.js` (`redactGuest`, `BOOKING_SELECT`), `src/routes/checkin.js` |
 | 2 | The gate-pass page always lists the guest ID photos. `gatepass_attach_ids` only controls the email attachments. A host who turns "Attach IDs" off may not expect the building admin's link to show them | `src/routes/gatepass.js` (`passData`, `GET /public/gatepass/:token`) |
 | 3 | `redactGuest` lives in `src/routes/stays.js`, not in `src/lib/access.js` as the project notes say | `src/lib/access.js` |
 | 4 | Staff can read financial reports, the dashboard, stays revenue, rent and expense lists and pricing for their assigned properties. `docs/ARCHITECTURE.md` agrees, but the assistant's role text says reports and pricing are hidden from staff. One of them should change | `src/routes/reports.js`, `stays.js`, `pricing.js`, `money.js`; `src/routes/assistant.js` `ROLE_TEXT` |
-| 5 | Managers limited to some properties can still create and edit workspace-wide discount codes and message templates, and switch the built-in template language | `src/routes/guestcare.js`, `src/routes/inbox.js` |
+| 5 | ~~Managers limited to some properties can still create and edit workspace-wide discount codes and message templates, and switch the built-in template language~~ Fixed (D-28, checked 2026-10-13): discount-code creation and changes, message-template changes and the template language switch are owner-only; managers can read the discount codes | `src/routes/guestcare.js`, `src/routes/inbox.js` |
 | 6 | A cleaning task can be assigned to any active member, even one not assigned to that property, who then can't see it | `src/routes/housekeeping.js` (`checkAssignee`) |
 | 7 | Guest-link tokens (`checkin_token`, `pay_token`, `review_token`, `gate_passes.token`, `units.ical_token`, `direct_checkouts.public_token`) are stored in plain text, unlike session and auth tokens | migrations 002, 007, 010, 014, 018, 019 |
 | 8 | ~~No cleanup of expired `sessions` or `auth_tokens`~~ Fixed 2026-10-13: the hourly `auth-cleanup` job deletes expired or idle sessions and old one-time tokens, and the owner portal's sessions and sign-in links too | `src/lib/auth.js` (`purgeExpiredAuth`) |
@@ -890,6 +891,7 @@ Cleaners are denied by `cleanerGuard` on every Phase 5 route. "Assigned" means t
 | 13 | ~~Rollback note missing `idempotency_key`~~ Not needed: the rollback drops the whole `owner_payouts` table | `db/migrations/029_phase2_owners.sql` |
 | 14 | ~~D-46 security items~~ Fixed 2026-10-13: an email change or clear ends the owner's portal sessions and cancels unused links (clearing also turns access off); owner blocks are refused while the workspace is view-only (402) or the demo (403); block create and cancel are limited to 20 per hour per owner; the sign-in link is removed from the address bar after use. Covered by tests | `src/routes/ownerportal.js`, `src/routes/owners.js`, `src/lib/auth.js` (`planGuard`) |
 | 15 | ~~Daily close by a manager with no properties~~ Fixed 2026-10-13: such a manager gets 403 on the daily close (D-75) | `src/routes/dailyclose.js` (`POST /daily-close`) |
+| 16 | New 2026-10-13 (QA round 1, D-76): add-on names are unique among active add-ons only in the app (`assertNameFree` in `src/routes/addons.js`); there is no database index, because live data may already hold duplicates. Two creates at the same instant could both pass | `src/routes/addons.js` |
 - Paused maintenance schedules are resumed with `PATCH /maintenance-schedules/:id { active: true }` (the Resume button on the Maintenance page).
 - Monthly schedules step from the last due date, so a due date on the 31st can drift to the 28th (`src/lib/maintschedule.js`).
 - Section 6 (the older matrix) has no Cleaner column. Cleaners are denied by default by `cleanerGuard`, and section 6.1 covers the Phase 3 rows.
@@ -898,3 +900,15 @@ Cleaners are denied by `cleanerGuard` on every Phase 5 route. "Assigned" means t
 - Phase 4: the listing's own check-in instructions and house rules have no Taglish text, so the guide shows English for those two sections.
 - Phase 4: the Wi-Fi password and the door code are stored as plain text in the inbox history once a message containing them is sent. This is a known trade-off (D-64), not a bug.
 - Phase 4: the discount code list shows the welcome codes in their own section, apart from the owner's codes (see D-64).
+
+## 8. API notes from QA round 1 (2026-10-13)
+
+- `GET /api/supplies/:id/movements` (owner, manager; assigned properties): the last 20 movements, newest first, each with `kind`, `quantity`, `note`, `created_at` and `recorded_by_name`. Supply notes now hold up to 200 characters.
+- `GET /api/units/:id/channels` (owner, manager): each feed also carries `problem_message`, the plain sentence for the host, or `null` when the feed is fine. `last_message` keeps the raw text.
+- `POST /api/unit-owners/:id/payouts`: with a `month`, a payout that takes the month's payouts above the statement's payout (the published copy, or the live figure for a draft) answers 409 `PAYOUT_OVER_DUE` with `due` and `paid`. Resend with `confirm_over: true` to record it.
+- `POST /api/cleaning-tasks/:id/inspect`: the response has `pay_cleared`, true when a failed inspection cleared a pay amount that was set. Finishing a clean no longer sets `started_at` (per-hour pay with no real start stays `NULL`, "not set"); `POST /cleaner-pay/mark-paid` refuses it with `NO_PAY_AMOUNT`.
+- `POST /api/pricing/seasons`: the response has `overlaps`, the seasons on the same scope that share nights, each with `wins` (`new`, `existing` or `null`). `GET /api/pricing/preview` is open to staff for their own active listings.
+- `GET /api/owner-portal/pnl`: the response has `source` (`published` or `live`) and, for a published month, `published_at`; the numbers come from the stored statement.
+- `POST /api/bulk/prices`: a 0% change is refused and a nightly price above ₱1,000,000 is refused (preview and apply). `POST /api/bulk/blocks` needs a `reason`.
+- Auth limits (`src/routes/auth.js`): sign-in and sign-up count failed attempts only (20 per IP and email, 60 per IP, per 15 minutes). Forgot-password and resend-verification: 5 per email address (or signed-in user), plus 30 per IP, per 15 minutes.
+- **Shared rule `src/lib/leases.js`** (`leasedListings`): a unit with an active monthly lease over any of the requested nights can't be booked for a short stay. Used by manual reservations (create and move), room-type and group bookings, the public booking page (availability and checkout) and iCal import. A long-term-only workspace gets 409 `LONG_TERM_ONLY` on short stays.

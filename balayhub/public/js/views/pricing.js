@@ -18,6 +18,15 @@ export function ruleSummary(r) {
   return `Gaps of up to ${n} night${n === 1 ? '' : 's'} between bookings: ${pctWords(r.adjust_pct)}`;
 }
 const KIND_LABEL = { custom: 'Custom price', holiday: 'Holiday', season: 'Season', weekend: 'Weekend', base: 'Base rate' };
+
+const prices = (s) => s.nightly_rate !== null || s.adjust_pct !== null;
+// Which season prices a shared night: the one that starts later (the engine's order), within the same scope.
+// Returns the seasons that overlap `s` (same listing, or both for all listings) with who wins; `wins` is null when it is not a price clash.
+export function seasonClashes(s, seasons) {
+  return seasons.filter((o) => o !== s && (o.unit_id || null) === (s.unit_id || null) && o.start_date <= s.end_date && o.end_date >= s.start_date)
+    .map((o) => ({ name: o.name, wins: !prices(s) || !prices(o) || o.start_date === s.start_date ? null : (s.start_date > o.start_date ? 'this' : 'other') }));
+}
+export const clashText = (c) => `Overlaps ${c.name}${c.wins === 'this' ? ': this season wins the shared nights' : c.wins === 'other' ? `: ${c.name} wins the shared nights` : ''}.`;
 const pctNum = (v) => (v === '' || v === undefined || v === null ? v : Number(v));
 
 export async function pricingView(el, { rerender }) {
@@ -47,7 +56,9 @@ export async function pricingView(el, { rerender }) {
       if (mode !== 'pct') body.adjust_pct = '';
       else body.adjust_pct = pctNum(body.adjust_pct);
       if (body.adjust_pct === '') delete body.adjust_pct;
-      await post('/pricing/seasons', body); toast('Season saved.'); rerender();
+      const { overlaps } = await post('/pricing/seasons', body);
+      const clash = overlaps.map((o) => `${o.name}${o.wins === 'new' ? ' (this season wins)' : o.wins === 'existing' ? ' (that one wins)' : ''}`);
+      toast(clash.length ? `Season saved. It overlaps ${clash.join(', ')} on shared nights.` : 'Season saved.'); rerender();
     },
   }));
   const modeSync = (m) => {
@@ -164,14 +175,14 @@ export async function pricingView(el, { rerender }) {
       seasons.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'table' },
         h('thead', null, h('tr', null, ['Season', 'Nights', 'Listing', 'Price', 'Min. nights', ''].map((t) => h('th', null, t)))),
         h('tbody', null, seasons.map((s) => h('tr', null,
-          h('td', null, s.name),
+          h('td', null, s.name, seasonClashes(s, seasons).map((c) => h('div', { class: 'muted small' }, clashText(c)))),
           h('td', null, `${fmtDate(s.start_date)} – ${fmtDate(s.end_date)}`),
           h('td', null, s.unit_name || 'All listings'),
           h('td', null, s.nightly_rate ? peso(s.nightly_rate) : (s.adjust_pct === null ? '—' : `${s.adjust_pct > 0 ? '+' : ''}${s.adjust_pct}%`)),
           h('td', null, s.min_nights ? String(s.min_nights) : '—'),
           h('td', null, canManage && (s.unit_id || isOwner) && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => remove(s) }, 'Remove')))))))
         : h('p', { class: 'muted' }, 'No seasons yet. Add one for peak months (e.g. March to May), local fiestas, or a minimum stay over Holy Week and Christmas.')),
-    previewCard(listings),
+    previewCard(listings, seasons),
     h('div', { class: 'card' },
       h('div', { class: 'card__head' }, h('h2', null, 'Philippine holidays (next 12 months)')),
       h('p', { class: 'muted small' }, 'Holiday rates use these dates. Some dates (Chinese New Year, Eid) are set each year by proclamation and may move; set a price on the calendar for any night that needs it.'),
@@ -180,7 +191,12 @@ export async function pricingView(el, { rerender }) {
 
 
 // ---------------------------------------------------------------- price preview
-function previewCard(listings) {
+// Other seasons that cover a night a season priced, and so lost to it.
+function losingSeasons(n, seasons, unitId) {
+  const lost = seasons.filter((s) => (!s.unit_id || s.unit_id === unitId) && prices(s) && s.start_date <= n.date && s.end_date >= n.date && s.name !== n.label);
+  return lost.length ? h('p', { class: 'muted small' }, `Also covers this night, but ${n.label} wins: ${lost.map((s) => s.name).join(', ')}.`) : null;
+}
+function previewCard(listings, seasons) {
   const out = h('div', { 'aria-live': 'polite' });
   if (!listings.length) return h('div', { class: 'card' }, h('div', { class: 'card__head' }, h('h2', null, 'Price preview')), h('p', { class: 'muted' }, 'Add a listing to see its prices.'));
   const sel = h('select', { class: 'input', id: 'pr-unit', 'aria-label': 'Listing' }, listings.map((l) => h('option', { value: l.unit_id }, `${l.unit_name} · ${l.property_name}`)));
@@ -201,6 +217,7 @@ function previewCard(listings) {
       detail.replaceChildren(
         h('strong', null, `${fmtDate(n.date)}: ${peso(n.price)}`),
         h('p', { class: 'small' }, n.booked ? 'Booked. ' : '', `${n.label || KIND_LABEL[n.kind]}.`),
+        n.kind === 'season' ? losingSeasons(n, seasons, sel.value) : null,
         applied.length ? h('ul', { class: 'small' }, applied.map((a) => h('li', null, `${a.label}${a.adjust_pct !== null ? ` (${Number(a.adjust_pct) > 0 ? '+' : ''}${a.adjust_pct}%)` : ''}`)))
           : h('p', { class: 'muted small' }, 'No booking-window rules applied.'));
     };

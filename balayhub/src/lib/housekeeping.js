@@ -83,11 +83,13 @@ function cleanerKey(assignedTo, assigneeName) {
 }
 
 // The task fields `user` may see. A cleaner gets the guest's first name, and
-// pay only on a clean they finished. The internal completed_by id is never sent.
+// pay only on a clean paid to them: the same payee rule as My pay (D-52), i.e. assigned to
+// them, or unassigned and finished by them. The internal completed_by id is never sent.
 function presentTask(user, row) {
   const { completed_by: doneBy, ...task } = row;
   if (!isCleaner(user)) return task;
-  const mine = doneBy === user.user_id;
+  const mine = task.assigned_to ? task.assigned_to === user.user_id
+    : !task.assignee_name && doneBy === user.user_id;
   return {
     ...task,
     departing_guest: firstName(task.departing_guest),

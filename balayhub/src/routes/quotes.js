@@ -72,12 +72,24 @@ function hostJson(q) {
   };
 }
 
+// The Taglish names of a quote's add-ons, read now from the add-on list. The quote keeps only the English
+// name it was priced with, so this reads name_tl the same way the pay page does.
+async function addonNamesTl(q) {
+  const ids = (q.addons || []).map((a) => a.addon_id);
+  if (!ids.length) return new Map();
+  const { rows } = await query('SELECT addon_id, name_tl FROM listing_addons WHERE organization_id = $1 AND addon_id = ANY($2::uuid[])',
+    [q.organization_id, ids]);
+  return new Map(rows.map((r) => [r.addon_id, r.name_tl]));
+}
+
 // The guest's view of their own quote. Never other guests' data, and never a key.
-function guestJson(q) {
+function guestJson(q, namesTl) {
   return {
     status: q.status, check_in: q.check_in, check_out: q.check_out, num_guests: q.num_guests,
     guest_name: q.guest_name, guest_email: q.guest_email, guest_phone: q.guest_phone,
-    accommodation_total: q.accommodation_total, cleaning_fee: q.cleaning_fee, addons: addonLines(q), addons_total: q.addons_total,
+    accommodation_total: q.accommodation_total, cleaning_fee: q.cleaning_fee,
+    addons: (q.addons || []).map(({ addon_id, name, quantity, amount }) => ({ name, name_tl: namesTl.get(addon_id) ?? null, quantity, amount })),
+    addons_total: q.addons_total,
     discount_amount: q.discount_amount, total_amount: q.total_amount, amount_due_now: amountDueNow(q),
     pay_type: q.pay_type, note: q.note, expires_at: q.expires_at, booking_code: q.booking_code,
     host: { name: q.host_name, guest_language: q.guest_language },
@@ -265,7 +277,7 @@ publicRouter.get('/public/quote/:token', ah(async (req, res) => {
     q = await quoteByToken(req.params.token);
   }
   if (q.status === 'expired') throw expiredError(q);
-  res.json(guestJson(q));
+  res.json(guestJson(q, await addonNamesTl(q)));
 }));
 
 // The guest accepts and pays. Same hold and PayMongo checkout as a direct booking; confirmation marks
@@ -279,17 +291,28 @@ publicRouter.post('/public/quote/:token/checkout', payLimiter, ah(async (req, re
   withHostState(q);
   if (!q.accepting) throw new HttpError(409, 'This host is not taking online payments right now. Please contact them directly.', { code: 'NOT_ACCEPTING' });
   if (q.check_in < manilaToday()) throw new HttpError(409, 'The check-in date has passed. Please ask the host for a new quote.', { code: 'DATES_PASSED' });
-  const body = validate(req.body, {
-    name: { type: 'string', max: 120, required: !q.guest_name, label: 'Full name' },
-    email: { type: 'email', required: !q.guest_email, label: 'Email' },
-    phone: { type: 'phone', required: !q.guest_phone, label: 'Mobile number' },
+  // Same privacy notice as the direct booking checkout. startCheckout stamps consent_at when the checkout is created.
+  // Consent and house rules are checked with the other fields, so one 400 names every missing field.
+  const rules = q.house_rules && q.house_rules.trim() ? q.house_rules : null;
+  const agreed = validate(req.body, {
     accept_rules: { type: 'bool', label: 'House rules' },
     consent: { type: 'bool', label: 'Consent' },
   });
-  // Same privacy notice as the direct booking checkout. startCheckout stamps consent_at when the checkout is created.
-  if (!body.consent) throw validationError({ consent: 'Please agree to continue.' });
-  const rules = q.house_rules && q.house_rules.trim() ? q.house_rules : null;
-  if (rules && !body.accept_rules) throw validationError({ accept_rules: 'Please read and agree to the house rules.' });
+  const fields = {};
+  if (!agreed.consent) fields.consent = 'Please agree to continue.';
+  if (rules && !agreed.accept_rules) fields.accept_rules = 'Please read and agree to the house rules.';
+  let body;
+  try {
+    body = validate(req.body, {
+      name: { type: 'string', max: 120, required: !q.guest_name, label: 'Full name' },
+      email: { type: 'email', required: !q.guest_email, label: 'Email' },
+      phone: { type: 'phone', required: !q.guest_phone, label: 'Mobile number' },
+    });
+  } catch (err) {
+    if (!err.extra?.fields) throw err;
+    Object.assign(fields, err.extra.fields);
+  }
+  if (Object.keys(fields).length) throw validationError(fields);
   if (q.pay_type === 'deposit' && addDays(q.check_in, -q.balance_due_days) <= manilaToday()) {
     throw new HttpError(409, 'Your stay is too soon for a deposit. Please ask the host for a new quote.', { code: 'DEPOSIT_NOT_ALLOWED' });
   }

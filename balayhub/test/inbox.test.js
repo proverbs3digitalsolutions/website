@@ -138,7 +138,7 @@ test('AI reply drafts use the reservation and conversation, and fail gracefully'
   aiStatus = 401;
   const bad = await owner.post(`/api/inbox/${convA}/ai-draft`, {});
   assert.equal(bad.status, 502);
-  assert.match(bad.data.error, /ANTHROPIC_API_KEY/);
+  assert.doesNotMatch(bad.data.error, /ANTHROPIC|API_KEY/);
   aiStatus = 200;
 });
 

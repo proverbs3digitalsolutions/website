@@ -1,11 +1,12 @@
 // Supplies per property with par levels. Anything below par is flagged as low.
 
 import { get, post, patch, qs } from '../api.js';
-import { h, field, formModal, confirmDialog, emptyState, pageHead, toast, errorState, skeleton } from '../ui.js';
+import { h, field, formModal, confirmDialog, emptyState, pageHead, toast, errorState, skeleton, openModal, fmtDate, manilaDay } from '../ui.js';
 import { state } from '../app.js';
 import { initFilters, filterBar, changed } from '../filters.js';
 
 const isLow = (s) => Number(s.on_hand) < Number(s.par_level);
+const MOVED = { used: 'Used', restocked: 'Added', count: 'Counted' };
 
 export async function suppliesView(el, { query = {} } = {}) {
   const defaults = { property_id: '', low: '', q: '' };
@@ -35,19 +36,38 @@ export async function suppliesView(el, { query = {} } = {}) {
   });
 
   const move = (s, kind) => formModal({
-    title: { count: 'Count stock', restocked: 'Add stock', used: 'Take stock out' }[kind] + `: ${s.name}`,
+    title: { count: 'Count stock', restocked: 'Add stock', used: 'Record use' }[kind] + `: ${s.name}`,
     submitText: 'Save',
     fields: [
       h('p', { class: 'muted small' }, `On hand now: ${s.on_hand} ${s.unit_label}. Keep at least ${s.par_level}.`),
       field({ name: 'quantity', label: kind === 'count' ? `How many ${s.unit_label} are there now?` : `How many ${s.unit_label}?`, type: 'number', min: kind === 'count' ? 0 : 1, step: 1, required: true, value: kind === 'count' ? s.on_hand : '' }),
       field({ name: 'note', label: 'Note (optional)', maxlength: 200 }),
     ],
-    onSubmit: async (d) => { await post(`/supplies/${s.supply_id}/movements`, { kind, quantity: Number(d.quantity), note: d.note || undefined }); toast('Stock updated.'); load(); },
+    onSubmit: async (d) => { await post(`/supplies/${s.supply_id}/movements`, { kind, quantity: Number(d.quantity), note: d.note || undefined }); toast(kind === 'used' ? 'Use recorded.' : 'Stock updated.'); load(); },
   });
 
   async function archive(s) {
     if (!await confirmDialog({ title: `Archive ${s.name}?`, text: 'It disappears from the list and from cleaners. Its history is kept.', confirmText: 'Archive', danger: true })) return;
     try { await post(`/supplies/${s.supply_id}/archive`); toast('Archived.'); load(); } catch (err) { toast(err.message, 'error'); }
+  }
+
+  // The last 20 movements on one item, loaded when the dialog opens.
+  function showHistory(s) {
+    const body = h('div', { 'aria-live': 'polite' });
+    const paint = async () => {
+      body.replaceChildren(skeleton(2));
+      try {
+        const { movements } = await get(`/supplies/${s.supply_id}/movements`);
+        body.replaceChildren(movements.length
+          ? h('ul', { class: 'list' }, movements.map((m) => h('li', { class: 'row' }, h('div', { class: 'row__main' },
+            h('span', { class: 'row__title' }, `${MOVED[m.kind]} ${m.quantity} ${s.unit_label}`),
+            h('span', { class: 'row__sub' }, `${m.recorded_by_name || 'Someone'} · ${fmtDate(manilaDay(m.created_at))}`),
+            m.note && h('span', { class: 'row__sub' }, m.note)))))
+          : h('p', { class: 'muted small' }, 'Nothing has been recorded for this item yet.'));
+      } catch (err) { body.replaceChildren(errorState(err, paint)); }
+    };
+    openModal({ title: `History: ${s.name}`, body });
+    paint();
   }
 
   async function load() {
@@ -81,6 +101,8 @@ export async function suppliesView(el, { query = {} } = {}) {
           canManage && h('div', { class: 'ops-supply__actions' },
             h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => move(s, 'restocked') }, 'Add stock'),
             h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => move(s, 'count') }, 'Count'),
+            h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => move(s, 'used'), 'aria-label': `Record use of ${s.name}` }, 'Record use'),
+            h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => showHistory(s), 'aria-label': `History of ${s.name}` }, 'History'),
             h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => addOrEdit(s) }, 'Edit'),
             h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => archive(s), 'aria-label': `Archive ${s.name}` }, 'Archive'))))))));
   }

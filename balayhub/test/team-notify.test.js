@@ -74,7 +74,7 @@ test('a mention is refused when the person cannot see the reservation, and nothi
   assert.equal(noAccess.data.code, 'VALIDATION');
   assert.equal(noAccess.data.fields.body, "Mgr B can't see this reservation");
   const staffOnly = await owner.post(`/api/inbox/${convA}/messages`, { body: `Hi ${mention(staffU)}`, note: true });
-  assert.equal(staffOnly.data.fields.body, 'Unknown person', 'staff cannot be mentioned');
+  assert.equal(staffOnly.data.fields.body, 'Only owners and managers can be mentioned.', 'staff cannot be mentioned');
   const made = await owner.post(`/api/inbox/${convA}/messages`, { body: 'Hi @[Nobody](00000000-0000-0000-0000-000000000000)', note: true });
   assert.equal(made.data.fields.body, 'Unknown person');
   assert.equal(await count(), before, 'a refused note is not saved');
@@ -299,7 +299,8 @@ test('assignment changes are capped at 60 an hour per person; a PATCH that keeps
 
 test('the mention renderer runs on internal notes only; guest messages show their raw text', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'views', 'inbox.js'), 'utf8');
-  assert.match(src, /'msg__body' \}, m\.direction === 'note' \? renderMentions\(m\.body\) : m\.body\)/);
+  assert.match(src, /const show = \(t\) => \(m\.direction === 'note' \? renderMentions\(t\) : t\);/);
+  assert.match(src, /'msg__body' \}, show\(full\)\)/);
   // The renderer uses the server's pattern, so it highlights only mentions the server would have saved.
   const mentionPattern = (...file) => fs.readFileSync(path.join(__dirname, '..', ...file), 'utf8')
     .match(/^const MENTION(?:_RE)? = \/(.+)\/(gi?);$/m).slice(1);

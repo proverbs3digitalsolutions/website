@@ -5,6 +5,7 @@ import { h, brand, toast } from '../ui.js';
 import { t, tServer, initGuestLang, langToggle, fmtDateL as fmtDate, extendTranslations } from '../i18n.js';
 
 extendTranslations({
+  'Thank you!': 'Salamat po!',
   'Would you share your experience?': 'Gusto mo bang ibahagi ang karanasan mo?',
   'A public review helps other travellers find {host}. It only takes a minute.': 'Nakakatulong ang public review para mahanap ng ibang biyahero si {host}. Isang minuto lang ito.',
   'Opens in a new tab': 'Bubukas sa bagong tab',
@@ -44,7 +45,7 @@ export async function guestReviewView(el, { params }) {
   initGuestLang(d.guest_language);
   const thanks = (links = []) => el.replaceChildren(page(h('div', { class: 'card bk-done' },
     h('div', { class: 'gc__tick', 'aria-hidden': 'true' }, '✓'),
-    h('h1', null, 'Salamat po!'),
+    h('h1', null, t('Thank you!')),
     h('p', { class: 'muted' }, t('Thank you for your feedback. {host} will read it personally. We hope to host you again!', { host: d.host })),
     links.length > 0 && h('section', { class: 'gp-share', 'aria-labelledby': 'share-h' },
       h('h2', { id: 'share-h', style: { width: '100%', textAlign: 'center' } }, t('Would you share your experience?')),

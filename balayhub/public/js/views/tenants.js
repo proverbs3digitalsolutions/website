@@ -37,7 +37,7 @@ export function newTenantModal({ onSaved } = {}) {
             h('p', null, 'Possible duplicate:'),
             h('ul', null, err.data.duplicates.map((d) => h('li', null,
               h('a', { href: `#/tenants/${d.tenant_id}`, target: '_blank' }, d.full_name), [d.phone, d.email].filter(Boolean).length ? ` — ${[d.phone, d.email].filter(Boolean).join(', ')}` : '', d.status === 'archived' ? ' (archived)' : ''))),
-            h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => { confirmDuplicate = true; modal.el.querySelector('form').requestSubmit(); } }, 'It’s a different person — save anyway')));
+            h('button', { class: 'btn btn--secondary', type: 'button', onclick: () => { confirmDuplicate = true; modal.el.querySelector('form').requestSubmit(); } }, 'It’s a different person — save anyway')));
         }
         throw err;
       }
@@ -68,7 +68,7 @@ export async function assignTenantModal({ tenant, unit, onSaved } = {}) {
 
   const unitSelect = field({
     name: 'unit_id', label: 'Unit', type: 'select', required: true, value: unit?.unit_id,
-    options: units.map((u) => [u.unit_id, `${u.property_name} — Unit ${u.unit_name} (${peso(u.monthly_rent)})`]),
+    options: units.map((u) => [u.unit_id, `${u.property_name} — ${unitLabel(u.unit_name)} (${peso(u.monthly_rent)})`]),
   });
   const rentField = field({ name: 'monthly_rent', label: 'Monthly rent', type: 'money', required: true, value: unit?.monthly_rent || (units.length === 1 ? units[0].monthly_rent : '') });
   const depositField = field({ name: 'deposit_amount', label: 'Security deposit', type: 'money', value: unit?.security_deposit_amount || (units.length === 1 ? units[0].security_deposit_amount : '') });
@@ -143,7 +143,7 @@ export async function tenantsView(el, { query }) {
         h('ul', { class: 'list' }, tenants.map((t) => h('li', null, h('a', { class: 'row', href: `#/tenants/${t.tenant_id}` },
           h('div', { class: 'row__main' },
             h('span', { class: 'row__title' }, t.full_name),
-            h('span', { class: 'row__sub' }, t.lease_id ? `${t.property_name} · Unit ${t.unit_name} · ${peso(t.monthly_rent)}/mo${t.end_date ? ` · lease ends ${fmtDate(t.end_date)}` : ''}` : 'No unit assigned'),
+            h('span', { class: 'row__sub' }, t.lease_id ? `${t.property_name} · ${unitLabel(t.unit_name)} · ${peso(t.monthly_rent)}/mo${t.end_date ? ` · lease ends ${fmtDate(t.end_date)}` : ''}` : 'No unit assigned'),
             !t.limited && (t.phone || t.email) && h('span', { class: 'row__sub' }, [t.phone, t.email].filter(Boolean).join(' · '))),
           h('div', { class: 'row__end' },
             Number(t.overdue) > 0 ? [h('span', { class: 'amount amount--neg' }, peso(t.overdue)), badge('overdue')]
@@ -255,7 +255,7 @@ export async function tenantDetailView(el, { params, query, rerender }) {
     const input = h('input', { type: 'file', accept: 'application/pdf,image/jpeg,image/png,image/webp', class: 'input' });
     const status = h('div');
     openModal({
-      title: `Lease documents — Unit ${lease.unit_name}`,
+      title: `Lease documents — ${unitLabel(lease.unit_name)}`,
       body: h('div', { class: 'form' },
         filesList(files),
         h('div', { class: 'field' }, h('label', null, 'Upload signed lease or tenant document'), input, h('div', { class: 'hint' }, 'PDF, JPG, PNG or WEBP up to 10 MB. Stored privately.')),
@@ -275,7 +275,7 @@ export async function tenantDetailView(el, { params, query, rerender }) {
 
   const leaseCard = (l) => h('div', { class: 'card' },
     h('div', { class: 'card__head' },
-      h('h2', null, h('a', { href: `#/properties/${l.property_id}` }, l.property_name), ` · Unit ${l.unit_name}`),
+      h('h2', null, h('a', { href: `#/properties/${l.property_id}` }, l.property_name), ` · ${unitLabel(l.unit_name)}`),
       badge(l.lease_status)),
     h('dl', { class: 'dl' },
       h('dt', null, 'Lease period'), h('dd', null, `${fmtDate(l.start_date)} – ${l.end_date ? fmtDate(l.end_date) : 'month-to-month'}`),
@@ -286,7 +286,7 @@ export async function tenantDetailView(el, { params, query, rerender }) {
       h('dt', null, 'Balance'), h('dd', { class: Number(l.outstanding) > 0 ? 'amount--neg' : '' }, peso(l.outstanding), Number(l.overdue) > 0 ? ` (${peso(l.overdue)} overdue)` : ''),
       Number(l.credit) > 0 && [h('dt', null, 'Advance / credit'), h('dd', null, peso(l.credit))]),
     h('div', { class: 'chips', style: { marginTop: '14px' } },
-      (l.lease_status === 'active' || Number(l.outstanding) > 0) && h('button', { class: 'btn btn--primary btn--sm', onclick: () => recordPaymentModal({ leaseId: l.lease_id, onSaved: rerender }) }, 'Record payment'),
+      (l.lease_status === 'active' || Number(l.outstanding) > 0) && h('button', { class: 'btn btn--primary', onclick: () => recordPaymentModal({ leaseId: l.lease_id, onSaved: rerender }) }, 'Record payment'),
       canManage && h('button', { class: 'btn btn--secondary btn--sm', onclick: () => leaseDocs(l) }, 'Documents'),
       canManage && l.lease_status === 'active' && [
         h('button', { class: 'btn btn--ghost btn--sm', onclick: () => editTerms(l) }, 'Change terms'),
@@ -303,7 +303,7 @@ export async function tenantDetailView(el, { params, query, rerender }) {
   el.replaceChildren(
     pageHead({
       title: tenant.full_name,
-      sub: active ? `${active.property_name} · Unit ${active.unit_name}` : (archived ? 'Archived tenant' : 'No unit assigned'),
+      sub: active ? `${active.property_name} · ${unitLabel(active.unit_name)}` : (archived ? 'Archived tenant' : 'No unit assigned'),
       back: { href: '#/tenants', label: 'Tenants' },
       actions: [
         canManage && !active && !archived && h('button', { class: 'btn btn--primary', onclick: () => assignTenantModal({ tenant, onSaved: rerender }) }, 'Assign Unit'),
@@ -339,7 +339,7 @@ export async function tenantDetailView(el, { params, query, rerender }) {
         h('div', { class: 'card' },
           h('div', { class: 'card__head' }, h('h2', null, 'Payment history')),
           payments.length ? h('ul', { class: 'list' }, payments.map((p) => h('li', null, h('a', { class: 'row', href: `#/payments/${p.payment_id}` },
-            h('div', { class: 'row__main' }, h('span', { class: `row__title${p.voided_at ? ' strike' : ''}` }, fmtDate(p.payment_date)), h('span', { class: 'row__sub' }, `${label(p.payment_method)}${p.reference_number ? ` · Ref ${p.reference_number}` : ''} · Unit ${p.unit_name}`)),
+            h('div', { class: 'row__main' }, h('span', { class: `row__title${p.voided_at ? ' strike' : ''}` }, fmtDate(p.payment_date)), h('span', { class: 'row__sub' }, `${label(p.payment_method)}${p.reference_number ? ` · Ref ${p.reference_number}` : ''} · ${unitLabel(p.unit_name)}`)),
             h('div', { class: 'row__end' }, h('span', { class: `amount${p.voided_at ? ' strike muted' : ''}` }, peso(p.amount_paid)), p.voided_at && badge('voided', 'Voided'))))))
             : emptyState({ title: 'No payments recorded', text: 'Recorded payments will appear here.' })),
         charges.length > 0 && h('div', { class: 'card' },

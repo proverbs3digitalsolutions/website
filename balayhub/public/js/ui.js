@@ -109,9 +109,17 @@ export const pesoShort = (v) => {
   return Number.isInteger(n) ? `₱${n.toLocaleString('en-PH')}` : peso(n);
 };
 
+// Manila calendar day (YYYY-MM-DD) of a timestamp; plain dates pass through unchanged.
+export function manilaDay(ts) {
+  if (!ts) return '';
+  const s = String(ts);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const d = new Date(ts);
+  return Number.isNaN(d.getTime()) ? s.slice(0, 10) : new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(d);
+}
 export function fmtDate(d) {
   if (!d) return '—';
-  const s = String(d).slice(0, 10);
+  const s = manilaDay(d);
   const [y, m, day] = s.split('-').map(Number);
   return new Date(Date.UTC(y, m - 1, day)).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 }
@@ -144,7 +152,7 @@ export const LABELS = {
 };
 export const label = (k) => LABELS[k] || k;
 // "Unit 3B", but not "Unit Unit 1" when the name already says it.
-export const unitLabel = (name) => (/^unit\b/i.test(String(name || '')) ? String(name) : `Unit ${name}`);
+export const unitLabel = (name) => (/^\d/.test(String(name || '')) ? `Unit ${name}` : String(name ?? ''));
 export const badge = (status, text) => h('span', { class: `badge badge--${status}` }, text || label(status));
 export const options = (keys) => keys.map((k) => [k, label(k)]);
 
@@ -274,11 +282,13 @@ export function clearErrors(form) {
   form.querySelector('.form-error')?.replaceChildren();
 }
 
+// Marks the fields it can find on the form; returns the messages of fields that aren't on it.
 export function showErrors(form, fields = {}) {
   let first = null;
+  const unplaced = [];
   for (const [name, msg] of Object.entries(fields)) {
     const wrap = form.querySelector(`[data-field="${CSS.escape(name)}"]`);
-    if (!wrap) continue;
+    if (!wrap) { unplaced.push(msg); continue; }
     wrap.classList.add('field--invalid');
     const err = wrap.querySelector('.error');
     if (err) err.textContent = msg;
@@ -287,6 +297,7 @@ export function showErrors(form, fields = {}) {
     first ||= input;
   }
   first?.focus();
+  return unplaced;
 }
 
 // Keep unsaved form input in sessionStorage so it survives an expired session
@@ -360,8 +371,10 @@ export function makeForm({ fields, submitText = 'Save', onSubmit, cancel, draftK
           formError.replaceChildren(h('div', { class: 'alert alert--warn' }, "Couldn't reach BalayHub. Nothing was saved yet — your input is kept. Check your connection and press Save again."));
         } else {
           if (err.status === 400 && idempotent) idemKey = newIdempotencyKey();
-          formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, err.message));
-          showErrors(form, err.fields);
+          const unplaced = showErrors(form, err.fields);
+          // Validation: show only the server messages that have no field on this form (else the generic summary).
+          const text = err.summary ? (unplaced.length ? [...new Set(unplaced)].join(' ') : err.summary) : err.message;
+          formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, text));
           if (err.onRender) err.onRender(formError);
         }
       } else {

@@ -23,11 +23,11 @@ export async function proofsCard(reservation, rerender) {
       toCheck ? badge('open', `${toCheck} to check`) : null),
     h('p', { class: 'muted small' }, 'Guests send a screenshot of a GCash, Maya or bank payment from their payment page. Check it against your account, then confirm or reject it.'),
     proofs.length
-      ? proofs.map((p) => proofRow(p, rerender))
+      ? proofs.map((p) => proofRow(p, rerender, reservation.guest_email))
       : h('p', { class: 'muted small' }, 'No payment proofs yet.'));
 }
 
-function proofRow(p, rerender) {
+function proofRow(p, rerender, guestEmail) {
   const [status, text] = STATUS[p.status] || [p.status, p.status];
   const shots = (p.files || []).map((f) => (f.mime_type === 'application/pdf'
     ? h('a', { class: 'btn btn--secondary btn--sm', href: `/api/files/${f.file_id}`, target: '_blank', rel: 'noopener' }, 'Open PDF')
@@ -35,7 +35,7 @@ function proofRow(p, rerender) {
       h('img', { src: `/api/files/${f.file_id}`, alt: 'Payment proof', loading: 'lazy',
         style: { width: '100%', maxHeight: '360px', objectFit: 'contain', borderRadius: '10px', border: '1px solid var(--line)' } }))));
   const actions = p.status === 'pending' && h('div', { class: 'chips' },
-    p.booking_status === 'confirmed' && h('button', { class: 'btn btn--primary btn--sm', type: 'button', onclick: () => confirmProof(p, rerender) }, 'Confirm payment'),
+    p.booking_status === 'confirmed' && h('button', { class: 'btn btn--primary btn--sm', type: 'button', onclick: () => confirmProof(p, rerender, guestEmail) }, 'Confirm payment'),
     h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => rejectProof(p, rerender) }, 'Reject'));
   return h('div', { class: 'proof', style: { display: 'grid', gap: '8px', paddingTop: '12px', borderTop: '1px solid var(--line)' } },
     h('div', { class: 'chips' }, h('strong', null, peso(p.amount)), badge(status, text)),
@@ -49,13 +49,14 @@ function proofRow(p, rerender) {
     actions);
 }
 
-function confirmProof(p, rerender) {
+function confirmProof(p, rerender, guestEmail) {
   formModal({
     title: 'Confirm this payment',
     submitText: 'Record payment',
     fields: [
       h('p', { class: 'small' }, `This records ${peso(p.amount)} by ${METHOD[p.method] || p.method} on the reservation and lowers the balance. Check the screenshot first.`),
-      field({ name: 'send_receipt', label: 'Email a receipt to the guest', type: 'checkbox', value: true }),
+      // No receipt box without an email to send it to, as on the Record payment dialog.
+      guestEmail && field({ name: 'send_receipt', label: 'Email a receipt to the guest', type: 'checkbox', value: true }),
     ],
     onSubmit: async (d) => {
       const r = await post(`/payment-proofs/${encodeURIComponent(p.proof_id)}/confirm`, { send_receipt: Boolean(d.send_receipt) });

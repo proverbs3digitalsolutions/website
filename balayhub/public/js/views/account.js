@@ -4,41 +4,11 @@
 import { get, post, patch } from '../api.js';
 import { h, icon, badge, label, fmtDate, fmtDateTime, field, formModal, toast, confirmDialog } from '../ui.js';
 import { state, logout, refreshUser } from '../app.js';
-import { changePassword, ROLE_TEXT } from './settings.js';
+import { changePassword, ROLE_TEXT, actionText } from './settings.js';
 import { themeSwitch } from '../themeswitch.js';
 
 const TYPE = { short_term: 'Short-term stays', long_term: 'Monthly rentals', both: 'Short-term stays and monthly rentals' };
 const OWNER_TEXT = 'Full access: listings, reservations, money, reports, team, plan and billing, and the workspace’s data.';
-
-// Audit actions in plain words.
-const ACTIONS = {
-  'auth.password_changed': 'Changed your password', 'auth.signed_out_others': 'Signed out your other devices', 'user.profile_updated': 'Updated your profile',
-  'reservation.created': 'Added a reservation', 'reservation.updated': 'Edited a reservation', 'reservation.cancelled': 'Cancelled a reservation',
-  'reservation.confirmation_sent': 'Sent a booking confirmation', 'reservation.receipt_sent': 'Sent a receipt', 'reservation.payment_recorded': 'Recorded a guest payment',
-  'reservation.payment_voided': 'Voided a guest payment', 'deposit.received': 'Recorded a security deposit', 'deposit.settled': 'Returned or settled a deposit',
-  'deposit.reopened': 'Reopened a deposit', 'calendar.blocked': 'Blocked dates', 'calendar.unblocked': 'Unblocked dates', 'rates.updated': 'Changed nightly prices',
-  'season.created': 'Added a season price', 'season.removed': 'Removed a season price', 'cleaning.task_created': 'Added a cleaning task', 'cleaning.task_updated': 'Updated a cleaning task',
-  'cleaning.checklist_updated': 'Edited the cleaning checklist', 'guest.created': 'Added a guest', 'guest.updated': 'Updated a guest', 'checkin.link_replaced': 'Made a new check-in link',
-  'inbox.ai_draft': 'Used an AI reply draft', 'inbox.message_cancelled': 'Cancelled a scheduled message', 'template.created': 'Added a message template',
-  'template.updated': 'Edited a message template', 'template.archived': 'Removed a message template', 'template.language_switched': 'Switched message templates’ language',
-  'automation.created': 'Added an automatic message', 'automation.updated': 'Edited an automatic message', 'automation.removed': 'Removed an automatic message',
-  'ical.feed_added': 'Connected a channel calendar', 'ical.feed_removed': 'Disconnected a channel calendar', 'ical.export_rotated': 'Made a new calendar export link',
-  'discount_code.created': 'Added a discount code', 'direct_booking.settings_changed': 'Changed booking page settings', 'property.created': 'Added a property',
-  'property.updated': 'Edited a property', 'property.archived': 'Archived a property', 'property.restored': 'Restored a property', 'property.gatepass_updated': 'Changed gate pass settings',
-  'unit.created': 'Added a listing/unit', 'unit.updated': 'Edited a listing/unit', 'unit.archived': 'Archived a listing/unit', 'unit.restored': 'Restored a listing/unit',
-  'unit_owner.created': 'Added a unit owner', 'unit_owner.updated': 'Edited a unit owner', 'unit_owner.archived': 'Archived a unit owner', 'unit_owner.statement_sent': 'Sent an owner statement',
-  'tenant.created': 'Added a tenant', 'tenant.updated': 'Edited a tenant', 'tenant.archived': 'Archived a tenant', 'tenant.restored': 'Restored a tenant', 'tenant.exported': 'Exported a tenant’s data',
-  'lease.created': 'Added a lease', 'lease.updated': 'Edited a lease', 'lease.cancelled': 'Cancelled a lease', 'payment.recorded': 'Recorded a rent payment', 'payment.voided': 'Voided a rent payment',
-  'expense.recorded': 'Added an expense', 'expense.corrected': 'Corrected an expense', 'expense.voided': 'Voided an expense', 'maintenance.created': 'Logged a repair request',
-  'file.uploaded': 'Uploaded a file', 'gatepass.sent': 'Sent a gate pass', 'member.invited': 'Invited a team member', 'member.updated': 'Changed a team member’s access', 'member.removed': 'Removed a team member',
-  'member.invite_revoked': 'Cancelled an invitation', 'workspace.updated': 'Changed workspace settings', 'workspace.exported': 'Exported all workspace data',
-  'workspace.deletion_requested': 'Asked to delete the workspace', 'workspace.deletion_cancelled': 'Cancelled the workspace deletion',
-};
-function activityText(a) {
-  if (ACTIONS[a.action]) return ACTIONS[a.action];
-  const t = a.action.replace(/[._]/g, ' ');
-  return t.charAt(0).toUpperCase() + t.slice(1);
-}
 
 function planLine(p) {
   if (!p) return '—';
@@ -218,7 +188,7 @@ export async function accountView(el, { rerender }) {
           h('div', { class: 'card__head' }, h('h2', null, 'Your recent activity')),
           d.activity.length
             ? h('ul', { class: 'list' }, d.activity.map((a) => h('li', null, h('div', { class: 'row' },
-              h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, activityText(a)), h('span', { class: 'row__sub' }, fmtDateTime(a.created_at)))))))
+              h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, actionText(a.action)), h('span', { class: 'row__sub' }, fmtDateTime(a.created_at)))))))
             : h('p', { class: 'muted' }, 'Nothing yet.')))),
   );
 }

@@ -52,6 +52,18 @@ async function assertUnits(orgId, unitIds) {
   }
 }
 
+// Two active add-ons in one workspace can't share a name (ignoring case and spaces at the ends).
+// Archived ones don't count. ponytail: check then insert, so two creates at the same instant could both pass; a partial unique index on (organization_id, lower(btrim(name))) WHERE active would close that.
+async function assertNameFree(db, orgId, name, exceptId = null) {
+  const { rows } = await db.query(
+    `SELECT 1 FROM listing_addons
+      WHERE organization_id = $1 AND active AND lower(btrim(name)) = lower(btrim($2)) AND addon_id IS DISTINCT FROM $3`,
+    [orgId, name, exceptId]);
+  if (rows.length) {
+    throw new HttpError(409, 'That name is already in use.', { code: 'DUPLICATE', fields: { name: 'You already have an active add-on with this name. Choose another name, or archive that one first.' } });
+  }
+}
+
 router.get('/addons', managers, ah(async (req, res) => {
   const { rows } = await query(
     `SELECT ${COLUMNS} FROM listing_addons WHERE organization_id = $1 ORDER BY active DESC, sort_order, created_at, addon_id`,
@@ -62,6 +74,7 @@ router.get('/addons', managers, ah(async (req, res) => {
 router.post('/addons', owners, ah(async (req, res) => {
   const body = validate(req.body, CREATE_SPEC);
   await assertUnits(req.user.organization_id, body.unit_ids);
+  await assertNameFree({ query }, req.user.organization_id, body.name);
   // Absent flags default to on; validate() alone would read absent as off.
   const flag = (key) => (req.body[key] === undefined ? true : body[key]);
   const { rows: [a] } = await query(
@@ -84,6 +97,10 @@ router.patch('/addons/:id', owners, ah(async (req, res) => {
       `SELECT ${COLUMNS} FROM listing_addons WHERE addon_id = $1 AND organization_id = $2 FOR UPDATE`, [id, req.user.organization_id]);
     if (!cur) throw notFound();
     const next = { ...cur, ...body };
+    // A rename, or switching an archived add-on back on, must not leave two active add-ons with one name.
+    // Saving other fields on an older duplicate still goes through.
+    const renamed = body.name !== undefined && body.name.toLowerCase() !== cur.name.trim().toLowerCase();
+    if (next.active && (renamed || !cur.active)) await assertNameFree(db, req.user.organization_id, next.name, id);
     const { rows: [updated] } = await db.query(
       `UPDATE listing_addons SET name = $2, name_tl = $3, description = $4, price = $5, pricing = $6, max_quantity = $7,
               unit_ids = $8, on_booking_page = $9, before_arrival = $10, active = $11, updated_at = now()

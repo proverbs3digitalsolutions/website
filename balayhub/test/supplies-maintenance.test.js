@@ -208,7 +208,7 @@ test('recurring schedules: create, list with names, validate, pause and resume',
   assert.equal(aircon.every_n, 3);
   tank = ok(await manager.c.post('/api/maintenance-schedules', { property_id: prop.property_id, title: 'Water tank check', every_n: 30, every_unit: 'days', next_due: d(10), priority: 'low' }), 201).schedule;
   assert.equal(tank.unit_name, null, 'property-wide schedule has no unit');
-  const list = ok(await staff.c.get('/api/maintenance-schedules')).schedules;
+  const list = ok(await manager.c.get('/api/maintenance-schedules')).schedules;
   assert.equal(list.length, 2);
   assert.ok(list.every((s) => s.property_name === 'Azure'));
   assert.equal(list.find((s) => s.schedule_id === tank.schedule_id).unit_name, null);

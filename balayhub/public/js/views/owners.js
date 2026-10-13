@@ -11,6 +11,11 @@ const manilaDay = (ts) => fmtDate(new Intl.DateTimeFormat('en-CA', { timeZone: '
 const short = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 const num = (v) => h('td', { class: 'num' }, v);
 
+const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+// A month in the URL: valid, or '' when absent (use last month). Anything else is bad and gets a message.
+const badMonth = (q) => q.month != null && q.month !== '' && !MONTH_RE.test(q.month);
+const badMonthAlert = (q) => h('div', { class: 'alert alert--warn', role: 'alert' }, `"${q.month}" is not a valid month. Choose a month above.`);
+
 const lastMonth = () => {
   const [y, m] = todayManila().split('-').map(Number);
   return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
@@ -154,8 +159,9 @@ export async function ownersView(el, { rerender, query = {} }) {
 }
 
 export async function ownerStatementsView(el, { query = {} }) {
-  const month = /^\d{4}-\d{2}$/.test(query.month || '') ? query.month : lastMonth();
-  const data = await get(`/owner-statements${qs({ month })}`);
+  const invalid = badMonth(query);
+  const month = MONTH_RE.test(query.month || '') ? query.month : lastMonth();
+  const data = invalid ? { owners: [] } : await get(`/owner-statements${qs({ month })}`);
   const list = data.owners;
   const monthInput = h('input', { class: 'input input--sm', type: 'month', value: month, 'aria-label': 'Month',
     onchange: (e) => { if (e.target.value) navigate(`#/owners/statements?month=${e.target.value}`); } });
@@ -169,7 +175,7 @@ export async function ownerStatementsView(el, { query = {} }) {
       back: { href: '#/owners', label: 'Unit owners' },
       actions: monthInput,
     }),
-    list.length
+    invalid ? badMonthAlert(query) : list.length
       ? [ready > 0 && h('div', { class: 'alert alert--info' }, `${ready} statement${ready === 1 ? ' is' : 's are'} still a draft. Open each one, check the numbers, then publish.`),
         h('div', { class: 'card card--flush' }, h('div', { class: 'table-wrap' }, h('table', { class: 'table own-list' },
           h('thead', null, h('tr', null, ['Owner', 'Units', 'Status', 'Payout', 'Sent', ''].map((x, i) => h('th', { class: i === 3 ? 'num' : null }, x)))),
@@ -184,9 +190,18 @@ export async function ownerStatementsView(el, { query = {} }) {
 }
 
 export async function ownerStatementView(el, { params, query = {}, rerender }) {
-  const month = /^\d{4}-\d{2}$/.test(query.month || '') ? query.month : lastMonth();
+  const month = MONTH_RE.test(query.month || '') ? query.month : lastMonth();
   const id = params.id;
   const base = `/unit-owners/${id}`;
+  if (badMonth(query)) {
+    el.replaceChildren(
+      h('a', { class: 'back no-print', href: '#/owners' }, '‹ Unit owners'),
+      h('div', { class: 'page-head' }, h('div', { class: 'page-head__title' }, h('h1', null, 'Owner statement')),
+        h('div', { class: 'page-head__actions' }, h('input', { class: 'input input--sm', type: 'month', value: month, 'aria-label': 'Month',
+          onchange: (e) => { if (e.target.value) navigate(`#/owners/${id}/statement?month=${e.target.value}`); } }))),
+      badMonthAlert(query));
+    return;
+  }
   const detail = await get(`${base}/statement?month=${month}`);
   const live = detail.statement;
   const record = detail.record;
@@ -202,6 +217,7 @@ export async function ownerStatementView(el, { params, query = {}, rerender }) {
   const paid = (payouts || []).filter((p) => !p.voided).reduce((a, p) => a + Math.round(Number(p.amount) * 100), 0) / 100;
   const payoutDue = Number(t.payout);
   const owes = payoutDue < 0; // flat fee with no stays: the owner owes the host
+  const overpaid = owes ? 0 : Math.max(0, Math.round((paid - payoutDue) * 100) / 100);
   const remaining = owes ? 0 : Math.max(0, Math.round((payoutDue - paid) * 100) / 100);
   const topup = Number(s.reserve?.topup) || 0;
   const monthEnded = month < todayManila().slice(0, 7);
@@ -214,7 +230,7 @@ export async function ownerStatementView(el, { params, query = {}, rerender }) {
     act('publish', { month }, 'Statement published.');
   };
   const unpublish = async () => {
-    if (!await confirmDialog({ title: 'Unpublish to correct?', text: 'The owner can no longer see this statement. Make your corrections, then publish it again.', confirmText: 'Unpublish', danger: true })) return;
+    if (!await confirmDialog({ title: 'Unpublish to correct?', text: `The owner can no longer see this statement.${record.sent_at ? ` They already have the copy you emailed on ${manilaDay(record.sent_at)}, and unpublishing does not take that back.` : ''} Make your corrections, then publish it again.`, confirmText: 'Unpublish', danger: true })) return;
     act('unpublish', { month }, 'Statement is a draft again.');
   };
   const send = async () => {
@@ -249,7 +265,15 @@ export async function ownerStatementView(el, { params, query = {}, rerender }) {
       field({ name: 'reference_number', label: 'Reference number (optional)', maxlength: 100 }),
       field({ name: 'note', label: 'Note (optional)', type: 'textarea', maxlength: 500 }),
     ],
-    onSubmit: async (d, { idempotencyKey }) => { await post(`${base}/payouts`, { ...d, month }, { idempotencyKey }); toast('Payout recorded.'); rerender(); },
+    onSubmit: async (d, { idempotencyKey }) => {
+      try { await post(`${base}/payouts`, { ...d, month }, { idempotencyKey }); } catch (err) {
+        if (err.code !== 'PAYOUT_OVER_DUE') throw err;
+        // Paying more than the statement says is allowed, but only if the host confirms it.
+        if (!await confirmDialog({ title: 'Pay more than the statement?', text: err.message, confirmText: 'Record anyway' })) throw new Error('Payout not saved.');
+        await post(`${base}/payouts`, { ...d, month, confirm_over: true }, { idempotencyKey });
+      }
+      toast('Payout recorded.'); rerender();
+    },
   });
   const voidPayout = async (p) => {
     const reason = await confirmDialog({ title: 'Void this payout?', text: `${peso(p.amount)} paid on ${fmtDate(p.paid_on)}. The record is kept for history.`, confirmText: 'Void payout', danger: true, reason: true });
@@ -261,6 +285,7 @@ export async function ownerStatementView(el, { params, query = {}, rerender }) {
       h('button', { class: 'btn btn--primary btn--sm', type: 'button', disabled: !payouts, onclick: recordPayout }, 'Record payout')),
     payouts
       ? [h('p', { class: 'own-paid' }, h('strong', null, owes ? `Paid ${peso(paid)}. The owner owes you ${peso(-payoutDue)} this month.` : `Paid ${peso(paid)} of ${peso(payoutDue)}`), remaining > 0 ? ` · ${peso(remaining)} left to pay` : ''),
+        overpaid > 0 && h('p', { class: 'own-paid amount--neg' }, `Overpaid by ${peso(overpaid)}`),
         payouts.length
           ? h('ul', { class: 'list' }, payouts.map((p) => h('li', null, h('div', { class: 'row' },
             h('div', { class: 'row__main' },
@@ -320,12 +345,11 @@ export async function ownerStatementView(el, { params, query = {}, rerender }) {
       h('p', { class: 'muted small' }, `Units: ${s.units.map((u) => u.unit_name).join(', ') || 'none'} · ${t.stays} stay${t.stays === 1 ? '' : 's'}, ${t.nights} night${t.nights === 1 ? '' : 's'} (${t.occupancy_pct}% occupancy) · stays are counted in the month they check out, refunds in the month they were paid back`),
       h('h3', { class: 'subhead' }, 'Stays'),
       s.stays.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'table table--compact' },
-        h('thead', null, h('tr', null, ['Dates', 'Unit', 'Guest', 'Channel', 'Total', 'Channel fee', s.owner.cleaning_to_manager ? 'Cleaning' : null, 'Net'].filter(Boolean).map((x) => h('th', null, x)))),
+        h('thead', null, h('tr', null, ['Dates', 'Unit', 'Guest', 'Total', 'Channel fee', s.owner.cleaning_to_manager ? 'Cleaning' : null, 'Net'].filter(Boolean).map((x) => h('th', null, x)))),
         h('tbody', null, s.stays.map((x) => h('tr', null,
           h('td', { class: 'num' }, `${short(x.check_in)} – ${short(x.check_out)}`),
-          h('td', null, x.unit_name),
+          h('td', null, x.unit_name, h('div', { class: 'muted small' }, CHANNEL_LABEL[x.channel] || x.channel)),
           h('td', null, x.guest_first_name),
-          h('td', null, CHANNEL_LABEL[x.channel] || x.channel),
           num(x.missing_amount ? h('span', { class: 'amount--neg' }, 'not entered') : peso(x.total_amount)),
           num(Number(x.channel_fee) ? `− ${peso(x.channel_fee)}` : '—'),
           s.owner.cleaning_to_manager && num(Number(x.cleaning_fee) ? `− ${peso(x.cleaning_fee)}` : '—'),
@@ -355,7 +379,8 @@ export async function ownerStatementView(el, { params, query = {}, rerender }) {
         owes
           ? row('Owner owes you', peso(-payoutDue), { strong: true, cls: 'amount--neg' })
           : row('Payout to owner', peso(t.payout), { strong: true, cls: 'statement__payout' }),
-        payouts && !owes && row('Paid so far', `${peso(paid)} of ${peso(payoutDue)}`)),
+        payouts && !owes && row('Paid so far', `${peso(paid)} of ${peso(payoutDue)}`),
+        overpaid > 0 && row('Overpaid by', peso(overpaid), { cls: 'amount--neg' })),
       owes && h('p', { class: 'muted small' }, 'Your fee and expenses were more than this month\'s income, so the owner owes you this amount. Nothing to pay out.'),
       h('p', { class: 'muted small', style: { marginTop: '18px' } }, `Generated by BalayHub on ${fmtDate(todayManila())}.`)),
     payoutsCard, reserveCard || '');

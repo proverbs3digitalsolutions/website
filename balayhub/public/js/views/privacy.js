@@ -8,7 +8,7 @@ import { state } from '../app.js';
 export async function privacyView(el) {
   let contact = '';
   try { contact = (await get('/public/plans')).contact_email || ''; } catch { /* ignore */ }
-  const section = (title, ...paras) => [h('h2', null, title), ...paras.map((p) => (Array.isArray(p) ? h('ul', null, p.map((li) => h('li', null, li))) : h('p', null, p)))];
+  const section = (title, ...paras) => [h('h2', null, title), ...paras.map((p) => (Array.isArray(p) ? h('ul', null, p.map((li) => h('li', null, li))) : typeof p === 'string' ? h('p', null, p) : p))];
   el.append(h('div', { class: 'public' },
     h('header', { class: 'public__top' }, brand(state.user ? '#/dashboard' : '#/'), h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => (history.length > 1 ? history.back() : (location.hash = state.user ? '#/settings' : '#/')) }, 'Back')),
     h('main', { class: 'content', id: 'main' }, h('article', { class: 'card prose' },
@@ -43,5 +43,5 @@ export async function privacyView(el) {
         'Under the Data Privacy Act you may request access to, correction of, or deletion or blocking of your personal data, object to processing, and file a complaint with the National Privacy Commission. Tenants should contact their landlord first; the landlord can export the tenant’s record from BalayHub to respond.'),
       ...section('Contact',
         contact ? `For privacy questions or requests, contact the BalayHub Data Protection Officer at ${contact}. Guests can also contact their host directly.`
-          : 'For privacy questions or requests, contact your host, or the BalayHub team through the contact details on our home page.')))));
+          : h('p', null, 'For privacy questions or requests, contact your host, or use ', h('a', { href: '#/help' }, 'Help & support'), '.'))))));
 }

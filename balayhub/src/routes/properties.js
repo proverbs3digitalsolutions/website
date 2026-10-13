@@ -30,8 +30,8 @@ const propertySpec = {
 const unitSpec = {
   unit_name: { type: 'string', required: true, max: 60, label: 'Unit name or number' },
   unit_type: { type: 'enum', values: UNIT_TYPES, required: true, label: 'Unit type' },
-  monthly_rent: { type: 'money', label: 'Monthly rent' },
-  nightly_rate: { type: 'money', label: 'Nightly rate' },
+  monthly_rent: { type: 'money', positive: true, label: 'Monthly rent' },
+  nightly_rate: { type: 'money', positive: true, label: 'Nightly rate' },
   cleaning_fee: { type: 'money', label: 'Cleaning fee' },
   max_guests: { type: 'int', min: 1, max: 50, label: 'Maximum guests' },
   checkin_time: { type: 'time', label: 'Check-in time' },
@@ -48,8 +48,8 @@ const unitSpec = {
   payment_option: { type: 'enum', values: ['full', 'deposit', 'either'], label: 'Online payment' },
   min_nights: { type: 'int', min: 1, max: 60, label: 'Minimum nights' },
   balance_due_days: { type: 'int', min: 0, max: 60, label: 'Balance due' },
-  weekend_rate: { type: 'money', label: 'Weekend rate' },
-  holiday_rate: { type: 'money', label: 'Holiday rate' },
+  weekend_rate: { type: 'money', positive: true, label: 'Weekend rate' },
+  holiday_rate: { type: 'money', positive: true, label: 'Holiday rate' },
   weekly_discount: { type: 'int', min: 0, max: 50, label: 'Weekly discount' },
   monthly_discount: { type: 'int', min: 0, max: 70, label: 'Monthly discount' },
   cancellation_policy: { type: 'enum', values: POLICY_KEYS, label: 'Cancellation policy' },
@@ -57,7 +57,7 @@ const unitSpec = {
   deposit_pct: { type: 'int', min: 10, max: 90, label: 'Deposit' },
   public_slug: { type: 'string', max: 60, label: 'Page address' },
   room_type: { type: 'string', max: 40, label: 'Room type' },
-  min_price: { type: 'money', label: 'Lowest price' },
+  min_price: { type: 'money', positive: true, label: 'Lowest price' },
   fortnight_discount: { type: 'int', min: 0, max: 90, label: 'Fourteen-night discount' },
 };
 

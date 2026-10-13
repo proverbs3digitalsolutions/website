@@ -255,7 +255,7 @@ export async function groupsView(el, { query }) {
       h('tbody', null, shown.map((g) => {
         const go = () => navigate(`#/groups/${g.group_id}`);
         const bal = Number(g.balance);
-        return h('tr', { class: 'row-link', tabindex: 0, onclick: go, onkeydown: (e) => { if (e.key === 'Enter') go(); } },
+        return h('tr', { class: 'row-link', tabindex: 0, onclick: go, onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } } },
           h('td', null, h('strong', null, g.name)),
           h('td', null, g.guest_name || '—'),
           h('td', null, g.check_in ? `${fmtDate(g.check_in)} – ${fmtDate(g.check_out)}` : '—'),

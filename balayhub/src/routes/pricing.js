@@ -67,7 +67,7 @@ router.post('/pricing/seasons', managers, ah(async (req, res) => {
     unit_id: { type: 'uuid', label: 'Listing' },
     start_date: { type: 'date', required: true, label: 'First night' },
     end_date: { type: 'date', required: true, label: 'Last night' },
-    nightly_rate: { type: 'money', label: 'Nightly rate' },
+    nightly_rate: { type: 'money', positive: true, label: 'Nightly rate' },
     adjust_pct: { type: 'int', min: -90, max: 300, label: 'Percentage change' },
     min_nights: { type: 'int', min: 1, max: 60, label: 'Minimum nights' },
   });
@@ -84,13 +84,24 @@ router.post('/pricing/seasons', managers, ah(async (req, res) => {
   else if (req.user.role !== 'owner') throw validationError({ unit_id: 'Choose a listing. Only the owner can set seasons for every listing.' });
   const { rows: [{ n }] } = await query('SELECT COUNT(*)::int AS n FROM seasons WHERE organization_id = $1 AND end_date >= $2', [req.user.organization_id, manilaToday()]);
   if (n >= 200) throw new HttpError(409, 'You have too many upcoming seasons. Remove some first.', { code: 'LIMIT' });
+  // Overlaps on the same scope are allowed, but the saver is told which season prices the shared nights:
+  // the engine uses the one that starts later (a season that only sets a minimum stay never prices a night).
+  const { rows: clash } = await query(
+    `SELECT name, start_date::text AS start_date, end_date::text AS end_date, nightly_rate, adjust_pct FROM seasons
+      WHERE organization_id = $1 AND unit_id IS NOT DISTINCT FROM $2 AND start_date <= $4 AND end_date >= $3 ORDER BY start_date`,
+    [req.user.organization_id, body.unit_id, body.start_date, body.end_date]);
+  const prices = (x) => x.nightly_rate !== null || x.adjust_pct !== null;
+  const overlaps = clash.map((o) => ({
+    name: o.name, start_date: o.start_date, end_date: o.end_date,
+    wins: !prices(body) || !prices(o) || o.start_date === body.start_date ? null : (body.start_date > o.start_date ? 'new' : 'existing'),
+  }));
   const s = await one(
     `INSERT INTO seasons (organization_id, unit_id, name, start_date, end_date, nightly_rate, adjust_pct, min_nights, created_by)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING season_id`,
     [req.user.organization_id, body.unit_id, body.name, body.start_date, body.end_date, body.nightly_rate, body.adjust_pct,
       body.min_nights, req.user.user_id]);
   await audit(null, req.user, 'season.created', 'season', s.season_id, body);
-  res.status(201).json({ season_id: s.season_id });
+  res.status(201).json({ season_id: s.season_id, overlaps });
 }));
 
 router.post('/pricing/seasons/:id/remove', managers, ah(async (req, res) => {
@@ -157,13 +168,14 @@ router.post('/pricing/rules/:id/remove', managers, ah(async (req, res) => {
 }));
 
 // The price of each night as a one-night stay that checks in that night, with the rules that changed it.
-router.get('/pricing/preview', managers, ah(async (req, res) => {
+router.get('/pricing/preview', requireRole('owner', 'manager', 'staff'), ah(async (req, res) => {
   const q = validate(req.query, {
     unit_id: { type: 'uuid', required: true, label: 'Listing' },
     from: { type: 'date', label: 'First night' },
     days: { type: 'int', min: 1, max: 120, label: 'Days' },
   });
   const unit = await loadUnit(req.user, q.unit_id);
+  if (unit.status !== 'active' || unit.property_status !== 'active') throw notFound();
   const from = q.from || manilaToday();
   const days = q.days ?? 60;
   const nights = await nightlyPrices(unit.unit_id, from, holidays.addDays(from, days));

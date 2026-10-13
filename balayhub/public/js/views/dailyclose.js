@@ -6,6 +6,24 @@ import { addDays } from './reservations.js';
 
 const METHOD = { cash: 'Cash', bank_transfer: 'Bank transfer', gcash: 'GCash', maya: 'Maya', card: 'Card', channel_payout: 'Channel payout', other: 'Other' };
 
+// A YYYY-MM-DD string that names a real calendar day (2027-02-29 and 2026-02-30 do not).
+function isRealDate(s) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toISOString().slice(0, 10) === s;
+}
+
+// Checks the day a page was opened with before anything is loaded, so the server never refuses it.
+// Missing means today. A date after tomorrow is clamped to tomorrow; a date that is not real falls back to today.
+// The message says which happened, shown inline on the page.
+export function closeDayFor(raw, today = todayManila()) {
+  const tomorrow = addDays(today, 1);
+  if (!raw) return { date: today, message: null };
+  if (!isRealDate(raw)) return { date: today, message: "That date isn't valid." };
+  if (raw > tomorrow) return { date: tomorrow, message: 'You can close a day up to tomorrow, so this shows tomorrow.' };
+  return { date: raw, message: null };
+}
+
 function section(s) {
   const { items, count } = s;
   const methods = s.by_method || [];
@@ -27,8 +45,8 @@ function section(s) {
 }
 
 export async function dailyCloseView(el, { query, rerender }) {
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(query.date || '') ? query.date : todayManila();
   const today = todayManila();
+  const { date, message } = closeDayFor(query.date, today);
   const [day, hist] = await Promise.all([
     get(`/daily-close${qs({ date })}`),
     get(`/daily-closes${qs({ from: addDays(today, -60), to: today })}`).catch(() => ({ closes: [] })),
@@ -37,7 +55,7 @@ export async function dailyCloseView(el, { query, rerender }) {
   // Payments recorded is a record of the day, not work left to do.
   const open = sections.filter((s) => s.key !== 'payments_today').reduce((n, s) => n + s.count, 0);
 
-  const picker = h('input', { class: 'input input--sm', type: 'date', value: date, max: addDays(today, 1), 'aria-label': 'Day to close' });
+  const picker = h('input', { class: 'input input--sm', type: 'date', value: date, max: addDays(today, 1), 'aria-label': 'Day to close', 'aria-describedby': message ? 'dc-date-msg' : undefined });
   picker.addEventListener('change', () => { if (picker.value) location.hash = `#/daily-close${qs({ date: picker.value === today ? '' : picker.value })}`; });
 
   const closeDay = () => formModal({
@@ -54,6 +72,7 @@ export async function dailyCloseView(el, { query, rerender }) {
     h('div', { class: 'page-head' },
       h('div', { class: 'page-head__title' }, h('h1', null, 'Daily close'), h('p', null, 'Check the day is wrapped up, then close it')),
       h('div', { class: 'page-head__actions' }, picker, h('button', { class: 'btn btn--primary', onclick: closeDay }, closed ? 'Update close' : 'Close the day'))),
+    message && h('div', { class: 'alert alert--warn', id: 'dc-date-msg', role: 'alert' }, message),
     closed
       ? h('div', { class: 'alert alert--ok', role: 'status' }, `Closed ${fmtDateTime(closed.closed_at)} by ${closed.closed_by_name || 'a team member'}${closed.note ? `: ${closed.note}` : ''}`)
       : h('div', { class: `alert ${open ? 'alert--warn' : 'alert--info'}`, role: 'status' }, `${fmtDate(date)} is not closed yet.${open ? ` ${open} item${open === 1 ? '' : 's'} to look at.` : ''}`),

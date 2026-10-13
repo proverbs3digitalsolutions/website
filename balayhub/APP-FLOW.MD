@@ -19,6 +19,7 @@ The app is a single page with hash routes (`#/…`). Each route has an access le
 
 - **Home page by type:** Long-term workspaces land on `#/dashboard`. Short-term and Both land on `#/home`.
 - **Unknown route:** sends to the home page (signed in) or `#/` (signed out).
+- **Route guard (2026-10-13, D-76):** a signed-in user who types a page their role or workspace type can't use (for example staff on `#/inbox`, a manager on `#/owners`, a long-term workspace on `#/calendar`, a short-term one on `#/dashboard`, `#/admin` for anyone but a platform admin) goes to their home page with the toast "That page isn't available for your role or workspace." The rules are in `public/js/routeaccess.js`, built from the same lists as the menu.
 - **After login (`afterLogin`):** setup redirect first; else the remembered page; else, for an owner of a short-term or Both workspace (not the demo) whose Launchpad is unfinished and not hidden, `#/launchpad`; else the home page.
 
 ## 2. Global states (every app page)
@@ -36,6 +37,8 @@ The app is a single page with hash routes (`#/…`). Each route has an access le
 | Double click | Save button disabled while saving ("Saving…"); payments and expenses use an idempotency key | Recorded once |
 | Empty list | An icon, a title and a hint, often with an action button (e.g. "Add listing") | See each page |
 | Filters hide everything | "No results found — Try removing a filter" | Remove a chip or **Clear all** |
+| Backwards date range in a filter bar | Inline red "The end date is before the start date." on the range; the range is not applied | Fix a date |
+| Row you can click | Rows that open a page can also be opened with the keyboard (Tab to focus, Enter or Space) | — |
 
 ### Plan and workspace banners (top of every app page)
 
@@ -279,6 +282,7 @@ Managers follow the same flows unless section 8 says otherwise.
 - Empty (no listings): "Add your first listing" + **Add listing** (owner). Managers/staff: "No listings assigned to you yet". A card that fails shows a red message inside the card only.
 
 ### 7.3 Calendar `#/calendar`
+- A start date in the address that isn't a real date (such as 2026-02-30) shows today with the toast "That date wasn't valid, so we're showing today." A refused drag-move shows the reason (for example the guest limit) in its toast.
 - Toolbar: ‹ ›, **Today**, date picker, 14/30 days. Filter bar: search, property, availability, type, cleaning. Legend by channel.
 - **Tap an open night** → menu: **New reservation** (form pre-filled), **🔒 Block dates** (first/last night, reason), **₱ Set nightly price** (date range; empty price removes the override).
 - **Tap a reservation bar** → `#/reservations/<id>`. **Tap a block** → "Remove this block?" (channel blocks: "Change it on the channel.").
@@ -296,7 +300,8 @@ Managers follow the same flows unless section 8 says otherwise.
 - Saved views (side list on desktop, a dropdown on phone). Filter bar: search, channel, property, More filters (listing, check-in/out dates, payment, guest type, check-in form, nights, guests, sort).
 - **New reservation** → form with live quote ("2 nights · ₱… · includes 1 weekend night"). **Save reservation** → toast with the code → reservation page. If the email failed: "Reservation saved, but the confirmation was not emailed: …". "Do not rebook" → warning toast.
 - **Export CSV** downloads the current view.
-- **Click a row** → `#/reservations/<id>`.
+- **Click a row** (or Enter or Space on it) → `#/reservations/<id>`.
+- On a cancelled booking that still holds money, the page shows "Cancelled: ₱… still to refund" with a link to the Refunds card (the "Overpaid" and "You keep" lines are for live bookings only). The Unpaid and Partial payment filters list confirmed bookings only.
 - Empty: "Nothing here yet" + **New reservation**. Filtered: "No results found".
 
 ### 7.6 Reservation detail `#/reservations/<id>`
@@ -329,6 +334,7 @@ Printable acknowledgement receipt. **Print / save as PDF**. Voided receipts show
 - Left list with view dropdown (with counts) and filter bar. **Click a conversation** → thread on the right.
 - Thread header: **Snooze** (pick a time) / **Unsnooze**, **Mark unread**, **Archive** / **Unarchive**.
 - Composer: **Message guest** or **Internal note** tabs, **Insert template…**, **✨ Draft reply with AI** ("Drafting…" → "Draft ready. Read it and edit before sending."), subject, **Send later** time, **Send**.
+- The chosen tab (**Message guest** or **Internal note**) stays after a note is saved, so the next note doesn't go to the guest. A hint line says "Internal note: only your team sees this" or "This will be emailed to <guest>". Sending a message that still has `@[Name](id)` mention text or an unfilled `{{variable}}` asks "Send this to the guest?" first. Mentioning staff or a cleaner shows "Only owners and managers can be mentioned." A counter appears in the last 1,000 characters (limit 10,000). Very long messages show a **Show more** button.
 - Results: "Sent.", "Scheduled for …", "Note saved.", or "Saved, but the email was not sent: …". Scheduled messages can be cancelled; failed ones retried. Drafts are kept per conversation in this browser.
 - No guest email → warning with a link to the reservation.
 - Right panel: reservation summary + **Open**.
@@ -341,6 +347,7 @@ Printable acknowledgement receipt. **Print / save as PDF**. Voided receipts show
 - Warning if email sending is not set up.
 
 ### 7.10 Housekeeping `#/housekeeping`
+- **Add task** with a due date in the past asks "Date is in the past" (it will show as overdue) → **Add task** to confirm. A failed inspection says "Sent back for re-cleaning. The pay you set was cleared; it is set again when the clean is finished."
 - Tabs with counts. Filter bar. **Add task** (listing, date, assignee or outside cleaner, notes). **Edit checklist** (owner).
 - **Click a task** → `#/housekeeping/<id>`: tick checklist items, **Start**, **Mark done** (asks if items are unticked) → listing clean, **Reopen**, **Copy for cleaner**, **Cancel task**, assign, upload photos.
 - **Board** tab: each unit as Dirty, Clean or Inspected, with the current stay, next arrival, open job and last inspection score.
@@ -352,7 +359,7 @@ Printable acknowledgement receipt. **Print / save as PDF**. Voided receipts show
 
 ### 7.11 Listings `#/listings`
 - Tabs All / Needs cleaning / Clean. Filter bar (property, occupancy, type, channels, booking page, guests, sort).
-- **Add listing** → building (pick or create new — owner only) + listing fields → "Listing added. Next: connect your Airbnb or Booking.com calendar." Over the plan limit → plan-limit error.
+- **Add listing** → building (pick or create new — owner only) + listing fields → "Listing added. Next: connect your Airbnb or Booking.com calendar." Over the plan limit → plan-limit error. If the new building saved but the listing didn't, the form keeps the saved building (no second building is created on retry) and says "The building was saved; fix the listing details and save again."
 - Per listing: **Mark clean / Needs cleaning**, **Channels** (copy export link, **Create a new link**, connect a channel link → "Connected. …" or "Connected, but the first sync failed: …", **Sync now**, **Disconnect**), **Photos** (upload up to 12, **Make cover**, delete), **Edit**, **Bookings** → filtered reservations.
 - **Gate pass** → `#/gatepass-settings`.
 - Empty: "No listings yet" + **Add listing**. Nothing dirty: "All clean ✨".
@@ -377,7 +384,7 @@ Average and count, filter bar, list linking to reservations. Empty: "No reviews 
 - **Statements** (`#/owners/statements?month=…`): a month picker and one row per owner with status (Draft, Published, Sent), payout and sent date. Each row opens the statement.
 - Statement page (`#/owners/<id>/statement?month=…`): status bar (Draft / Published on … / Sent to … on …). Buttons: **Publish** (refused for a month that has not ended), **Unpublish to correct** (confirm), **Send to owner** (only when published; confirm), **Print**. Shows the fee line (for example "Management fee (20% of net)" or "(flat)"), the repairs reserve top-up line, and expense rows with a **Receipt** link when one is attached. A warning appears when stays lack amounts.
 - Flat fee with no stays: the statement shows "Owner owes you" and nothing to pay out.
-- **Payouts** card: list (voided ones are marked), **Record payout** (amount prefilled with what is still unpaid), void with a reason. The card shows "Paid ₱X of ₱Y" or "Owner owes you".
+- **Payouts** card: list (voided ones are marked), **Record payout** (amount prefilled with what is still unpaid), void with a reason. The card shows "Paid ₱X of ₱Y" or "Owner owes you". A payout that would take a month's payouts above the amount due asks "Pay more than the statement?" (with the amounts) → **Record anyway**; the statement then shows "Overpaid by ₱…". A month in the address that isn't a real month shows "… is not a valid month. Choose a month above."
 - **Repairs reserve** card: balance, target, entries, **Record withdrawal** (amount, date, required note).
 - Empty: "No unit owners yet" + **Add owner**.
 
@@ -429,8 +436,8 @@ Cards top to bottom (owner):
 - Staff don't see the menu item and get the server's 403 if they open the page directly.
 
 ### 7.24 Phase 3 pages (owners and managers)
-- **Cleaner pay `#/cleaner-pay`:** pick a month and filters, tick finished cleans, **Mark paid** (date, method, reference, optional expense). **Rates** editor is owners only. **Undo paid** is owners only.
-- **Supplies `#/supplies`:** per property, low stock highlighted. Add, archive, record count, restock or use.
+- **Cleaner pay `#/cleaner-pay`:** pick a month and filters, tick finished cleans, **Mark paid** (a per-hour clean with no start time shows "Pay not set — add the hours, or set the amount." and can't be marked paid until its pay is set) (date, method, reference, optional expense). **Rates** editor is owners only. **Undo paid** is owners only.
+- **Supplies `#/supplies`:** per property, low stock highlighted. Add, archive, record count, restock, or **Record use** (toast "Use recorded."). **History** on each item opens a dialog with its last 20 movements (what, how many, who, date, note). Owners and managers only; an archived item has no History button.
 - **Lost and found `#/lost-found`:** filter by status; mark Held, Returned or Disposed with a note.
 - **Maintenance → Schedules:** add, pause. Requests from a cleaning job show a "From cleaning task" badge.
 - **Damage reports** (on a stay): Charge the guest, Deduct from deposit, or Waive.
@@ -482,7 +489,7 @@ No assigned properties → lists are empty with "assigned to you" wording.
 
 - **Admin** appears in the menu only for verified emails in `PLATFORM_ADMIN_EMAILS`. Anyone else opening `#/admin` sees "Not found" (API returns 404).
 - **Platform admin `#/admin`:** stats (on trial, paying, monthly revenue, ended/overdue), filter bar (status, type, plan, signup dates, sort), workspace table. **Click a workspace** (not the demo) → plan, paid until, trial ends, note → **Save** (audit-logged). **Support queue** → `#/admin/support`.
-- **Support queue `#/admin/support`:** tickets from every workspace, urgent and new first. Status tabs and its own filters (topic, priority, assigned to me). These filters live in the URL only, not the shared remembered filter bar. Empty: "No tickets here".
+- **Support queue `#/admin/support`:** tickets from every workspace, urgent and new first. Status tabs plus the standard filter bar (search, topic, priority, assigned to me); the filters are kept in the address and remembered. Rows open with Enter or Space. Help tickets on `#/help` use the same filter bar (search plus the Open or Closed tabs). Empty: "No tickets here".
 - **Ticket `#/admin/support/<id>`:** **Assign to me**, **Mark resolved**, reply or internal note, customer card, attachments, **Change status** buttons. Customers see replies from "BalayHub Support".
 - A platform admin is also a normal member of their own workspace.
 
@@ -522,6 +529,7 @@ Unit owners never see the workspace app. They use the owner portal at `#/owner`,
 - Any portal call that returns "signed out" sends the owner back to `#/owner`.
 - A block that overlaps another stay shows "These dates overlap a stay or block on this unit." It doesn't name the guest.
 - The login page has a small "Are you a unit owner? Sign in here" link to `#/owner`.
+- `#/owner/pnl`: for a month with a published statement the page shows that statement's frozen numbers with "From your published statement, <date>. Later changes don't show here."; other months say "Live numbers. They can still change until the statement is published."
 - Host side: the invite and turn-off buttons are on the owner row in `#/owners` (section 7.16).
 
 ## 13. Phase 4 flows: guest experience and direct booking (built 2026-10-13)
@@ -581,6 +589,7 @@ Spec: `docs/specs/PHASE-4-GUESTS.md`. Decisions D-57 to D-64. Both the English a
 
 ### 13.9 Host: add-ons `#/addons`
 
+- A filter bar (search, status Active or Archived) sits above the list. A name already used by an active add-on is refused with a message under the name field.
 - Owners see the catalogue and can add, edit and archive. Managers can view it, but the add-on forms are hidden.
 - Each add-on shows its price, pricing rule, maximum quantity, listings, and whether it is offered on the booking page, before arrival, or both.
 - Archive shows "Add-on archived." Archived add-ons stay on past stays.
@@ -619,7 +628,8 @@ Spec: `docs/specs/PHASE-5-PRICING-TEAM.md`. Decisions D-66 to D-74. Staff and cl
 ### 14.1 Host: pricing rules `#/pricing` (changes to 7.4)
 
 - **Booking-window rules:** last-minute (0 to 30 days before check-in), far-out (31 to 540 days) and gap nights (1 to 7 nights). Each is a percentage. Owners set workspace rules. Owners and managers set listing rules.
-- **Seasons:** a season can be a fixed nightly price, or a percentage change on the usual price.
+- **Seasons:** a season can be a fixed nightly price, or a percentage change on the usual price. Overlapping seasons are allowed: saving one that overlaps another shows "Season saved. It overlaps … on shared nights." with which one wins (the later start wins), and the season list shows an "Overlaps …" line. Zero prices are refused.
+- **Staff** can open the page and the price preview for their properties; the add and remove controls are hidden.
 - **Price preview:** pick a listing and a start date. Each night shows its price, a colour for its kind, and a legend. Select a night to see how its price was worked out ("Rules applied").
 - **Bulk changes:** pick listings or a tag, the first and last night, and an action: set a price, change prices by %, clear custom prices, block dates or unblock dates. **Preview** shows each change and any skipped listings. **Apply** makes exactly those changes.
 
@@ -667,13 +677,14 @@ Spec: `docs/specs/PHASE-5-PRICING-TEAM.md`. Decisions D-66 to D-74. Staff and cl
 
 ### 14.9 Host: daily close `#/daily-close` (owners and managers)
 
-- Pick a day (today by default, up to tomorrow). The checklist shows each section with its count and links to fix each line.
+- Pick a day (today by default, up to tomorrow). A date after tomorrow is changed to tomorrow with "You can close a day up to tomorrow, so this shows tomorrow."; a date that isn't real (such as 2026-02-30) shows today with "That date isn't valid." The page never ends on an error for a typed date. The checklist shows each section with its count and links to fix each line.
 - **Payments recorded:** totals by method for the day.
 - **Close the day:** optional note, then "Update the daily close" if the day is already closed. Past closes are listed below with the date, who closed it and the note.
 - A manager sees the summary only for a close that covers exactly their properties, or for an owner's close.
 
 ### 14.10 Sync warnings (who sees them)
 
+- Warnings use plain words (for example, the address could not be reached) instead of the raw error. On a listing's Channels list the raw text stays under "Technical details".
 - Owners and managers only, on Home and the Calendar. Stale means no sync for 3 hours; failing means the last sync errored; overlap means a channel booking was skipped because the dates are taken.
 - Each new problem sends one alert by push, or by email if there is no device. Alerts are checked every 15 minutes.
 

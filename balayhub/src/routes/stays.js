@@ -11,6 +11,8 @@ const { audit } = require('../lib/audit');
 const { requireRole } = require('../lib/auth');
 const { propertyScope, loadUnit } = require('../lib/access');
 const ical = require('../lib/ical');
+const { feedProblem, problemText, STALE_MS } = require('../lib/synchealth');
+const { leasedListings } = require('../lib/leases');
 const { ensureTaskForBooking, syncOpenTasks } = require('../lib/housekeeping');
 const { computePay } = require('../lib/cleanerpay');
 const receipts = require('../lib/receipts');
@@ -127,7 +129,7 @@ router.post('/units/:id/cleaning', ah(async (req, res) => {
       // Marking the listing clean finishes its open cleaning tasks that are due, and sets their pay.
       // An unassigned one goes to whoever marked it, the same as a status change does.
       const { rows } = await db.query(
-        `UPDATE cleaning_tasks SET status = 'done', completed_at = now(), completed_by = $2, started_at = COALESCE(started_at, now()),
+        `UPDATE cleaning_tasks SET status = 'done', completed_at = now(), completed_by = $2,
                 assigned_to = CASE WHEN assigned_to IS NULL AND assignee_name IS NULL THEN $2 ELSE assigned_to END
           WHERE unit_id = $1 AND status IN ('todo', 'in_progress') AND due_date <= ${TODAY} RETURNING task_id`, [unit.unit_id, req.user.user_id]);
       for (const { task_id: taskId } of rows) await computePay(db, taskId);
@@ -284,8 +286,8 @@ function reservationQuery(req) {
   if (req.query.property_id) { params.push(uuidParam(req.query.property_id)); where.push(`p.property_id = $${params.length}`); }
   const paid = `COALESCE((SELECT SUM(bp.amount) FROM booking_payments bp WHERE bp.booking_id = b.booking_id AND bp.voided_at IS NULL), 0)`;
   if (req.query.payment === 'paid') where.push(`b.total_amount - b.channel_fee <= ${paid}`);
-  if (req.query.payment === 'unpaid') where.push(`${paid} = 0 AND b.total_amount - b.channel_fee > 0`);
-  if (req.query.payment === 'partial') where.push(`${paid} > 0 AND b.total_amount - b.channel_fee > ${paid}`);
+  if (req.query.payment === 'unpaid') where.push(`b.status = 'confirmed' AND ${paid} = 0 AND b.total_amount - b.channel_fee > 0`);
+  if (req.query.payment === 'partial') where.push(`b.status = 'confirmed' AND ${paid} > 0 AND b.total_amount - b.channel_fee > ${paid}`);
   if (req.query.guest === 'vip') where.push('g.vip');
   if (req.query.guest === 'repeat') where.push(`EXISTS (SELECT 1 FROM bookings pb WHERE pb.guest_id = b.guest_id AND pb.booking_id <> b.booking_id AND pb.status = 'confirmed' AND pb.kind = 'reservation' AND pb.check_in < b.check_in)`);
   if (req.query.guest === 'first') where.push(`NOT EXISTS (SELECT 1 FROM bookings pb WHERE pb.guest_id = b.guest_id AND pb.booking_id <> b.booking_id AND pb.status = 'confirmed' AND pb.kind = 'reservation' AND pb.check_in < b.check_in)`);
@@ -391,13 +393,30 @@ function checkListingChoice(body) {
   if (Object.keys(fields).length) throw validationError(fields);
 }
 
-// The listings, of those given, that already have a confirmed stay or block on any of these nights.
+// The listings, of those given, that already have a confirmed stay or block, or a monthly lease, on any of these nights.
 async function busyListings(unitIds, checkIn, checkOut, db = { query }) {
   const { rows } = await db.query(
     `SELECT DISTINCT unit_id FROM bookings
       WHERE unit_id = ANY($1) AND status = 'confirmed' AND daterange(check_in, check_out) && daterange($2::date, $3::date)`,
     [unitIds, checkIn, checkOut]);
-  return new Set(rows.map((r) => r.unit_id));
+  const busy = new Set(rows.map((r) => r.unit_id));
+  for (const id of await leasedListings(unitIds, checkIn, checkOut, db)) busy.add(id);
+  return busy;
+}
+
+// Short stays only exist in a short-term or combined workspace, and never over a monthly lease.
+function assertShortTerm(user) {
+  if (user.business_type === 'long_term') {
+    throw new HttpError(409, 'This workspace is set up for long-term rentals only, so short-term stays can\'t be added. Change the workspace type in Settings to take short-term bookings.', { code: 'LONG_TERM_ONLY' });
+  }
+}
+
+async function assertStayAllowed(user, unitId, checkIn, checkOut, db) {
+  assertShortTerm(user);
+  if ((await leasedListings([unitId], checkIn, checkOut, db)).size) {
+    throw new HttpError(409, 'This unit has an active monthly lease over these dates, so it can\'t be booked for a short stay.',
+      { code: 'UNIT_LEASED', fields: { check_in: 'Unit is on a monthly lease', check_out: 'Unit is on a monthly lease' } });
+  }
 }
 
 // Listings of a room type at a property, in the order a free one is taken (by name).
@@ -475,6 +494,7 @@ router.post('/reservations', managers, ah(async (req, res) => {
   const unit = body.unit_id ? await loadUnit(req.user, body.unit_id) : await pickListing(req.user, body);
   if (unit.status !== 'active' || unit.property_status !== 'active') throw new HttpError(409, 'This listing is archived.', { code: 'ARCHIVED' });
   checkStay(body, unit);
+  await assertStayAllowed(req.user, unit.unit_id, body.check_in, body.check_out);
   if (body.guest_id) await loadGuest(req.user, body.guest_id);
   else if (!body.guest_name) throw validationError({ guest_name: 'Enter the guest name or choose an existing guest.' });
 
@@ -518,6 +538,10 @@ router.patch('/reservations/:id', managers, ah(async (req, res) => {
   const merged = { ...booking, ...body };
   const unit = await loadUnit(req.user, merged.unit_id);
   checkStay(merged, unit);
+  // Only a move (other listing or other dates) is checked; notes, guests and fees stay editable.
+  if (['unit_id', 'check_in', 'check_out'].some((k) => k in body && String(body[k]) !== String(booking[k]))) {
+    await assertStayAllowed(req.user, merged.unit_id, merged.check_in, merged.check_out);
+  }
   const keys = Object.keys(body);
   if (!keys.length) return res.json({ reservation: booking });
   try {
@@ -757,6 +781,7 @@ async function groupGuest(user, input) {
 // Every listing involved is locked in one fixed order first, so two group bookings can't interleave.
 // `picks` records what was booked, so a late clash can be reported with the rooms that are taken.
 async function bookRooms(db, user, rooms, { guestId, groupId, picks, action }) {
+  assertShortTerm(user);
   const explicit = rooms.filter((r) => r.unit_id);
   const listingsFor = [];
   for (const r of rooms) {
@@ -1158,8 +1183,14 @@ router.get('/units/:id/channels', managers, ah(async (req, res) => {
     token = (await one('SELECT ical_token FROM units WHERE unit_id = $1', [unit.unit_id])).ical_token;
   }
   const { rows: feeds } = await query(
-    'SELECT feed_id, channel, url, last_synced_at, last_status, last_message FROM ical_feeds WHERE unit_id = $1 ORDER BY created_at', [unit.unit_id]);
-  res.json({ export_url: `${require('../config').appUrl}/ical/${token}.ics`, feeds });
+    'SELECT feed_id, channel, url, last_synced_at, last_status, last_message, created_at FROM ical_feeds WHERE unit_id = $1 ORDER BY created_at', [unit.unit_id]);
+  // problem_message is the plain owner-facing sentence, or null when the feed is fine. last_message keeps the raw text.
+  const cutoff = new Date(Date.now() - STALE_MS);
+  const withProblems = feeds.map((f) => {
+    const problem = feedProblem(f, cutoff);
+    return { ...f, problem_message: problem ? problemText(f, problem).message : null };
+  });
+  res.json({ export_url: `${require('../config').appUrl}/ical/${token}.ics`, feeds: withProblems });
 }));
 
 router.post('/units/:id/channels/rotate', managers, ah(async (req, res) => {

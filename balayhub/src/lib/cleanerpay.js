@@ -25,6 +25,8 @@ async function rateFor(db, orgId, task) {
 
 // Set pay_amount on a finished, unpaid clean from its payee's rate. Per clean: the rate.
 // Per hour: finished minus started, rounded up to the next 15 minutes, at most 12 hours.
+// Per hour with no real start (Start never pressed) leaves the pay NULL, "not set", for the owner
+// to fill in; it is never 0. A start equal to the finish is the same thing (set together, not worked).
 // Call it after the clean is marked done, inside the same transaction. Returns the new
 // amount, or null when nothing was set (not done, already paid, or no rate).
 async function computePay(db, taskId) {
@@ -36,6 +38,7 @@ async function computePay(db, taskId) {
   if (!rate) return null;
   const { rows: [out] } = await db.query(
     `UPDATE cleaning_tasks SET pay_amount = CASE WHEN $2::text = 'per_clean' THEN $3::numeric
+        WHEN started_at IS NULL OR started_at = completed_at THEN NULL
         ELSE ROUND($3::numeric * LEAST(GREATEST(CEIL(EXTRACT(EPOCH FROM (completed_at - started_at)) / 900)::int, 0) * 15, 720) / 60, 2)
       END
       WHERE task_id = $1 RETURNING pay_amount`,

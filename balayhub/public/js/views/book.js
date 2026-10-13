@@ -24,7 +24,14 @@ extendTranslations({
   'Please tick this box to continue.': 'I-tick ang box na ito para makapagpatuloy.',
   'House rules': 'House rules',
   'Due now': 'Babayaran ngayon',
+  'Choose your dates first, then apply your code.': 'Piliin muna ang dates mo, saka i-apply ang code mo.',
+  'This place allows up to {n} guests.': 'Hanggang {n} guests lang ang puwede sa lugar na ito.',
+  "We couldn't confirm the cancellation. Your dates may stay on hold for a short while. Please try again, or contact the host.": 'Hindi namin makumpirma ang pagkansela. Puwedeng ma-hold pa nang saglit ang dates mo. Pakisubukan ulit, o i-contact ang host.',
 });
+
+// The same email and mobile rules the server applies (src/lib/validate.js), so both are checked on the first submit.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const PHONE_RE = /^[+\d][\d\s()-]{6,19}$/;
 
 // Where the guest came from (?src=facebook etc.); kept for the whole visit and sent with checkout.
 let source = '';
@@ -106,10 +113,11 @@ export async function bookListingView(el, { params, query }) {
   }
   document.title = `${l.unit_name} — ${host.name}`;
   if (query.cancelled) {
-    // Release the held dates right away so they can be booked again.
+    // Release the held dates right away so they can be booked again. Only say "cancelled" once the release has worked.
     history.replaceState(null, '', `#/book/${slug}/${params.unitId}${srcQs()}`);
-    post(`/public/book/cancel/${encodeURIComponent(query.cancelled)}`).catch(() => {});
-    toast(t('Payment cancelled. Nothing was charged and your dates were not booked.'));
+    post(`/public/book/cancel/${encodeURIComponent(query.cancelled)}`)
+      .then(() => toast(t('Payment cancelled. Nothing was charged and your dates were not booked.')))
+      .catch(() => toast(t("We couldn't confirm the cancellation. Your dates may stay on hold for a short while. Please try again, or contact the host."), 'error'));
   }
   const testBanner = host.test_mode && h('div', { class: 'alert alert--warn' }, t('TEST MODE: this page uses a PayMongo test key, so payments are not real.'));
 
@@ -188,7 +196,15 @@ export async function bookListingView(el, { params, query }) {
   let promoCode = '';
   const codeMsg = h('div', { class: 'muted small', role: 'status' });
   const codeInput = h('input', { class: 'input', name: 'code', maxlength: 40, autocomplete: 'off', placeholder: 'e.g. BALIK10', 'aria-label': t('Discount code') });
-  const applyCode = () => { promoCode = codeInput.value.trim(); updateQuote(); };
+  const applyCode = () => {
+    promoCode = codeInput.value.trim();
+    // With no dates yet nothing can be checked, so say so; the quote checks the code once the dates are picked.
+    if (!checkIn || !checkOut) {
+      codeMsg.className = 'muted small';
+      codeMsg.textContent = promoCode ? t('Choose your dates first, then apply your code.') : '';
+    }
+    updateQuote();
+  };
   codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); applyCode(); } });
   const codeBox = h('details', { class: 'field bk-code', dataset: { field: 'code' } },
     h('summary', null, t('Have a discount code?')),
@@ -309,14 +325,27 @@ export async function bookListingView(el, { params, query }) {
     e.preventDefault();
     if (busy || !current) return;
     clearErrors(form);
-    if (rulesBox && !form.elements.accept_rules.checked) {
-      showErrors(form, { accept_rules: t('Please read and agree to the house rules.') });
-      rulesBox.querySelector('input').focus();
+    formError.replaceChildren();
+    // Check every field in one pass, so the guest sees all the gaps at once. Keys follow the form's order (the first one gets focus).
+    const d = readForm(form);
+    const guests = Number(d.num_guests);
+    const email = String(d.email).trim();
+    const phone = String(d.phone).trim();
+    const errors = {};
+    if (!String(d.name).trim()) errors.name = tServer('Full name is required.');
+    if (!Number.isInteger(guests) || guests < 1) errors.num_guests = tServer('Guests is required.');
+    else if (guests > (l.max_guests || 50)) errors.num_guests = t('This place allows up to {n} guests.', { n: l.max_guests || 50 });
+    if (!email) errors.email = tServer('Email is required.');
+    else if (!EMAIL_RE.test(email)) errors.email = tServer('Enter a valid email address.');
+    if (!phone) errors.phone = tServer('Mobile number is required.');
+    else if (!PHONE_RE.test(phone)) errors.phone = tServer('Enter a valid phone number.');
+    if (rulesBox && !d.accept_rules) errors.accept_rules = t('Please read and agree to the house rules.');
+    if (!d.consent) errors.consent = tServer('Please agree to continue.');
+    if (Object.keys(errors).length) {
+      showErrors(form, errors);
       return;
     }
     busy = true;
-    formError.replaceChildren();
-    const d = readForm(form);
     submit.disabled = true;
     submit.textContent = t('Opening secure payment…');
     try {

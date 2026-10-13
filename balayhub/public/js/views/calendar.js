@@ -45,7 +45,10 @@ export async function calendarView(el, { query }) {
   const dateInput = h('input', { class: 'input input--sm', type: 'date', 'aria-label': 'Go to date' });
 
   async function load() {
+    const asked = view.start;
     const [data] = await Promise.all([get(`/calendar${qs({ start: view.start, days: view.days })}`), loadProblems()]);
+    // The server quietly shows today for a start that isn't a real date (e.g. 2026-02-30); say so.
+    if (asked && asked !== data.start) toast("That date wasn't valid, so we're showing today.");
     view.start = data.start;
     lastData = data;
     title.textContent = monthName(data.start);
@@ -153,7 +156,8 @@ export async function calendarView(el, { query }) {
   async function moveBar(b, to) {
     const from = lastData.listings.find((x) => x.unit_id === b.unit_id);
     if (!await confirmDialog({ title: 'Move this reservation?', text: `Move ${b.guest_name || 'this guest'} from ${from?.unit_name || 'this listing'} to ${to.unit_name}? The price stays the same.`, confirmText: 'Move reservation' })) return;
-    try { await patch(`/reservations/${b.booking_id}`, { unit_id: to.unit_id }); toast('Reservation moved.'); } catch (err) { toast(err.message, 'error'); }
+    // Show the server's field message (e.g. the guest limit), not the generic "check the highlighted fields".
+    try { await patch(`/reservations/${b.booking_id}`, { unit_id: to.unit_id }); toast('Reservation moved.'); } catch (err) { toast(Object.values(err.fields || {}).join(' ') || err.message, 'error'); }
     load();
   }
 

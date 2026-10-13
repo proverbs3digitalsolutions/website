@@ -240,7 +240,7 @@ test('reserve: deposits and withdrawals set the balance, and no withdrawal takes
   const over = await owner.post(withdraw(ownerId), withdrawalBody({ amount: '1500.01' }));
   assert.equal(over.status, 409);
   assert.equal(over.data.code, 'INSUFFICIENT_RESERVE');
-  assert.match(over.data.error, /1500\.00/);
+  assert.match(over.data.error, /1,500\.00/);
   assert.equal(await balanceOf(ownerId), '1500.00', 'a refused withdrawal changes nothing');
 
   const exact = await owner.post(withdraw(ownerId), withdrawalBody({ amount: '1500' }));

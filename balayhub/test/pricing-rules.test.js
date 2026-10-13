@@ -200,7 +200,7 @@ test('rules are scoped: managers only on their listings; workspace-wide rules ar
   assert.equal((await mgr.patch(`/api/pricing/rules/${ownLm.data.rule_id}`, { days: 4 })).status, 200);
 
   assert.equal((await staff.post('/api/pricing/rules', { kind: 'last_minute', days: 5, adjust_pct: -10, unit_id: units.u1.unit_id })).status, 403);
-  assert.equal((await staff.get(`/api/pricing/preview?unit_id=${units.u1.unit_id}`)).status, 403);
+  assert.equal((await staff.get(`/api/pricing/preview?unit_id=${units.u1.unit_id}`)).status, 200); // staff may view (D-10)
 });
 
 test('rules: owner can change, switch off and remove a rule; bad changes are refused', async () => {

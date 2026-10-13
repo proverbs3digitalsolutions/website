@@ -2,13 +2,19 @@
 
 import { get, post, patch, qs, uploadFile } from '../api.js';
 import {
-  h, icon, peso, fmtDate, fmtDateTime, badge, label, options, field, formModal, emptyState, pageHead, toast,
+  h, icon, peso, fmtDate, fmtDateTime, manilaDay, badge, label, options, field, formModal, emptyState, pageHead, toast,
   todayManila, filesList, openModal, unitLabel, confirmDialog } from '../ui.js';
 import { state, navigate } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 
 const PRIORITIES = ['low', 'medium', 'high', 'urgent'];
 const STATUSES = ['open', 'in_progress', 'resolved', 'cancelled'];
+
+// "From cleaning task" badge, linking to the job. Inside a list row (already a link) it navigates by click.
+const taskBadge = (m, inRow) => h('a', {
+  class: 'badge badge--ops', href: `#/housekeeping/${m.cleaning_task_id}`,
+  ...(inRow ? { onclick: (e) => { e.preventDefault(); e.stopPropagation(); navigate(`#/housekeeping/${m.cleaning_task_id}`); } } : {}),
+}, 'From cleaning task');
 
 export async function newMaintenanceModal({ onSaved, propertyId, unitId } = {}) {
   let properties; let units;
@@ -75,9 +81,9 @@ export async function maintenanceView(el, { query }) {
         h('ul', { class: 'list' }, requests.map((m) => h('li', null, h('a', { class: 'row', href: `#/maintenance/${m.request_id}` },
           h('div', { class: 'row__main' },
             h('span', { class: 'row__title' }, m.title),
-            h('span', { class: 'row__sub' }, `${m.property_name}${m.unit_name ? ` · Unit ${m.unit_name}` : ''} · reported ${fmtDate(m.created_at.slice(0, 10))}${m.assigned_to ? ` · ${m.assigned_to}` : ''}`),
+            h('span', { class: 'row__sub' }, `${m.property_name}${m.unit_name ? ` · ${unitLabel(m.unit_name)}` : ''} · reported ${fmtDate(manilaDay(m.created_at))}${m.assigned_to ? ` · ${m.assigned_to}` : ''}`),
             (Number(m.actual_cost) > 0 || m.estimated_cost) && h('span', { class: 'row__sub' }, Number(m.actual_cost) > 0 ? `Cost ${peso(m.actual_cost)}` : `Est. ${peso(m.estimated_cost)}`)),
-          h('div', { class: 'row__end' }, badge(m.status), badge(m.priority), m.cleaning_task_id && h('span', { class: 'badge badge--ops' }, 'From cleaning task'))))))]
+          h('div', { class: 'row__end' }, badge(m.status), badge(m.priority), m.cleaning_task_id && taskBadge(m, true))))))]
       : (isFiltered()
         ? emptyState({ title: 'No results found', text: 'Nothing matches these filters. Try removing a filter.', action: h('button', { class: 'btn btn--secondary', onclick: () => { Object.assign(filters, defaults, { status: filters.status }); rememberFilters('maintenance', filters); renderBar(); load(); } }, 'Clear filters') })
         : emptyState({ iconName: 'wrench', title: filters.status === 'active' ? 'No open repair requests' : 'No requests here', text: 'Log repairs as they’re reported so nothing gets lost in chat threads.', action: h('button', { class: 'btn btn--primary', onclick: () => newMaintenanceModal() }, icon('plus'), 'New request') })));
@@ -207,14 +213,14 @@ export async function maintenanceDetailView(el, { params, rerender }) {
   el.replaceChildren(
     pageHead({
       title: m.title,
-      sub: `${m.property_name}${m.unit_name ? ` · Unit ${m.unit_name}` : ''}`,
+      sub: `${m.property_name}${m.unit_name ? ` · ${unitLabel(m.unit_name)}` : ''}`,
       back: { href: '#/maintenance', label: 'Maintenance' },
       actions: [canManage && h('button', { class: 'btn btn--secondary', onclick: edit }, 'Edit'), h('button', { class: 'btn btn--primary', onclick: addCost }, icon('plus'), 'Add cost')],
     }),
     h('div', { class: 'grid grid--2' },
       h('div', { class: 'stack' },
         h('div', { class: 'card' },
-          h('div', { class: 'card__head' }, h('h2', null, 'Status'), h('div', { class: 'chips' }, badge(m.status), badge(m.priority), m.cleaning_task_id && h('span', { class: 'badge badge--ops' }, 'From cleaning task'))),
+          h('div', { class: 'card__head' }, h('h2', null, 'Status'), h('div', { class: 'chips' }, badge(m.status), badge(m.priority), m.cleaning_task_id && taskBadge(m, false))),
           h('dl', { class: 'dl' },
             h('dt', null, 'Reported'), h('dd', null, `${fmtDateTime(m.created_at)}${m.reported_by ? ` by ${m.reported_by}` : ''}`),
             h('dt', null, 'Assigned to'), h('dd', null, m.assigned_to || '—'),

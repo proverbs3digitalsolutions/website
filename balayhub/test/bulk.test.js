@@ -278,14 +278,14 @@ test('bulk blocks: a listing with a booking on those nights is skipped, the othe
   assert.equal(again.data.created.length, 0);
   assert.match(again.data.skipped.find((s) => s.unit_id === a1.unit_id).reason, /^Already blocked/);
 
-  assert.equal((await manager.post('/api/bulk/blocks', { unit_ids: [b1.unit_id], from: d(45), to: d(46), action: 'block', dry_run: true })).status, 404);
+  assert.equal((await manager.post('/api/bulk/blocks', { unit_ids: [b1.unit_id], from: d(45), to: d(46), action: 'block', reason: 'Owner use', dry_run: true })).status, 404);
   assert.equal((await owner.post('/api/bulk/blocks', { unit_ids: [a1.unit_id], from: d(-1), to: d(1), action: 'block', dry_run: true })).status, 400);
   assert.equal((await owner.post('/api/bulk/blocks', { unit_ids: [a1.unit_id], from: d(45), to: d(46), action: 'block', reason: 'x'.repeat(201) })).status, 400);
 });
 
 test('bulk unblocks: cancel only manual blocks fully inside the range', async () => {
   // A second manual block on A1 for d50 and d51, which runs past a narrower range.
-  const extra = await owner.post('/api/bulk/blocks', { unit_ids: [a1.unit_id], from: d(50), to: d(51), action: 'block' });
+  const extra = await owner.post('/api/bulk/blocks', { unit_ids: [a1.unit_id], from: d(50), to: d(51), action: 'block', reason: 'Owner use' });
   assert.equal(extra.status, 200, JSON.stringify(extra.data));
 
   // A channel block and an owner stay on A3, set straight in the database (the sync and the owner portal write them in the app).
@@ -344,6 +344,6 @@ test('every apply writes one audit entry with its counts; a preview writes none'
   const blockBefore = await count('bulk.blocks');
   await owner.post('/api/bulk/blocks', { unit_ids: [a3.unit_id], from: d(100), to: d(101), action: 'block', dry_run: true });
   assert.equal(await count('bulk.blocks'), blockBefore);
-  await owner.post('/api/bulk/blocks', { unit_ids: [a3.unit_id], from: d(100), to: d(101), action: 'block' });
+  await owner.post('/api/bulk/blocks', { unit_ids: [a3.unit_id], from: d(100), to: d(101), action: 'block', reason: 'Owner use' });
   assert.equal(await count('bulk.blocks'), blockBefore + 1);
 });

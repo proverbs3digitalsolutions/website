@@ -169,7 +169,8 @@ test('stale and failing feeds: one alert per problem, cleared when healthy, scop
   assert.equal(stale.channel, 'booking');
   assert.equal(stale.unit_name, 'Seaside 4');
   assert.equal(failing.kind, 'failing');
-  assert.equal(failing.message, 'The channel returned HTTP 404. Check the link.');
+  assert.equal(failing.message, "The channel's calendar link returned an error. Check the link on the listing's Channels page.");
+  assert.equal(failing.detail, 'The channel returned HTTP 404. Check the link.');
   assert.ok(!Number.isNaN(Date.parse(failing.since)), 'since is an ISO time');
 
   // A manager assigned to the first property sees only that property's feed.

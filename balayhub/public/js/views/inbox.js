@@ -226,11 +226,11 @@ async function renderThread(pane, id, { status, back, rerender }) {
     }
     return h('div', { class: `msg msg--${m.direction}${m.status === 'cancelled' ? ' msg--cancelled' : ''}` },
       m.direction === 'out' && m.subject && h('div', { class: 'msg__subject' }, m.subject),
-      h('div', { class: 'msg__body' }, m.direction === 'note' ? renderMentions(m.body) : m.body),
+      messageBody(m),
       meta);
   };
 
-  const thread = h('div', { class: 'inbox__messages', 'aria-live': 'polite' },
+  const thread = h('div', { class: 'inbox__messages', tabindex: '0', role: 'region', 'aria-label': 'Conversation messages', 'aria-live': 'polite' },
     messages.length ? messages.map(bubble) : h('p', { class: 'muted small center' }, 'No messages yet. Write the first one below.'));
 
   pane.replaceChildren(
@@ -238,6 +238,30 @@ async function renderThread(pane, id, { status, back, rerender }) {
     summary(c));
   thread.scrollTop = thread.scrollHeight;
 }
+
+// Very long messages show their first part with a "Show more" button.
+const LONG_MESSAGE = 1200;
+const PREVIEW_LENGTH = 800;
+function messageBody(m) {
+  const full = String(m.body ?? '');
+  const show = (t) => (m.direction === 'note' ? renderMentions(t) : t);
+  const box = h('div', { class: 'msg__body' }, show(full));
+  if (full.length <= LONG_MESSAGE) return box;
+  let open = false;
+  const toggle = h('button', { class: 'linkbtn', type: 'button', 'aria-expanded': 'false' });
+  const paint = () => {
+    box.replaceChildren(...[show(open ? full : `${full.slice(0, PREVIEW_LENGTH)}…`)].flat());
+    toggle.textContent = open ? 'Show less' : 'Show more';
+    toggle.setAttribute('aria-expanded', String(open));
+  };
+  toggle.addEventListener('click', () => { open = !open; paint(); });
+  paint();
+  return h('div', null, box, toggle);
+}
+
+// The chosen composer mode for each conversation, kept across the re-render after every save
+// (otherwise the next internal note would go to the guest).
+const composerModes = new Map();
 
 // "@[Full Name](user_id)" shows as a highlighted "@Full Name"; the stored text stays as typed.
 // Same pattern as MENTION_RE in src/routes/inbox.js, so only mentions the server saved are highlighted.
@@ -260,7 +284,7 @@ function renderMentions(text) {
 function mentionPicker(body, people) {
   const list = h('ul', { class: 'mention-list', role: 'listbox', id: `ml-${Math.random().toString(36).slice(2, 7)}`, 'aria-label': 'Team members', hidden: true });
   let items = []; let active = 0; let start = -1;
-  const close = () => { list.hidden = true; items = []; start = -1; body.setAttribute('aria-expanded', 'false'); body.removeAttribute('aria-activedescendant'); };
+  const close = () => { list.hidden = true; items = []; start = -1; body.removeAttribute('aria-activedescendant'); };
   const mark = () => {
     [...list.children].forEach((li, i) => li.setAttribute('aria-selected', String(i === active)));
     if (list.children[active]) body.setAttribute('aria-activedescendant', list.children[active].id);
@@ -289,11 +313,9 @@ function mentionPicker(body, people) {
       onmousedown: (e) => { e.preventDefault(); pick(p); },
     }, p.full_name)));
     list.hidden = false;
-    body.setAttribute('aria-expanded', 'true');
     mark();
   };
   body.setAttribute('aria-controls', list.id);
-  body.setAttribute('aria-expanded', 'false');
   body.addEventListener('input', () => { active = 0; update(); });
   body.addEventListener('click', update);
   body.addEventListener('blur', close);
@@ -308,14 +330,25 @@ function mentionPicker(body, people) {
 }
 
 function composer(c, templates, status, rerender, assignees = []) {
-  let mode = 'message';
+  let mode = composerModes.get(c.conversation_id) || 'message';
   const subject = h('input', { class: 'input input--sm', name: 'subject', maxlength: 200, placeholder: `Subject (default: ${c.subject})`, 'aria-label': 'Subject' });
   const body = h('textarea', { class: 'input', name: 'body', maxlength: 10000, placeholder: `Write to ${c.guest_name}…`, 'aria-label': 'Message' });
-  const sendAt = h('input', { class: 'input input--sm', type: 'datetime-local', 'aria-label': 'Send later at' });
-  const err = h('div', { class: 'error', role: 'alert' });
+  const counter = h('div', { class: 'small muted', hidden: true });
+  const updateCounter = () => {
+    const left = 10000 - body.value.length;
+    counter.hidden = left > 1000;
+    counter.textContent = left <= 0 ? 'Limit reached: 10,000 characters. Anything longer is cut off.' : `${left.toLocaleString('en-US')} characters left`;
+  };
+  body.addEventListener('input', updateCounter);
+  const errId = `cerr-${c.conversation_id}`;
+  const sendAt = h('input', { class: 'input input--sm', type: 'datetime-local', 'aria-label': 'Send later at', 'aria-describedby': errId });
+  sendAt.addEventListener('input', () => sendAt.removeAttribute('aria-invalid'));
+  const err = h('div', { class: 'error', role: 'alert', id: errId });
+  const modeHint = h('div', { class: 'small muted', role: 'status' });
   const sendBtn = h('button', { class: 'btn btn--primary', type: 'submit' }, 'Send');
   const draftKey = `bh-draft:msg:${c.conversation_id}`;
   try { body.value = sessionStorage.getItem(draftKey) || ''; } catch { /* ignore */ }
+  updateCounter();
   body.addEventListener('input', () => { try { sessionStorage.setItem(draftKey, body.value); } catch { /* ignore */ } });
 
   const tplSelect = h('select', {
@@ -353,15 +386,18 @@ function composer(c, templates, status, rerender, assignees = []) {
   const modeTabs = h('div', { class: 'tabs tabs--compact', role: 'tablist' },
     [['message', 'Message guest'], ['note', 'Internal note']].map(([k, t]) => h('button', {
       type: 'button', role: 'tab', 'aria-selected': String(k === mode),
-      onclick: (e) => {
-        mode = k;
-        modeTabs.querySelectorAll('button').forEach((b) => b.setAttribute('aria-selected', String(b === e.currentTarget)));
-        form.classList.toggle('composer--note', mode === 'note');
-        sendBtn.textContent = mode === 'note' ? 'Save note' : 'Send';
-        if (mode !== 'note') picker.close();
-        body.placeholder = mode === 'note' ? 'Only your team sees notes.' : `Write to ${c.guest_name}…`;
-      },
+      onclick: () => setMode(k),
     }, t)));
+  const setMode = (k) => {
+    mode = k;
+    composerModes.set(c.conversation_id, k);
+    [...modeTabs.children].forEach((b, i) => b.setAttribute('aria-selected', String(i === (k === 'note' ? 1 : 0))));
+    form.classList.toggle('composer--note', mode === 'note');
+    sendBtn.textContent = mode === 'note' ? 'Save note' : 'Send';
+    if (mode !== 'note') picker.close();
+    body.placeholder = mode === 'note' ? 'Only your team sees notes.' : `Write to ${c.guest_name}…`;
+    modeHint.textContent = mode === 'note' ? 'Internal note: only your team sees this. It is not emailed to the guest.' : `This will be emailed to ${c.guest_name}.`;
+  };
 
   const noEmail = !c.guest_email && h('div', { class: 'alert alert--warn small' },
     'This guest has no email address yet. ', c.booking_id && h('a', { href: `#/reservations/${c.booking_id}` }, 'Open the reservation'), ' to add one, or save an internal note.');
@@ -374,6 +410,12 @@ function composer(c, templates, status, rerender, assignees = []) {
       if (busy) return;
       err.textContent = '';
       if (!body.value.trim()) { err.textContent = 'Write a message first.'; body.focus(); return; }
+      if (mode === 'message' && /@\[[^\]\n]+\]\([0-9a-f-]{36}\)|\{\{[^}\n]*\}\}/i.test(body.value)
+        && !await confirmDialog({
+          title: 'Send this to the guest?',
+          text: 'The message contains internal mention text (@[Name](id)) or an unfilled {{variable}}. The guest will see it exactly as typed.',
+          confirmText: 'Send anyway',
+        })) return;
       busy = true;
       sendBtn.disabled = true;
       try {
@@ -389,7 +431,8 @@ function composer(c, templates, status, rerender, assignees = []) {
         else toast({ note: 'Note saved.', scheduled: `Scheduled for ${fmtDateTime(r.message.scheduled_at)}.`, sent: 'Sent.' }[r.message.status] || 'Saved.');
         rerender();
       } catch (ex) {
-        err.textContent = ex.offline ? "You're offline. Your message is kept; try again when you're back online." : (ex.fields.body || ex.message);
+        err.textContent = ex.offline ? "You're offline. Your message is kept; try again when you're back online." : (ex.fields.body || ex.fields.send_at || ex.message);
+        if (ex.fields?.send_at) { sendAt.setAttribute('aria-invalid', 'true'); sendAt.focus(); }
       } finally { busy = false; sendBtn.disabled = false; }
     },
   },
@@ -397,10 +440,13 @@ function composer(c, templates, status, rerender, assignees = []) {
   noEmail,
   h('div', { class: 'composer__subject' }, subject),
   h('div', { class: 'composer__body' }, body, picker.list),
+  counter,
+  modeHint,
   err,
   h('div', { class: 'composer__actions' },
     h('label', { class: 'composer__later small muted' }, 'Send later (optional) ', sendAt),
     sendBtn));
+  setMode(mode);
   return form;
 }
 

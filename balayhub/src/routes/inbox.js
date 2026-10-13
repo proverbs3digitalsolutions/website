@@ -51,11 +51,16 @@ async function checkMentions(user, conv, text) {
         AND u.user_id = ANY($2::uuid[])`,
     [user.organization_id, [...typed.keys()], propertyId]);
   const people = new Map(rows.map((r) => [r.user_id, r]));
+  // Staff (and cleaners) exist in the workspace but can't be mentioned: say so rather than "Unknown person".
+  const { rows: others } = await query(
+    `SELECT user_id FROM users WHERE organization_id = $1 AND account_status = 'active' AND user_id = ANY($2::uuid[])`,
+    [user.organization_id, [...typed.keys()].filter((id) => !people.has(id))]);
+  const known = new Set(others.map((r) => r.user_id));
   const problems = new Set();
   const mentions = [];
   for (const id of typed.keys()) {
     const p = people.get(id);
-    if (!p) problems.add('Unknown person');
+    if (!p) problems.add(known.has(id) ? 'Only owners and managers can be mentioned.' : 'Unknown person');
     else if (!p.can_see) problems.add(`${p.full_name} can't see this reservation`);
     else mentions.push({ user_id: p.user_id, full_name: p.full_name });
   }
@@ -400,6 +405,17 @@ const templateSpec = {
   body: { type: 'text', required: true, max: 5000, label: 'Message' },
 };
 
+// Refuse {{names}} that messaging doesn't know: they would reach the guest as literal braces.
+function checkVariables(body) {
+  const fields = {};
+  for (const k of ['subject', 'body']) {
+    if (typeof body[k] !== 'string') continue;
+    const bad = [...new Set([...body[k].matchAll(/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g)].map((m) => m[1]))].filter((n) => !messaging.VARIABLE_NAMES.includes(n));
+    if (bad.length) fields[k] = `Unknown ${bad.length === 1 ? 'variable' : 'variables'}: ${bad.map((n) => `{{${n}}}`).join(', ')}. Use only the names listed under the message.`;
+  }
+  if (Object.keys(fields).length) throw validationError(fields);
+}
+
 async function loadTemplate(user, id) {
   const t = await one('SELECT * FROM message_templates WHERE template_id = $1 AND organization_id = $2', [id, user.organization_id]);
   if (!t) throw notFound();
@@ -424,6 +440,7 @@ router.post('/message-templates/language', owners, ah(async (req, res) => {
 
 router.post('/message-templates', owners, ah(async (req, res) => {
   const body = validate(req.body, templateSpec);
+  checkVariables(body);
   const t = await one(
     `INSERT INTO message_templates (organization_id, name, subject, body, created_by) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
     [req.user.organization_id, body.name, body.subject, body.body, req.user.user_id]);
@@ -434,6 +451,7 @@ router.post('/message-templates', owners, ah(async (req, res) => {
 router.patch('/message-templates/:id', owners, ah(async (req, res) => {
   const t = await loadTemplate(req.user, uuidParam(req.params.id));
   const body = validate(req.body, templateSpec, { partial: true });
+  checkVariables(body);
   const keys = Object.keys(body).filter((k) => body[k] !== null);
   if (keys.length) {
     await query(`UPDATE message_templates SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')}, updated_at = now() WHERE template_id = $1`,

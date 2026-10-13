@@ -2,7 +2,7 @@
 
 Things only the founder can do or decide before related work can go ahead. Automated runs add items here. The founder clears them by doing the item and ticking it, or by writing the decision in DECISIONS.MD.
 
-Last updated: 2026-10-13
+Last updated: 2026-10-13 (QA round 1 questions added)
 
 ## Security — do first
 
@@ -65,3 +65,19 @@ Last updated: 2026-10-13
 - [ ] **Branches.** Keep deploying from `claude/trusting-hopper-lyg8vu`, or merge it into `main` and have the server pull `main`?
 - [ ] **Test tenant for QA.** Create a dedicated test workspace and test login on the live site, so `/proverbs3-qa` and `/proverbs3-e2e` can run without touching real data.
 - [ ] **Review the eight canon docs** (this file plus PRD, TRD, APP-FLOW, DESIGN-BRIEF, BACKEND-SCHEMA, IMPLEMENTATION-PLAN, DECISIONS). Correct anything that isn't what you want BalayHub to be.
+
+## Questions from QA round 1 (2026-10-13)
+
+Each one has the default we will use if you don't answer. None of them stops the work.
+
+- [ ] **Terms and Privacy drafts.** The Terms and Privacy pages still say "Draft pending review by a Philippine lawyer". Has the legal review been done, so the notice can come off? *Default: keep the notice until you confirm.*
+- [ ] **Contact email on the live server.** Is a contact email set on the live server, so "Message us" on the home page has somewhere to go? Without one, the public "Help & support" links need a login, so a visitor who can't log in has no way to reach you. *Default: if none is set, the copy points to Help & support.*
+- [ ] **Weak passwords.** Passwords only need 8 characters, so "password" works. Should we also refuse the most common passwords? *Default: add a short block list of common passwords (small and easy to undo).*
+- [ ] **Starter plan card.** The landing page card says "1 to 3 units" but the Starter plan allows 2 listings. Should it say "1 to 2 units"? *Default: change the copy to "1 to 2 units".*
+- [ ] **Sign-up and taken emails.** Sign-up says an email is already registered, which tells anyone that address has an account. Keep the friendly message, or use a neutral one? *Default: keep it, as most apps do.*
+- [ ] **Building-wide expenses on statements.** Expenses for the whole building (such as association dues) never reach an owner statement; they only show on your profit and loss as "Not linked to a unit". Is that what you want? *Default: keep it (D-44).*
+- [ ] **Cleaner pay in the owner portal.** The owner portal's recent activity lists cleaner pay as an expense, but statements never deduct it. Hide it from owners, or deduct it on statements? *Default: hide it from the owner portal activity.*
+- [ ] **Bottom tab bar on tablets.** The phone bottom tab bar also shows at tablet width (768px). Is that intended? *Default: keep it.*
+- [ ] **Live Reyes manual-payment instructions.** During QA the Reyes manual-payment instructions were cleared on the local test copy only (no live data was touched). If the live Reyes workspace has instructions, please check they are still there. *Default: nothing to do unless you see them missing.*
+- [ ] **Landing page description wording.** Check the short description search engines show for the home page (the page's meta description) and tell us if you want different words. *Default: keep the current wording.*
+- [ ] **Share image (optional).** Add a 1200 by 630 picture that shows when the site link is shared in chat apps or on social media. *Default: keep the square app icon as the share picture for now.*

@@ -11,6 +11,7 @@ const notify = require('./notify');
 const { CHANNEL_LABEL } = require('./ical');
 
 const STALE_MS = 3 * 60 * 60 * 1000;
+const STALE_MESSAGE = "The calendar hasn't updated for over 3 hours, so its bookings may be out of date.";
 // Must be an entry in push.TYPES (push.js), or notify drops the alert.
 const SYNC_TYPE = 'sync_problem';
 
@@ -20,6 +21,24 @@ function feedProblem(f, cutoff) {
   if (f.last_status === 'error' && !String(f.last_message || '').startsWith('Synced:')) return 'failing';
   if (new Date(f.last_synced_at || f.created_at) < cutoff) return 'stale';
   return null;
+}
+
+// Owner-facing words for a feed problem. `message` is plain language (screens and alerts show it);
+// `detail` is the raw error text from ical.js, or null. The patterns match the strings ical.js writes,
+// so a new error text there needs a line here. Anything unmatched is a link that could not be reached.
+const CHECK_LINK = "Check the link on the listing's Channels page.";
+const FAILURE_WORDS = [
+  [/^Sync failed:/, "BalayHub couldn't save the bookings from this calendar. Try again later, or contact support if it keeps happening."],
+  [/HTTP \d{3}/, `The channel's calendar link returned an error. ${CHECK_LINK}`],
+  [/didn't return a calendar file/, `The link doesn't lead to a calendar file. ${CHECK_LINK}`],
+  [/too large/, `The calendar file is too big for BalayHub to read. ${CHECK_LINK}`],
+  [/too long/, `The channel took too long to answer. ${CHECK_LINK}`],
+];
+function problemText(f, kind) {
+  if (kind === 'stale') return { message: STALE_MESSAGE, detail: null };
+  const text = String(f.last_message || '');
+  const hit = FAILURE_WORDS.find(([pattern]) => pattern.test(text));
+  return { message: hit ? hit[1] : `Couldn't reach the calendar link. ${CHECK_LINK}`, detail: f.last_message || null };
 }
 
 // One message to each owner, and each manager assigned to the property. notify.js picks
@@ -36,18 +55,8 @@ async function alertPeople(orgId, propertyId, payload) {
 
 function feedAlert(f, problem) {
   const label = CHANNEL_LABEL[f.channel] || 'Channel';
-  if (problem === 'stale') {
-    return {
-      title: `${label} calendar hasn't updated in BalayHub`,
-      body: `${f.unit_name}: no sync for over 3 hours, so bookings from ${label} may be out of date. Check the calendar link in Listings.`,
-      url: '/#/listings',
-    };
-  }
-  return {
-    title: `${label} calendar can't be read`,
-    body: `${f.unit_name}: ${(f.last_message || 'the last sync failed').replace(/\.$/, '')}. Check the calendar link in Listings.`,
-    url: '/#/listings',
-  };
+  const title = problem === 'stale' ? `${label} calendar hasn't updated in BalayHub` : `${label} calendar can't be read`;
+  return { title, body: `${f.unit_name}: ${problemText(f, problem).message}`, url: '/#/listings' };
 }
 
 // Run every 15 minutes. Read-only workspaces (demo, ended trial, overdue plan) are skipped.
@@ -80,4 +89,4 @@ async function checkFeeds(now = new Date()) {
   }
 }
 
-module.exports = { checkFeeds, alertPeople, feedProblem, STALE_MS };
+module.exports = { checkFeeds, alertPeople, feedProblem, problemText, STALE_MS };

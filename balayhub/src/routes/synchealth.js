@@ -8,7 +8,7 @@ const { requireRole } = require('../lib/auth');
 const { propertyScope } = require('../lib/access');
 const { ah } = require('../lib/http');
 const { pool } = require('../db');
-const { feedProblem, STALE_MS } = require('../lib/synchealth');
+const { feedProblem, problemText, STALE_MS } = require('../lib/synchealth');
 
 const router = express.Router();
 
@@ -46,7 +46,7 @@ router.get('/sync-health', requireRole('owner', 'manager'), ah(async (req, res) 
       unit_name: f.unit_name,
       channel: f.channel,
       since: f.problem_since || f.last_synced_at || f.created_at,
-      message: kind === 'failing' ? f.last_message : 'Not updated for over 3 hours',
+      ...problemText(f, kind),
     });
   }
   for (const c of overlaps) {
@@ -58,6 +58,7 @@ router.get('/sync-health', requireRole('owner', 'manager'), ah(async (req, res) 
       channel: c.channel,
       since: c.first_seen_at,
       message: 'Overlaps dates already taken in BalayHub, so it was not added.',
+      detail: null,
       check_in: c.check_in,
       check_out: c.check_out,
     });

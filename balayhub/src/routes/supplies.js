@@ -17,6 +17,7 @@ const router = express.Router();
 const managers = requireRole('owner', 'manager');
 
 const MAX_QTY = 100000;
+const MAX_NOTE = 200;
 const validationError = (fields) => new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields });
 const nameTaken = () => validationError({ name: 'This property already has an item with that name.' });
 
@@ -28,7 +29,7 @@ const SUPPLY_FIELDS = {
 const MOVEMENT_FIELDS = {
   kind: { type: 'enum', values: ['used', 'restocked', 'count'], required: true, label: 'Movement' },
   quantity: { type: 'int', required: true, min: 0, max: MAX_QTY, label: 'Quantity' },
-  note: { type: 'string', max: 120, label: 'Note' },
+  note: { type: 'string', max: MAX_NOTE, label: 'Note' },
 };
 // What a cleaner (or anyone working a task) may record: use or restock, at least one.
 const TASK_ITEM_FIELDS = {
@@ -79,7 +80,9 @@ async function applyMovement(db, user, supply, { kind, quantity, note = null, ta
   else if (kind === 'restocked') onHand = supply.on_hand + quantity;
   else if (quantity > supply.on_hand) {
     onHand = 0;
-    logNote = [note, `Asked for ${quantity}, only ${supply.on_hand} on hand.`].filter(Boolean).join(' ');
+    // The log note holds MAX_NOTE characters, so a long note gives way to the message.
+    const short = `Asked for ${quantity}, only ${supply.on_hand} on hand.`;
+    logNote = [note?.slice(0, MAX_NOTE - short.length - 1), short].filter(Boolean).join(' ');
   } else onHand = supply.on_hand - quantity;
   await db.query(
     `INSERT INTO supply_movements (organization_id, supply_id, kind, quantity, task_id, note, recorded_by)
@@ -184,6 +187,19 @@ router.post('/supplies/:id/movements', managers, ah(async (req, res) => {
     await applyMovement(db, req.user, supply, body);
   });
   res.json({ supply: await loadSupply(req.user, id) });
+}));
+
+// The last 20 movements on one supply, newest first, with the name of who recorded each.
+router.get('/supplies/:id/movements', managers, ah(async (req, res) => {
+  const supply = await loadSupply(req.user, uuidParam(req.params.id));
+  const { rows } = await query(
+    `SELECT m.kind, m.quantity, m.note, m.created_at, u.full_name AS recorded_by_name
+       FROM supply_movements m
+       LEFT JOIN users u ON u.user_id = m.recorded_by
+      WHERE m.supply_id = $1
+      ORDER BY m.created_at DESC
+      LIMIT 20`, [supply.supply_id]);
+  res.json({ movements: rows });
 }));
 
 // Cleaners record what they used or restocked on a task. Supplies must belong to the task's

@@ -178,18 +178,29 @@ router.get('/workspace/manual-payments', owners, ah(async (req, res) => {
   res.json({ enabled: o.manual_payments_enabled, instructions: o.manual_payment_instructions });
 }));
 
+// Partial: only the fields sent change. Enabling needs details, saved or sent with this save.
 router.patch('/workspace/manual-payments', owners, ah(async (req, res) => {
   const body = validate(req.body, {
     enabled: { type: 'bool', label: 'Accept manual payments' },
     instructions: { type: 'text', max: 1000, label: 'Payment details' },
+  }, { partial: true });
+  const saved = await tx(async (db) => {
+    // Locked, so two saves at once can't each check against stale values.
+    const { rows: [cur] } = await db.query(
+      'SELECT manual_payments_enabled, manual_payment_instructions FROM organizations WHERE organization_id = $1 FOR UPDATE', [req.user.organization_id]);
+    const next = {
+      enabled: 'enabled' in body ? body.enabled : cur.manual_payments_enabled,
+      instructions: 'instructions' in body ? body.instructions : cur.manual_payment_instructions,
+    };
+    if (next.enabled && !next.instructions) {
+      throw validationError({ instructions: 'Add the GCash number, bank name or account name guests should pay to.' });
+    }
+    await db.query('UPDATE organizations SET manual_payments_enabled = $2, manual_payment_instructions = $3 WHERE organization_id = $1',
+      [req.user.organization_id, next.enabled, next.instructions]);
+    await audit(db, req.user, 'workspace.manual_payments_updated', 'organization', req.user.organization_id, { enabled: next.enabled });
+    return next;
   });
-  if (body.enabled && !body.instructions) {
-    throw validationError({ instructions: 'Add the GCash number, bank name or account name guests should pay to.' });
-  }
-  await query('UPDATE organizations SET manual_payments_enabled = $2, manual_payment_instructions = $3 WHERE organization_id = $1',
-    [req.user.organization_id, body.enabled, body.instructions]);
-  await audit(null, req.user, 'workspace.manual_payments_updated', 'organization', req.user.organization_id, { enabled: body.enabled });
-  res.json({ enabled: body.enabled, instructions: body.instructions });
+  res.json(saved);
 }));
 
 // ---------------------------------------------------------------- guest side (public, by pay link)

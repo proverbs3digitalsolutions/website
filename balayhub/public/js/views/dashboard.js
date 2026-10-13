@@ -1,7 +1,7 @@
 // Screen 3 — Dashboard. Every number comes from saved records via /api/dashboard.
 
 import { get } from '../api.js';
-import { h, icon, peso, fmtDate, fmtMonth, badge, emptyState, label } from '../ui.js';
+import { h, icon, peso, fmtDate, fmtMonth, badge, emptyState, label, unitLabel } from '../ui.js';
 import { state } from '../app.js';
 import { recordPaymentModal } from './rent.js';
 import { newMaintenanceModal } from './maintenance.js';
@@ -54,34 +54,34 @@ export async function dashboardView(el, { rerender }) {
       h('button', { onclick: () => newMaintenanceModal({ onSaved: rerender }) }, icon('wrench'), 'Maintenance')));
 
   const rentRows = d.rent_this_month.map((c) => h('li', null, h('a', { class: 'row', href: `#/tenants/${c.tenant_id}` },
-    h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, c.tenant_name), h('span', { class: 'row__sub' }, `${c.property_name} · ${c.unit_name} · due ${fmtDate(c.due_date)}`)),
+    h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, c.tenant_name), h('span', { class: 'row__sub' }, `${c.property_name} · ${unitLabel(c.unit_name)} · due ${fmtDate(c.due_date)}`)),
     h('div', { class: 'row__end' }, h('span', { class: 'amount' }, peso(c.amount_due)), badge(c.status)))));
   const rentCard = h('div', { class: 'card' },
     h('div', { class: 'card__head' }, h('h2', null, `Rent for ${fmtMonth(d.month_start)}`), h('a', { href: '#/rent' }, 'View all')),
     rentRows.length ? h('ul', { class: 'list' }, rentRows)
-      : emptyState({ title: d.has_tenants ? 'No rent due this month' : 'No tenants yet', text: d.has_tenants ? 'Rent appears here once a lease is active this month.' : 'Add a tenant and assign them to a unit to start tracking rent.', action: canManage && !d.has_tenants && h('button', { class: 'btn btn--primary btn--sm', onclick: () => newTenantModal() }, 'Add tenant') }));
+      : emptyState({ title: d.has_tenants ? 'No rent due this month' : 'No tenants yet', text: d.has_tenants ? 'Rent appears here once a lease is active this month.' : 'Add a tenant and assign them to a unit to start tracking rent.', action: canManage && !d.has_tenants && h('button', { class: 'btn btn--primary', onclick: () => newTenantModal() }, 'Add tenant') }));
 
   const recent = h('div', { class: 'card' },
     h('div', { class: 'card__head' }, h('h2', null, 'Recent payments'), h('a', { href: '#/rent?tab=payments' }, 'View all')),
     d.recent_payments.length ? h('ul', { class: 'list' }, d.recent_payments.map((pm) => h('li', null, h('a', { class: 'row', href: `#/payments/${pm.payment_id}` },
-      h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, pm.tenant_name), h('span', { class: 'row__sub' }, `${pm.unit_name} · ${fmtDate(pm.payment_date)} · ${label(pm.payment_method)}`)),
+      h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, pm.tenant_name), h('span', { class: 'row__sub' }, `${unitLabel(pm.unit_name)} · ${fmtDate(pm.payment_date)} · ${label(pm.payment_method)}`)),
       h('div', { class: 'row__end' }, h('span', { class: 'amount' }, peso(pm.amount_paid)))))))
       : emptyState({ title: 'No payments recorded yet', text: 'When you record a rent payment it will show here.' }));
 
   const tasks = [];
   for (const t of d.overdue_tenants) {
     tasks.push(h('li', null, h('a', { class: 'row', href: `#/tenants/${t.tenant_id}` },
-      h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, `Follow up: ${t.tenant_name}`), h('span', { class: 'row__sub' }, `${t.property_name} · ${t.unit_name} · overdue since ${fmtDate(t.oldest_overdue)}`)),
+      h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, `Follow up: ${t.tenant_name}`), h('span', { class: 'row__sub' }, `${t.property_name} · ${unitLabel(t.unit_name)} · overdue since ${fmtDate(t.oldest_overdue)}`)),
       h('div', { class: 'row__end' }, h('span', { class: 'amount amount--neg' }, peso(t.overdue)), badge('overdue')))));
   }
   for (const l of d.expiring_leases) {
     tasks.push(h('li', null, h('a', { class: 'row', href: `#/tenants/${l.tenant_id}` },
-      h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, `Lease ending: ${l.tenant_name}`), h('span', { class: 'row__sub' }, `${l.property_name} · ${l.unit_name}`)),
+      h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, `Lease ending: ${l.tenant_name}`), h('span', { class: 'row__sub' }, `${l.property_name} · ${unitLabel(l.unit_name)}`)),
       h('div', { class: 'row__end' }, h('span', { class: 'small' }, fmtDate(l.end_date)), badge('expiring', 'Renewal')))));
   }
   for (const m of d.open_maintenance) {
     tasks.push(h('li', null, h('a', { class: 'row', href: `#/maintenance/${m.request_id}` },
-      h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, m.title), h('span', { class: 'row__sub' }, `${m.property_name}${m.unit_name ? ` · ${m.unit_name}` : ''} · ${label(m.status)}`)),
+      h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, m.title), h('span', { class: 'row__sub' }, `${m.property_name}${m.unit_name ? ` · ${unitLabel(m.unit_name)}` : ''} · ${label(m.status)}`)),
       h('div', { class: 'row__end' }, badge(m.priority)))));
   }
   const tasksCard = h('div', { class: 'card' },

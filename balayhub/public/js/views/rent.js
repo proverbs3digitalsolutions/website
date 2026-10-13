@@ -40,7 +40,7 @@ export async function recordPaymentModal({ leaseId, onSaved } = {}) {
   };
   const leaseField = field({
     name: 'lease_id', label: 'Tenant', type: 'select', required: true, value: leaseId,
-    options: leases.map((l) => [l.lease_id, `${l.tenant_name} — ${l.property_name}, Unit ${l.unit_name}${l.lease_status !== 'active' ? ' (former)' : ''}`]),
+    options: leases.map((l) => [l.lease_id, `${l.tenant_name} — ${l.property_name}, ${unitLabel(l.unit_name)}${l.lease_status !== 'active' ? ' (former)' : ''}`]),
   });
   const amountField = field({ name: 'amount_paid', label: 'Amount paid', type: 'money', required: true, hint: 'Partial payments are fine — the remaining balance is kept.' });
   leaseField.querySelector('select').addEventListener('change', (e) => {
@@ -213,7 +213,7 @@ export async function rentView(el, { query }) {
         h('ul', { class: 'list' }, charges.map((c) => h('li', null, h('div', { class: 'row' },
           h('a', { class: 'row__main', href: `#/tenants/${c.tenant_id}`, style: { color: 'inherit', textDecoration: 'none' } },
             h('span', { class: 'row__title' }, c.tenant_name, c.lease_status !== 'active' ? h('span', { class: 'muted small' }, ' (former)') : ''),
-            h('span', { class: 'row__sub' }, `${c.property_name} · Unit ${c.unit_name} · ${fmtMonth(c.period)} · due ${fmtDate(c.due_date)}`),
+            h('span', { class: 'row__sub' }, `${c.property_name} · ${unitLabel(c.unit_name)} · ${fmtMonth(c.period)} · due ${fmtDate(c.due_date)}`),
             Number(c.amount_applied) > 0 && c.status !== 'paid' && h('span', { class: 'row__sub' }, `Paid ${peso(c.amount_applied)} of ${peso(c.amount_due)}`)),
           h('div', { class: 'row__end' },
             h('span', { class: `amount${c.status === 'overdue' ? ' amount--neg' : ''}` }, peso(c.status === 'paid' ? c.amount_due : c.balance)),
@@ -234,7 +234,7 @@ export async function rentView(el, { query }) {
     body.replaceChildren(h('div', { class: 'card' }, payments.length
       ? [h('p', { class: 'muted small' }, `${kept.length} payment${kept.length === 1 ? '' : 's'} · ${peso(total)}${payments.length >= 500 ? ' (latest 500)' : ''}`),
         h('ul', { class: 'list' }, payments.map((p) => h('li', null, h('a', { class: 'row', href: `#/payments/${p.payment_id}` },
-          h('div', { class: 'row__main' }, h('span', { class: `row__title${p.voided_at ? ' strike' : ''}` }, p.tenant_name), h('span', { class: 'row__sub' }, `${fmtDate(p.payment_date)} · ${label(p.payment_method)} · ${p.property_name}, Unit ${p.unit_name}${p.reference_number ? ` · Ref ${p.reference_number}` : ''}`)),
+          h('div', { class: 'row__main' }, h('span', { class: `row__title${p.voided_at ? ' strike' : ''}` }, p.tenant_name), h('span', { class: 'row__sub' }, `${fmtDate(p.payment_date)} · ${label(p.payment_method)} · ${p.property_name}, ${unitLabel(p.unit_name)}${p.reference_number ? ` · Ref ${p.reference_number}` : ''}`)),
           h('div', { class: 'row__end' }, h('span', { class: `amount${p.voided_at ? ' strike muted' : ''}` }, peso(p.amount_paid)), p.voided_at && badge('voided', 'Voided'))))))]
       : (isFiltered() ? noResults() : emptyState({ title: 'No payments recorded yet', text: 'Record the first rent payment to see it here.', action: h('button', { class: 'btn btn--primary', onclick: () => recordPaymentModal({ onSaved: reload }) }, 'Record payment') }))));
   }
@@ -248,7 +248,7 @@ export async function rentView(el, { query }) {
     body.replaceChildren(h('div', { class: 'card' }, expenses.length
       ? [h('p', { class: 'muted small' }, `${kept.length} expense${kept.length === 1 ? '' : 's'} · ${peso(total)}${expenses.length >= 500 ? ' (latest 500)' : ''}`),
         h('ul', { class: 'list' }, expenses.map((x) => h('li', null, h('a', { class: 'row', href: `#/expenses/${x.expense_id}` },
-          h('div', { class: 'row__main' }, h('span', { class: `row__title${x.voided_at ? ' strike' : ''}` }, x.description || label(x.category)), h('span', { class: 'row__sub' }, `${fmtDate(x.expense_date)} · ${label(x.category)} · ${x.property_name}${x.unit_name ? `, Unit ${x.unit_name}` : ''}${x.vendor_name ? ` · ${x.vendor_name}` : ''}`)),
+          h('div', { class: 'row__main' }, h('span', { class: `row__title${x.voided_at ? ' strike' : ''}` }, x.description || label(x.category)), h('span', { class: 'row__sub' }, `${fmtDate(x.expense_date)} · ${label(x.category)} · ${x.property_name}${x.unit_name ? `, ${unitLabel(x.unit_name)}` : ''}${x.vendor_name ? ` · ${x.vendor_name}` : ''}`)),
           h('div', { class: 'row__end' }, h('span', { class: `amount${x.voided_at ? ' strike muted' : ''}` }, peso(x.amount)), x.voided_at && badge('voided', 'Voided'))))))]
       : (isFiltered() ? noResults() : emptyState({ title: 'No expenses recorded yet', text: 'Track repairs, utilities, dues and other operating costs per property.', action: h('button', { class: 'btn btn--primary', onclick: () => addExpenseModal({ onSaved: reload }) }, 'Add expense') }))));
   }
@@ -376,7 +376,7 @@ export async function paymentDetailView(el, { params, rerender }) {
   const upload = h('input', { type: 'file', class: 'input', accept: 'application/pdf,image/jpeg,image/png,image/webp' });
   el.replaceChildren(
     pageHead({
-      title: `Payment · ${peso(p.amount_paid)}`, sub: `${p.tenant_name} · ${p.property_name}, Unit ${p.unit_name}`,
+      title: `Payment · ${peso(p.amount_paid)}`, sub: `${p.tenant_name} · ${p.property_name}, ${unitLabel(p.unit_name)}`,
       back: { href: '#/rent?tab=payments', label: 'Payments' },
       actions: [
         h('a', { class: 'btn btn--secondary', href: `#/tenants/${p.tenant_id}` }, 'View tenant'),
@@ -401,7 +401,7 @@ export async function paymentDetailView(el, { params, rerender }) {
           h('dt', null, 'Method'), h('dd', null, label(p.payment_method)),
           h('dt', null, 'Reference no.'), h('dd', null, p.reference_number || '—'),
           h('dt', null, 'Tenant'), h('dd', null, p.tenant_name),
-          h('dt', null, 'Unit'), h('dd', null, `${p.property_name}, Unit ${p.unit_name}`),
+          h('dt', null, 'Unit'), h('dd', null, `${p.property_name}, ${unitLabel(p.unit_name)}`),
           h('dt', null, 'Recorded by'), h('dd', null, `${p.recorded_by_name}, ${fmtDateTime(p.created_at)}`),
           p.notes && [h('dt', null, 'Notes'), h('dd', null, p.notes)])),
       h('div', { class: 'card no-print' },
@@ -423,7 +423,7 @@ export async function expenseDetailView(el, { params, rerender }) {
   const upload = h('input', { type: 'file', class: 'input', accept: 'application/pdf,image/jpeg,image/png,image/webp' });
   el.replaceChildren(
     pageHead({
-      title: `Expense · ${peso(x.amount)}`, sub: `${label(x.category)} · ${x.property_name}${x.unit_name ? `, Unit ${x.unit_name}` : ''}`,
+      title: `Expense · ${peso(x.amount)}`, sub: `${label(x.category)} · ${x.property_name}${x.unit_name ? `, ${unitLabel(x.unit_name)}` : ''}`,
       back: { href: '#/rent?tab=expenses', label: 'Expenses' },
       actions: canEdit && [
         h('button', { class: 'btn btn--secondary', onclick: () => addExpenseModal({ expense: x, onSaved: rerender }) }, 'Correct'),
