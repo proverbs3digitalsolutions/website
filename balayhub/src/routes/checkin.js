@@ -71,7 +71,7 @@ async function loadByToken(token) {
   const b = await one(
     `SELECT b.booking_id, b.organization_id, b.check_in, b.check_out, b.num_guests, b.status, b.confirmation_code,
             u.unit_name, u.max_guests, to_char(u.checkin_time, 'HH24:MI') AS checkin_time, to_char(u.checkout_time, 'HH24:MI') AS checkout_time,
-            p.property_name, p.city, o.name AS workspace_name, o.is_demo,
+            p.property_name, p.city, o.name AS workspace_name, o.is_demo, o.guest_language,
             COALESCE(g.full_name, b.guest_label) AS guest_name,
             (b.status <> 'confirmed' OR b.check_out < ${TODAY}) AS closed
        FROM bookings b JOIN units u ON u.unit_id = b.unit_id JOIN properties p ON p.property_id = u.property_id
@@ -91,7 +91,7 @@ publicRouter.get('/public/checkin/:token', ah(async (req, res) => {
       check_in: b.check_in, check_out: b.check_out, checkin_time: b.checkin_time, checkout_time: b.checkout_time,
       guests_allowed: b.max_guests || 20, num_guests: b.num_guests, code: b.confirmation_code,
       guest_first_name: String(b.guest_name || '').split(' ')[0] || null, closed: b.closed,
-      id_retention_days: config.guestIdRetentionDays,
+      id_retention_days: config.guestIdRetentionDays, guest_language: b.guest_language,
     },
     // The guest's own answers so they can review and edit them (ID photos are never sent back).
     registration: r && {

@@ -82,6 +82,103 @@ Thank you!
   },
 ];
 
+// Taglish versions of the built-in templates (same variables).
+const TAGLISH_TEMPLATES = {
+  confirmation: {
+    name: 'Booking confirmation (Taglish)', subject: 'Confirmed na ang stay mo sa {{listing_name}} ({{confirmation_code}})',
+    body: `Hi {{guest_first_name}}!
+
+Salamat sa pag-book sa {{workspace_name}}! Confirmed na ang stay mo.
+
+Listing: {{listing_name}}, {{property_name}}
+Check-in: {{check_in}}, mula {{checkin_time}}
+Check-out: {{check_out}}, hanggang {{checkout_time}}
+Guests: {{num_guests}}
+Total: {{total}} · Balanse: {{balance}}
+Confirmation code: {{confirmation_code}}
+
+Bago ka dumating, paki-fill up ang guest registration form (pangalan ng lahat ng guests at litrato ng valid ID; requirement ito ng building):
+{{checkin_link}}
+
+Magpapadala kami ng check-in instructions bago ang stay mo. Mag-reply lang dito kung may tanong ka.
+
+See you soon!
+{{host_name}}`,
+  },
+  checkin: {
+    name: 'Check-in instructions (Taglish)', subject: 'Check-in details para sa {{check_in}} — {{listing_name}}',
+    body: `Hi {{guest_first_name}}!
+
+Excited na kaming i-welcome ka sa {{check_in}}! Narito ang kailangan mo:
+
+Check-in: mula {{checkin_time}}
+Address: {{property_address}}
+
+{{checkin_instructions}}
+
+Wi-Fi: {{wifi_name}} / Password: {{wifi_password}}
+
+House rules:
+{{house_rules}}
+
+Kung hindi mo pa nagagawa, paki-fill up ang guest registration form: {{checkin_link}}
+
+Balanse: {{balance}}. Mag-reply lang dito kung may kailangan ka.
+
+{{host_name}}`,
+  },
+  thanks: {
+    name: 'Thank you after check-out (Taglish)', subject: 'Salamat sa pag-stay, {{guest_first_name}}!',
+    body: `Hi {{guest_first_name}}!
+
+Maraming salamat sa pag-stay sa {{listing_name}}! Sana nag-enjoy ka.
+
+Kung nagustuhan mo, malaking tulong sa amin ang review mo — at welcome na welcome ka ulit. Mag-book direkta sa amin next time para sa best rate.
+
+{{review_link}}
+
+Salamat po!
+{{host_name}}`,
+  },
+  payment_reminder: {
+    name: 'Payment reminder (Taglish)', subject: 'Paalala sa balanse para sa stay mo sa {{check_in}}',
+    body: `Hi {{guest_first_name}}!
+
+Friendly reminder lang po na ang natitirang balanse mo na {{balance}} para sa {{listing_name}} ({{check_in}} – {{check_out}}) ay kailangang bayaran bago mag-check-in.
+
+{{payment_link}}
+
+Puwede ka ring magbayad sa GCash, Maya o bank transfer. Paki-reply lang ng reference number kung ganoon.
+
+Salamat po!
+{{host_name}}`,
+  },
+};
+
+// Switch the built-in templates to English or Taglish, keeping any custom
+// wording as a separate copy first. The built-in keys (and so the automations
+// and confirmation logic) stay the same.
+async function setTemplateLanguage(organizationId, language, userId) {
+  await ensureDefaults(organizationId);
+  const target = language === 'tl' ? TAGLISH_TEMPLATES : Object.fromEntries(DEFAULT_TEMPLATES.map((t) => [t.system_key, t]));
+  const stock = new Set([...DEFAULT_TEMPLATES.map((t) => t.body), ...Object.values(TAGLISH_TEMPLATES).map((t) => t.body)]);
+  let copied = 0;
+  await tx(async (db) => {
+    for (const [key, t] of Object.entries(target)) {
+      const { rows: [cur] } = await db.query('SELECT * FROM message_templates WHERE organization_id = $1 AND system_key = $2 FOR UPDATE', [organizationId, key]);
+      if (!cur) continue;
+      if (!stock.has(cur.body)) {
+        await db.query(`INSERT INTO message_templates (organization_id, name, subject, body, created_by) VALUES ($1,$2,$3,$4,$5)`,
+          [organizationId, `${cur.name} (my version)`.slice(0, 120), cur.subject, cur.body, userId]);
+        copied += 1;
+      }
+      await db.query('UPDATE message_templates SET name = $2, subject = $3, body = $4, updated_at = now() WHERE template_id = $1',
+        [cur.template_id, t.name, t.subject, t.body]);
+    }
+  });
+  return { copied };
+}
+
 const DEFAULT_AUTOMATIONS = [
   { key: 'confirmation', name: 'Send booking confirmation when a reservation is created', trigger_event: 'booking_created', offset_days: 0 },
   { key: 'checkin', name: 'Send check-in instructions 1 day before arrival', trigger_event: 'before_check_in', offset_days: 1, send_time: '10:00' },
@@ -372,6 +469,6 @@ async function runAutomations() {
 }
 
 module.exports = {
-  DEFAULT_TEMPLATES, VARIABLE_NAMES, ensureDefaults, bookingContext, variables, render, renderTemplateFor,
+  DEFAULT_TEMPLATES, TAGLISH_TEMPLATES, setTemplateLanguage, VARIABLE_NAMES, ensureDefaults, bookingContext, variables, render, renderTemplateFor,
   getOrCreateConversation, queueMessage, deliver, sendDueMessages, runAutomations, automationSendAt, replyAddress, fmtPeso, fmtDate,
 };

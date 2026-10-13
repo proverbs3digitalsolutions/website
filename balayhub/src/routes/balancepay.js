@@ -64,7 +64,7 @@ async function loadByToken(token) {
   const b = await one(
     `SELECT b.booking_id, b.organization_id, b.check_in, b.check_out, b.status, b.total_amount, b.confirmation_code, ${BALANCE} AS balance,
             u.unit_name, p.property_name, o.name AS host_name, o.paymongo_key_enc, o.paymongo_key_hint, o.plan, o.trial_ends_at, o.paid_until,
-            o.is_demo, o.deletion_scheduled_at, COALESCE(g.full_name, b.guest_label) AS guest_name
+            o.is_demo, o.deletion_scheduled_at, o.guest_language, COALESCE(g.full_name, b.guest_label) AS guest_name
        FROM bookings b JOIN units u ON u.unit_id = b.unit_id JOIN properties p ON p.property_id = u.property_id
        JOIN organizations o ON o.organization_id = b.organization_id LEFT JOIN guests g ON g.guest_id = b.guest_id
       WHERE b.pay_token = $1 AND b.kind = 'reservation'`, [token]);
@@ -80,7 +80,7 @@ publicRouter.get('/public/pay/:token', ah(async (req, res) => {
     host: b.host_name, listing: b.unit_name, property: b.property_name, check_in: b.check_in, check_out: b.check_out,
     code: b.confirmation_code, guest_first_name: String(b.guest_name || '').split(' ')[0] || null,
     total: b.total_amount, paid: (Number(b.total_amount) - Number(b.balance)).toFixed(2), balance: Number(b.balance) > 0 ? b.balance : '0.00',
-    accepting: b.accepting, test_mode: b.test_mode, cancelled: b.status !== 'confirmed',
+    accepting: b.accepting, test_mode: b.test_mode, cancelled: b.status !== 'confirmed', guest_language: b.guest_language,
   });
 }));
 

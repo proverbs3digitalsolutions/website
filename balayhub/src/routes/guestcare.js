@@ -25,7 +25,7 @@ publicRouter.use('/public/review', reviewLimiter);
 async function loadForReview(token) {
   if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{20,40}$/.test(token)) throw notFound('This review link is not valid.');
   const b = await one(
-    `SELECT b.booking_id, b.organization_id, b.guest_id, b.check_in::text, b.check_out::text, b.status, u.unit_name, o.name AS host_name, o.is_demo,
+    `SELECT b.booking_id, b.organization_id, b.guest_id, b.check_in::text, b.check_out::text, b.status, u.unit_name, o.name AS host_name, o.is_demo, o.guest_language,
             split_part(COALESCE(g.full_name, b.guest_label, ''), ' ', 1) AS guest_first_name,
             r.rating, r.created_at AS reviewed_at
        FROM bookings b JOIN units u USING (unit_id) JOIN organizations o ON o.organization_id = b.organization_id
@@ -41,7 +41,7 @@ publicRouter.get('/public/review/:token', ah(async (req, res) => {
   const b = await loadForReview(req.params.token);
   res.json({
     host: b.host_name, listing: b.unit_name, check_in: b.check_in, check_out: b.check_out, guest_first_name: b.guest_first_name || null,
-    reviewed: Boolean(b.reviewed_at), open: b.open,
+    reviewed: Boolean(b.reviewed_at), open: b.open, guest_language: b.guest_language,
   });
 }));
 

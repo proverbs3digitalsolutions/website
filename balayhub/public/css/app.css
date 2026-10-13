@@ -832,3 +832,11 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .sharebars__track { height: 10px; background: var(--line); border-radius: 99px; overflow: hidden; }
 .sharebars__bar { display: block; height: 100%; background: var(--forest); border-radius: 99px; }
 .sharebars__value { font-variant-numeric: tabular-nums; }
+
+/* ================================================================ guest language toggle */
+.langtoggle { display: inline-flex; border: 1px solid var(--line-2); border-radius: 99px; overflow: hidden; }
+.langtoggle button { background: transparent; border: 0; padding: 4px 10px; font-size: .8rem; cursor: pointer; color: inherit; }
+.langtoggle button[aria-pressed="true"] { background: var(--forest); color: #fff; }
+.gc__top--lang { justify-content: space-between; align-items: center; gap: 12px; max-width: 720px; margin: 0 auto; }
+
+.bk__right { display: inline-flex; align-items: center; gap: 10px; }

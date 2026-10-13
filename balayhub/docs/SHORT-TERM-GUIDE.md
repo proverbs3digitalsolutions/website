@@ -100,6 +100,15 @@ received** (cash basis, excluding security deposits), channel fees, expenses and
 as CSV for your bookkeeper. BalayHub doesn't issue BIR official receipts or give tax advice; your
 accountant decides which figures and tax option apply.
 
+## Taglish for guests
+
+Settings → **Language for guests**: choose English or Taglish for your booking page, payment page,
+guest check-in form and review page. Guests can switch with the English / Tagalog button at the top.
+Tick "Also switch my … messages" to change the built-in confirmation, check-in, thank-you and
+payment reminder messages too; if you had edited them, your wording is kept as a separate
+"(my version)" template. Error messages from the server, receipts and the building admin's gate
+pass stay in English.
+
 ## Pricing helpers
 
 Set them per listing (Listings → Edit → *Pricing helpers*) and in **Calendar → Pricing rules**:

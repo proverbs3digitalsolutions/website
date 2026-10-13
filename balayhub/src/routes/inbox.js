@@ -302,6 +302,14 @@ router.get('/message-templates', ah(async (req, res) => {
   res.json({ templates: rows, variables: messaging.VARIABLE_NAMES });
 }));
 
+// Switch the built-in guest messages to English or Taglish.
+router.post('/message-templates/language', requireRole('owner', 'manager'), ah(async (req, res) => {
+  const { language } = validate(req.body, { language: { type: 'enum', values: ['en', 'tl'], required: true, label: 'Language' } });
+  const r = await messaging.setTemplateLanguage(req.user.organization_id, language, req.user.user_id);
+  await audit(null, req.user, 'template.language_switched', 'organization', req.user.organization_id, { language, copied: r.copied });
+  res.json(r);
+}));
+
 router.post('/message-templates', ah(async (req, res) => {
   const body = validate(req.body, templateSpec);
   const t = await one(

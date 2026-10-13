@@ -165,7 +165,7 @@ publicRouter.use('/public/book', publicLimiter);
 async function loadHost(slug) {
   const o = await one(
     `SELECT organization_id, name, booking_slug, booking_enabled, booking_intro, paymongo_key_enc, paymongo_key_hint, plan, trial_ends_at, paid_until,
-            is_demo, deletion_scheduled_at
+            is_demo, deletion_scheduled_at, guest_language
        FROM organizations WHERE lower(booking_slug) = lower($1)`, [String(slug || '').slice(0, 60)]);
   if (!o || (!o.booking_enabled && !o.is_demo)) throw notFound('This booking page is not available.');
   const st = planStatus(o);
@@ -193,7 +193,7 @@ async function loadPublicUnit(host, unitId) {
 publicRouter.get('/public/book/:slug', ah(async (req, res) => {
   const host = await loadHost(req.params.slug);
   const { rows } = await query(`${PUBLIC_UNIT} ORDER BY p.property_name, u.unit_name`, [host.organization_id]);
-  res.json({ host: { name: host.name, intro: host.booking_intro, accepting: host.accepting, demo: host.is_demo, test_mode: host.test_mode }, listings: rows });
+  res.json({ host: { name: host.name, intro: host.booking_intro, accepting: host.accepting, demo: host.is_demo, test_mode: host.test_mode, guest_language: host.guest_language }, listings: rows });
 }));
 
 // Taken nights and prices for a date range (for the availability calendar).
@@ -364,7 +364,7 @@ publicRouter.get('/public/book/status/:token', ah(async (req, res) => {
   const status = await refreshCheckout(c.checkout_ref).catch(() => null);
   const row = await one(
     `SELECT c.status, c.check_in, c.check_out, c.num_guests, c.guest_name, c.pay_type, c.total_amount, c.amount_due_now,
-            u.unit_name, u.balance_due_days, p.property_name, o.name AS host_name, b.confirmation_code, b.checkin_token
+            u.unit_name, u.balance_due_days, p.property_name, o.name AS host_name, o.guest_language, b.confirmation_code, b.checkin_token
        FROM direct_checkouts c JOIN units u USING (unit_id) JOIN properties p ON p.property_id = u.property_id
        JOIN organizations o ON o.organization_id = c.organization_id LEFT JOIN bookings b ON b.booking_id = c.booking_id
       WHERE c.checkout_ref = $1`, [c.checkout_ref]);
@@ -374,7 +374,7 @@ publicRouter.get('/public/book/status/:token', ah(async (req, res) => {
       host: row.host_name, listing: row.unit_name, property: row.property_name, check_in: row.check_in, check_out: row.check_out,
       guests: row.num_guests, guest_name: row.guest_name, pay_type: row.pay_type, total: row.total_amount, paid: row.amount_due_now,
       balance: (Number(row.total_amount) - Number(row.amount_due_now)).toFixed(2), balance_due_days: row.balance_due_days,
-      code: row.confirmation_code, checkin_link: row.checkin_token ? `${config.appUrl}/#/checkin/${row.checkin_token}` : null,
+      guest_language: row.guest_language, code: row.confirmation_code, checkin_link: row.checkin_token ? `${config.appUrl}/#/checkin/${row.checkin_token}` : null,
     },
   });
 }));

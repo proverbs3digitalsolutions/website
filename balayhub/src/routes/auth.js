@@ -34,6 +34,7 @@ function publicUser(u) {
     organization_id: u.organization_id,
     organization_name: u.organization_name || null,
     business_type: u.business_type || null,
+    guest_language: u.guest_language || 'en',
     email_verified: Boolean(u.email_verified_at),
     plan: u.organization_id ? planStatus(u) : null,
     is_platform_admin: isPlatformAdmin(u),
@@ -133,7 +134,7 @@ router.post('/auth/signup', ipLimiter, authLimiter, ah(async (req, res) => {
   await createSession(res, user.user_id);
   const sent = !invite && config.requireEmailVerification ? await sendVerification(user) : {};
   const me = await one(
-    `SELECT u.*, o.name AS organization_name, o.business_type FROM users u LEFT JOIN organizations o USING (organization_id) WHERE u.user_id = $1`,
+    `SELECT u.*, o.name AS organization_name, o.business_type, o.guest_language FROM users u LEFT JOIN organizations o USING (organization_id) WHERE u.user_id = $1`,
     [user.user_id],
   );
   res.status(201).json({ user: publicUser(me), devVerificationLink: sent.devLink, emailFailed: Boolean(sent.failed) || undefined });
@@ -146,7 +147,7 @@ router.post('/auth/login', ipLimiter, authLimiter, ah(async (req, res) => {
     password: { type: 'string', required: true, max: 200, label: 'Password' },
   });
   const user = await one(
-    `SELECT u.*, o.name AS organization_name, o.business_type FROM users u LEFT JOIN organizations o USING (organization_id)
+    `SELECT u.*, o.name AS organization_name, o.business_type, o.guest_language FROM users u LEFT JOIN organizations o USING (organization_id)
       WHERE lower(u.email) = $1`,
     [body.email],
   );
@@ -267,6 +268,7 @@ router.patch('/workspace', requireAuth, ah(async (req, res) => {
   const body = validate(req.body, {
     name: { type: 'string', max: 120, label: 'Business or workspace name' },
     business_type: { type: 'enum', values: ['short_term', 'long_term', 'both'], label: 'Type of rentals' },
+    guest_language: { type: 'enum', values: ['en', 'tl'], label: 'Guest language' },
   }, { partial: true });
   const keys = Object.keys(body).filter((k) => body[k]);
   if (keys.length) {

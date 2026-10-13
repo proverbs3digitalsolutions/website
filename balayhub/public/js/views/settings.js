@@ -56,6 +56,7 @@ export async function settingsView(el, { rerender, query = {} }) {
         rerender();
       } }, 'Save')))));
 
+  if (u.role === 'owner' && u.business_type !== 'long_term') sections.push(guestLanguageCard(u, rerender));
   if (!u.plan?.is_demo) sections.push(await notificationsCard(rerender).catch(() => null));
   if (u.role === 'owner' && u.plan && !u.plan.is_demo) sections.push(await planCard(u));
   if (u.role === 'owner' && u.plan && !u.plan.is_demo && u.business_type !== 'long_term') sections.push(await bookingCard(rerender));
@@ -235,6 +236,34 @@ function payOnline(p, bill) {
 
 
 // ---------------------------------------------------------------- password
+// ---------------------------------------------------------------- guest language
+function guestLanguageCard(u, rerender) {
+  const lang = h('select', { class: 'input', 'aria-label': 'Language for guests' },
+    h('option', { value: 'en', selected: u.guest_language !== 'tl' }, 'English'),
+    h('option', { value: 'tl', selected: u.guest_language === 'tl' }, 'Taglish (Tagalog + English)'));
+  const alsoMessages = h('input', { type: 'checkbox', checked: true });
+  const save = async () => {
+    try {
+      await patch('/workspace', { guest_language: lang.value });
+      let note = '';
+      if (alsoMessages.checked) {
+        const r = await post('/message-templates/language', { language: lang.value });
+        if (r.copied) note = ` Your own wording was kept as ${r.copied} extra template${r.copied > 1 ? 's' : ''} ("my version").`;
+      }
+      await refreshUser();
+      toast(`Guest language saved.${note}`);
+      rerender();
+    } catch (err) { toast(err.message, 'error'); }
+  };
+  return h('div', { class: 'card' },
+    h('div', { class: 'card__head' }, h('h2', null, 'Language for guests')),
+    h('p', { class: 'muted small' }, 'Used on your booking page, payment page, guest check-in form and review page. Guests can switch between English and Tagalog themselves.'),
+    h('div', { class: 'form' },
+      h('div', { class: 'field' }, h('label', null, 'Default language'), lang),
+      h('label', { class: 'check' }, alsoMessages, h('span', null, 'Also switch my booking confirmation, check-in, thank-you and payment reminder messages')),
+      h('div', null, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: save }, 'Save'))));
+}
+
 function changePassword() {
   formModal({
     title: 'Change password',

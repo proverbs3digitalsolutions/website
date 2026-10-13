@@ -3,6 +3,7 @@
 
 import { get, post, api, ApiError } from '../api.js';
 import { h, brand, field, fmtDate, fmtDateTime, toast, clearErrors, showErrors, readForm, confirmDialog } from '../ui.js';
+import { t, initGuestLang, langToggle, fmtDateL } from '../i18n.js';
 
 const fmtTime = (t) => {
   if (!t) return '';
@@ -12,7 +13,7 @@ const fmtTime = (t) => {
 
 // Shrink phone photos (often 4–8 MB) to about 1600 px JPEG before upload.
 async function shrinkImage(file) {
-  if (!/^image\/(jpeg|png|webp)$/.test(file.type) && !/^image\//.test(file.type)) throw new Error('Please choose a photo.');
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type) && !/^image\//.test(file.type)) throw new Error(t('Please choose a photo.'));
   try {
     const bitmap = await createImageBitmap(file);
     const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
@@ -23,7 +24,7 @@ async function shrinkImage(file) {
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85));
     if (blob) return blob;
   } catch { /* fall back to the original */ }
-  if (file.size > 10 * 1024 * 1024) throw new Error('This photo is too large. Please take a smaller one.');
+  if (file.size > 10 * 1024 * 1024) throw new Error(t('This photo is too large. Please take a smaller one.'));
   return file;
 }
 
@@ -31,77 +32,78 @@ async function shrinkImage(file) {
 export async function guestCheckinView(el, { params }) {
   const token = params.token;
   const page = (...children) => h('div', { class: 'gc' },
-    h('header', { class: 'gc__top' }, brand(null)),
+    h('header', { class: 'gc__top gc__top--lang' }, brand(null), langToggle(() => guestCheckinView(el, { params }))),
     h('main', { class: 'gc__main', id: 'main' }, children));
 
   let data;
   try {
     data = await get(`/public/checkin/${encodeURIComponent(token)}`);
   } catch (err) {
-    el.replaceChildren(page(h('div', { class: 'card' }, h('h1', null, 'Link not found'), h('p', { class: 'muted' }, err.message))));
+    el.replaceChildren(page(h('div', { class: 'card' }, h('h1', null, t('Link not found')), h('p', { class: 'muted' }, err.message))));
     return;
   }
   const { stay: s, registration: r } = data;
+  initGuestLang(s.guest_language);
   const header = h('div', { class: 'gc__stay card' },
     h('p', { class: 'gc__eyebrow' }, s.workspace_name),
-    h('h1', null, s.guest_first_name ? `Hi ${s.guest_first_name}! Please register before you arrive` : 'Guest registration'),
-    h('p', { class: 'muted' }, 'The building requires the names and a valid ID of everyone staying. It takes about 2 minutes.'),
+    h('h1', null, s.guest_first_name ? t('Hi {name}! Please register before you arrive', { name: s.guest_first_name }) : t('Guest registration')),
+    h('p', { class: 'muted' }, t('The building requires the names and a valid ID of everyone staying. It takes about 2 minutes.')),
     h('dl', { class: 'dl', style: { marginTop: '12px' } },
-      h('dt', null, 'Stay'), h('dd', null, `${s.listing}, ${s.property}${s.city ? `, ${s.city}` : ''}`),
-      h('dt', null, 'Check-in'), h('dd', null, `${fmtDate(s.check_in)}${s.checkin_time ? `, from ${fmtTime(s.checkin_time)}` : ''}`),
-      h('dt', null, 'Check-out'), h('dd', null, `${fmtDate(s.check_out)}${s.checkout_time ? `, by ${fmtTime(s.checkout_time)}` : ''}`),
-      h('dt', null, 'Booking'), h('dd', null, s.code)));
+      h('dt', null, t('Stay')), h('dd', null, `${s.listing}, ${s.property}${s.city ? `, ${s.city}` : ''}`),
+      h('dt', null, t('Check-in')), h('dd', null, s.checkin_time ? t('{date}, from {time}', { date: fmtDateL(s.check_in), time: fmtTime(s.checkin_time) }) : fmtDateL(s.check_in)),
+      h('dt', null, t('Check-out')), h('dd', null, s.checkout_time ? t('{date}, by {time}', { date: fmtDateL(s.check_out), time: fmtTime(s.checkout_time) }) : fmtDateL(s.check_out)),
+      h('dt', null, t('Booking')), h('dd', null, s.code)));
 
   if (s.closed) {
-    el.replaceChildren(page(header, h('div', { class: 'alert alert--info' }, 'This stay has ended or was cancelled, so the form is closed.')));
+    el.replaceChildren(page(header, h('div', { class: 'alert alert--info' }, t('This stay has ended or was cancelled, so the form is closed.'))));
     return;
   }
 
   // Other guests: one input each, add/remove.
   const others = h('div', { class: 'gc__guests' });
   const addGuest = (value = '') => {
-    if (others.children.length + 1 >= s.guests_allowed) { toast(`This unit allows up to ${s.guests_allowed} guests.`, 'error'); return; }
+    if (others.children.length + 1 >= s.guests_allowed) { toast(t('This unit allows up to {n} guests.', { n: s.guests_allowed }), 'error'); return; }
     const row = h('div', { class: 'gc__guest' },
-      h('input', { class: 'input', name: 'guest', value, maxlength: 120, placeholder: 'Full name', 'aria-label': `Guest ${others.children.length + 2} full name` }),
-      h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': 'Remove', onclick: () => row.remove() }, '✕'));
+      h('input', { class: 'input', name: 'guest', value, maxlength: 120, placeholder: t('Full name'), 'aria-label': t('Guest {n} full name', { n: others.children.length + 2 }) }),
+      h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': t('Remove'), onclick: () => row.remove() }, '✕'));
     others.append(row);
   };
   const initial = r?.guests?.length ? r.guests : Array.from({ length: Math.max(0, (s.num_guests || 1) - 1) }, () => '');
   initial.forEach((g) => addGuest(g));
 
   // No `capture`: guests must be able to pick existing photos from their gallery.
-  const photos = h('input', { type: 'file', accept: 'image/*', multiple: true, class: 'input', 'aria-label': 'ID photos' });
+  const photos = h('input', { type: 'file', accept: 'image/*', multiple: true, class: 'input', 'aria-label': t('ID photos') });
   const uploaded = new Set(); // files already sent, so a retry doesn't upload them twice
   const progress = h('div', { class: 'muted small', 'aria-live': 'polite' });
   const formError = h('div');
-  const submit = h('button', { class: 'btn btn--primary btn--block', type: 'submit' }, r ? 'Save changes' : 'Submit registration');
+  const submit = h('button', { class: 'btn btn--primary btn--block', type: 'submit' }, r ? t('Save changes') : t('Submit registration'));
 
   const form = h('form', { class: 'form card', novalidate: true },
-    r && h('div', { class: 'alert alert--ok' }, `Received ${fmtDateTime(r.submitted_at)}${r.id_count ? ` with ${r.id_count} ID photo${r.id_count > 1 ? 's' : ''}` : ''}. You can update it below.`),
+    r && h('div', { class: 'alert alert--ok' }, `${t('Received {when}', { when: fmtDateTime(r.submitted_at) })}${r.id_count ? (r.id_count > 1 ? t(' with {n} ID photos', { n: r.id_count }) : t(' with 1 ID photo')) : ''}${t('. You can update it below.')}`),
     formError,
-    h('h2', null, 'Main guest'),
-    field({ name: 'lead_name', label: 'Full name (as on your ID)', required: true, value: r?.lead_name || '', maxlength: 120, autocomplete: 'name' }),
+    h('h2', null, t('Main guest')),
+    field({ name: 'lead_name', label: t('Full name (as on your ID)'), required: true, value: r?.lead_name || '', maxlength: 120, autocomplete: 'name' }),
     h('div', { class: 'form-row form-row--2' },
-      field({ name: 'phone', label: 'Mobile number', type: 'tel', required: true, value: r?.phone || '', inputmode: 'tel', placeholder: '0917 123 4567', autocomplete: 'tel' }),
-      field({ name: 'email', label: 'Email', type: 'email', value: r?.email || '', autocomplete: 'email' })),
-    h('h2', null, 'Other guests'),
+      field({ name: 'phone', label: t('Mobile number'), type: 'tel', required: true, value: r?.phone || '', inputmode: 'tel', placeholder: '0917 123 4567', autocomplete: 'tel' }),
+      field({ name: 'email', label: t('Email'), type: 'email', value: r?.email || '', autocomplete: 'email' })),
+    h('h2', null, t('Other guests')),
     h('div', { class: 'field', dataset: { field: 'guests' } },
-      h('p', { class: 'hint' }, 'Everyone else staying, including children.'),
+      h('p', { class: 'hint' }, t('Everyone else staying, including children.')),
       others,
-      h('div', null, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => addGuest() }, '+ Add guest')),
+      h('div', null, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => addGuest() }, t('+ Add guest'))),
       h('div', { class: 'error', role: 'alert' })),
-    h('h2', null, 'Arrival'),
+    h('h2', null, t('Arrival')),
     h('div', { class: 'form-row form-row--2' },
-      field({ name: 'arrival_time', label: 'Estimated arrival time', type: 'time', value: r?.arrival_time || '' }),
-      field({ name: 'vehicle_plate', label: 'Car plate number (if parking)', value: r?.vehicle_plate || '', maxlength: 20, placeholder: 'e.g. ABC 1234' })),
-    field({ name: 'notes', label: 'Anything we should know?', type: 'textarea', value: r?.notes || '', maxlength: 1000, placeholder: 'Special requests, late arrival, celebrating something…' }),
-    h('h2', null, 'Valid ID'),
+      field({ name: 'arrival_time', label: t('Estimated arrival time'), type: 'time', value: r?.arrival_time || '' }),
+      field({ name: 'vehicle_plate', label: t('Car plate number (if parking)'), value: r?.vehicle_plate || '', maxlength: 20, placeholder: 'e.g. ABC 1234' })),
+    field({ name: 'notes', label: t('Anything we should know?'), type: 'textarea', value: r?.notes || '', maxlength: 1000, placeholder: t('Special requests, late arrival, celebrating something…') }),
+    h('h2', null, t('Valid ID')),
     h('div', { class: 'field' },
-      h('p', { class: 'hint' }, `A photo of a valid government ID for each adult (driver's license, passport, UMID, PhilID…). ${r?.id_count ? 'Photos you already sent are kept; add more only if needed.' : ''}`),
+      h('p', { class: 'hint' }, `${t("A photo of a valid government ID for each adult (driver's license, passport, UMID, PhilID…). ")}${r?.id_count ? t('Photos you already sent are kept; add more only if needed.') : ''}`),
       photos, progress),
     h('div', { class: 'field', dataset: { field: 'consent' } },
       h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'consent', checked: Boolean(r) }),
-        h('span', null, `I agree that ${s.workspace_name} may use these details and ID photos to register our stay with the building, as required under the Data Privacy Act. BalayHub deletes the ID photos ${s.id_retention_days} days after check-out; copies given to the building follow the building's own rules.`)),
+        h('span', null, t("I agree that {host} may use these details and ID photos to register our stay with the building, as required under the Data Privacy Act. BalayHub deletes the ID photos {days} days after check-out; copies given to the building follow the building's own rules.", { host: s.workspace_name, days: s.id_retention_days }))),
       h('div', { class: 'error', role: 'alert' })),
     submit);
 
@@ -120,11 +122,11 @@ export async function guestCheckinView(el, { params }) {
       guests: [...others.querySelectorAll('input')].map((i) => i.value.trim()).filter(Boolean),
     };
     try {
-      submit.textContent = 'Saving…';
+      submit.textContent = t('Saving…');
       await post(`/public/checkin/${encodeURIComponent(token)}`, payload);
       const files = [...photos.files].filter((f) => !uploaded.has(f));
       for (const [i, f] of files.entries()) {
-        progress.textContent = `Uploading ID photo ${i + 1} of ${files.length}…`;
+        progress.textContent = t('Uploading ID photo {i} of {n}…', { i: i + 1, n: files.length });
         const blob = await shrinkImage(f);
         await api('POST', `/public/checkin/${encodeURIComponent(token)}/id`, undefined, { rawBody: blob, headers: { 'Content-Type': blob.type || 'image/jpeg' } });
         uploaded.add(f);
@@ -132,23 +134,23 @@ export async function guestCheckinView(el, { params }) {
       progress.textContent = '';
       el.replaceChildren(page(header, h('div', { class: 'card gc__done' },
         h('div', { class: 'gc__tick', 'aria-hidden': 'true' }, '✓'),
-        h('h2', null, 'Thank you! You\'re registered.'),
-        h('p', { class: 'muted' }, `${s.workspace_name} has received your details. You'll get your check-in instructions before arrival.`),
-        h('p', null, h('button', { class: 'linkbtn', onclick: () => guestCheckinView(el, { params }) }, 'Review or change my answers')))));
+        h('h2', null, t("Thank you! You're registered.")),
+        h('p', { class: 'muted' }, t("{host} has received your details. You'll get your check-in instructions before arrival.", { host: s.workspace_name })),
+        h('p', null, h('button', { class: 'linkbtn', onclick: () => guestCheckinView(el, { params }) }, t('Review or change my answers'))))));
     } catch (err) {
       progress.textContent = '';
-      const msg = err instanceof ApiError ? err.message : (err.message || 'Something went wrong. Please try again.');
-      formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, err.offline ? "You're offline. Your answers are still here; try again when you're connected." : msg));
+      const msg = err instanceof ApiError ? err.message : (err.message || t('Something went wrong. Please try again.'));
+      formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, err.offline ? t("You're offline. Your answers are still here; try again when you're connected.") : msg));
       if (err.fields) showErrors(form, err.fields);
       formError.scrollIntoView?.({ block: 'nearest' });
     } finally {
       busy = false;
       submit.disabled = false;
-      submit.textContent = r ? 'Save changes' : 'Submit registration';
+      submit.textContent = r ? t('Save changes') : t('Submit registration');
     }
   });
 
-  el.replaceChildren(page(header, form, h('p', { class: 'gc__foot muted small' }, 'Powered by BalayHub · ', h('a', { href: '#/privacy' }, 'Privacy notice'))));
+  el.replaceChildren(page(header, form, h('p', { class: 'gc__foot muted small' }, t('Powered by BalayHub · '), h('a', { href: '#/privacy' }, t('Privacy notice')))));
 }
 
 // ---------------------------------------------------------------- host: card on the reservation page
