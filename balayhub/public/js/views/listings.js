@@ -11,11 +11,61 @@ import { CHANNEL_LABEL, SOURCE_LABEL, addDays } from './reservations.js';
 const UNIT_TYPES = ['studio', 'apartment', 'room', 'house', 'other'];
 const PROPERTY_TYPES = ['condominium', 'apartment', 'house', 'boarding_house', 'other'];
 
-function listingFields(u = {}) {
+// Tags: type and press Enter or comma. Lowercase, up to 10, up to 30 characters each.
+const MAX_TAGS = 10;
+function tagsField(initial = []) {
+  const tags = [];
+  const hidden = h('input', { type: 'hidden', name: 'tags', value: '' });
+  const chips = h('span', { class: 'tag-chips' });
+  const input = h('input', { class: 'input', type: 'text', id: `tg-${Math.random().toString(36).slice(2, 7)}`, maxlength: 31, placeholder: 'e.g. beachfront, pet-friendly', autocomplete: 'off', enterkeyhint: 'done' });
+  const msg = h('p', { class: 'muted small', 'aria-live': 'polite' }, 'Press Enter or comma to add. Up to 10 tags, used to filter listings and for bulk changes.');
+  const paint = () => {
+    hidden.value = tags.join(',');
+    hidden.dispatchEvent(new Event('input', { bubbles: true }));
+    chips.replaceChildren(tags.map((t) => h('span', { class: 'tag-chip' }, t,
+      h('button', { type: 'button', class: 'tag-chip__x', 'aria-label': `Remove tag ${t}`, onclick: () => { tags.splice(tags.indexOf(t), 1); paint(); input.focus(); } }, '×'))));
+  };
+  const add = (raw) => {
+    const t = String(raw).trim().toLowerCase().replace(/\s+/g, '-').slice(0, 30);
+    if (!t) return;
+    if (tags.includes(t)) { msg.textContent = `"${t}" is already added.`; return; }
+    if (tags.length >= MAX_TAGS) { msg.textContent = `You can add up to ${MAX_TAGS} tags.`; return; }
+    tags.push(t); paint();
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); add(input.value); input.value = ''; }
+    else if (e.key === 'Backspace' && !input.value && tags.length) { tags.pop(); paint(); }
+  });
+  input.addEventListener('input', () => { if (input.value.includes(',')) { input.value.split(',').forEach(add); input.value = ''; } });
+  input.addEventListener('blur', () => { add(input.value); input.value = ''; });
+  (Array.isArray(initial) ? initial : []).forEach(add);
+  const id = input.id;
+  return h('div', { class: 'field', dataset: { field: 'tags' } }, h('label', { for: id }, 'Tags'), chips, input, msg, hidden, h('div', { class: 'error', role: 'alert' }));
+}
+
+async function roomTypeNames() {
+  try { return [...new Set((await get('/room-types')).room_types.map((r) => r.room_type).filter(Boolean))]; } catch { return []; }
+}
+
+// The server wants real lists and numbers, not form strings.
+function prepUnit(d) {
+  return { ...d, tags: d.tags ? d.tags.split(',').filter(Boolean) : [], min_price: d.min_price === '' ? null : d.min_price, room_type: d.room_type?.trim() || null };
+}
+
+function listingFields(u = {}, roomTypes = []) {
   return [
     h('div', { class: 'form-row form-row--2' },
       field({ name: 'unit_name', label: 'Listing name', required: true, value: u.unit_name, placeholder: 'e.g. Tower 1 - 1201 or Studio A', maxlength: 60 }),
       field({ name: 'unit_type', label: 'Type', type: 'select', required: true, value: u.unit_type || 'studio', placeholderOption: false, options: options(UNIT_TYPES) })),
+    h('div', { class: 'form-row form-row--2' },
+      (() => {
+        const f = field({ name: 'room_type', label: 'Room type', value: u.room_type, maxlength: 40, placeholder: 'e.g. Studio, 1-bedroom', hint: 'Lets you pick "any free room of this type" on a booking.' });
+        const inp = f.querySelector('input');
+        const dl = h('datalist', { id: `rt-${Math.random().toString(36).slice(2, 7)}` }, roomTypes.map((t) => h('option', { value: t })));
+        inp.setAttribute('list', dl.id); f.append(dl);
+        return f;
+      })(),
+      tagsField(u.tags)),
     h('div', { class: 'form-row form-row--2' },
       field({ name: 'nightly_rate', label: 'Base nightly rate', type: 'money', required: true, value: u.nightly_rate, placeholder: '2,500' }),
       field({ name: 'cleaning_fee', label: 'Cleaning fee per stay', type: 'money', value: u.cleaning_fee, placeholder: '500' })),
@@ -35,6 +85,11 @@ function listingFields(u = {}) {
     h('div', { class: 'form-row form-row--2' },
       field({ name: 'weekly_discount', label: 'Weekly discount % (7+ nights)', type: 'number', min: 0, max: 50, value: u.weekly_discount || 0, inputmode: 'numeric' }),
       field({ name: 'monthly_discount', label: 'Monthly discount % (28+ nights)', type: 'number', min: 0, max: 70, value: u.monthly_discount || 0, inputmode: 'numeric' })),
+    h('div', { class: 'form-row form-row--2' },
+      field({ name: 'fortnight_discount', label: '14+ night discount %', type: 'number', min: 0, max: 90, value: u.fortnight_discount || 0, inputmode: 'numeric',
+        hint: 'Between the weekly and monthly discounts.' }),
+      field({ name: 'min_price', label: 'Lowest price per night (optional)', type: 'money', value: u.min_price, placeholder: 'No floor',
+        hint: 'Rules and discounts never take a night below this.' })),
     h('hr', { class: 'divider' }),
     h('h3', { class: 'subhead' }, 'Guest info (used in messages to guests)'),
     h('div', { class: 'form-row form-row--2' },
@@ -67,7 +122,7 @@ function listingFields(u = {}) {
 }
 
 async function addListingModal(onSaved) {
-  const { properties } = await get('/properties');
+  const [{ properties }, roomTypes] = await Promise.all([get('/properties'), roomTypeNames()]);
   const isOwner = state.user.role === 'owner';
   const newProp = h('div', { class: 'form', hidden: properties.length > 0 },
     field({ name: 'property_name', label: 'Building / property name', placeholder: 'e.g. Azure Urban Residences', maxlength: 120 }),
@@ -84,8 +139,9 @@ async function addListingModal(onSaved) {
   if (!properties.length && !isOwner) { toast('Ask the workspace owner to add a property first.', 'error'); return; }
   formModal({
     title: 'Add listing', submitText: 'Save listing', draftKey: 'listing-new',
-    fields: [propSelect, newProp, h('hr', { class: 'divider' }), ...listingFields()],
-    onSubmit: async (d) => {
+    fields: [propSelect, newProp, h('hr', { class: 'divider' }), ...listingFields({}, roomTypes)],
+    onSubmit: async (raw) => {
+      const d = prepUnit(raw);
       let propertyId = d.property_id;
       if (!propertyId || propertyId === '__new') {
         const res = await post('/properties', { property_name: d.property_name, property_type: d.property_type, address: d.address, city: d.city, province: d.province });
@@ -300,6 +356,7 @@ function matchListing(l, f, bookable) {
   if (f.cleaning && l.cleaning_status !== f.cleaning) return false;
   if (f.property_id && l.property_id !== f.property_id) return false;
   if (f.unit_type && l.unit_type !== f.unit_type) return false;
+  if (f.tag && Array.isArray(l.tags) && !l.tags.includes(f.tag)) return false;
   if (f.occupancy === 'vacant' && l.current_booking_id) return false;
   if (f.occupancy === 'occupied' && !l.current_booking_id) return false;
   if (f.occupancy === 'arriving' && !(l.next_check_in && l.next_check_in <= addDays(todayManila(), 7))) return false;
@@ -314,14 +371,19 @@ function matchListing(l, f, bookable) {
 
 export async function listingsView(el, { query }) {
   const canManage = state.user.role !== 'staff';
-  const defaults = { q: '', cleaning: '', property_id: '', unit_type: '', occupancy: '', channels: '', direct: '', min_guests: '', sort: '' };
+  const defaults = { q: '', cleaning: '', property_id: '', tag: '', unit_type: '', occupancy: '', channels: '', direct: '', min_guests: '', sort: '' };
   const filters = initFilters('listings', query, defaults);
   if (!['', 'dirty', 'clean'].includes(filters.cleaning)) filters.cleaning = '';
-  const { properties } = await get('/properties');
+  const [{ properties }, tagList] = await Promise.all([get('/properties'), get('/tags').then((r) => r.tags).catch(() => [])]);
   const box = h('div');
   async function load() {
     history.replaceState(null, '', `#/listings${qs(changed(filters, defaults))}`);
-    const { listings } = await get('/listings');
+    const { listings } = await get(`/listings${qs({ tag: filters.tag })}`);
+    // Calendar sync problems per listing (owners and managers; the page works without them).
+    const problems = new Map();
+    if (['owner', 'manager'].includes(state.user.role)) {
+      try { for (const p of (await get('/sync-health')).problems) problems.set(p.unit_id, [...(problems.get(p.unit_id) || []), p]); } catch { /* skip warnings */ }
+    }
     // Which listings show on the booking page (owners and managers only).
     const bookable = new Set(canManage ? listings.filter((l) => l.bookable_online).map((l) => l.unit_id) : []);
     const others = { ...filters, cleaning: '' };
@@ -345,8 +407,14 @@ export async function listingsView(el, { query }) {
       : emptyState({ title: 'No results found', text: 'Try removing a filter.' });
     box.replaceChildren(tabs, shown.length ? h('div', { class: 'listing-grid' }, shown.map((l) => h('article', { class: `card listing${query.focus === l.unit_id ? ' is-focus' : ''}` },
       h('div', { class: 'card__head' },
-        h('div', null, h('h2', null, l.unit_name), h('p', { class: 'muted small' }, `${l.property_name}${l.city ? ` · ${l.city}` : ''}`)),
+        h('div', null, h('h2', null, l.unit_name), h('p', { class: 'muted small' }, `${l.property_name}${l.city ? ` · ${l.city}` : ''}${l.room_type ? ` · ${l.room_type}` : ''}`),
+          l.tags?.length > 0 && h('div', { class: 'tag-chips', role: 'list', 'aria-label': 'Tags' }, l.tags.map((t) => h('span', { class: 'tag-chip', role: 'listitem' }, t)))),
         h('span', { class: `badge badge--${l.cleaning_status === 'dirty' ? 'overdue' : 'paid'}` }, l.cleaning_status === 'dirty' ? '🧹 Dirty' : '✓ Clean')),
+      problems.has(l.unit_id) && h('div', { class: 'alert alert--warn sync-alert', role: 'status' },
+        h('strong', null, 'Calendar sync problem'),
+        h('ul', { class: 'sync-alert__list' }, problems.get(l.unit_id).map((p) => h('li', null,
+          `${CHANNEL_LABEL[p.channel]}: ${p.message}${p.kind === 'overlap' ? ` (${fmtDate(p.check_in)} to ${fmtDate(p.check_out)})` : ''}`))),
+        canManage && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => channelsModal(l, load) }, 'Open channels')),
       h('dl', { class: 'dl' },
         h('dt', null, 'Nightly rate'), h('dd', null, l.nightly_rate ? peso(l.nightly_rate) : '—'),
         h('dt', null, 'Cleaning fee'), h('dd', null, peso(l.cleaning_fee)),
@@ -366,8 +434,9 @@ export async function listingsView(el, { query }) {
         canManage && h('button', { class: 'btn btn--ghost btn--sm', onclick: async () => {
           const { units } = await get(`/properties/${l.property_id}`).then((r) => ({ units: r.units }));
           const unit = units.find((u) => u.unit_id === l.unit_id);
-          formModal({ title: `Edit ${l.unit_name}`, submitText: 'Save changes', fields: listingFields(unit),
-            onSubmit: async (d) => { await patch(`/units/${l.unit_id}`, d); toast('Listing updated.'); load(); } });
+          const roomTypes = await roomTypeNames();
+          formModal({ title: `Edit ${l.unit_name}`, submitText: 'Save changes', fields: listingFields({ ...unit, tags: unit.tags }, roomTypes),
+            onSubmit: async (d) => { await patch(`/units/${l.unit_id}`, prepUnit(d)); toast('Listing updated.'); load(); } });
         } }, 'Edit'),
         h('a', { class: 'btn btn--ghost btn--sm', href: `#/reservations?q=${encodeURIComponent(l.unit_name)}&view=all` }, 'Bookings')))))
       : h('div', { class: 'card' }, empty));
@@ -377,6 +446,7 @@ export async function listingsView(el, { query }) {
     search: { placeholder: 'Search listing, building or city' },
     quick: [
       properties.length > 1 && { name: 'property_id', label: 'Property', all: 'All properties', options: properties.map((p) => [p.property_id, p.property_name]) },
+      tagList.length > 0 && { name: 'tag', label: 'Tag', all: 'All tags', options: tagList.map((t) => [t.tag, `${t.tag} (${t.count})`]) },
       { name: 'occupancy', label: 'Occupancy', all: 'Any occupancy', options: [['vacant', 'Vacant tonight'], ['occupied', 'Guest staying now'], ['arriving', 'Arrival in the next 7 days'], ['no_next', 'No upcoming booking']] },
     ].filter(Boolean),
     more: [

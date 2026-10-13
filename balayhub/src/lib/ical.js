@@ -200,6 +200,10 @@ async function syncFeed(feedId, { fetcher = fetchText } = {}) {
     await client.query('BEGIN');
     const { rows: existing } = await client.query('SELECT * FROM bookings WHERE ical_feed_id = $1', [feedId]);
     const byUid = new Map(existing.map((b) => [b.external_uid, b]));
+    const { rows: priorConflicts } = await client.query('SELECT external_uid, resolved_at FROM ical_conflicts WHERE feed_id = $1', [feedId]);
+    const openBefore = new Set(priorConflicts.filter((c) => !c.resolved_at).map((c) => c.external_uid));
+    const overlaps = new Map(); // uid -> event skipped because its dates are taken in BalayHub
+    const freshOverlaps = []; // overlaps that are new, or back after being resolved: alerted once
     const seen = new Set();
     for (const ev of events) {
       if (seen.has(ev.uid)) continue; // repeated UID (recurrence overrides): keep the first
@@ -234,9 +238,20 @@ async function syncFeed(feedId, { fetcher = fetchText } = {}) {
         await client.query('ROLLBACK TO SAVEPOINT ev');
         if (['bookings_no_overlap', 'bookings_code_uq', 'bookings_feed_uid_uq'].includes(err.constraint)) {
           counts.conflicts.push(`${ev.start} to ${ev.end}`);
+          if (err.constraint === 'bookings_no_overlap') {
+            const fresh = !openBefore.has(ev.uid);
+            overlaps.set(ev.uid, ev);
+            await recordOverlap(client, feed, ev, fresh);
+            if (fresh) freshOverlaps.push(ev);
+          }
         } else throw err;
       }
     }
+    // Overlaps the channel no longer reports (or that no longer clash) are resolved.
+    await client.query(
+      `UPDATE ical_conflicts SET resolved_at = now()
+        WHERE feed_id = $1 AND resolved_at IS NULL AND external_uid <> ALL($2::text[])`,
+      [feedId, [...overlaps.keys()]]);
     // Events that disappeared from the channel were cancelled or unblocked there.
     for (const b of existing) {
       if (seen.has(b.external_uid) || b.status !== 'confirmed' || b.check_out < today) continue;
@@ -252,12 +267,15 @@ async function syncFeed(feedId, { fetcher = fetchText } = {}) {
     const conflictNote = counts.conflicts.length
       ? ` ${counts.conflicts.length} stay(s) overlap bookings already in BalayHub and were skipped: ${counts.conflicts.slice(0, 5).join(', ')}.`
       : '';
+    // A message starting "Synced:" with status 'error' means the sync worked but skipped overlaps.
+    // synchealth.js relies on that prefix to tell overlaps apart from a failing feed.
     const message = `Synced: ${counts.added} new, ${counts.updated} changed, ${counts.removed} removed.${conflictNote}`;
     await client.query(
       `UPDATE ical_feeds SET last_synced_at = now(), last_status = $2, last_message = $3 WHERE feed_id = $1`,
       [feedId, counts.conflicts.length ? 'error' : 'ok', message]);
     await client.query('COMMIT');
     if (newStays.length) notifyNewStays(feed, label, newStays).catch(() => {});
+    if (freshOverlaps.length) alertOverlaps(feed, label, freshOverlaps).catch(() => {});
     return { ok: true, message, ...counts };
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
@@ -270,16 +288,44 @@ async function syncFeed(feedId, { fetcher = fetchText } = {}) {
   }
 }
 
+const fmtDay = (dd) => new Date(`${dd}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+
 async function notifyNewStays(feed, label, stays) {
   const { notify } = require('./push');
   const { rows: [u] } = await pool.query('SELECT unit_name, property_id FROM units WHERE unit_id = $1', [feed.unit_id]);
-  const fmt = (dd) => new Date(`${dd}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', timeZone: 'UTC' });
   await notify(feed.organization_id, 'new_booking', {
     title: stays.length === 1 ? `New ${label} booking` : `${stays.length} new ${label} bookings`,
-    body: stays.length === 1 ? `${u.unit_name}: ${fmt(stays[0].start)} – ${fmt(stays[0].end)}` : `${u.unit_name}: ${stays.map((x) => fmt(x.start)).join(', ')}`,
+    body: stays.length === 1 ? `${u.unit_name}: ${fmtDay(stays[0].start)} – ${fmtDay(stays[0].end)}` : `${u.unit_name}: ${stays.map((x) => fmtDay(x.start)).join(', ')}`,
     url: '/#/reservations?view=recent',
     propertyId: u.property_id,
   });
+}
+
+// An event skipped because its dates are taken in BalayHub (D-73). `fresh` marks a new problem, which gets an alert.
+async function recordOverlap(client, feed, ev, fresh) {
+  await client.query(
+    `INSERT INTO ical_conflicts (organization_id, feed_id, unit_id, external_uid, check_in, check_out, alerted_at)
+     VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $7::boolean THEN now() END)
+     ON CONFLICT (feed_id, external_uid) DO UPDATE SET check_in = EXCLUDED.check_in, check_out = EXCLUDED.check_out,
+       last_seen_at = now(), resolved_at = NULL,
+       alerted_at = CASE WHEN $7::boolean THEN now() ELSE ical_conflicts.alerted_at END`,
+    [feed.organization_id, feed.feed_id, feed.unit_id, ev.uid, ev.start, ev.end, fresh]);
+}
+
+// One alert per new overlap, to the owners and the managers of the listing's property.
+async function alertOverlaps(feed, label, events) {
+  const { alertPeople } = require('./synchealth'); // lazy: synchealth.js requires this file
+  const { rows: [u] } = await pool.query(
+    `SELECT u.unit_name, u.property_id FROM units u JOIN properties p ON p.property_id = u.property_id
+      WHERE u.unit_id = $1 AND u.status = 'active' AND p.status = 'active'`, [feed.unit_id]);
+  if (!u) return; // archived listing or property: the overlap is still recorded, just not alerted
+  for (const ev of events) {
+    await alertPeople(feed.organization_id, u.property_id, {
+      title: `${label} booking overlaps dates in BalayHub`,
+      body: `${u.unit_name}: ${fmtDay(ev.start)} to ${fmtDay(ev.end)} was not added, because those dates are already taken. Check both bookings.`,
+      url: '/#/listings',
+    });
+  }
 }
 
 async function syncAllFeeds() {
@@ -289,4 +335,4 @@ async function syncAllFeeds() {
   }
 }
 
-module.exports = { guardedLookup, fetchText, buildCalendar, newFeedToken, parseEvents, classify, validateFeedUrl, isPublicAddress, syncFeed, syncAllFeeds, addDays, randomCode };
+module.exports = { guardedLookup, fetchText, buildCalendar, newFeedToken, parseEvents, classify, validateFeedUrl, isPublicAddress, syncFeed, syncAllFeeds, addDays, randomCode, CHANNEL_LABEL };

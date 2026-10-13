@@ -1,7 +1,7 @@
 // Multi-calendar: listings down the side, dates across, reservations as bars,
 // nightly prices on open nights. Tap an open night to book, block or reprice.
 
-import { get, post, api, qs } from '../api.js';
+import { get, post, patch, api, qs } from '../api.js';
 import { h, icon, peso, fmtDate, field, formModal, openModal, confirmDialog, toast, emptyState, label } from '../ui.js';
 import { initFilters, filterBar, changed } from '../filters.js';
 import { state, navigate } from '../app.js';
@@ -16,19 +16,36 @@ export async function calendarView(el, { query }) {
   const canManage = state.user.role !== 'staff';
   const view = { start: query.start || null, days: Number(query.days) === 30 ? 30 : 14 };
   // Filters only hide rows (client-side); the grid itself is unchanged.
-  const defaults = { q: '', property_id: '', unit_type: '', cleaning: '', avail: '' };
+  const defaults = { q: '', property_id: '', unit_type: '', cleaning: '', avail: '', tag: '' };
   const filters = initFilters('calendar', query, defaults);
   const { listings: meta } = await get('/listings');
   const typeOf = new Map(meta.map((l) => [l.unit_id, l.unit_type]));
   const properties = [...new Map(meta.map((l) => [l.property_id, l.property_name])).entries()];
   const types = [...new Set(meta.map((l) => l.unit_type))];
   let lastData = null;
+  // Phase 5: tags (owners and managers), sync warnings per listing, and the bar being dragged.
+  let tags = [];
+  if (canManage) { try { ({ tags } = await get('/tags')); } catch { tags = []; } }
+  let tagUnits = null;
+  let problems = new Map();
+  let dragging = null;
+  async function loadTagUnits() {
+    tagUnits = null;
+    if (!filters.tag) return;
+    try { tagUnits = new Set((await get(`/listings${qs({ tag: filters.tag })}`)).listings.map((l) => l.unit_id)); } catch (err) { toast(err.message, 'error'); }
+  }
+  async function loadProblems() {
+    problems = new Map();
+    if (!canManage) return;
+    try { for (const p of (await get('/sync-health')).problems) problems.set(p.unit_id, [...(problems.get(p.unit_id) || []), p]); } catch { /* the grid works without it */ }
+  }
+  await loadTagUnits();
   const grid = h('div', { class: 'cal-scroll' });
   const title = h('strong', { class: 'cal-title' });
   const dateInput = h('input', { class: 'input input--sm', type: 'date', 'aria-label': 'Go to date' });
 
   async function load() {
-    const data = await get(`/calendar${qs({ start: view.start, days: view.days })}`);
+    const [data] = await Promise.all([get(`/calendar${qs({ start: view.start, days: view.days })}`), loadProblems()]);
     view.start = data.start;
     lastData = data;
     title.textContent = monthName(data.start);
@@ -49,6 +66,7 @@ export async function calendarView(el, { query }) {
     const q = filters.q.toLowerCase();
     if (q && !`${l.unit_name} ${l.property_name}`.toLowerCase().includes(q)) return false;
     if (filters.property_id && l.property_id !== filters.property_id) return false;
+    if (filters.tag && tagUnits && !tagUnits.has(l.unit_id)) return false;
     if (filters.unit_type && typeOf.get(l.unit_id) !== filters.unit_type) return false;
     if (filters.cleaning === 'dirty' && l.cleaning_status !== 'dirty') return false;
     if (filters.cleaning === 'clean' && l.cleaning_status === 'dirty') return false;
@@ -96,24 +114,47 @@ export async function calendarView(el, { query }) {
         const to = Math.min(endIdx + 0.5, data.days);
         if (to <= from) return null;
         const isBlock = b.kind === 'block';
+        const locked = !isBlock && b.from_channel;
         return h('button', {
           type: 'button',
+          draggable: canManage && !isBlock ? 'true' : null,
+          ondragstart: (e) => {
+            if (locked) { e.preventDefault(); toast(`This stay comes from ${CHANNEL_LABEL[b.channel] || 'a channel'}, so it can't be moved here. Change it on the channel.`); return; }
+            dragging = b; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', b.booking_id);
+          },
+          ondragend: () => { dragging = null; grid.querySelectorAll('.is-drop').forEach((x) => x.classList.remove('is-drop')); },
           class: `cal-bar cal-bar--${isBlock ? 'block' : b.channel}${startIdx + 0.5 < 0 ? ' cut-left' : ''}${endIdx + 0.5 > data.days ? ' cut-right' : ''}`,
           style: { left: `calc(${from} * var(--cal-col))`, width: `calc(${to - from} * var(--cal-col) - 3px)` },
-          title: isBlock ? `Blocked: ${b.block_reason || ''}` : `${b.guest_name} · ${b.check_in} → ${b.check_out}`,
+          title: isBlock ? `Blocked: ${b.block_reason || ''}` : `${b.guest_name} · ${b.check_in} → ${b.check_out}${locked ? ` · From ${CHANNEL_LABEL[b.channel] || 'a channel'}: change it there` : canManage ? ' · Drag to another listing to move it' : ''}`,
           onclick: (e) => { e.stopPropagation(); if (isBlock) blockMenu(b); else navigate(`#/reservations/${b.booking_id}`); },
         }, isBlock ? `🔒 ${b.block_reason || 'Blocked'}` : `${b.guest_name || 'Guest'}${b.num_guests ? ` · ${b.num_guests}` : ''}`);
       });
-      table.append(h('div', { class: 'cal-row' },
+      const warn = problems.get(l.unit_id);
+      const row = h('div', { class: 'cal-row' },
         h('div', { class: 'cal-side' },
           h('a', { href: `#/listings?focus=${l.unit_id}`, class: 'cal-name' }, l.unit_name),
           h('span', { class: 'cal-prop' }, l.property_name),
-          h('span', { class: `badge badge--${l.cleaning_status === 'dirty' ? 'overdue' : 'paid'}` }, l.cleaning_status === 'dirty' ? 'Dirty' : 'Clean')),
-        h('div', { class: 'cal-days cal-days--body' }, cells, bars)));
+          h('span', { class: `badge badge--${l.cleaning_status === 'dirty' ? 'overdue' : 'paid'}` }, l.cleaning_status === 'dirty' ? 'Dirty' : 'Clean'),
+          warn && h('a', { class: 'badge badge--partial cal-warn', href: `#/listings?focus=${l.unit_id}`, title: warn.map((p) => p.message).join(' '), 'aria-label': `Sync problem on ${l.unit_name}: ${warn.map((p) => p.message).join(' ')}` }, `⚠ ${warn.length > 1 ? `${warn.length} sync problems` : 'Sync problem'}`)),
+        h('div', { class: 'cal-days cal-days--body' }, cells, bars));
+      if (canManage) {
+        const ok = () => dragging && dragging.unit_id !== l.unit_id;
+        row.addEventListener('dragover', (e) => { if (ok()) { e.preventDefault(); row.classList.add('is-drop'); } });
+        row.addEventListener('dragleave', (e) => { if (!row.contains(e.relatedTarget)) row.classList.remove('is-drop'); });
+        row.addEventListener('drop', (e) => { e.preventDefault(); row.classList.remove('is-drop'); if (ok()) moveBar(dragging, l); });
+      }
+      table.append(row);
     }
     grid.replaceChildren(listings.length ? table : emptyState({ title: 'No results found', text: 'No listing matches these filters. Try removing a filter.' }));
     const todayCell = grid.querySelector('.cal-day-head.is-today');
     if (todayCell) grid.scrollLeft = Math.max(0, todayCell.offsetLeft - 220);
+  }
+
+  async function moveBar(b, to) {
+    const from = lastData.listings.find((x) => x.unit_id === b.unit_id);
+    if (!await confirmDialog({ title: 'Move this reservation?', text: `Move ${b.guest_name || 'this guest'} from ${from?.unit_name || 'this listing'} to ${to.unit_name}? The price stays the same.`, confirmText: 'Move reservation' })) return;
+    try { await patch(`/reservations/${b.booking_id}`, { unit_id: to.unit_id }); toast('Reservation moved.'); } catch (err) { toast(err.message, 'error'); }
+    load();
   }
 
   function cellMenu(listing, date, price, rule) {
@@ -176,10 +217,11 @@ export async function calendarView(el, { query }) {
         h('a', { class: 'btn btn--secondary', href: '#/pricing' }, '₱ Pricing rules'),
         h('button', { class: 'btn btn--primary', onclick: () => newReservationModal({ onSaved: load }) }, icon('plus'), 'New reservation'))),
     filterBar({
-      key: 'calendar', values: filters, defaults, onChange: () => { if (lastData) render(lastData); },
+      key: 'calendar', values: filters, defaults, onChange: async () => { await loadTagUnits(); if (lastData) render(lastData); },
       search: { placeholder: 'Search listings' },
       quick: [
         properties.length > 1 && { name: 'property_id', label: 'Property', all: 'All properties', options: properties },
+        tags.length > 0 && { name: 'tag', label: 'Tag', all: 'All tags', options: tags.map((t) => [t.tag, `${t.tag} (${t.count})`]) },
         { name: 'avail', label: 'Availability', all: 'Any availability', options: [['open', 'Has open nights'], ['empty', 'No bookings in these dates'], ['booked', 'Has bookings in these dates']] },
       ].filter(Boolean),
       more: [

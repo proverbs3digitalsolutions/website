@@ -29,7 +29,7 @@ async function exportOrganization(orgId) {
     'maintenance_requests', 'files', 'billing_payments', 'invitations', 'audit_logs', 'direct_checkouts', 'balance_checkouts', 'seasons', 'unit_owners', 'guest_reviews', 'discount_codes', 'gate_passes', 'stay_deposits', 'support_tickets', 'booking_charges', 'booking_refunds', 'payment_proofs',
     'owner_statements', 'owner_payouts', 'owner_reserve_entries',
     'cleaner_rates', 'cleaning_inspections', 'damage_reports', 'lost_found_items', 'supplies', 'supply_movements', 'maintenance_schedules',
-    'listing_addons']) {
+    'listing_addons', 'pricing_rules', 'booking_groups', 'daily_closes', 'ical_conflicts']) {
     out[t] = await byOrg(t);
   }
   // Phase 4: the guidebook without the encrypted door code; quotes (public_token is stripped by SECRET_KEYS).
@@ -50,6 +50,7 @@ async function exportOrganization(orgId) {
 // Tables purgeOrganization() clears. test/account.test.js fails if a new table
 // is added to the schema without being listed here.
 const PURGED_TABLES = [
+  'ical_conflicts', 'daily_closes', 'booking_groups', 'pricing_rules',
   'unit_guides', 'listing_addons', 'booking_quotes',
   'owner_sessions', 'owner_login_tokens', 'owner_reserve_entries', 'owner_payouts', 'owner_statements',
   'supply_movements', 'supplies', 'cleaning_inspections', 'damage_reports', 'lost_found_items', 'cleaner_rates', 'maintenance_schedules',
@@ -69,6 +70,9 @@ async function purgeOrganization(orgId) {
     await run('DELETE FROM support_tickets WHERE organization_id = $1'); // messages and events cascade
     await run('DELETE FROM push_subscriptions WHERE organization_id = $1');
     await run('DELETE FROM seasons WHERE organization_id = $1');
+    await run('DELETE FROM pricing_rules WHERE organization_id = $1'); // points at units and users
+    await run('DELETE FROM daily_closes WHERE organization_id = $1'); // points at users
+    await run('DELETE FROM ical_conflicts WHERE organization_id = $1'); // points at feeds and units
     await run('DELETE FROM balance_checkouts WHERE organization_id = $1');
     await run('DELETE FROM direct_checkouts WHERE organization_id = $1'); // points at quotes and discount codes
     await run('DELETE FROM booking_quotes WHERE organization_id = $1'); // points at bookings and units
@@ -100,7 +104,8 @@ async function purgeOrganization(orgId) {
     for (const t of ['messages', 'conversations', 'guest_registrations', 'files', 'cleaning_tasks', 'booking_payments', 'billing_payments', 'receipt_counters']) {
       await run(`DELETE FROM ${t} WHERE organization_id = $1`);
     }
-    await run('DELETE FROM bookings WHERE organization_id = $1');
+    await run('DELETE FROM bookings WHERE organization_id = $1'); // bookings point at groups
+    await run('DELETE FROM booking_groups WHERE organization_id = $1'); // groups point at guests
     await run('DELETE FROM ical_feeds WHERE organization_id = $1');
     await run('DELETE FROM guests WHERE organization_id = $1');
     await run(`DELETE FROM nightly_rates WHERE unit_id IN (${units})`);

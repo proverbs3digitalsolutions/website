@@ -14,6 +14,8 @@ import { privacyView } from './views/privacy.js';
 import { homeView } from './views/home.js';
 import { calendarView } from './views/calendar.js';
 import { reservationsView, reservationDetailView, receiptView } from './views/reservations.js';
+import { groupsView, groupDetailView } from './views/groups.js';
+import { dailyCloseView } from './views/dailyclose.js';
 import { listingsView, guestsView, guestDetailView } from './views/listings.js';
 import { inboxView, inboxSettingsView, unreadCount } from './views/inbox.js';
 import { housekeepingView, housekeepingDetailView } from './views/housekeeping.js';
@@ -107,6 +109,9 @@ const routes = [
   ['/pnl', pnlView, APP],
   ['/reservations', reservationsView, APP],
   ['/reservations/:id', reservationDetailView, APP],
+  ['/groups', groupsView, APP],
+  ['/groups/:id', groupDetailView, APP],
+  ['/daily-close', dailyCloseView, APP],
   ['/listings', listingsView, APP],
   ['/guests', guestsView, APP],
   ['/guests/:id', guestDetailView, APP],
@@ -138,6 +143,8 @@ const NAV_SHORT = [
   ['/inbox', 'Inbox', 'inbox'],
   ['/calendar', 'Calendar', 'calendar'],
   ['/reservations', 'Reservations', 'bed'],
+  ['/groups', 'Group bookings', 'users'],
+  ['/daily-close', 'Daily close', 'file'],
   ['/housekeeping', 'Housekeeping', 'sparkle'],
   ['/listings', 'Listings', 'building'],
   ['/guests', 'Guests', 'users'],
@@ -165,6 +172,8 @@ const NAV_BOTH = [
   ['/inbox', 'Inbox', 'inbox'],
   ['/calendar', 'Calendar', 'calendar'],
   ['/reservations', 'Reservations', 'bed'],
+  ['/groups', 'Group bookings', 'users'],
+  ['/daily-close', 'Daily close', 'file'],
   ['/housekeeping', 'Housekeeping', 'sparkle'],
   ['/listings', 'Listings', 'building'],
   ['/dashboard', 'Long-term rentals', 'chart'],
@@ -188,7 +197,7 @@ const isCleanerPath = (path) => CLEANER_PATHS.some((p) => path === p || path.sta
 const OPS_NAV = [['/cleaner-pay', 'Cleaner pay', 'wallet'], ['/supplies', 'Supplies', 'wallet'], ['/lost-found', 'Lost and found', 'file']];
 // Staff don't see guest conversations; the platform admin gets an Admin link.
 const navFor = () => state.user?.role === 'cleaner' ? CLEANER_NAV : [...({ short_term: NAV_SHORT, both: NAV_BOTH }[state.user?.business_type] || NAV_LONG)
-  .filter(([p]) => (p !== '/inbox' || state.user?.role !== 'staff') && (!['/launchpad', '/owners'].includes(p) || state.user?.role === 'owner') && (!['/stay-reports', '/pnl'].includes(p) || state.user?.role !== 'staff') && (!['/quotes', '/addons'].includes(p) || ['owner', 'manager'].includes(state.user?.role))),
+  .filter(([p]) => (p !== '/inbox' || state.user?.role !== 'staff') && (!['/launchpad', '/owners'].includes(p) || state.user?.role === 'owner') && (!['/stay-reports', '/pnl'].includes(p) || state.user?.role !== 'staff') && (!['/quotes', '/addons', '/groups', '/daily-close'].includes(p) || ['owner', 'manager'].includes(state.user?.role))),
 ['/help', 'Help & support', 'help'],
 ...(state.user?.is_platform_admin ? [['/admin', 'Admin', 'shield']] : [])].flatMap((n) => (n[0] === '/housekeeping' && state.user?.business_type !== 'long_term' && state.user?.role !== 'staff' ? [n, ...OPS_NAV] : [n]));
 

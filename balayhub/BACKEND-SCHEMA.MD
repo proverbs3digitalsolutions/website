@@ -262,6 +262,35 @@ Key constraint: **`bookings_no_overlap`** is an `EXCLUDE USING gist (unit_id WIT
 
 ---
 
+### 2.4b Phase 5 pricing and team (migration 032, 2026-10-13)
+
+**Column and constraint changes**
+
+| Where | Change |
+|---|---|
+| `seasons` | Add `adjust_pct` smallint, −90 to 300. A season needs one of a nightly rate, a minimum stay or a percentage, and can't have both a nightly rate and a percentage. The old "rate or minimum stay" check is replaced. |
+| `units` | Add `fortnight_discount` smallint 0 to 90 (same type as `weekly_discount`), `min_price` numeric(12,2) ≥ 0 (null = no floor), `tags` text[] (default empty; GIN index `units_tags_idx`), `room_type` text ≤ 40. |
+| `users` | No change. `notify_prefs` jsonb was added in migration 015. Its shape is now: one boolean per notification type (`new_booking`, `guest_message`, `checkin_form`, `payment`, `cleaning`, `mention`, `assignment`, `sync_problem`), and an optional `property_ids` list. No list means all properties. |
+| `bookings` | Add `group_id` → booking_groups (null for normal reservations; indexed where set). |
+| `ical_feeds` | Add `alerted_at` (when the last stale or failing alert was sent) and `problem_since` (when the current problem started). |
+
+**New tables**
+
+| Table | Key columns and rules |
+|---|---|
+| `pricing_rules` | `rule_id` PK, `organization_id`, `unit_id` → units (null = every listing; deleted with the listing), `kind` (last_minute, far_out, gap_night), `days` smallint 0 to 540 (checked per kind in code: 0 to 30, 31 to 540, 1 to 7), `adjust_pct` smallint −90 to 300, `active`, `created_by`, `created_at`, `updated_at`. Unique on `(organization_id, kind, unit_id)` with null treated as a value. |
+| `booking_groups` | `group_id` PK, `organization_id`, `name` (1 to 120), `guest_id` → guests, `notes` (≤ 1000), `created_by`, `created_at`, `cancelled_at`. Indexed by organization and guest. |
+| `daily_closes` | `close_id` PK, `organization_id`, `close_date`, `property_ids` uuid[] (the properties the close covers; empty = whole workspace), `summary` jsonb (counts per section and payment totals by method, as they were at close), `note` (≤ 1000), `closed_by`, `closed_at`, `updated_at`. Unique on `(organization_id, close_date)`. |
+| `ical_conflicts` | `conflict_id` PK, `organization_id`, `feed_id` → ical_feeds (cascade delete), `unit_id`, `external_uid`, `check_in`, `check_out`, `first_seen_at`, `last_seen_at`, `alerted_at`, `resolved_at` (null = open). Unique on `(feed_id, external_uid)`. Open rows are indexed by organization. |
+
+**Money rules.** The price engine works in whole centavos. Rule and season percentages are applied once to each night, rounded to the centavo. A custom calendar price is never changed by a rule. Stored amounts are numeric, and `pg` returns them as strings.
+
+**Purge and export.** The four new tables are in `PURGED_TABLES` in `src/lib/account.js`, and the purge removes them before the tables they point to.
+
+**Migration.** The migration is forward only. Its header comment has the rollback statements, for use as a new migration or from the pre-deploy backup.
+
+---
+
 ### 2.5 Payments and receipts (short-term)
 
 **booking_payments**: money received for a reservation. Voided, never deleted.
@@ -814,6 +843,34 @@ The cleaner role is denied by `cleanerGuard` (D-48) unless a route is on its all
 
 ---
 
+### 6.3 Phase 5 access matrix (pricing, team, groups, daily close, sync)
+
+Cleaners are denied by `cleanerGuard` on every Phase 5 route. "Assigned" means the properties the manager is assigned to, as in section 6.1. Workspace-wide pricing rules and seasons are owner-only to change.
+
+| Data area | Owner | Manager | Staff | Cleaner | Public |
+|---|---|---|---|---|---|
+| Pricing rules: read | All | Workspace-wide rules, and rules for assigned listings | No | No | No |
+| Pricing rules and seasons for every listing: create, change, remove | Yes | No (403) | No | No | No |
+| Pricing rules and seasons for one listing: create, change, remove | Yes | Yes (assigned) | No | No | No |
+| Price preview | Yes | Yes (assigned) | No | No | No |
+| Bulk prices and blocks (preview and apply) | Yes | Yes (assigned listings only; a tag covers only those) | No | No | No |
+| Tags and room types: read | Yes | Yes (assigned) | Yes (assigned; the app shows the filter to owners and managers) | No | No |
+| Tags, room type, lowest price, fourteen-night discount on a listing | Yes | Yes (assigned) | No | No | No |
+| Reservation activity log | Yes | Yes (assigned) | No (403) | No | No |
+| Assign a conversation | Yes | Yes, only to someone who can see that property (refused otherwise) | No (inbox hidden) | No | No |
+| Mention in an internal note | Yes | Yes, to owners and managers who can see that reservation's property | No | No | No |
+| Own notification settings (types) | Yes, for types their role receives | Same | Same | Cleaning only | No |
+| Notification property choice | Owner: all or chosen | Any member may choose among properties they can see (wider than the spec; see PRD.MD gaps) | Same | Same | No |
+| Groups: list and open | Yes | Yes (only when every room is in their properties) | Yes, without money (only when every room is in their properties) | No | No |
+| Groups: create, add room, remove room, cancel, edit | Yes | Yes (assigned) | No | No | No |
+| Room type on a new reservation | Yes | Yes (assigned) | No | No | No |
+| Move a reservation to another listing | Yes | Yes (assigned) | No | No | No |
+| Daily close: view and close a day | Yes (whole workspace) | Yes (assigned; a close covers their properties) | No | No | No |
+| Daily close: history | All | Whole-workspace closes, and closes that cover any of their properties | No | No | No |
+| Sync health (`GET /sync-health`) and Home or Calendar warnings | Yes | Yes (assigned) | No (403) | No | No |
+
+---
+
 ## 7. Known gaps and risks found while checking
 
 | # | Finding | Where |
@@ -832,6 +889,7 @@ The cleaner role is denied by `cleanerGuard` (D-48) unless a route is on its all
 | 12 | Decided 2026-10-13: published statements keep each stay's confirmation code in the stored copy, but screens and emails don't print it (the table is already wide on phones). Owners match stays by dates, unit and guest first name | `src/lib/statements.js`, `public/js/views/ownerportal.js`, `public/js/views/owners.js`, `statementText()` |
 | 13 | ~~Rollback note missing `idempotency_key`~~ Not needed: the rollback drops the whole `owner_payouts` table | `db/migrations/029_phase2_owners.sql` |
 | 14 | ~~D-46 security items~~ Fixed 2026-10-13: an email change or clear ends the owner's portal sessions and cancels unused links (clearing also turns access off); owner blocks are refused while the workspace is view-only (402) or the demo (403); block create and cancel are limited to 20 per hour per owner; the sign-in link is removed from the address bar after use. Covered by tests | `src/routes/ownerportal.js`, `src/routes/owners.js`, `src/lib/auth.js` (`planGuard`) |
+| 15 | ~~Daily close by a manager with no properties~~ Fixed 2026-10-13: such a manager gets 403 on the daily close (D-75) | `src/routes/dailyclose.js` (`POST /daily-close`) |
 - Paused maintenance schedules are resumed with `PATCH /maintenance-schedules/:id { active: true }` (the Resume button on the Maintenance page).
 - Monthly schedules step from the last due date, so a due date on the 31st can drift to the 28th (`src/lib/maintschedule.js`).
 - Section 6 (the older matrix) has no Cleaner column. Cleaners are denied by default by `cleanerGuard`, and section 6.1 covers the Phase 3 rows.

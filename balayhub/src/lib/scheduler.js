@@ -30,6 +30,8 @@ function startScheduler() {
 
   // Airbnb / Booking.com / Agoda calendars.
   every(30 * 60 * 1000, 'ical', syncAllFeeds, 60 * 1000);
+  // Calendar feeds that stopped syncing or are failing: alert once per problem (D-73).
+  every(15 * 60 * 1000, 'sync-health', () => require('./synchealth').checkFeeds(new Date()), 65 * 1000);
   // Scheduled and automatic guest messages.
   every(60 * 1000, 'messages', async () => {
     await messaging.sendDueMessages();

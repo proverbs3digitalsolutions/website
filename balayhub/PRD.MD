@@ -846,6 +846,97 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 
 ---
 
+### F47. Pricing rules: booking-window prices and price preview
+**Status:** Phase 5 (built 2026-10-13, D-66)
+
+**What it does:**
+- Three rule kinds, each a percentage (-90 to +300):
+  - **Last-minute:** check-in within 0 to 30 days of today (Manila time).
+  - **Far-out:** check-in more than 31 to 540 days away.
+  - **Gap night:** the stay exactly fills a free gap of 1 to 7 nights between two confirmed bookings or blocks. The minimum stay is waived for that gap.
+- Owners set a rule for every listing. Owners and managers set one for a single listing. A listing rule replaces the workspace rule of the same kind. An inactive rule switches that kind off for the listing.
+- Seasons can change the price by a percentage instead of setting a fixed rate.
+- A fortnight discount (14+ nights, 0 to 90%) per listing. The discount ladder is monthly (28+) over fortnight over weekly (7+).
+- A lowest nightly price per listing. No night is priced below it. A custom calendar price is used exactly as set, even below the floor.
+- Price preview: the next 1 to 120 days for one listing (default 60), each night with its price, the rule that changed it, and whether it is booked.
+
+**Done looks like:** Bookings already made keep their prices. The direct booking page, quotes, the new-reservation suggestion, the calendar and the preview all use one engine, so they agree. Each night says why its price is what it is.
+
+**Out of scope:** occupancy-based automatic pricing (founder decision pending in BLOCKERS.MD).
+
+### F48. Bulk price and block changes, tags and room types
+**Status:** Phase 5 (built 2026-10-13, D-67, D-68)
+
+**What it does:**
+- Pick listings by checkbox or tag (up to 50) and a date range (up to 366 days, from today on).
+- **Price:** set one nightly price, change today's computed prices by a percentage, or clear custom prices.
+- **Block:** creates blocks. A listing is skipped whole, and named, if any night in the range has a booking or block.
+- **Unblock:** cancels only manual blocks that lie fully inside the range. Channel blocks, owner stays and reservations are never touched.
+- Every action has a **Preview** that writes nothing, then **Apply**. Both run the same code. Each apply is audited as one entry with counts.
+- **Tags:** up to 10 per listing, lowercase, up to 30 characters each. Tags filter the listing list, the calendar and bulk changes.
+- **Room types:** a name per listing (up to 40 characters, for example Studio or 1-bedroom), listed per property with a count.
+
+**Done looks like:** The preview lists exactly what Apply writes. Nothing changes until Apply.
+
+**Out of scope:** room types on the public booking page.
+
+### F49. Team tools: activity log, assignment, mentions and notification settings
+**Status:** Phase 5 (built 2026-10-13, D-69)
+
+**What it does:**
+- **Activity log** on each reservation: the newest 200 lines, in plain English, of what happened to the stay and its payments, charges, refunds, payment proofs, deposits, damage reports, cleaning task, quotes and guest messages, with who and when. Owners and managers only.
+- **Assignment:** assigning a conversation tells the new assignee (push, or email if they have no device). Home shows "Assigned to you (n)".
+- **Mentions:** in an internal note, `@` and a team member's name notifies that person with the note and a link. Only owners and managers who can see the reservation's property can be mentioned. Staff and cleaners can't.
+- **Notification settings** in My account: each person switches each type on or off. Owners can limit alerts to chosen properties. Default: everything on, all properties. Three types were added: mentions, assignments and calendar sync problems.
+
+**Done looks like:** Nobody is alerted about a reservation they can't open.
+
+**Out of scope:** shift scheduling, and team chat outside notes.
+
+### F50. Group bookings, room-type booking and moving a booking
+**Status:** Phase 5 (built 2026-10-13, D-70, D-71)
+
+**What it does:**
+- **Group booking:** one lead guest, a name, and 2 to 20 rooms. Each room is a normal reservation in its own listing, chosen by listing, or by room type (the first free listing of that type is taken). Each room has its own dates, guests, accommodation total and cleaning fee.
+- **All or nothing:** if any room is taken, nothing is saved and the taken rooms are named.
+- **Group page:** rooms, amounts, paid and balance per room and in total. Actions: add a room, remove a room (a reason is required and that reservation is cancelled), cancel the whole group, change the name and notes.
+- Payments stay per room. Group bookings send no automatic confirmation email. Channel-imported bookings can't join a group.
+- **Room type on a new reservation:** "Any free room of a type" at a property.
+- **Move a booking:** owners and managers drag a reservation to another listing's row on the calendar, or use "Move to another listing" on the reservation. Dates and price stay the same. Channel stays and taken listings are refused. The cleaning task moves with the stay.
+
+**Done looks like:** No double booking is possible, and a group never ends up half saved.
+
+**Out of scope:** one checkout for a whole group. Room types on the public booking page.
+
+### F51. Daily close
+**Status:** Phase 5 (built 2026-10-13, D-72)
+
+**What it does:**
+- Owners and managers open the checklist for a day (today by default, Manila time; up to tomorrow). Managers see their own properties.
+- The checklist: arrivals not checked in, departures not checked out, cleanings not done, payments recorded that day by method with totals, balances due within 2 days (including guests staying now), payment proofs waiting, open damage reports, and calendar sync problems. Each line links to where it can be fixed.
+- **Close the day** saves a snapshot of the counts and totals, with an optional note. One close per workspace per date; closing again updates it, and every save is audited. History lists past closes.
+- Home shows "Today isn't closed yet. Close the day." after 9 PM (Manila time) until the day is closed.
+
+**Done looks like:** A close is a record of what was open at the time, not a live view.
+
+**Out of scope:** end-of-shift handover between team members.
+
+### F52. Calendar sync health
+**Status:** Phase 5 (built 2026-10-13, D-73)
+
+**What it does:**
+- A channel calendar is **stale** when it hasn't synced for 3 hours. A calendar that has never synced counts from when it was added. It is **failing** when its last sync errored.
+- A channel event whose dates are already taken in BalayHub is skipped and kept as an overlap, with its dates, until the channel stops reporting it or the dates clear.
+- Warnings show on **Home** (a banner) and on the **Calendar** (a "Sync problem" mark on the listing's row).
+- Owners and managers of the property get **one alert per new problem** (push, or email if no device), checked every 15 minutes. A problem that clears and comes back is alerted again.
+- Archived listings and properties raise no warnings. Staff and cleaners don't see them.
+
+**Done looks like:** One alert per problem, not one every 30 minutes.
+
+**Out of scope:** two-way channel APIs (no integrations, founder decision 2026-10-13).
+
+---
+
 ## Cross-cutting requirements (built)
 
 - **Security:** workspace scoping on every query, 404 for out-of-scope records, CSRF header on writes, strict Content-Security-Policy, text-only rendering, rate limits, scrypt passwords, HttpOnly cookies (7-day absolute, 12-hour idle).
@@ -865,9 +956,9 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 | **Phase 1: Money done right** (itemised stay bill with extras, payment proof uploads and bank transfer, cancellation policies and refund log, deposit % per listing, host net per booking) | **Built 2026-10-13** | Spec: docs/specs/PHASE-1-MONEY.md. Decisions D-31 to D-36. |
 | BIR-ready invoices and monthly tax summary | **Waiting on a tax practitioner** | See BLOCKERS.MD. |
 | **Phase 2: Owners and co-hosts** (owner portal login, owner date blocks, fee models, statement approval, payout record, reserve, per-unit P&L, monthly emailed report) | **Built 2026-10-13** | Spec: docs/specs/PHASE-2-OWNERS.md. Decisions D-39 to D-45. Features F16 and F30–F32. |
-| **Phase 3: Operations** (cleaner-only access, cleaner calendar, status board with inspected, inspections and scores, damage reports linked to deposits, cleaner pay, supplies par levels, lost and found, maintenance for stays) | Next | |
+| **Phase 3: Operations** (cleaner-only access, cleaner calendar, status board with inspected, inspections and scores, damage reports linked to deposits, cleaner pay, supplies par levels, lost and found, maintenance for stays) | **Built 2026-10-13** | Spec: docs/specs/PHASE-3-OPERATIONS.md. Decisions D-48 to D-56. Features F33 to F39. |
 | **Phase 4: Guest experience and direct booking** (guidebook in English and Taglish, house rules acceptance, paid add-ons, quote-and-pay links for Facebook inquiries, private feedback, returning-guest codes, unpaid-booking follow-up, search-friendly listing pages) | **Built 2026-10-13** | Covers the "Booking page upgrades" idea below. |
-| **Phase 5: Pricing rules and team** (gap nights, last-minute and far-out rules, events, bulk changes, booking activity log, conversation assignment, notification rules, unit tags, group bookings, room types, sync-health alerts) | Planned | Covers the "Smarter reports" idea below. |
+| **Phase 5: Pricing rules and team** (gap nights, last-minute and far-out rules, events, bulk changes, booking activity log, conversation assignment, notification rules, unit tags, group bookings, room types, sync-health alerts) | **Built 2026-10-13** | Spec: docs/specs/PHASE-5-PRICING-TEAM.md. Decisions D-66 to D-74. Features F47 to F52. The roadmap phases 1 to 5 are now all built. |
 | Booking page upgrades | Idea | Not specified in the repo docs yet. Scope to be defined. |
 | Smarter reports | Idea | Not specified in the repo docs yet. Scope to be defined. |
 | Recurring expenses | Idea | Not built. Expenses are entered one at a time today. |
@@ -891,3 +982,9 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - Phase 4: the listing's own check-in instructions and house rules have no Taglish text yet, so the guide shows English for them.
 - Phase 4: door code and Wi-Fi password become plain text in the inbox history once a message with them is sent (D-64).
 - Phase 4: Google decides when to show the listing pages. BalayHub can't force it.
+- Phase 5: the reservation activity log doesn't show check-in form submissions, or the reason given for a refund (D-74).
+- Phase 5: sync warnings show on Home and the Calendar, not on the Listings page the spec asked for (D-74).
+- Phase 5: the profit and loss page doesn't filter by tag yet, although the spec asked for it.
+- Phase 5: fixed — a manager with no assigned properties can't open or save the daily close (D-75).
+- Phase 5: a mention in a note on a conversation with no reservation can only reach owners, because the property check has nothing to test.
+- Phase 5: notification settings let any team member choose among the properties they can see. The spec limited this to owners.

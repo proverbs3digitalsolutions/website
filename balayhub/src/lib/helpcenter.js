@@ -554,6 +554,121 @@ const ARTICLES = [
       'Listings made by the demo or seed have no page address until you set one. Google decides when to show new pages; BalayHub can\'t force it.',
     ],
   },
+  {
+    slug: 'booking-window-prices', category: 'money', roles: MANAGERS, title: 'Last-minute, far-out and gap-night prices',
+    keywords: 'last minute far out gap night early booking discount fortnight 14 nights lowest price floor preview price rule percent season',
+    body: [
+      'Open Pricing rules. A rule changes the price of stays by a percentage. Use a minus sign for a discount, for example -10.',
+      'Last-minute: check-ins within 0 to 30 days of today (Philippine time). Usually a discount to fill the gap.',
+      'Far-out: check-ins more than 31 to 540 days away. Usually a discount for early bookers, or an increase.',
+      'Gap night: a stay that exactly fills a free gap of 1 to 7 nights between two bookings or blocks. The minimum stay is waived for it.',
+      'Owners set a rule for every listing. Owners and managers can set one for a single listing. A listing rule replaces the workspace rule of the same kind, and switching a rule off for a listing turns that kind off there.',
+      'Stays of 14 nights or more can get a fortnight discount, set per listing. Stays of 28 nights or more get the monthly discount instead, and 7 nights or more the weekly one.',
+      'The lowest price is a floor per listing. No night goes below it. A price you set on the calendar is always used exactly as you set it, even if it is below the floor.',
+      'Price preview: pick a listing to see the next 60 days, night by night, with the rule that changed each price. Each night is shown as a one-night stay, so a last-minute price can differ from the price of a longer stay.',
+      'Bookings you already made keep their price.',
+    ],
+  },
+  {
+    slug: 'bulk-prices-blocks', category: 'bookings', roles: MANAGERS, title: 'Change prices or block dates for many listings at once',
+    keywords: 'bulk change many listings tag price percent clear block unblock preview apply several units dates multiple',
+    body: [
+      'Open Pricing rules and choose Bulk changes (owners and managers). Pick listings with the checkboxes or by tag, then the first and last night. You can change up to 50 listings and up to a year at a time.',
+      'Price: set one nightly price, change prices by a percentage, or clear the custom prices set on the calendar. A percentage works from today\'s price for each night.',
+      'Block: closes the dates for an owner stay or repairs. A listing is skipped whole if any of those nights already has a booking or block, and BalayHub says why.',
+      'Unblock: removes only your manual blocks that lie fully inside the dates. Channel blocks, owner stays and reservations are never removed.',
+      'Always preview first. The preview lists every change and writes nothing. Apply makes exactly the changes you saw.',
+    ],
+  },
+  {
+    slug: 'tags-room-types', category: 'bookings', roles: MANAGERS, title: 'Tags and room types',
+    keywords: 'tag tags room type studio 1-bedroom any free room group filter listing type label bulk',
+    body: [
+      'Tags are short labels for listings, such as "azure" or "beachfront". Open Listings, choose the listing, then Edit. Add up to 10 tags. Each tag can be up to 30 characters, and tags are saved in lowercase.',
+      'Use tags to filter the listing list and the calendar, and to pick listings for bulk changes.',
+      'Room type is what kind of place a listing is, such as Studio or 1-bedroom (up to 40 characters).',
+      'When you create a reservation, choose "Any free room of a type" and the property. BalayHub takes the first free listing of that type for your dates. Group bookings can use room types too.',
+      'Room types are not shown on your public booking page yet.',
+    ],
+  },
+  {
+    slug: 'reservation-activity', category: 'bookings', roles: MANAGERS, title: 'Reservation activity: who did what, and when',
+    keywords: 'activity history log audit who changed what payment charge refund check in check out timeline proof deposit damage',
+    body: [
+      'Open a reservation. The Activity card lists what happened, newest first, in plain English: check-ins, changes, payments, charges, refunds, payment proofs, deposits, damage, cleaning, quotes and messages sent to the guest.',
+      'Each line shows who did it and when. The newest 200 lines are shown.',
+      'Only owners and managers can see the Activity card. Staff never see money lines.',
+      'Phone numbers and email addresses typed into a reason are removed from the lines.',
+      'Not in the history yet: check-in form submissions, and the reason given for a refund.',
+    ],
+  },
+  {
+    slug: 'assign-mentions', category: 'business', roles: MANAGERS, title: 'Assign conversations and mention a teammate',
+    keywords: 'assign assigned inbox conversation mention @ note team notify push email owner manager',
+    body: [
+      'In the Inbox, open a conversation and choose who it is assigned to. That person gets a push alert, or an email if they have no device. Home shows "Assigned to you" with a count.',
+      'You can only assign a conversation to an owner or manager who can see that reservation\'s property. Otherwise BalayHub refuses it.',
+      'In an internal note, type @ and a teammate\'s name, then pick them from the list. They get the note by push or email, with a link to the conversation.',
+      'Only owners and managers who can see that reservation\'s property can be mentioned. Staff and cleaners can\'t be mentioned, because they can\'t open the inbox.',
+      'Each person can switch these alerts off under My account, Notifications.',
+    ],
+  },
+  {
+    slug: 'notification-settings', category: 'account', roles: CREW, title: 'Choose which alerts you get',
+    keywords: 'notifications settings turn off alerts push email property mentions assignment sync problems my account bell',
+    body: [
+      'Open My account, then Notifications. Each type of alert has its own on or off switch. Everything is on at first.',
+      'Owners can choose all properties or only some. Other team members get alerts only for properties they can see.',
+      'If an alert can\'t reach any of your devices, BalayHub sends it by email instead, when your email address is set.',
+      'Cleaners see only the cleaning alerts.',
+    ],
+  },
+  {
+    slug: 'group-bookings', category: 'bookings', roles: ALL, title: 'Group bookings: several rooms for one guest',
+    keywords: 'group booking family reunion several rooms listings lead guest one booking all or nothing add room remove cancel party',
+    body: [
+      'Open Group bookings and choose New group booking (owners and managers). Enter a name, the lead guest, then 2 to 20 rooms.',
+      'Each room becomes a normal reservation in its own listing. Pick a listing, or a room type to take the first free listing of that type.',
+      'It is all or nothing. If any room is taken, nothing is saved and BalayHub names the rooms that are taken.',
+      'Each room has its own dates, guests and price. The group page shows the total and what is paid and still due for each room.',
+      'Payments are taken per room. Group bookings do not send an automatic confirmation email, so send one from a room\'s reservation if the guest needs it.',
+      'Add a room later. To remove a room, give a reason; that reservation is cancelled. Cancelling the group cancels every room. Channel bookings can\'t join a group.',
+      'Staff can see groups, without money.',
+    ],
+  },
+  {
+    slug: 'move-booking-calendar', category: 'bookings', roles: MANAGERS, title: 'Move a reservation to another listing',
+    keywords: 'move drag calendar another listing room change unit swap same dates price stays cleaning',
+    body: [
+      'On the Calendar, drag a reservation bar onto another listing\'s row, then confirm. The dates and the price stay the same.',
+      'Or open the reservation and choose Move to another listing. Use this on a phone or with the keyboard.',
+      'The move is refused if the other listing is taken for those nights. Stays that come from a channel calendar (Airbnb, Booking.com, Agoda) can\'t be moved.',
+      'The cleaning task moves with the stay.',
+    ],
+  },
+  {
+    slug: 'daily-close', category: 'operations', roles: MANAGERS, title: 'Daily close: check the day before you log off',
+    keywords: 'daily close checklist end of day arrivals departures cleaning payments balances proofs damage sync close the day note history',
+    body: [
+      'Open Daily close from the menu (owners and managers). It opens today, Philippine time. You can pick another day, up to tomorrow.',
+      'The checklist shows what is still open: arrivals not checked in, departures not checked out, cleanings not done, payment proofs to review, balances due within 2 days, open damage reports and calendar sync problems. Tap a line to fix it.',
+      'Payments recorded that day are totalled by method.',
+      'Close the day to save a snapshot and an optional note. Closing again updates it. Past closes are listed below.',
+      'A manager\'s close covers their own properties. A manager can\'t change a close that covers properties they don\'t look after; only an owner can.',
+      'After 9 PM, Home reminds you if today isn\'t closed yet.',
+    ],
+  },
+  {
+    slug: 'sync-warnings', category: 'bookings', roles: MANAGERS, title: 'Calendar sync warnings: stale calendars and overlapping bookings',
+    keywords: 'sync warning stale failing calendar not updated overlap double booking alert airbnb booking.com agoda ical problem',
+    body: [
+      'BalayHub shows a warning on Home, and a "Sync problem" mark on the Calendar, when a channel calendar hasn\'t refreshed for 3 hours or its last refresh failed.',
+      'When a channel booking overlaps dates you already have in BalayHub, BalayHub doesn\'t add it and shows the overlap with its dates. Check both bookings on the channel.',
+      'Owners and managers of that property get one alert per new problem, by push or by email if they have no device. The warning clears when the calendar updates again.',
+      'To fix a stale calendar, open Listings, choose the listing, then Channels, and press Sync now. If it still fails, check the calendar link on the channel.',
+      'Only owners and managers see these warnings.',
+    ],
+  },
 ];
 
 const norm = (s) => String(s || '').toLowerCase();

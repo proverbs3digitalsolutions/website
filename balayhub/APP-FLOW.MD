@@ -609,3 +609,75 @@ Spec: `docs/specs/PHASE-4-GUESTS.md`. Decisions D-57 to D-64. Both the English a
 ### 13.14 Menu (changes to 3)
 
 - Owners and managers in short-term workspaces see **Quotes** and **Add-ons** in the menu.
+
+---
+
+## 14. Phase 5 flows: pricing, team and operations (built 2026-10-13)
+
+Spec: `docs/specs/PHASE-5-PRICING-TEAM.md`. Decisions D-66 to D-74. Staff and cleaners see none of the pricing or daily close screens. Owners and managers see them for their own properties.
+
+### 14.1 Host: pricing rules `#/pricing` (changes to 7.4)
+
+- **Booking-window rules:** last-minute (0 to 30 days before check-in), far-out (31 to 540 days) and gap nights (1 to 7 nights). Each is a percentage. Owners set workspace rules. Owners and managers set listing rules.
+- **Seasons:** a season can be a fixed nightly price, or a percentage change on the usual price.
+- **Price preview:** pick a listing and a start date. Each night shows its price, a colour for its kind, and a legend. Select a night to see how its price was worked out ("Rules applied").
+- **Bulk changes:** pick listings or a tag, the first and last night, and an action: set a price, change prices by %, clear custom prices, block dates or unblock dates. **Preview** shows each change and any skipped listings. **Apply** makes exactly those changes.
+
+### 14.2 Host: listings (changes to 7.11)
+
+- Edit form: tags (up to 10 chips), room type, lowest nightly price, and the fourteen-night discount.
+- The listing list has a tag filter in the filter bar.
+- Listings shows no sync warning in this build (see PRD.MD known gaps).
+
+### 14.3 Host: calendar (changes to 7.3)
+
+- Tag filter (owners and managers).
+- A "Sync problem" mark on a listing's row when its channel calendar is stale, failing or overlapping.
+- **Drag to move:** drag a reservation bar onto another listing's row. A confirm box says "Move this reservation? … The price stays the same." Refused moves show the reason (for example, the listing is taken).
+
+### 14.4 Host: reservation detail (changes to 7.6)
+
+- **Activity card** (owners and managers): newest first, with who and when.
+- **Group badge:** "Group: <name>", linking to the group page.
+- **Move to another listing:** a picker of other active listings; the dates and price stay. Not shown for channel stays, or while the stay is checked out.
+- New reservation: choose "Any free room of a type", then the room type and property. BalayHub takes the first free listing for those dates, or says "No free <type>" if there is none.
+
+### 14.5 Host: group bookings `#/groups`, `#/groups/<id>` (owners and managers, menu)
+
+- **List:** group name, rooms, dates, total, and status (Active or Cancelled).
+- **New group booking:** name, lead guest (an existing guest, or a new one), then 2 to 20 room rows. Each row is a listing or a room type, with dates, guests, accommodation total and cleaning fee.
+- **Group page:** rooms with amounts, paid and balance per room and in total. Actions: add a room, remove a room (a reason is required), cancel group, edit name and notes.
+- Staff can open groups and rooms, without money.
+
+### 14.6 Host: inbox (changes to 7.8)
+
+- **Assigned to** select on a conversation. "Assigned to me" filter. Assignment notifies the new assignee.
+- **Internal note:** typing `@` opens a list of owners and managers. Picking one inserts their name. A mention shows as "@Name". A mention of someone who can't see the property is refused with "<name> can't see this reservation".
+
+### 14.7 My account: Notifications (changes to 7.20)
+
+- One switch per notification type the person can receive. Owners can choose all properties or chosen ones.
+- Saved with "Notification settings saved." A person must pick at least one property, or choose all properties.
+
+### 14.8 Home (changes to 7.2)
+
+- **Assigned to you (n):** a link to the Inbox filter "Assigned to me".
+- **Sync problems:** a banner when any calendar is stale, failing or overlapping. Owners and managers only.
+- **Day not closed:** after 9 PM Manila time, a link "Today isn't closed yet. Close the day." until the day is closed.
+
+### 14.9 Host: daily close `#/daily-close` (owners and managers)
+
+- Pick a day (today by default, up to tomorrow). The checklist shows each section with its count and links to fix each line.
+- **Payments recorded:** totals by method for the day.
+- **Close the day:** optional note, then "Update the daily close" if the day is already closed. Past closes are listed below with the date, who closed it and the note.
+- A manager sees the summary only for a close that covers exactly their properties, or for an owner's close.
+
+### 14.10 Sync warnings (who sees them)
+
+- Owners and managers only, on Home and the Calendar. Stale means no sync for 3 hours; failing means the last sync errored; overlap means a channel booking was skipped because the dates are taken.
+- Each new problem sends one alert by push, or by email if there is no device. Alerts are checked every 15 minutes.
+
+### 14.11 Menu (changes to 3)
+
+- Owners and managers in short-term workspaces see **Group bookings** and **Daily close**. Staff don't see them in the menu.
+

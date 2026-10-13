@@ -1,6 +1,6 @@
 // Reservations: saved views, list, detail (check-in/out, payments), new reservation.
 
-import { get, post, patch, qs } from '../api.js';
+import { get, post, patch, qs, ApiError } from '../api.js';
 import {
   h, icon, peso, fmtDate, fmtDateTime, badge, options, field, formModal, confirmDialog, emptyState, searchBox, toast, todayManila, openModal,
 } from '../ui.js';
@@ -67,6 +67,10 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
     return;
   }
   const start = checkIn || todayManila();
+  // "Any free room of type": property + room type pairs (Phase 5). Quietly skipped if none are set up.
+  let roomTypes = [];
+  if (!unitId) { try { ({ room_types: roomTypes } = await get('/room-types')); } catch { roomTypes = []; } }
+  const propName = new Map(listings.map((l) => [l.property_id, l.property_name]));
   const quoteBox = h('div', { class: 'alert alert--info', 'aria-live': 'polite' }, 'Choose a listing and dates to see the price.');
   let quoted = null;
   const modal = formModal({
@@ -74,7 +78,9 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
     submitText: 'Save reservation',
     draftKey: unitId ? null : 'reservation-new',
     fields: [
+      roomTypes.length > 0 && field({ name: 'pick_mode', label: 'Book', type: 'select', value: 'unit', placeholderOption: false, options: [['unit', 'A specific listing'], ['type', 'Any free room of a type']] }),
       field({ name: 'unit_id', label: 'Listing', type: 'select', required: true, value: unitId, options: listings.map((l) => [l.unit_id, `${l.unit_name} — ${l.property_name}`]) }),
+      roomTypes.length > 0 && field({ name: 'room_pick', label: 'Room type', type: 'select', options: roomTypes.map((t) => [`${t.property_id}|${t.room_type}`, `${t.room_type} · ${propName.get(t.property_id) || 'Property'} (${t.count})`]), hint: 'BalayHub picks the first free listing of this type for these dates.' }),
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'check_in', label: 'Check-in', type: 'date', required: true, value: start }),
         field({ name: 'check_out', label: 'Check-out', type: 'date', required: true, value: addDays(start, 1) })),
@@ -97,6 +103,13 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
     ],
     onSubmit: async (data) => {
       if (!data.guest_email) data.send_confirmation = false;
+      if (data.pick_mode === 'type') {
+        const [property_id, ...rt] = String(data.room_pick || '').split('|');
+        if (!property_id) throw new ApiError('Choose a room type.', { status: 400, fields: { room_pick: 'Choose a room type.' } });
+        Object.assign(data, { property_id, room_type: rt.join('|') });
+        delete data.unit_id;
+      }
+      delete data.pick_mode; delete data.room_pick;
       const res = await post('/reservations', data);
       if (res.confirmation && !res.confirmation.sent) toast(`Reservation saved, but the confirmation was not emailed: ${res.confirmation.error}`, 'error');
       else toast(`Reservation ${res.reservation.confirmation_code} saved${res.confirmation?.sent ? ' and confirmation emailed' : ''}.`);
@@ -105,13 +118,31 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
     },
   });
   const form = modal.el.querySelector('form');
+  const typeMode = () => form.elements.pick_mode?.value === 'type';
+  // For a room-type booking the price hint uses the first listing of that type, when listings say their type.
+  const quoteUnit = () => {
+    if (!typeMode()) return form.elements.unit_id.value;
+    const [pid, ...rt] = String(form.elements.room_pick.value).split('|');
+    return listings.find((l) => l.property_id === pid && l.room_type === rt.join('|'))?.unit_id || '';
+  };
+  const syncMode = () => {
+    if (!form.elements.pick_mode) return;
+    const t = typeMode();
+    form.querySelector('[data-field=unit_id]').hidden = t;
+    form.querySelector('[data-field=room_pick]').hidden = !t;
+    form.elements.unit_id.required = !t;
+    form.elements.room_pick.required = t;
+  };
+  syncMode();
   let seq = 0;
   async function refreshQuote(e) {
-    if (e && !['unit_id', 'check_in', 'check_out'].includes(e.target.name)) return;
-    const { unit_id: u, check_in: ci, check_out: co } = Object.fromEntries(['unit_id', 'check_in', 'check_out'].map((k) => [k, form.elements[k].value]));
+    if (e?.target.name === 'pick_mode') syncMode();
+    if (e && !['unit_id', 'check_in', 'check_out', 'pick_mode', 'room_pick'].includes(e.target.name)) return;
+    const { check_in: ci, check_out: co } = Object.fromEntries(['check_in', 'check_out'].map((k) => [k, form.elements[k].value]));
+    const u = quoteUnit();
     if (e?.target.name === 'check_in' && ci && (!co || co <= ci)) form.elements.check_out.value = addDays(ci, 1);
     const coNow = form.elements.check_out.value;
-    if (!u) { quoteBox.textContent = 'Choose a listing to see the price.'; return; }
+    if (!u) { quoteBox.textContent = typeMode() ? 'The price is not suggested for a room type yet. Enter the total yourself.' : 'Choose a listing to see the price.'; return; }
     if (!ci || !coNow || coNow <= ci) { quoteBox.textContent = 'Check-out must be after check-in.'; return; }
     const mySeq = ++seq;
     try {
@@ -276,6 +307,39 @@ async function lostFoundCard(r, rerender) {
     })));
 }
 
+// ---------------------------------------------------------------- activity log and move (Phase 5)
+async function activityCard(r) {
+  const { items } = await get(`/reservations/${r.booking_id}/activity`);
+  const body = h('div');
+  let all = false;
+  const paint = () => {
+    const shown = all ? items : items.slice(0, 10);
+    body.replaceChildren(
+      shown.length ? h('ul', { class: 'list act-list' }, shown.map((i) => h('li', { class: `act-item act-item--${i.kind}` },
+        h('span', { class: 'act-item__text' }, i.text),
+        h('span', { class: 'row__sub' }, `${i.who || 'System'} · ${fmtDateTime(i.at)}`)))) : h('p', { class: 'muted small' }, 'Nothing has happened on this booking yet.'),
+      items.length > 10 && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-expanded': String(all), onclick: () => { all = !all; paint(); } }, all ? 'Show fewer' : `Show all ${items.length}`));
+  };
+  paint();
+  return h('div', { class: 'card' }, h('div', { class: 'card__head' }, h('h2', null, 'Activity')), body);
+}
+
+async function moveModal(r, rerender) {
+  let listings;
+  try { ({ listings } = await get('/listings')); } catch (err) { toast(err.message, 'error'); return; }
+  const others = listings.filter((l) => l.unit_id !== r.unit_id)
+    .sort((a, b) => (b.property_id === r.property_id) - (a.property_id === r.property_id));
+  if (!others.length) { toast('There is no other active listing to move to.', 'error'); return; }
+  formModal({
+    title: 'Move to another listing', submitText: 'Move reservation',
+    fields: [
+      h('p', { class: 'muted small' }, `${r.unit_name} · ${fmtDate(r.check_in)} – ${fmtDate(r.check_out)}. The dates and the price stay the same.`),
+      field({ name: 'unit_id', label: 'Move to', type: 'select', required: true, placeholderOption: false, options: others.map((l) => [l.unit_id, `${l.unit_name} — ${l.property_name}`]) }),
+    ],
+    onSubmit: async (d) => { await patch(`/reservations/${r.booking_id}`, { unit_id: d.unit_id }); toast('Reservation moved.'); rerender(); },
+  });
+}
+
 // ---------------------------------------------------------------- detail
 export async function reservationDetailView(el, { params, rerender }) {
   const { reservation: r, payments } = await get(`/reservations/${params.id}`);
@@ -361,6 +425,8 @@ export async function reservationDetailView(el, { params, rerender }) {
   const refunds = await card(refundsCard);
   const damage = canManage ? await card(damageCard) : null;
   const lostFound = canManage ? await card(lostFoundCard) : null;
+  const activity = canManage ? await activityCard(r).catch(() => null) : null;
+  const grp = r.group;
   const overpaid = canManage && Number(r.balance) < 0 ? Math.abs(Number(r.balance)) : 0;
   const keep = Number(r.total_amount) - Number(r.channel_fee);
   const feeSaved = r.channel === 'direct' ? Math.round(Number(r.accommodation_total) * 15) / 100 : 0;
@@ -396,12 +462,13 @@ export async function reservationDetailView(el, { params, rerender }) {
       h('div', { class: 'page-head__actions' }, stayButtons,
         canManage && h('button', { class: 'btn btn--secondary', onclick: () => messageGuest(r.booking_id, navigate) }, icon('inbox'), 'Message guest'),
         canManage && confirmed && h('button', { class: 'btn btn--secondary', onclick: editDetails }, 'Edit'),
+        canManage && confirmed && !r.ical_feed_id && !r.checked_out_at && h('button', { class: 'btn btn--secondary', onclick: () => moveModal(r, rerender) }, 'Move to another listing'),
         canManage && confirmed && !r.ical_feed_id && !r.checked_out_at && h('button', { class: 'btn btn--danger', onclick: cancel }, 'Cancel'))),
     !confirmed && h('div', { class: 'alert alert--error', style: { marginBottom: '16px' } }, `Cancelled ${fmtDateTime(r.cancelled_at)}${r.cancel_reason ? `: ${r.cancel_reason}` : ''}`),
     h('div', { class: 'grid grid--2' },
       h('div', { class: 'stack' },
         h('div', { class: 'card' },
-          h('div', { class: 'card__head' }, h('h2', null, 'Stay'), h('div', { class: 'chips' }, stayState, channelBadge(r.channel))),
+          h('div', { class: 'card__head' }, h('h2', null, 'Stay'), h('div', { class: 'chips' }, stayState, channelBadge(r.channel), grp && h('a', { class: 'badge badge--active', href: `#/groups/${grp.group_id}` }, `Group: ${grp.name}`))),
           h('dl', { class: 'dl' },
             h('dt', null, 'Listing'), h('dd', null, `${r.unit_name}, ${r.property_name}`),
             h('dt', null, 'Check-in'), h('dd', null, fmtDate(r.check_in), r.checked_in_at ? h('div', { class: 'muted small' }, `Checked in ${fmtDateTime(r.checked_in_at)}`) : null),
@@ -425,7 +492,7 @@ export async function reservationDetailView(el, { params, rerender }) {
           h('div', { class: 'card__head' }, h('h2', null, 'Guest review'), h('span', { class: 'muted small' }, 'Private')),
           h('p', null, stars(r.review.rating), ` ${r.review.rating}/5`, r.review.cleanliness ? h('span', { class: 'muted small' }, ` · cleanliness ${r.review.cleanliness}/5`) : null),
           r.review.comment && h('p', { style: { whiteSpace: 'pre-wrap' } }, `“${r.review.comment}”`)),
-        checkin, gatepass, deposit, damage, lostFound),
+        checkin, gatepass, deposit, damage, lostFound, activity),
       h('div', { class: 'stack' },
         h('div', { class: 'card', id: 'payment-card' },
           overpaid > 0 && h('div', { class: 'alert alert--warn', role: 'alert', style: { marginBottom: '12px' } },

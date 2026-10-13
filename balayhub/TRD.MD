@@ -87,6 +87,7 @@ Jobs run inside the app process. A job never overlaps itself. After 3 failures i
 | Job name | Interval | First run after start | What it does |
 |---|---|---|---|
 | `ical` | 30 min | 60 s | Imports every connected channel calendar (Airbnb, Booking.com, Agoda, Vrbo, Expedia, Trip.com, other) |
+| `sync-health` | 15 min | 65 s | Alerts owners and managers once per new stale or failing calendar feed (D-73). Overlap alerts are sent by the 30-minute `ical` import instead. Skips read-only workspaces. |
 | `messages` | 1 min | 20 s | Sends scheduled messages (up to 50 per run), then runs stay automations |
 | `inbox` | 2 min | 30 s | Polls IMAP for guest replies (only when `IMAP_URL` is set) |
 | `housekeeping` | 15 min | 40 s | Creates cleaning tasks for today's and tomorrow's departures |
@@ -127,6 +128,16 @@ Note: in `scheduler.js` the comment "Workspaces whose owner asked for deletion" 
 - Cache-Control is `public, max-age=300`. Robots allows `/stay/`, disallows `/api/`, and names the sitemap. The sitemap has no `lastmod`, because listings have no update time.
 - Phase 4 public routes and their limits (per IP unless stated): the guidebook page 60 per 15 minutes; the quote page 300 per 15 minutes; quote payment 20 per hour; add-on purchase 20 per hour per link. The `/stay` pages and the sitemap have no limiter of their own (see the gaps in PRD.MD).
 - Guidebook, quote and listing links are built from `APP_URL`. No new environment variables.
+
+### 2.7 Pricing, team and sync health (Phase 5)
+
+- **Price engine:** `src/lib/pricing.js` (`quote`, `nightlyPrices`), with the holiday list from `src/lib/holidays.js`. Used by quotes, the direct booking page, the new-reservation price, the calendar, bulk changes and the price preview. Routes: `src/routes/pricing.js` (rules, seasons, preview) and `src/routes/bulk.js` (bulk prices and blocks, tags, room types).
+- **Team:** `src/lib/activity.js` turns `audit_logs` rows into plain-English lines (served by `src/routes/activity.js`). `src/lib/notify.js` (`notifyUser`) sends a push, or an email when no device accepts it, and checks `notify_prefs` first. `src/lib/push.js` has three new types (`mention`, `assignment`, `sync_problem`) and the `allowed()` check. Mentions and assignment are in `src/routes/inbox.js`. Notification settings are `GET` and `PATCH /account/notify-prefs` in `src/routes/push.js`.
+- **Groups:** `src/routes/stays.js` (`/booking-groups`, and room-type picks on `POST /reservations`). Group rooms are written in one transaction with the listings locked in a fixed order.
+- **Daily close:** `src/routes/dailyclose.js`. The checklist is computed on each request; only the close itself is stored.
+- **Sync health:** `src/lib/synchealth.js` (stale and failing checks, alerts), `src/routes/synchealth.js` (`GET /sync-health`), and `src/lib/ical.js`, which writes `ical_conflicts` on each sync and alerts once per new overlap.
+- **Limits:** price preview up to 120 days (default 60). Rule days per kind as in PRD F47. Bulk changes up to 50 listings and 366 nights, with a preview of the first 500 rows. Activity up to 200 lines. Daily close history up to 92 days. Groups 2 to 20 rooms. Daily close date up to tomorrow (Manila). Tags up to 10 per listing, 30 characters each. Room type up to 40 characters. Percentages −90 to 300 for rules and seasons; fortnight discount 0 to 90.
+- **Environment variables:** none added.
 
 ## 3. External services and integrations
 
@@ -226,6 +237,8 @@ Note: `ANTHROPIC_BASE_URL` is only used by the assistant (the drafts code ignore
 ---
 
 ## 4. Environment variables (names and purpose only)
+
+Phase 5 adds no environment variables.
 
 Phase 3 added no environment variables. Phase 4 added none either.
 
@@ -340,6 +353,8 @@ Fixed in code (not configurable): privacy policy version, terms version, time zo
 | Response time or uptime targets | None defined in the code or docs (**unverified**) |
 
 ### 5.3 Testing
+
+- Phase 5 test files: `test/pricing-rules.test.js`, `test/pricing.test.js`, `test/bulk.test.js`, `test/activity.test.js`, `test/team-notify.test.js`, `test/groups.test.js`, `test/dailyclose.test.js`, `test/synchealth.test.js`, `test/migration-032.test.js`.
 
 | Suite | How it runs |
 |---|---|

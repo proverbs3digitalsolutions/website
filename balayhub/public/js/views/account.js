@@ -51,6 +51,56 @@ function planLine(p) {
   return p.name;
 }
 
+// Notifications card: which kinds of alerts you get, and (owners and managers) for which properties.
+function notifyCard(role) {
+  const card = h('div', { class: 'card' });
+  async function load() {
+    card.replaceChildren(h('div', { class: 'card__head' }, h('h2', null, 'Notifications')), h('p', { class: 'muted' }, 'Loading…'));
+    let np;
+    try { np = await get('/account/notify-prefs'); } catch (err) {
+      card.replaceChildren(h('div', { class: 'card__head' }, h('h2', null, 'Notifications')), h('div', { class: 'alert alert--error', role: 'alert' }, err.message),
+        h('button', { class: 'btn btn--secondary btn--sm', style: { marginTop: '10px' }, onclick: load }, 'Try again'));
+      return;
+    }
+    const boxes = Object.entries(np.types).map(([k, on]) => {
+      const input = h('input', { type: 'checkbox', name: k, checked: on });
+      return h('label', { class: 'check', key: k }, input, h('span', null, np.labels[k]));
+    });
+    const props = np.properties;
+    const picked = new Set(np.property_ids || []);
+    const showProps = ['owner', 'manager'].includes(role) && props.length > 0;
+    let all = !np.property_ids;
+    const propBoxes = props.map((p) => h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'prop', value: p.property_id, checked: picked.has(p.property_id) }), h('span', null, p.property_name)));
+    const propList = h('div', { class: 'stack notify__props', hidden: all }, propBoxes);
+    const radio = (v, t) => h('label', { class: 'check' }, h('input', { type: 'radio', name: 'scope', value: v, checked: (v === 'all') === all, onchange: () => { all = v === 'all'; propList.hidden = all; } }), h('span', null, t));
+    const err = h('div', { class: 'error', role: 'alert' });
+    const save = h('button', { class: 'btn btn--primary btn--sm', type: 'submit' }, 'Save');
+    card.replaceChildren(
+      h('div', { class: 'card__head' }, h('h2', null, 'Notifications')),
+      h('form', {
+        class: 'stack',
+        onsubmit: async (e) => {
+          e.preventDefault(); err.textContent = '';
+          const types = Object.fromEntries(boxes.map((b) => [b.querySelector('input').name, b.querySelector('input').checked]));
+          const body = { types };
+          if (showProps) {
+            body.property_ids = all ? null : propBoxes.filter((b) => b.querySelector('input').checked).map((b) => b.querySelector('input').value);
+            if (!all && !body.property_ids.length) { err.textContent = 'Pick at least one property, or choose all properties.'; return; }
+          }
+          save.disabled = true;
+          try { await patch('/account/notify-prefs', body); toast('Notification settings saved.'); } catch (ex) { err.textContent = ex.fields.property_ids || ex.fields.types || ex.message; } finally { save.disabled = false; }
+        },
+      },
+      h('p', { class: 'muted small' }, 'Choose which alerts reach you by push or email.'),
+      h('div', { class: 'stack' }, boxes),
+      showProps && h('fieldset', { class: 'hp-fieldset' }, h('legend', null, 'Properties'),
+        h('div', { class: 'stack' }, radio('all', 'All properties'), radio('some', 'Only these properties'), propList)),
+      err, h('div', null, save)));
+  }
+  load();
+  return card;
+}
+
 export async function accountView(el, { rerender }) {
   const d = await get('/account/profile');
   const { user: u, workspace: w } = d;
@@ -146,6 +196,8 @@ export async function accountView(el, { rerender }) {
           d.sessions.length > 5 && h('button', { class: 'flt__clear', style: { marginTop: '6px' }, onclick: (e) => { e.currentTarget.closest('.card').querySelectorAll('.acct-more').forEach((li) => { li.hidden = false; }); e.currentTarget.remove(); } }, `Show ${d.sessions.length - 5} more`),
           others.length > 1 && h('button', { class: 'btn btn--secondary btn--sm', style: { marginTop: '10px' }, onclick: signOutOthers }, 'Sign out all other devices'),
           h('p', { class: 'muted small', style: { marginTop: '10px' } }, 'Don’t recognise a device? Sign it out and change your password.')),
+
+        w && notifyCard(w.role),
 
         h('div', { class: 'card' },
           h('div', { class: 'card__head' }, h('h2', null, 'Preferences')),

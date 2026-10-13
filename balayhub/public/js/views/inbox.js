@@ -153,11 +153,17 @@ export async function inboxView(el, { params, query, rerender }) {
 // ---------------------------------------------------------------- thread
 async function renderThread(pane, id, { status, back, rerender }) {
   const [{ conversation: c, messages }, { templates }, { assignees }] = await Promise.all([
-    get(`/inbox/${id}`), get('/message-templates'), get('/inbox/assignees'),
+    get(`/inbox/${id}`), get('/message-templates'), get(`/inbox/assignees${qs({ conversation_id: id })}`),
   ]);
 
   const act = async (fn, msg) => {
     try { await fn(); if (msg) toast(msg); rerender(); } catch (err) { toast(err.message, 'error'); }
+  };
+
+  // The server refuses an assignee who can't see this reservation; show why and put the dropdown back.
+  const assign = async (e) => {
+    try { await patch(`/inbox/${id}`, { assigned_to: e.target.value || null }); toast('Assignment updated.'); } catch (err) { toast(err.fields.assigned_to || err.message, 'error'); }
+    rerender();
   };
 
   const snooze = () => {
@@ -186,8 +192,8 @@ async function renderThread(pane, id, { status, back, rerender }) {
       h('div', { class: 'inbox__head-actions' },
         h('select', {
           class: 'input input--sm', 'aria-label': 'Assigned to',
-          onchange: (e) => act(() => patch(`/inbox/${id}`, { assigned_to: e.target.value || null }), 'Assignment updated.'),
-        }, h('option', { value: '' }, 'Unassigned'), assignees.map((a) => h('option', { value: a.user_id, selected: a.user_id === c.assigned_to }, a.full_name))),
+          onchange: assign,
+        }, h('option', { value: '' }, 'Unassigned'), c.assigned_to && !assignees.some((a) => a.user_id === c.assigned_to) && h('option', { value: c.assigned_to, selected: true }, c.assigned_name), assignees.map((a) => h('option', { value: a.user_id, selected: a.user_id === c.assigned_to }, a.full_name))),
         c.snoozed_until && new Date(c.snoozed_until) > new Date()
           ? h('button', { class: 'btn btn--secondary btn--sm', onclick: () => act(() => patch(`/inbox/${id}`, { snoozed_until: null }), 'Unsnoozed.') }, 'Unsnooze')
           : h('button', { class: 'btn btn--secondary btn--sm', onclick: snooze }, 'Snooze'),
@@ -220,7 +226,7 @@ async function renderThread(pane, id, { status, back, rerender }) {
     }
     return h('div', { class: `msg msg--${m.direction}${m.status === 'cancelled' ? ' msg--cancelled' : ''}` },
       m.direction === 'out' && m.subject && h('div', { class: 'msg__subject' }, m.subject),
-      h('div', { class: 'msg__body' }, m.body),
+      h('div', { class: 'msg__body' }, m.direction === 'note' ? renderMentions(m.body) : m.body),
       meta);
   };
 
@@ -228,12 +234,80 @@ async function renderThread(pane, id, { status, back, rerender }) {
     messages.length ? messages.map(bubble) : h('p', { class: 'muted small center' }, 'No messages yet. Write the first one below.'));
 
   pane.replaceChildren(
-    h('div', { class: 'card card--flush inbox__main' }, header, thread, composer(c, templates, status, rerender)),
+    h('div', { class: 'card card--flush inbox__main' }, header, thread, composer(c, templates, status, rerender, assignees)),
     summary(c));
   thread.scrollTop = thread.scrollHeight;
 }
 
-function composer(c, templates, status, rerender) {
+// "@[Full Name](user_id)" shows as a highlighted "@Full Name"; the stored text stays as typed.
+// Same pattern as MENTION_RE in src/routes/inbox.js, so only mentions the server saved are highlighted.
+const MENTION = /@\[([^\]\n]{1,120})\]\(([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\)/gi;
+function renderMentions(text) {
+  const out = [];
+  let last = 0;
+  String(text ?? '').replace(MENTION, (m, name, _id, idx) => {
+    if (idx > last) out.push(text.slice(last, idx));
+    out.push(h('span', { class: 'mention' }, `@${name}`));
+    last = idx + m.length;
+    return m;
+  });
+  if (!out.length) return text;
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+// Typing "@" in the note box lists teammates; arrows + Enter pick, Esc closes.
+function mentionPicker(body, people) {
+  const list = h('ul', { class: 'mention-list', role: 'listbox', id: `ml-${Math.random().toString(36).slice(2, 7)}`, 'aria-label': 'Team members', hidden: true });
+  let items = []; let active = 0; let start = -1;
+  const close = () => { list.hidden = true; items = []; start = -1; body.setAttribute('aria-expanded', 'false'); body.removeAttribute('aria-activedescendant'); };
+  const mark = () => {
+    [...list.children].forEach((li, i) => li.setAttribute('aria-selected', String(i === active)));
+    if (list.children[active]) body.setAttribute('aria-activedescendant', list.children[active].id);
+  };
+  const pick = (p) => {
+    const caret = body.selectionStart;
+    const ins = `@[${p.full_name}](${p.user_id}) `;
+    body.value = body.value.slice(0, start) + ins + body.value.slice(caret);
+    const pos = start + ins.length;
+    body.setSelectionRange(pos, pos);
+    close();
+    body.dispatchEvent(new Event('input'));
+    body.focus();
+  };
+  const update = () => {
+    const before = body.value.slice(0, body.selectionStart);
+    const m = /(^|\s)@([^@\n[\]]{0,30})$/.exec(before);
+    if (!m || !body.closest('.composer--note')) return close();
+    const q = m[2].toLowerCase();
+    items = people.filter((p) => p.full_name.toLowerCase().includes(q)).slice(0, 6);
+    if (!items.length) return close();
+    start = before.length - m[2].length - 1;
+    active = Math.min(active, items.length - 1);
+    list.replaceChildren(...items.map((p, i) => h('li', {
+      role: 'option', id: `${list.id}-${i}`, class: 'mention-list__item',
+      onmousedown: (e) => { e.preventDefault(); pick(p); },
+    }, p.full_name)));
+    list.hidden = false;
+    body.setAttribute('aria-expanded', 'true');
+    mark();
+  };
+  body.setAttribute('aria-controls', list.id);
+  body.setAttribute('aria-expanded', 'false');
+  body.addEventListener('input', () => { active = 0; update(); });
+  body.addEventListener('click', update);
+  body.addEventListener('blur', close);
+  body.addEventListener('keydown', (e) => {
+    if (list.hidden) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); active = (active + 1) % items.length; mark(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); active = (active - 1 + items.length) % items.length; mark(); }
+    else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pick(items[active]); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+  });
+  return { list, close };
+}
+
+function composer(c, templates, status, rerender, assignees = []) {
   let mode = 'message';
   const subject = h('input', { class: 'input input--sm', name: 'subject', maxlength: 200, placeholder: `Subject (default: ${c.subject})`, 'aria-label': 'Subject' });
   const body = h('textarea', { class: 'input', name: 'body', maxlength: 10000, placeholder: `Write to ${c.guest_name}…`, 'aria-label': 'Message' });
@@ -275,6 +349,7 @@ function composer(c, templates, status, rerender) {
     },
   }, '✨ Draft reply with AI');
 
+  const picker = mentionPicker(body, assignees);
   const modeTabs = h('div', { class: 'tabs tabs--compact', role: 'tablist' },
     [['message', 'Message guest'], ['note', 'Internal note']].map(([k, t]) => h('button', {
       type: 'button', role: 'tab', 'aria-selected': String(k === mode),
@@ -283,6 +358,7 @@ function composer(c, templates, status, rerender) {
         modeTabs.querySelectorAll('button').forEach((b) => b.setAttribute('aria-selected', String(b === e.currentTarget)));
         form.classList.toggle('composer--note', mode === 'note');
         sendBtn.textContent = mode === 'note' ? 'Save note' : 'Send';
+        if (mode !== 'note') picker.close();
         body.placeholder = mode === 'note' ? 'Only your team sees notes.' : `Write to ${c.guest_name}…`;
       },
     }, t)));
@@ -309,17 +385,18 @@ function composer(c, templates, status, rerender) {
         const r = await post(`/inbox/${c.conversation_id}/messages`, payload);
         try { sessionStorage.removeItem(draftKey); } catch { /* ignore */ }
         if (r.message.status === 'failed') toast(`Saved, but the email was not sent: ${r.message.error}`, 'error');
+        else if (r.mentions.length) toast(`Note saved. ${r.mentions.map((x) => x.full_name).join(', ')} mentioned.`);
         else toast({ note: 'Note saved.', scheduled: `Scheduled for ${fmtDateTime(r.message.scheduled_at)}.`, sent: 'Sent.' }[r.message.status] || 'Saved.');
         rerender();
       } catch (ex) {
-        err.textContent = ex.offline ? "You're offline. Your message is kept; try again when you're back online." : ex.message;
+        err.textContent = ex.offline ? "You're offline. Your message is kept; try again when you're back online." : (ex.fields.body || ex.message);
       } finally { busy = false; sendBtn.disabled = false; }
     },
   },
   h('div', { class: 'composer__top' }, modeTabs, h('div', { class: 'composer__tools' }, tplSelect, aiBtn)),
   noEmail,
   h('div', { class: 'composer__subject' }, subject),
-  body,
+  h('div', { class: 'composer__body' }, body, picker.list),
   err,
   h('div', { class: 'composer__actions' },
     h('label', { class: 'composer__later small muted' }, 'Send later (optional) ', sendAt),

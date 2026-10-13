@@ -309,3 +309,82 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 - **Search pages and the sitemap** are rate limited, and the sitemap is cached for 5 minutes.
 - **Other fixes:** adding an extra on the pay page can't be charged twice by a double tap. Quote checkout asks for privacy consent. The consent box no longer repeats the house rules, which have their own box.
 - **Accepted risk:** a host with a test payment key could make BalayHub send one reminder in 30 days to an address they type in.
+
+
+**D-66 · 2026-10-13 · Pricing rules (as built, Phase 5).**
+- Each night is priced in this order: a custom calendar price (kept as set), the holiday rate, a season (its fixed rate, or its percentage on the weekend or usual rate), the weekend rate, then the usual rate.
+- Booking-window rules: last-minute (check-in 0 to 30 days ahead, Manila date), far-out (31 to 540 days ahead) and gap night (fills a free gap of 1 to 7 nights between confirmed bookings or blocks). At most one of last-minute and far-out applies. A gap applies on top.
+- A listing rule replaces the workspace rule of the same kind. Percentages multiply each night that isn't custom, rounded to the centavo. The lowest price is applied after them.
+- One stay discount applies: monthly (28+), fortnight (14+) or weekly (7+), the first that fits.
+- Quotes, the direct booking page, the new-reservation price, the calendar and the preview all use this engine.
+*Why:* a price typed onto the calendar is exact; every other price comes from a rule that can be shown night by night.
+
+**D-67 · 2026-10-13 · Bulk changes (as built, Phase 5).**
+- Owners and managers pick up to 50 listings (checkboxes or a tag) and up to 366 nights, starting today or later. Managers reach only their properties.
+- Actions: set a price, change by a percentage, clear custom prices, block, unblock.
+- Preview and apply run the same code. Apply locks the listings in a fixed order, writes in one transaction and writes one audit entry with counts. The preview shows up to 500 rows, with totals.
+- A percentage change skips nights that have no price, and reports how many.
+
+**D-68 · 2026-10-13 · Tags and room types (as built, Phase 5).**
+- Tags are lowercase, 1 to 30 characters, up to 10 per listing. They filter the listing list, the calendar and bulk changes.
+- Room type is free text up to 40 characters, per listing. Picking a room type takes the first free active listing of that type, by name.
+
+**D-69 · 2026-10-13 · Team tools (as built, Phase 5).**
+- Activity: owners and managers only. The newest 200 lines from audit rows about the reservation and its related records. Free text is cleaned of email addresses and phone numbers. An action with no sentence shows its name in words.
+- Assignment: the new assignee is notified, unless it is you. Refused for someone who can't see the property.
+- Mentions: stored as `@[Full Name](user id)`. Each person is notified once. Only owners and managers who can see the property can be mentioned. Anyone else gets a 400 on the note text.
+- Notification settings: each person sees only the types their role can receive. Stored in `notify_prefs`.
+
+**D-70 · 2026-10-13 · Group bookings (as built, Phase 5).**
+- One lead guest and 2 to 20 rooms. Each room is a normal reservation linked by `group_id`. All rooms are saved in one transaction, or none are. Taken rooms are named (409 `ROOMS_TAKEN`).
+- A room type takes the first free listing. It never takes a listing another row in the same group names for the same nights. None free gives 409 `NO_FREE_ROOM`.
+- A group is visible only when every room is in the viewer's properties. Staff see groups without money.
+- Removing a room needs a reason and uses the normal cancel path. Cancelling the group cancels each confirmed room.
+
+**D-71 · 2026-10-13 · Moving a booking (as built, Phase 5).**
+- Drag on the calendar, or "Move to another listing", uses the normal reservation update. Dates and price stay the same. The cleaning task follows the existing rule.
+- Refused for channel-managed stays and for a taken listing (409, shown to the user). Owners and managers only.
+
+**D-72 · 2026-10-13 · Daily close (as built, Phase 5).**
+- The checklist is computed on each request for the chosen Manila date, within the caller's properties. Only the close itself is stored: counts, payment totals by method, an optional note, and who closed it.
+- One close per workspace per date. Closing again updates it. Every save is audited.
+- A manager's close records their properties; an owner's records none (whole workspace). A manager can't overwrite a close that covers properties they don't manage (409).
+- Balances due: check-ins within 2 days, plus guests staying now. Home reminds owners and managers after 9 PM Manila time.
+
+**D-73 · 2026-10-13 · Sync health (as built, Phase 5).**
+- Stale: no sync for 3 hours. A feed that has never synced counts from when it was added. Failing: the last sync errored, not counting "Synced:" messages that only skipped overlaps.
+- Overlaps are stored in `ical_conflicts` and shown until the channel stops reporting them. Each new overlap sends one alert during the 30-minute import.
+- The `sync-health` job (every 15 minutes) alerts once per new stale or failing problem. `ical_feeds.alerted_at` and `problem_since` track this. A problem that clears resets, so a return is alerted again.
+- Archived listings and properties raise no warnings and send no alerts.
+
+**D-74 · 2026-10-13 · Agreed build choices and open differences (Phase 5).**
+- A custom calendar price is used exactly as set, even below the lowest-price floor.
+- An inactive listing rule switches that kind off for that listing.
+- The calendar and price preview show each night as a one-night stay. So a last-minute price can differ from the price of a longer stay.
+- A bulk block skips the whole listing if any night in the range overlaps a booking or block.
+- A bulk unblock removes only manual blocks fully inside the range. Channel blocks, owner stays and reservations are never removed.
+- Previews never write.
+- A bulk percentage change uses today's computed price for each night.
+- Group rooms are all or nothing. A group is visible only when every room is in the viewer's properties. Group bookings send no automatic confirmation email. Payments stay per room.
+- Removing a room needs a reason. A manager can't overwrite a close that covers more than their properties.
+- Balances due include guests staying now.
+- Email is used when a push reaches no device.
+- Mentions reach only people who can see the reservation. Assignment is refused for a manager outside the property.
+- A sync overlap that clears and then returns sends alerts again. A never-synced feed counts as stale after 3 hours. Archived listings don't raise sync warnings.
+- Fixes made during the build: sync problem alerts use their own notification type (`sync_problem`); archived listings are left out of sync warnings; a conversation can't be assigned to a manager who can't see the property.
+- Not yet in the activity history: check-in form submissions and the reason given for a refund.
+- Open differences from the spec, not yet decided (see PRD.MD known gaps): sync warnings are not on Listings; the profit and loss page has no tag filter; any member can choose among their visible properties for alerts; the Home reminder reads "Today isn't closed yet. Close the day." rather than "Day not closed yet"; a manager with no properties can save a close that counts as whole-workspace (BACKEND-SCHEMA.MD section 7, finding 15).
+*Why:* each of these was a choice made during the build, to keep money exact, keep rules explainable, and keep alerts to people who can see the data.
+
+**D-75 · 2026-10-13 · Phase 5 security review fixes and corrections.** The review passed. Fixed before release:
+- **Daily close:**
+  - A manager with no assigned properties can't open or save the daily close.
+  - Managers see a stored close only if it covers the whole workspace or shares one of their properties.
+- **Group bookings:** adding a room locks the group, so it can't race a group cancel. Removing a room re-checks it under the same lock. Removing the last room cancels the group.
+- **Mentions:**
+  - A mention is saved with the person's real name, so it can't show one name and notify another.
+  - Only real mentions in internal notes are highlighted.
+  - Notes with mentions and assignment changes are each limited to 60 an hour per person.
+- **Prices:** stacked percentage changes (season, last-minute or far-out, gap night) can't take a night below 10% of its usual price. Custom calendar prices, including those written by bulk changes, are still used exactly as set.
+- **Sync warnings:** they reach owners and managers through the new "Calendar sync problems" notification type. Archived listings don't raise them. Conversations can't be assigned to a manager who can't see that property.
+- **Correction to D-74:** sync warnings are also shown on each listing card in Listings.

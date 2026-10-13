@@ -6,6 +6,7 @@ import { state, navigate } from '../app.js';
 import { barChart, lineChart, SERIES } from '../charts.js';
 import { launchpadReminder } from './launchpad.js';
 import { depositsDueCard } from './deposits.js';
+import { CHANNEL_LABEL } from './reservations.js';
 
 const shortDay = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
 const pesoWhole = (v) => `₱${Math.round(Number(v || 0)).toLocaleString('en-PH')}`;
@@ -163,10 +164,48 @@ async function suppliesAlert() {
   return h('a', { class: 'alert alert--warn', href: '#/supplies', style: { display: 'block' } }, `Supplies running low (${low.count})`);
 }
 
-const label = (v) => ({ direct: 'Direct', airbnb: 'Airbnb', booking: 'Booking.com', agoda: 'Agoda', other: 'Other' })[v] || v;
+// Owners and managers: conversations assigned to me.
+async function assignedAlert() {
+  if (!['owner', 'manager'].includes(state.user.role)) return null;
+  let r;
+  try { r = await get('/inbox/assigned-count'); } catch { return null; }
+  const n = Number(r.count);
+  if (!n) return null;
+  return h('a', { class: 'alert alert--info', href: '#/inbox?view=mine', style: { display: 'block' } }, `Assigned to you (${n})`);
+}
+
+const SYNC_TEXT = {
+  stale: (p) => `${p.unit_name}: the ${label(p.channel)} calendar hasn’t updated since ${fmtDate(String(p.since).slice(0, 10))}. Bookings may be out of date.`,
+  failing: (p) => `${p.unit_name}: the ${label(p.channel)} calendar can’t be read (${p.message}). Check the link.`,
+  overlap: (p) => `${p.unit_name}: a ${label(p.channel)} booking overlaps another (${fmtDate(p.check_in)} to ${fmtDate(p.check_out)}). Fix it to avoid a double booking.`,
+};
+// Owners and managers: calendar sync problems.
+async function syncAlert() {
+  if (!['owner', 'manager'].includes(state.user.role)) return null;
+  let r;
+  try { r = await get('/sync-health'); } catch { return null; }
+  const { problems } = r;
+  if (!problems.length) return null;
+  return h('div', { class: 'alert alert--warn sync-alert', role: 'status' },
+    h('strong', null, `Calendar sync problems (${problems.length})`),
+    h('ul', { class: 'sync-alert__list' }, problems.map((p) => h('li', null, SYNC_TEXT[p.kind](p), ' ', h('a', { href: `#/listings?focus=${p.unit_id}` }, 'Open listing')))));
+}
+
+// After 9 PM Manila, owners and managers are nudged to close the day.
+async function dayCloseAlert() {
+  if (!['owner', 'manager'].includes(state.user.role)) return null;
+  const hour = Number(new Intl.DateTimeFormat('en-GB', { hour: '2-digit', hourCycle: 'h23', timeZone: 'Asia/Manila' }).format(new Date()));
+  if (hour < 21) return null;
+  let r;
+  try { r = await get(`/daily-close${qs({ date: todayManila() })}`); } catch { return null; }
+  if (r.closed) return null;
+  return h('a', { class: 'alert alert--warn', href: '#/daily-close', style: { display: 'block' } }, 'Today isn’t closed yet. Close the day.');
+}
+
+const label = (v) => CHANNEL_LABEL[v];
 
 export async function homeView(el, { rerender } = {}) {
-  const [{ listings }, onboard, deposits, proofAlert, lowAlert] = await Promise.all([get('/listings'), launchpadReminder(rerender), depositsDueCard(), proofsAlert(), suppliesAlert()]);
+  const [{ listings }, onboard, deposits, proofAlert, lowAlert, assigned, sync, closeAlert] = await Promise.all([get('/listings'), launchpadReminder(rerender), depositsDueCard(), proofsAlert(), suppliesAlert(), assignedAlert(), syncAlert(), dayCloseAlert()]);
   const first = state.user.full_name.split(' ')[0];
   const head = h('div', { class: 'page-head' },
     h('div', { class: 'page-head__title' }, h('h1', null, `Welcome back, ${first}`), h('p', null, `${state.user.organization_name} · ${fmtDate(todayManila())}`)),
@@ -181,5 +220,5 @@ export async function homeView(el, { rerender } = {}) {
     })));
     return;
   }
-  el.replaceChildren(head, h('div', { class: 'stack' }, proofAlert, lowAlert, onboard, overviewCard(), deposits, trendsCard(), revenueSection()));
+  el.replaceChildren(head, h('div', { class: 'stack' }, assigned, sync, closeAlert, proofAlert, lowAlert, onboard, overviewCard(), deposits, trendsCard(), revenueSection()));
 }

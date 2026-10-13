@@ -16,7 +16,21 @@ const TYPES = {
   checkin_form: { label: 'Guest check-in forms', roles: ['owner', 'manager'] },
   payment: { label: 'Online payments', roles: ['owner', 'manager'] },
   cleaning: { label: 'Cleaning tasks', roles: ['owner', 'manager', 'staff', 'cleaner'] },
+  mention: { label: 'Mentions in notes', roles: ['owner', 'manager'] },
+  assignment: { label: 'Conversations assigned to you', roles: ['owner', 'manager'] },
+  sync_problem: { label: 'Calendar sync problems', roles: ['owner', 'manager'] },
 };
+
+// May this person (a users row: role and notify_prefs) get a `type` notification about `propertyId`?
+// No when they switched the type off, their role doesn't fit it, or they filtered out that property.
+// Lives here (not in notify.js) because it needs TYPES and notify.js already imports this module.
+function allowed(user, type, propertyId) {
+  const t = TYPES[type];
+  if (!t || !t.roles.includes(user.role)) return false;
+  const prefs = user.notify_prefs || {};
+  if (prefs[type] === false) return false;
+  return !Array.isArray(prefs.property_ids) || prefs.property_ids.includes(propertyId);
+}
 
 let keys = null;
 function vapid() {
@@ -41,24 +55,23 @@ function vapid() {
 }
 
 // Who should hear about something in a property: active members whose role
-// fits, who can see that property, and who haven't turned this type off.
+// fits and who can see that property. Their settings are checked by allowed().
 async function recipients(orgId, type, propertyId, onlyRoles, onlyUser) {
   const roles = onlyRoles || TYPES[type].roles;
   const { rows } = await query(
-    `SELECT s.* FROM push_subscriptions s JOIN users u ON u.user_id = s.user_id
+    `SELECT s.*, u.role, u.notify_prefs FROM push_subscriptions s JOIN users u ON u.user_id = s.user_id
       WHERE u.organization_id = $1 AND u.account_status = 'active' AND u.role = ANY($2)
-        AND COALESCE((u.notify_prefs->>$3)::boolean, true)
-        AND (u.role = 'owner' OR $4::uuid IS NULL
-             OR EXISTS (SELECT 1 FROM property_assignments pa WHERE pa.user_id = u.user_id AND pa.property_id = $4))
-        AND ($5::uuid IS NULL OR u.user_id = $5)`,
-    [orgId, roles, type, propertyId || null, onlyUser || null]);
+        AND (u.role = 'owner' OR $3::uuid IS NULL
+             OR EXISTS (SELECT 1 FROM property_assignments pa WHERE pa.user_id = u.user_id AND pa.property_id = $3))
+        AND ($4::uuid IS NULL OR u.user_id = $4)`,
+    [orgId, roles, propertyId || null, onlyUser || null]);
   return rows;
 }
 
 // Send to everyone concerned. Never throws.
 async function notify(orgId, type, { title, body, url, propertyId, roles, userId }) {
   try {
-    const subs = await recipients(orgId, type, propertyId, roles, userId);
+    const subs = (await recipients(orgId, type, propertyId, roles, userId)).filter((s) => allowed(s, type, propertyId));
     if (!subs.length) return 0;
     vapid();
     const payload = JSON.stringify({ title, body, url: url || '/#/home', tag: type });
@@ -87,4 +100,4 @@ async function propertyOfBooking(bookingId) {
   return r?.property_id || null;
 }
 
-module.exports = { TYPES, vapid, notify, propertyOfBooking, webpush };
+module.exports = { TYPES, vapid, allowed, notify, propertyOfBooking, webpush };

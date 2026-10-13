@@ -56,6 +56,9 @@ const unitSpec = {
   cancellation_policy_text: { type: 'text', max: 1000, label: 'Custom policy text' },
   deposit_pct: { type: 'int', min: 10, max: 90, label: 'Deposit' },
   public_slug: { type: 'string', max: 60, label: 'Page address' },
+  room_type: { type: 'string', max: 40, label: 'Room type' },
+  min_price: { type: 'money', label: 'Lowest price' },
+  fortnight_discount: { type: 'int', min: 0, max: 90, label: 'Fourteen-night discount' },
 };
 
 // A custom policy is the host's own wording, so it can't be blank.
@@ -70,6 +73,18 @@ function checkSlugFormat(slug) {
   if (!SLUG_RE.test(slug || '')) {
     throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { public_slug: 'Use 3 to 60 lowercase letters, numbers or hyphens.' } });
   }
+}
+
+// Listing tags: lowercase, trimmed, 1 to 30 characters, at most 10 per listing, no repeats.
+const TAG_LIMIT = 10;
+const tagError = (msg) => new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { tags: msg } });
+function parseTags(raw) {
+  if (raw === null || raw === undefined) return [];
+  if (!Array.isArray(raw) || raw.some((t) => typeof t !== 'string')) throw tagError('Tags must be a list of words.');
+  const tags = [...new Set(raw.map((t) => t.trim().toLowerCase()))];
+  if (tags.some((t) => t.length < 1 || t.length > 30)) throw tagError('Each tag needs 1 to 30 characters.');
+  if (tags.length > TAG_LIMIT) throw tagError(`Use at most ${TAG_LIMIT} tags on one listing.`);
+  return tags;
 }
 
 // Page addresses are unique within a workspace. No database index enforces that (units have no
@@ -109,6 +124,7 @@ const UNIT_SELECT = `
          u.description, u.bookable_online, u.payment_option, u.min_nights, u.balance_due_days,
          u.weekend_rate, u.holiday_rate, u.weekly_discount, u.monthly_discount,
          u.cancellation_policy, u.cancellation_policy_text, u.deposit_pct,
+         u.tags, u.room_type, u.min_price, u.fortnight_discount,
          l.lease_id AS active_lease_id, l.end_date AS lease_end_date, t.tenant_id, t.full_name AS tenant_name,
          CASE WHEN u.status = 'archived' THEN 'archived'
               WHEN l.lease_id IS NOT NULL THEN 'occupied'
@@ -270,6 +286,7 @@ router.post('/properties/:id/units', managers, ah(async (req, res) => {
   const body = validate(req.body, unitSpec);
   checkCustomPolicy(body.cancellation_policy, body.cancellation_policy_text);
   if (body.public_slug) checkSlugFormat(body.public_slug);
+  const tags = parseTags(req.body?.tags);
   try {
     const unit = await tx(async (db) => {
       const org = req.user.organization_id;
@@ -282,17 +299,20 @@ router.post('/properties/:id/units', managers, ah(async (req, res) => {
                             wifi_name, wifi_password, checkin_instructions, house_rules,
                             description, bookable_online, payment_option, min_nights, balance_due_days,
                             weekend_rate, holiday_rate, weekly_discount, monthly_discount,
-                            cancellation_policy, cancellation_policy_text, deposit_pct, public_slug)
+                            cancellation_policy, cancellation_policy_text, deposit_pct, public_slug,
+                            room_type, min_price, fortnight_discount, tags)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,COALESCE($11::time, '14:00'),COALESCE($12::time, '12:00'),$13,$14,$15,$16,
                  $17, $18, COALESCE($19, 'either'), COALESCE($20, 1), COALESCE($21, 3),
-                 $22, $23, COALESCE($24, 0), COALESCE($25, 0), $26, $27, COALESCE($28, 50), $29) RETURNING *`,
+                 $22, $23, COALESCE($24, 0), COALESCE($25, 0), $26, $27, COALESCE($28, 50), $29,
+                 $30, $31, COALESCE($32, 0), $33::text[]) RETURNING *`,
         [property.property_id, body.unit_name, body.unit_type, body.monthly_rent || '0.00', body.security_deposit_amount || '0.00',
           body.availability || 'available', body.availability_date, body.nightly_rate, body.cleaning_fee || '0.00',
           body.max_guests, body.checkin_time, body.checkout_time,
           body.wifi_name, body.wifi_password, body.checkin_instructions, body.house_rules,
           body.description, Boolean(body.bookable_online), body.payment_option, body.min_nights, body.balance_due_days,
           body.weekend_rate, body.holiday_rate, body.weekly_discount, body.monthly_discount,
-          body.cancellation_policy, body.cancellation_policy_text, body.deposit_pct, publicSlug]);
+          body.cancellation_policy, body.cancellation_policy_text, body.deposit_pct, publicSlug,
+          body.room_type, body.min_price, body.fortnight_discount, tags]);
       await audit(db, req.user, 'unit.created', 'unit', u.unit_id, { property_id: property.property_id, name: u.unit_name });
       return u;
     });
@@ -308,6 +328,7 @@ router.post('/properties/:id/units', managers, ah(async (req, res) => {
 router.patch('/units/:id', managers, ah(async (req, res) => {
   const unit = await loadUnit(req.user, uuidParam(req.params.id));
   const body = validate(req.body, unitSpec, { partial: true });
+  if (req.body?.tags !== undefined) body.tags = parseTags(req.body.tags);
   checkCustomPolicy(
     'cancellation_policy' in body ? body.cancellation_policy : unit.cancellation_policy,
     'cancellation_policy_text' in body ? body.cancellation_policy_text : unit.cancellation_policy_text);
@@ -317,7 +338,7 @@ router.patch('/units/:id', managers, ah(async (req, res) => {
   // deposit_pct is NOT NULL, so a blank deposit leaves it unchanged rather than clearing it.
   const keys = Object.keys(body).filter((k) => body[k] !== null
     || ['availability_date', 'nightly_rate', 'max_guests', 'wifi_name', 'wifi_password', 'checkin_instructions', 'house_rules', 'description',
-      'weekend_rate', 'holiday_rate', 'cancellation_policy', 'cancellation_policy_text'].includes(k));
+      'weekend_rate', 'holiday_rate', 'cancellation_policy', 'cancellation_policy_text', 'room_type', 'min_price'].includes(k));
   if (!keys.length) return res.json({ unit });
   const sets = keys.map((k, i) => `${k} = $${i + 2}`);
   try {

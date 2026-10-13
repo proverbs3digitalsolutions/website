@@ -92,8 +92,13 @@ const { quote, nightlyPrices } = require('../lib/pricing');
 router.get('/listings', ah(async (req, res) => {
   const params = [];
   const scope = propertyScope(req.user, params);
+  // ?tag= keeps only the listings with that tag (tags are stored lowercase).
+  const tag = typeof req.query.tag === 'string' ? req.query.tag.trim().toLowerCase() : '';
+  if (tag) params.push(tag);
+  const tagWhere = tag ? ` AND $${params.length} = ANY(u.tags)` : '';
   const { rows } = await query(
     `SELECT u.unit_id, u.unit_name, u.unit_type, u.nightly_rate, u.cleaning_fee, u.max_guests, u.cleaning_status, u.bookable_online,
+            u.tags, u.room_type,
             to_char(u.checkin_time, 'HH24:MI') AS checkin_time, to_char(u.checkout_time, 'HH24:MI') AS checkout_time,
             p.property_id, p.property_name, p.city,
             (SELECT COUNT(*) FROM ical_feeds f WHERE f.unit_id = u.unit_id) AS channel_count,
@@ -108,7 +113,7 @@ router.get('/listings', ah(async (req, res) => {
        LEFT JOIN LATERAL (SELECT * FROM bookings b WHERE b.unit_id = u.unit_id AND b.kind = 'reservation' AND b.status = 'confirmed'
                             AND b.check_in > ${TODAY} ORDER BY b.check_in LIMIT 1) nxt ON true
        LEFT JOIN guests ng ON ng.guest_id = nxt.guest_id
-      WHERE ${scope} AND u.status = 'active' AND p.status = 'active'
+      WHERE ${scope} AND u.status = 'active' AND p.status = 'active'${tagWhere}
       ORDER BY p.property_name, u.unit_name`, params);
   res.json({ listings: rows });
 }));
@@ -330,38 +335,144 @@ router.get('/reservations/:id', ah(async (req, res) => {
   const { rows: payments } = await query(
     `SELECT bp.*, u.full_name AS recorded_by_name FROM booking_payments bp LEFT JOIN users u ON u.user_id = bp.recorded_by
       WHERE bp.booking_id = $1 ORDER BY bp.payment_date DESC, bp.created_at DESC`, [booking.booking_id]);
-  res.json({ reservation: redactGuest(req.user, booking), payments });
+  const group = booking.group_id ? await one('SELECT group_id, name FROM booking_groups WHERE group_id = $1', [booking.group_id]) : null;
+  res.json({ reservation: { ...redactGuest(req.user, booking), group: group ? { group_id: group.group_id, name: group.name } : null }, payments });
 }));
 
-const reservationSpec = {
-  unit_id: { type: 'uuid', required: true, label: 'Listing' },
+// A room names a listing, or a room type at a property (the first free listing of that type is taken).
+const roomSpec = {
+  unit_id: { type: 'uuid', label: 'Listing' },
+  room_type: { type: 'string', max: 40, label: 'Room type' },
+  property_id: { type: 'uuid', label: 'Property' },
   check_in: { type: 'date', required: true, label: 'Check-in' },
   check_out: { type: 'date', required: true, label: 'Check-out' },
+  num_guests: { type: 'int', min: 1, max: 50, label: 'Number of guests' },
+  accommodation_total: { type: 'money', label: 'Accommodation total' },
+  cleaning_fee: { type: 'money', label: 'Cleaning fee' },
+};
+
+const reservationSpec = {
+  ...roomSpec,
   guest_id: { type: 'uuid', label: 'Guest' },
   guest_name: { type: 'string', max: 120, label: 'Guest name' },
   guest_phone: { type: 'phone', label: 'Guest mobile' },
   guest_email: { type: 'email', label: 'Guest email' },
-  num_guests: { type: 'int', min: 1, max: 50, label: 'Number of guests' },
   channel: { type: 'enum', values: CHANNELS, label: 'Booked through' },
-  accommodation_total: { type: 'money', label: 'Accommodation total' },
-  cleaning_fee: { type: 'money', label: 'Cleaning fee' },
   other_fees: { type: 'money', label: 'Other fees' },
   channel_fee: { type: 'money', label: 'Channel fee' },
   notes: { type: 'text', max: 1000, label: 'Notes' },
   send_confirmation: { type: 'bool', label: 'Email confirmation' },
 };
 
-function checkStay(body, unit) {
+const NO_RATE = 'This listing has no nightly rate for some of these nights. Enter the accommodation total.';
+const sameNights = (a, b) => a.check_in < b.check_out && b.check_in < a.check_out;
+
+function checkDates(body) {
   if (body.check_out <= body.check_in) throw validationError({ check_out: 'Check-out must be after check-in.' });
   if (nightsBetween(body.check_in, body.check_out) > 366) throw validationError({ check_out: 'Stays are limited to one year.' });
+}
+
+function checkStay(body, unit) {
+  checkDates(body);
   if (body.num_guests && unit.max_guests && body.num_guests > unit.max_guests) {
     throw validationError({ num_guests: `This listing allows up to ${unit.max_guests} guests.` });
   }
 }
 
+// A stay names a listing or a room type at a property, not both and not neither.
+function checkListingChoice(body) {
+  if (body.unit_id) {
+    if (body.room_type || body.property_id) throw validationError({ room_type: 'Choose a listing or a room type, not both.' });
+    return;
+  }
+  const fields = {};
+  if (!body.room_type) fields.room_type = 'Choose a listing or a room type.';
+  if (!body.property_id) fields.property_id = 'Choose the property for this room type.';
+  if (Object.keys(fields).length) throw validationError(fields);
+}
+
+// The listings, of those given, that already have a confirmed stay or block on any of these nights.
+async function busyListings(unitIds, checkIn, checkOut, db = { query }) {
+  const { rows } = await db.query(
+    `SELECT DISTINCT unit_id FROM bookings
+      WHERE unit_id = ANY($1) AND status = 'confirmed' AND daterange(check_in, check_out) && daterange($2::date, $3::date)`,
+    [unitIds, checkIn, checkOut]);
+  return new Set(rows.map((r) => r.unit_id));
+}
+
+// Listings of a room type at a property, in the order a free one is taken (by name).
+async function roomTypeListings(user, room, db = { query }) {
+  const params = [room.property_id, room.room_type];
+  const { rows } = await db.query(
+    `SELECT u.unit_id FROM units u JOIN properties p ON p.property_id = u.property_id
+      WHERE p.property_id = $1 AND lower(u.room_type) = lower($2) AND u.status = 'active' AND p.status = 'active'
+        AND ${propertyScope(user, params)}
+      ORDER BY u.unit_name, u.unit_id`, params);
+  return rows.map((r) => r.unit_id);
+}
+
+const noFreeRoom = (room) => new HttpError(409, `No free ${room.room_type} at this property on these dates.`, { code: 'NO_FREE_ROOM' });
+
+// A single reservation for a room type: the first free listing of that type.
+async function pickListing(user, room) {
+  checkDates(room);
+  const ids = await roomTypeListings(user, room);
+  const busy = await busyListings(ids, room.check_in, room.check_out);
+  const free = ids.find((id) => !busy.has(id));
+  if (!free) throw noFreeRoom(room);
+  return loadUnit(user, free);
+}
+
+// The guest for a stay: the one named; else the repeat guest with the same email and first name; else a new guest.
+async function resolveGuest(db, user, g) {
+  if (g.guest_id) return g.guest_id;
+  // Same email as a guest you've hosted before: it's them again (repeat stays add up).
+  // Only a guest this user can already see, and whose first name matches what was typed.
+  if (g.guest_email && g.guest_name) {
+    const params = [g.guest_email, g.guest_name];
+    const { rows: [prev] } = await db.query(
+      `SELECT g.guest_id FROM guests g WHERE lower(g.email) = lower($1)
+          AND lower(split_part(trim(g.full_name), ' ', 1)) = lower(split_part(trim($2), ' ', 1))
+          AND ${guestScope(user, params)} ORDER BY g.created_at LIMIT 1`, params);
+    if (prev) return prev.guest_id;
+  }
+  const { rows: [created] } = await db.query(
+    `INSERT INTO guests (organization_id, full_name, email, phone, created_by) VALUES ($1,$2,$3,$4,$5) RETURNING guest_id`,
+    [user.organization_id, g.guest_name, g.guest_email, g.guest_phone, user.user_id]);
+  return created.guest_id;
+}
+
+// One reservation row and its audit line, inside the caller's transaction. Guest and listing are already checked.
+async function insertReservation(db, user, unit, body, { guestId, accommodation, groupId = null, action = 'reservation.created' }) {
+  const { rows: [b] } = await db.query(
+    `INSERT INTO bookings (organization_id, unit_id, kind, guest_id, channel, check_in, check_out, num_guests,
+                           accommodation_total, cleaning_fee, other_fees, channel_fee, confirmation_code, notes, created_by, group_id)
+     VALUES ($1,$2,'reservation',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING booking_id, confirmation_code`,
+    [user.organization_id, unit.unit_id, guestId, body.channel || 'direct', body.check_in, body.check_out, body.num_guests,
+      accommodation, body.cleaning_fee ?? unit.cleaning_fee ?? '0.00', body.other_fees || '0.00', body.channel_fee || '0.00',
+      ical.randomCode('BH'), body.notes ?? null, user.user_id, groupId]);
+  await audit(db, user, action, 'booking', b.booking_id, { code: b.confirmation_code, check_in: body.check_in, check_out: body.check_out, booking_id: b.booking_id, group_id: groupId });
+  return b;
+}
+
+// The normal cancel path: used by the reservation cancel route and by removing a room from a group.
+function assertCancellable(booking) {
+  if (booking.status === 'cancelled') throw new HttpError(409, 'This reservation is already cancelled.', { code: 'CANCELLED' });
+  if (booking.ical_feed_id) {
+    throw new HttpError(409, 'This stay comes from a channel calendar. Cancel it on the channel; BalayHub updates on the next sync.', { code: 'CHANNEL_MANAGED' });
+  }
+}
+
+async function cancelBooking(user, booking, reason, { db = { query }, action = 'reservation.cancelled' } = {}) {
+  await db.query(`UPDATE bookings SET status = 'cancelled', cancelled_at = now(), cancel_reason = $2, updated_at = now() WHERE booking_id = $1`,
+    [booking.booking_id, reason]);
+  await audit(db, user, action, 'booking', booking.booking_id, { reason, booking_id: booking.booking_id, group_id: booking.group_id ?? null });
+}
+
 router.post('/reservations', managers, ah(async (req, res) => {
   const body = validate(req.body, reservationSpec);
-  const unit = await loadUnit(req.user, body.unit_id);
+  checkListingChoice(body);
+  const unit = body.unit_id ? await loadUnit(req.user, body.unit_id) : await pickListing(req.user, body);
   if (unit.status !== 'active' || unit.property_status !== 'active') throw new HttpError(409, 'This listing is archived.', { code: 'ARCHIVED' });
   checkStay(body, unit);
   if (body.guest_id) await loadGuest(req.user, body.guest_id);
@@ -370,35 +481,13 @@ router.post('/reservations', managers, ah(async (req, res) => {
   let accommodation = body.accommodation_total;
   if (accommodation === null) {
     const q = await quote(unit.unit_id, body.check_in, body.check_out);
-    if (q.missing_rates) throw validationError({ accommodation_total: 'This listing has no nightly rate for some of these nights. Enter the accommodation total.' });
+    if (q.missing_rates) throw validationError({ accommodation_total: NO_RATE });
     accommodation = q.accommodation_total;
   }
   try {
     const id = await tx(async (db) => {
-      let guestId = body.guest_id;
-      // Same email as a guest you've hosted before: it's them again (repeat stays add up).
-      // Only a guest this user can already see, and whose first name matches what was typed.
-      if (!guestId && body.guest_email && body.guest_name) {
-        const params = [body.guest_email, body.guest_name];
-        const { rows: [prev] } = await db.query(
-          `SELECT g.guest_id FROM guests g WHERE lower(g.email) = lower($1)
-              AND lower(split_part(trim(g.full_name), ' ', 1)) = lower(split_part(trim($2), ' ', 1))
-              AND ${guestScope(req.user, params)} ORDER BY g.created_at LIMIT 1`, params);
-        guestId = prev?.guest_id;
-      }
-      if (!guestId) {
-        const { rows: [g] } = await db.query(
-          `INSERT INTO guests (organization_id, full_name, email, phone, created_by) VALUES ($1,$2,$3,$4,$5) RETURNING guest_id`,
-          [req.user.organization_id, body.guest_name, body.guest_email, body.guest_phone, req.user.user_id]);
-        guestId = g.guest_id;
-      }
-      const { rows: [b] } = await db.query(
-        `INSERT INTO bookings (organization_id, unit_id, kind, guest_id, channel, check_in, check_out, num_guests,
-                               accommodation_total, cleaning_fee, other_fees, channel_fee, confirmation_code, notes, created_by)
-         VALUES ($1,$2,'reservation',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING booking_id, confirmation_code`,
-        [req.user.organization_id, unit.unit_id, guestId, body.channel || 'direct', body.check_in, body.check_out, body.num_guests,
-          accommodation, body.cleaning_fee ?? unit.cleaning_fee ?? '0.00', body.other_fees || '0.00', body.channel_fee || '0.00', ical.randomCode('BH'), body.notes, req.user.user_id]);
-      await audit(db, req.user, 'reservation.created', 'booking', b.booking_id, { code: b.confirmation_code, check_in: body.check_in, check_out: body.check_out });
+      const guestId = await resolveGuest(db, req.user, body);
+      const b = await insertReservation(db, req.user, unit, body, { guestId, accommodation });
       // Claim the "on booking" automation now, so it can't also send the confirmation.
       if (body.send_confirmation) await receipts.claimConfirmation(db, b.booking_id, req.user.organization_id);
       return b.booking_id;
@@ -416,7 +505,7 @@ router.patch('/reservations/:id', managers, ah(async (req, res) => {
   if (booking.kind !== 'reservation') throw notFound();
   if (booking.status !== 'confirmed') throw new HttpError(409, 'Cancelled reservations cannot be changed.', { code: 'CANCELLED' });
   const body = validate(req.body, {
-    unit_id: reservationSpec.unit_id, check_in: reservationSpec.check_in, check_out: reservationSpec.check_out,
+    unit_id: { ...reservationSpec.unit_id, required: true }, check_in: reservationSpec.check_in, check_out: reservationSpec.check_out,
     num_guests: reservationSpec.num_guests, channel: reservationSpec.channel, accommodation_total: reservationSpec.accommodation_total,
     cleaning_fee: reservationSpec.cleaning_fee, other_fees: reservationSpec.other_fees, channel_fee: reservationSpec.channel_fee, notes: reservationSpec.notes,
   }, { partial: true });
@@ -453,14 +542,9 @@ router.patch('/reservations/:id', managers, ah(async (req, res) => {
 router.post('/reservations/:id/cancel', managers, ah(async (req, res) => {
   const booking = await loadBooking(req.user, uuidParam(req.params.id));
   if (booking.kind !== 'reservation') throw notFound();
-  if (booking.status === 'cancelled') throw new HttpError(409, 'This reservation is already cancelled.', { code: 'CANCELLED' });
-  if (booking.ical_feed_id) {
-    throw new HttpError(409, 'This stay comes from a channel calendar. Cancel it on the channel; BalayHub updates on the next sync.', { code: 'CHANNEL_MANAGED' });
-  }
+  assertCancellable(booking);
   const { reason } = validate(req.body, { reason: { type: 'string', required: true, max: 300, label: 'Reason' } });
-  await query(`UPDATE bookings SET status = 'cancelled', cancelled_at = now(), cancel_reason = $2, updated_at = now() WHERE booking_id = $1`,
-    [booking.booking_id, reason]);
-  await audit(null, req.user, 'reservation.cancelled', 'booking', booking.booking_id, { reason });
+  await cancelBooking(req.user, booking, reason);
   await closeOpenCheckouts(booking.booking_id);
   res.json({ ok: true });
 }));
@@ -570,6 +654,295 @@ router.post('/reservations/:id/send-confirmation', managers, ah(async (req, res)
   const r = await receipts.sendConfirmation(booking.booking_id, req.user);
   if (!r.sent) throw new HttpError(409, r.error, { code: 'NOT_SENT' });
   await audit(null, req.user, 'reservation.confirmation_sent', 'booking', booking.booking_id);
+  res.json({ ok: true });
+}));
+
+// ---------------------------------------------------------------- group bookings
+// One guest's rooms, booked together or not at all. Rooms reuse the reservation helpers above.
+// Each group action writes one audit row per booking it touches, with booking_id and group_id in the details.
+
+// Staff see groups and rooms without money, as they see reservations without guest contact details.
+const seesMoney = (user) => !['staff', 'cleaner'].includes(user.role);
+const MONEY_FIELDS = ['total', 'total_amount', 'amount_paid', 'balance'];
+function hideMoney(user, row) {
+  if (seesMoney(user)) return row;
+  return Object.fromEntries(Object.entries(row).filter(([k]) => !MONEY_FIELDS.includes(k)));
+}
+
+// A group is shown only when every room in it is in this person's scope. Writes use the same rule.
+function groupScope(user, params) {
+  return `NOT EXISTS (SELECT 1 FROM bookings bx JOIN units ux ON ux.unit_id = bx.unit_id
+                       JOIN properties px ON px.property_id = ux.property_id
+                      WHERE bx.group_id = g.group_id AND NOT (${propertyScope(user, params, 'px')}))`;
+}
+
+async function loadGroup(user, id) {
+  const params = [id, user.organization_id];
+  const g = await one(`SELECT g.* FROM booking_groups g WHERE g.group_id = $1 AND g.organization_id = $2 AND ${groupScope(user, params)}`, params);
+  if (!g) throw notFound();
+  return g;
+}
+
+// One summary row per group: room count, dates, and money over the rooms still booked.
+const GROUP_ROWS = `
+  SELECT g.group_id, g.name, g.cancelled_at, CASE WHEN g.cancelled_at IS NULL THEN 'active' ELSE 'cancelled' END AS status,
+         gu.full_name AS guest_name, COUNT(b.booking_id)::int AS rooms, MIN(b.check_in) AS check_in, MAX(b.check_out) AS check_out,
+         COALESCE(SUM(b.total_amount) FILTER (WHERE b.status = 'confirmed'), 0)::numeric(12,2) AS total,
+         COALESCE(SUM(paid.amount) FILTER (WHERE b.status = 'confirmed'), 0)::numeric(12,2) AS amount_paid,
+         COALESCE(SUM(b.total_amount - b.channel_fee - paid.amount) FILTER (WHERE b.status = 'confirmed'), 0)::numeric(12,2) AS balance
+    FROM booking_groups g
+    LEFT JOIN guests gu ON gu.guest_id = g.guest_id
+    LEFT JOIN bookings b ON b.group_id = g.group_id
+    LEFT JOIN LATERAL (SELECT COALESCE(SUM(bp.amount), 0) AS amount FROM booking_payments bp
+                        WHERE bp.booking_id = b.booking_id AND bp.voided_at IS NULL) paid ON true`;
+
+async function groupRows(where, params) {
+  const { rows } = await query(`${GROUP_ROWS} WHERE ${where.join(' AND ')}
+    GROUP BY g.group_id, gu.full_name ORDER BY g.created_at DESC LIMIT 500`, params);
+  return rows;
+}
+
+const roomView = (user, b) => hideMoney(user, {
+  booking_id: b.booking_id, unit_name: b.unit_name, check_in: b.check_in, check_out: b.check_out, num_guests: b.num_guests,
+  total_amount: b.total_amount, amount_paid: b.amount_paid, balance: b.balance, status: b.status,
+});
+
+async function groupRoomRows(user, groupId) {
+  const params = [groupId];
+  const { rows } = await query(`${BOOKING_SELECT} WHERE b.group_id = $1 AND ${propertyScope(user, params)} ORDER BY b.check_in, u.unit_name`, params);
+  return rows;
+}
+
+// One room: a listing or a room type at a property, with its dates and guest count.
+function cleanRoom(body) {
+  const r = validate(body, roomSpec);
+  checkListingChoice(r);
+  checkDates(r);
+  return r;
+}
+
+// Two to twenty rooms. Field errors name the room, for example rooms.2.check_out.
+function cleanRooms(list) {
+  if (!Array.isArray(list) || list.length < 2 || list.length > 20) throw validationError({ rooms: 'A group needs between 2 and 20 rooms.' });
+  const fields = {};
+  const rooms = list.map((r, i) => {
+    try {
+      return cleanRoom(r);
+    } catch (err) {
+      for (const [k, msg] of Object.entries(err.extra.fields)) fields[`rooms.${i}.${k}`] = msg;
+      return null;
+    }
+  });
+  if (Object.keys(fields).length) throw validationError(fields);
+  return rooms;
+}
+
+// The group's guest: an existing guest (who must be visible to this user), or the details of a new one.
+async function groupGuest(user, input) {
+  const g = input && typeof input === 'object' ? input : {};
+  if (g.guest_id) {
+    const { guest_id: guestId } = validate(g, { guest_id: { type: 'uuid', required: true, label: 'Guest' } });
+    await loadGuest(user, guestId);
+    return { guest_id: guestId };
+  }
+  const f = validate(g, {
+    full_name: { type: 'string', required: true, max: 120, label: 'Guest name' },
+    phone: { type: 'phone', label: 'Guest mobile' },
+    email: { type: 'email', label: 'Guest email' },
+  });
+  return { guest_name: f.full_name, guest_phone: f.phone, guest_email: f.email };
+}
+
+// Books rooms inside `db`, all or none. A room names a listing, or a room type (the first free listing is taken).
+// Every listing involved is locked in one fixed order first, so two group bookings can't interleave.
+// `picks` records what was booked, so a late clash can be reported with the rooms that are taken.
+async function bookRooms(db, user, rooms, { guestId, groupId, picks, action }) {
+  const explicit = rooms.filter((r) => r.unit_id);
+  const listingsFor = [];
+  for (const r of rooms) {
+    if (r.unit_id) {
+      listingsFor.push([r.unit_id]);
+    } else {
+      // A room type never takes a listing that another room in this group names for the same nights.
+      const ids = await roomTypeListings(user, r, db);
+      listingsFor.push(ids.filter((id) => !explicit.some((e) => e.unit_id === id && sameNights(e, r))));
+    }
+  }
+  const lockParams = [[...new Set(listingsFor.flat())]];
+  const scope = propertyScope(user, lockParams);
+  const { rows: locked } = await db.query(
+    `SELECT u.unit_id, u.unit_name, u.status, u.max_guests, u.cleaning_fee, p.status AS property_status
+       FROM units u JOIN properties p ON p.property_id = u.property_id
+      WHERE u.unit_id = ANY($1) AND ${scope} ORDER BY u.unit_id FOR UPDATE OF u`, lockParams);
+  const byId = new Map(locked.map((u) => [u.unit_id, u]));
+  const plan = [];
+  const taken = [];
+  for (const [i, r] of rooms.entries()) {
+    const busy = await busyListings(listingsFor[i], r.check_in, r.check_out, db);
+    const takenInGroup = (id) => picks.some((p) => p.unit_id === id && sameNights(p, r));
+    let unit;
+    if (r.unit_id) {
+      unit = byId.get(r.unit_id);
+      if (!unit) throw notFound();
+      if (unit.status !== 'active' || unit.property_status !== 'active') throw new HttpError(409, 'This listing is archived.', { code: 'ARCHIVED' });
+      if (takenInGroup(unit.unit_id)) throw validationError({ rooms: 'Two rooms in this group are the same listing on overlapping nights.' });
+      if (busy.has(unit.unit_id)) {
+        taken.push({ unit_name: unit.unit_name, check_in: r.check_in, check_out: r.check_out });
+        continue;
+      }
+    } else {
+      const id = listingsFor[i].find((x) => {
+        const u = byId.get(x);
+        return u && u.status === 'active' && u.property_status === 'active' && !busy.has(x) && !takenInGroup(x);
+      });
+      if (!id) throw noFreeRoom(r);
+      unit = byId.get(id);
+    }
+    checkStay(r, unit);
+    picks.push({ unit_id: unit.unit_id, unit_name: unit.unit_name, check_in: r.check_in, check_out: r.check_out });
+    let accommodation = r.accommodation_total;
+    if (accommodation === null) {
+      const q = await quote(unit.unit_id, r.check_in, r.check_out, db);
+      if (q.missing_rates) throw validationError({ accommodation_total: NO_RATE });
+      accommodation = q.accommodation_total;
+    }
+    plan.push({ unit, room: r, accommodation });
+  }
+  if (taken.length) throw new HttpError(409, 'Some of these rooms are already booked for those nights. Nothing was saved.', { code: 'ROOMS_TAKEN', rooms: taken });
+  const ids = [];
+  for (const { unit, room, accommodation } of plan) {
+    const b = await insertReservation(db, user, unit, room, { guestId, accommodation, groupId, action });
+    ids.push(b.booking_id);
+  }
+  return ids;
+}
+
+// Runs a booking in one transaction. A clash found only at insert (another booking landed a moment earlier)
+// rolls everything back and reports the rooms that are taken now.
+async function bookInTx(picks, work) {
+  try {
+    return await tx(work);
+  } catch (err) {
+    if (err.constraint !== 'bookings_no_overlap') throw err;
+    const rooms = [];
+    for (const p of picks) {
+      if ((await busyListings([p.unit_id], p.check_in, p.check_out)).size) rooms.push({ unit_name: p.unit_name, check_in: p.check_in, check_out: p.check_out });
+    }
+    throw new HttpError(409, 'Some of these rooms were just booked by someone else. Nothing was saved.', { code: 'ROOMS_TAKEN', rooms });
+  }
+}
+
+router.get('/booking-groups', ah(async (req, res) => {
+  const params = [req.user.organization_id];
+  const where = ['g.organization_id = $1', groupScope(req.user, params)];
+  if (req.query.status === 'active') where.push('g.cancelled_at IS NULL');
+  if (req.query.status === 'cancelled') where.push('g.cancelled_at IS NOT NULL');
+  const groups = await groupRows(where, params);
+  res.json({ groups: groups.map((g) => hideMoney(req.user, g)) });
+}));
+
+router.get('/booking-groups/:id', ah(async (req, res) => {
+  const group = await loadGroup(req.user, uuidParam(req.params.id));
+  const [summary] = await groupRows(['g.group_id = $1'], [group.group_id]);
+  const rooms = await groupRoomRows(req.user, group.group_id);
+  const guest = await one('SELECT * FROM guests WHERE guest_id = $1', [group.guest_id]);
+  res.json({
+    group: { group_id: group.group_id, name: group.name, notes: group.notes, status: summary.status, cancelled_at: group.cancelled_at, created_at: group.created_at },
+    guest: redactGuest(req.user, guest),
+    rooms: rooms.map((b) => roomView(req.user, b)),
+    totals: hideMoney(req.user, { rooms: summary.rooms, total: summary.total, amount_paid: summary.amount_paid, balance: summary.balance }),
+  });
+}));
+
+router.post('/booking-groups', managers, ah(async (req, res) => {
+  const body = validate(req.body, {
+    name: { type: 'string', required: true, max: 120, label: 'Group name' },
+    notes: { type: 'text', max: 1000, label: 'Notes' },
+  });
+  const rooms = cleanRooms(req.body.rooms);
+  const guest = await groupGuest(req.user, req.body.guest);
+  const picks = [];
+  const groupId = await bookInTx(picks, async (db) => {
+    const guestId = await resolveGuest(db, req.user, guest);
+    const { rows: [g] } = await db.query(
+      `INSERT INTO booking_groups (organization_id, name, guest_id, notes, created_by) VALUES ($1,$2,$3,$4,$5) RETURNING group_id`,
+      [req.user.organization_id, body.name, guestId, body.notes, req.user.user_id]);
+    await bookRooms(db, req.user, rooms, { guestId, groupId: g.group_id, picks, action: 'booking_group.created' });
+    return g.group_id;
+  });
+  res.status(201).json({ group: (await groupRows(['g.group_id = $1'], [groupId]))[0] });
+}));
+
+router.patch('/booking-groups/:id', managers, ah(async (req, res) => {
+  const group = await loadGroup(req.user, uuidParam(req.params.id));
+  const body = validate(req.body, {
+    name: { type: 'string', required: true, max: 120, label: 'Group name' },
+    notes: { type: 'text', max: 1000, label: 'Notes' },
+  }, { partial: true });
+  const keys = Object.keys(body);
+  if (keys.length) {
+    await tx(async (db) => {
+      await db.query(`UPDATE booking_groups SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')} WHERE group_id = $1`,
+        [group.group_id, ...keys.map((k) => body[k])]);
+      const { rows: rooms } = await db.query('SELECT booking_id FROM bookings WHERE group_id = $1', [group.group_id]);
+      for (const { booking_id: bookingId } of rooms) {
+        await audit(db, req.user, 'booking_group.updated', 'booking', bookingId, { booking_id: bookingId, group_id: group.group_id, fields: keys });
+      }
+    });
+  }
+  res.json({ group: (await groupRows(['g.group_id = $1'], [group.group_id]))[0] });
+}));
+
+router.post('/booking-groups/:id/rooms', managers, ah(async (req, res) => {
+  const group = await loadGroup(req.user, uuidParam(req.params.id));
+  const room = cleanRoom(req.body);
+  const picks = [];
+  const [bookingId] = await bookInTx(picks, async (db) => {
+    // The group row is locked first, as the cancel path does, so no room is added while the group is being cancelled.
+    const { rows: [locked] } = await db.query('SELECT cancelled_at FROM booking_groups WHERE group_id = $1 FOR UPDATE', [group.group_id]);
+    if (locked.cancelled_at) throw new HttpError(409, 'This group is cancelled. Rooms cannot be added.', { code: 'CANCELLED' });
+    return bookRooms(db, req.user, [room], { guestId: group.guest_id, groupId: group.group_id, picks, action: 'booking_group.room_added' });
+  });
+  res.status(201).json({ booking_id: bookingId, group: (await groupRows(['g.group_id = $1'], [group.group_id]))[0] });
+}));
+
+// Removing a room is the normal cancel path for that booking. If no confirmed room is left, the group is cancelled too.
+router.post('/booking-groups/:id/rooms/:bookingId/remove', managers, ah(async (req, res) => {
+  const group = await loadGroup(req.user, uuidParam(req.params.id));
+  const booking = await loadBooking(req.user, uuidParam(req.params.bookingId));
+  if (booking.group_id !== group.group_id) throw notFound();
+  assertCancellable(booking);
+  const { reason } = validate(req.body, { reason: { type: 'string', required: true, max: 300, label: 'Reason' } });
+  await tx(async (db) => {
+    // Locking the group row first means two rooms removed at once can't each see the other one still booked.
+    await db.query('SELECT 1 FROM booking_groups WHERE group_id = $1 FOR UPDATE', [group.group_id]);
+    // A second tap may have cancelled this room while this request waited for the lock. Re-check it now.
+    const { rows: [current] } = await db.query('SELECT status FROM bookings WHERE booking_id = $1 FOR UPDATE', [booking.booking_id]);
+    if (current.status !== 'confirmed') throw new HttpError(409, 'This reservation is already cancelled.', { code: 'CANCELLED' });
+    await cancelBooking(req.user, booking, reason, { db, action: 'booking_group.room_removed' });
+    const { rows: [left] } = await db.query(`SELECT COUNT(*)::int AS n FROM bookings WHERE group_id = $1 AND status = 'confirmed'`, [group.group_id]);
+    if (!left.n) await db.query('UPDATE booking_groups SET cancelled_at = now() WHERE group_id = $1 AND cancelled_at IS NULL', [group.group_id]);
+  });
+  await closeOpenCheckouts(booking.booking_id);
+  res.json({ ok: true });
+}));
+
+router.post('/booking-groups/:id/cancel', managers, ah(async (req, res) => {
+  const group = await loadGroup(req.user, uuidParam(req.params.id));
+  const { reason } = validate(req.body, { reason: { type: 'string', max: 300, label: 'Reason' } });
+  const cancelled = await tx(async (db) => {
+    // Locking the group row means two cancels at once cancel each room only once.
+    const { rows: [locked] } = await db.query('SELECT cancelled_at FROM booking_groups WHERE group_id = $1 FOR UPDATE', [group.group_id]);
+    if (locked.cancelled_at) throw new HttpError(409, 'This group is already cancelled.', { code: 'CANCELLED' });
+    const { rows } = await db.query(`${BOOKING_SELECT} WHERE b.group_id = $1 AND b.status = 'confirmed'`, [group.group_id]);
+    for (const b of rows) {
+      assertCancellable(b);
+      await cancelBooking(req.user, b, reason, { db, action: 'booking_group.cancelled' });
+    }
+    await db.query('UPDATE booking_groups SET cancelled_at = now() WHERE group_id = $1', [group.group_id]);
+    return rows;
+  });
+  for (const b of cancelled) await closeOpenCheckouts(b.booking_id);
   res.json({ ok: true });
 }));
 

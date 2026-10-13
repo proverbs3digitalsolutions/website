@@ -10,21 +10,58 @@ const { query, one } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
 const { validate, uuidParam, isValidDate } = require('../lib/validate');
 const { audit } = require('../lib/audit');
-const { requireRole } = require('../lib/auth');
+const { requireRole, rateLimit } = require('../lib/auth');
 const { propertyScope } = require('../lib/access');
 const { mailEnabled } = require('../lib/mailer');
 const messaging = require('../lib/messaging');
 const { inboxStatus } = require('../lib/inbound');
 const config = require('../config');
 const { planStatus } = require('../lib/plans');
+const push = require('../lib/push');
+const { notifyUser } = require('../lib/notify');
 
 const router = express.Router();
 const managers = requireRole('owner', 'manager');
 const owners = requireRole('owner');
 router.use(['/inbox', '/message-templates', '/automations'], managers);
 
+// Per-person caps (in memory, like the other limiters): notes that @mention people, and assignment changes.
+const mentionLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 60, key: (req) => `inbox-mention|${req.user.user_id}` });
+const assignLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 60, key: (req) => `inbox-assign|${req.user.user_id}` });
+// Runs a limiter inside a handler, once the handler knows the request should count.
+const applyLimit = (limiter, req, res) => new Promise((resolve, reject) => limiter(req, res, (err) => (err ? reject(err) : resolve())));
+
 const TODAY = `(now() AT TIME ZONE 'Asia/Manila')::date`;
 const validationError = (fields) => new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields });
+
+// A mention in a note is stored as @[Full Name](user id).
+const MENTION_RE = /@\[([^\]\n]{1,120})\]\(([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\)/gi;
+
+// Check the people mentioned in a note: each must be an active owner or manager who can see the
+// reservation's property. Returns [{ user_id, full_name }], one per person.
+async function checkMentions(user, conv, text) {
+  const typed = new Map();
+  for (const m of text.matchAll(MENTION_RE)) typed.set(m[2].toLowerCase(), m[1]);
+  if (!typed.size) return [];
+  const propertyId = await push.propertyOfBooking(conv.booking_id);
+  const { rows } = await query(
+    `SELECT u.user_id, u.full_name, (u.role = 'owner' OR EXISTS (SELECT 1 FROM property_assignments pa
+              WHERE pa.user_id = u.user_id AND pa.property_id = $3)) AS can_see
+       FROM users u WHERE u.organization_id = $1 AND u.role IN ('owner', 'manager') AND u.account_status = 'active'
+        AND u.user_id = ANY($2::uuid[])`,
+    [user.organization_id, [...typed.keys()], propertyId]);
+  const people = new Map(rows.map((r) => [r.user_id, r]));
+  const problems = new Set();
+  const mentions = [];
+  for (const id of typed.keys()) {
+    const p = people.get(id);
+    if (!p) problems.add('Unknown person');
+    else if (!p.can_see) problems.add(`${p.full_name} can't see this reservation`);
+    else mentions.push({ user_id: p.user_id, full_name: p.full_name });
+  }
+  if (problems.size) throw validationError({ body: [...problems].join(' ') });
+  return mentions;
+}
 
 // Create default templates once per workspace per process.
 const seeded = new Set();
@@ -154,6 +191,14 @@ router.get('/inbox/counts', ah(async (req, res) => {
   res.json({ counts: row });
 }));
 
+// Open conversations assigned to the signed-in person (Home: "Assigned to you (n)").
+router.get('/inbox/assigned-count', ah(async (req, res) => {
+  const params = [];
+  const where = [propertyScope(req.user, params), viewSql('mine', params, req.user)];
+  const row = await one(`SELECT COUNT(*)::int AS count ${CONV_FROM} WHERE ${where.join(' AND ')}`, params);
+  res.json({ count: row.count });
+}));
+
 router.get('/inbox/status', ah(async (req, res) => {
   const replies = await inboxStatus();
   res.json({
@@ -165,11 +210,17 @@ router.get('/inbox/status', ah(async (req, res) => {
   });
 }));
 
-// People a conversation can be assigned to.
+// People a conversation can be assigned to, or @mentioned in. With conversation_id, only the
+// people who can see that conversation's property.
 router.get('/inbox/assignees', ah(async (req, res) => {
+  const conv = req.query.conversation_id ? await loadConversation(req.user, uuidParam(String(req.query.conversation_id))) : null;
+  const propertyId = conv ? await push.propertyOfBooking(conv.booking_id) : null;
   const { rows } = await query(
-    `SELECT user_id, full_name FROM users WHERE organization_id = $1 AND role IN ('owner', 'manager') AND account_status = 'active'
-      ORDER BY full_name`, [req.user.organization_id]);
+    `SELECT u.user_id, u.full_name FROM users u
+      WHERE u.organization_id = $1 AND u.role IN ('owner', 'manager') AND u.account_status = 'active'
+        AND ($2::uuid IS NULL OR u.role = 'owner'
+             OR EXISTS (SELECT 1 FROM property_assignments pa WHERE pa.user_id = u.user_id AND pa.property_id = $2))
+      ORDER BY u.full_name`, [req.user.organization_id, propertyId]);
   res.json({ assignees: rows });
 }));
 
@@ -209,10 +260,15 @@ router.patch('/inbox/:id', ah(async (req, res) => {
   const set = (col, v) => { params.push(v); sets.push(`${col} = $${params.length}`); };
   if (body.status) set('status', body.status);
   if ('assigned_to' in body) {
+    if (body.assigned_to !== conv.assigned_to) await applyLimit(assignLimiter, req, res);
     if (body.assigned_to) {
-      const member = await one(`SELECT user_id FROM users WHERE user_id = $1 AND organization_id = $2 AND role IN ('owner', 'manager') AND account_status = 'active'`,
-        [body.assigned_to, req.user.organization_id]);
+      const member = await one(
+        `SELECT u.user_id, (u.role = 'owner' OR EXISTS (SELECT 1 FROM property_assignments pa
+              WHERE pa.user_id = u.user_id AND pa.property_id = $3)) AS can_see
+           FROM users u WHERE u.user_id = $1 AND u.organization_id = $2 AND u.role IN ('owner', 'manager') AND u.account_status = 'active'`,
+        [body.assigned_to, req.user.organization_id, await push.propertyOfBooking(conv.booking_id)]);
       if (!member) throw validationError({ assigned_to: 'Choose an owner or manager in this workspace.' });
+      if (!member.can_see) throw validationError({ assigned_to: "This person can't see this reservation's property." });
     }
     set('assigned_to', body.assigned_to);
   }
@@ -228,6 +284,14 @@ router.patch('/inbox/:id', ah(async (req, res) => {
   }
   if ('unread' in body) set('unread', body.unread);
   if (sets.length) await query(`UPDATE conversations SET ${sets.join(', ')} WHERE conversation_id = $1`, params);
+  if (body.assigned_to && body.assigned_to !== conv.assigned_to && body.assigned_to !== req.user.user_id) {
+    await notifyUser(req.user.organization_id, body.assigned_to, 'assignment', {
+      title: `${req.user.full_name} assigned you a conversation`,
+      body: `${conv.guest_name} · ${conv.unit_name}, ${conv.check_in}`,
+      url: `/#/inbox/${conv.conversation_id}`,
+      propertyId: await push.propertyOfBooking(conv.booking_id),
+    });
+  }
   res.json({ conversation: await loadConversation(req.user, conv.conversation_id) });
 }));
 
@@ -255,14 +319,30 @@ router.post('/inbox/:id/messages', ah(async (req, res) => {
       throw new HttpError(409, 'Email sending is not set up on the server yet, so messages cannot be sent. See EMAIL-SETUP.md.', { code: 'MAIL_OFF' });
     }
   }
+  if (body.note && body.body.search(MENTION_RE) !== -1) await applyLimit(mentionLimiter, req, res);
+  const mentions = body.note ? await checkMentions(req.user, conv, body.body) : [];
+  // Each mention is saved with the name on record, not the name typed, so the note and its alerts agree.
+  const names = new Map(mentions.map((x) => [x.user_id, x.full_name]));
+  const saved = body.note ? body.body.replace(MENTION_RE, (_m, _typed, id) => `@[${names.get(id.toLowerCase())}](${id.toLowerCase()})`) : body.body;
   const r = await messaging.queueMessage({
-    bookingId: conv.booking_id, subject: body.subject, body: body.body, user: req.user, scheduledAt, note: body.note,
+    bookingId: conv.booking_id, subject: body.subject, body: saved, user: req.user, scheduledAt, note: body.note,
   });
   await query('UPDATE conversations SET unread = false WHERE conversation_id = $1', [conv.conversation_id]);
   await audit(null, req.user, body.note ? 'inbox.note_added' : (scheduledAt ? 'inbox.message_scheduled' : 'inbox.message_sent'),
     'message', r.message.message_id, { conversation_id: conv.conversation_id });
+  const others = mentions.filter((x) => x.user_id !== req.user.user_id);
+  if (others.length) {
+    const propertyId = await push.propertyOfBooking(conv.booking_id);
+    const text = saved.replace(MENTION_RE, '@$1').slice(0, 140);
+    await Promise.all(others.map((x) => notifyUser(req.user.organization_id, x.user_id, 'mention', {
+      title: `${req.user.full_name} mentioned you`, body: text, url: `/#/inbox/${conv.conversation_id}`, propertyId,
+    })));
+  }
   const m = r.message;
-  res.status(201).json({ message: { message_id: m.message_id, status: m.status, error: m.error, scheduled_at: m.scheduled_at, sent_at: m.sent_at } });
+  res.status(201).json({
+    message: { message_id: m.message_id, status: m.status, error: m.error, scheduled_at: m.scheduled_at, sent_at: m.sent_at },
+    mentions,
+  });
 }));
 
 // AI reply draft (only when ANTHROPIC_API_KEY is set). Never sent automatically.
