@@ -32,6 +32,16 @@ Last updated: 2026-10-13
 
 Before starting, run `/proverbs3-dfss` analysis on this feature so the requirements (CTQs) are written into DECISIONS.MD and the atoms above can be checked against them.
 
+### Small fixes found while writing these docs (do alongside Sprint A)
+
+- **Starter plan:** show an "upgrade for AI drafts" hint. The server already says so, but the app ignores it.
+- **Google sign-in:** check that a brand-new Google sign-up lands on workspace setup and not the landing page. Needs a browser check.
+- **Launchpad footer:** point "contact support" to Help & support.
+- **Trial banner:** show it only in the last few days, not the whole trial.
+- **Dead code:** remove the unused `welcomeView`.
+- **Old docs:** update `docs/ARCHITECTURE.md`, `docs/PROJECT-PLAN.md` ("Deferred" list) and `docs/SHORT-TERM-GUIDE.md` (the Launchpad replaced the Home checklist). Align README on 1–10 units and Node 22.
+- **Design polish:** fix the dark-mode contrast and hard-coded colour list at the end of DESIGN-BRIEF.MD (soft-green text pairs, login caption, modal background, printing in dark mode, channel colour drift, small tap targets).
+
 ### Later
 
 - **Sprint B: Facebook Messenger inbox.** Page messages appear in the Inbox next to email, with replies sent from BalayHub. Needs a Meta app and app review (BLOCKERS).
