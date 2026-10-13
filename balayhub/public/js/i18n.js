@@ -163,6 +163,9 @@ const TL = {
   '{n} stars – {label}': '{n} star – {label}',
 };
 
+// Pages can add their own Taglish wording (e.g. the landing page).
+export function extendTranslations(dict) { Object.assign(TL, dict); }
+
 const KEY = 'bh-guest-lang';
 let current = 'en';
 let hostDefault = 'en';
@@ -188,6 +191,12 @@ export function t(en, vars) {
 
 export function fmtDateL(d) {
   return d ? new Date(`${String(d).slice(0, 10)}T00:00:00Z`).toLocaleDateString(locale(), { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '';
+}
+
+export function setGuestLang(l) {
+  current = l === 'tl' ? 'tl' : 'en';
+  document.documentElement.lang = current === 'tl' ? 'fil' : 'en';
+  try { localStorage.setItem(KEY, current); } catch { /* ignore */ }
 }
 
 // "English · Tagalog" switch for guest pages.

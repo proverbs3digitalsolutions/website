@@ -248,13 +248,16 @@ router.post('/workspace', requireAuth, ah(async (req, res) => {
     throw new HttpError(403, 'Please verify your email address first.', { code: 'EMAIL_UNVERIFIED' });
   }
   if (req.user.organization_id) throw new HttpError(409, 'You already belong to a workspace.', { code: 'HAS_WORKSPACE' });
-  const { name, business_type: businessType } = validate(req.body, {
+  const { name, business_type: businessType, units_band: unitsBand, phone } = validate(req.body, {
     name: { type: 'string', required: true, max: 120, label: 'Business or workspace name' },
     business_type: { type: 'enum', values: ['short_term', 'long_term', 'both'], label: 'Type of rentals' },
+    units_band: { type: 'enum', values: ['1-3', '4-10', '10+'], label: 'Number of units' },
+    phone: { type: 'phone', label: 'Mobile number' },
   });
+  const profile = Object.fromEntries(Object.entries({ units_band: unitsBand, phone }).filter(([, v]) => v));
   const org = await tx(async (db) => {
-    const { rows: [o] } = await db.query(`INSERT INTO organizations (name, business_type, plan, trial_ends_at)
-       VALUES ($1, $2, 'trial', now() + make_interval(days => $3)) RETURNING *`, [name, businessType || 'short_term', config.trialDays]);
+    const { rows: [o] } = await db.query(`INSERT INTO organizations (name, business_type, plan, trial_ends_at, signup_profile)
+       VALUES ($1, $2, 'trial', now() + make_interval(days => $3), $4) RETURNING *`, [name, businessType || 'short_term', config.trialDays, JSON.stringify(profile)]);
     await db.query(`UPDATE users SET organization_id = $1, role = 'owner' WHERE user_id = $2`, [o.organization_id, req.user.user_id]);
     await audit(db, { ...req.user, organization_id: o.organization_id }, 'workspace.created', 'organization', o.organization_id);
     return o;

@@ -30,7 +30,7 @@ function splitPage(...children) {
 }
 
 let googleEnabled = null;
-async function googleButton(label, invite) {
+export async function googleButton(label, invite) {
   if (googleEnabled === null) {
     try { googleEnabled = (await get('/auth/options')).google; } catch { googleEnabled = false; }
   }
@@ -244,18 +244,31 @@ export async function verifyPendingView(el) {
 // ---------------------------------------------------------------- workspace setup
 export async function setupView(el) {
   if (state.user.organization_id) { afterLogin(); return; }
+  // Answers from the landing page's "Get started" steps: create the workspace right away.
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem('bh-setup') || 'null'); } catch { /* ignore */ }
+  if (saved?.name) {
+    try {
+      await post('/workspace', saved);
+      try { localStorage.removeItem('bh-setup'); } catch { /* ignore */ }
+      await refreshUser();
+      navigate(saved.business_type === 'long_term' ? '#/properties?new=1' : '#/launchpad', { replace: true });
+      return;
+    } catch { /* fall back to the form below, prefilled */ }
+  }
   const form = makeForm({
     submitText: 'Create workspace',
     fields: [
-      field({ name: 'name', label: 'Business or workspace name', required: true, maxlength: 120, placeholder: 'e.g. Santos Staycations', hint: 'You can invite co-hosts, managers and staff later.' }),
-      field({ name: 'business_type', label: 'What do you rent out?', type: 'select', required: true, value: 'short_term', placeholderOption: false, options: [
+      field({ name: 'name', label: 'Business or workspace name', required: true, maxlength: 120, placeholder: 'e.g. Santos Staycations', hint: 'You can invite co-hosts, managers and staff later.', value: saved?.name }),
+      field({ name: 'business_type', label: 'What do you rent out?', type: 'select', required: true, value: saved?.business_type || 'short_term', placeholderOption: false, options: [
         ['short_term', 'Short-term stays (Airbnb, staycations, per night)'],
         ['long_term', 'Long-term rentals (monthly tenants, leases)'],
         ['both', 'Both'],
       ], hint: 'You can change this later in Settings.' }),
     ],
     onSubmit: async (data) => {
-      await post('/workspace', data);
+      await post('/workspace', { ...data, units_band: saved?.units_band, phone: saved?.phone });
+      try { localStorage.removeItem('bh-setup'); } catch { /* ignore */ }
       await refreshUser();
       navigate(data.business_type === 'long_term' ? '#/properties?new=1' : '#/launchpad', { replace: true });
     },

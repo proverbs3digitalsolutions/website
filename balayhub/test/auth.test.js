@@ -43,8 +43,10 @@ test('full registration flow: signup -> verify -> workspace -> dashboard', async
 
   d = await c.get('/api/dashboard');
   assert.equal(d.data.code, 'NO_WORKSPACE');
-  w = await c.post('/api/workspace', { name: 'Rizal Homes' });
+  assert.equal((await c.post('/api/workspace', { name: 'Rizal Homes', units_band: '99' })).status, 400, 'units band is checked');
+  w = await c.post('/api/workspace', { name: 'Rizal Homes', units_band: '4-10', phone: '09171234567' });
   assert.equal(w.status, 201);
+  assert.deepEqual(w.data.organization.signup_profile, { units_band: '4-10', phone: '09171234567' });
   d = await c.get('/api/dashboard');
   assert.equal(d.status, 200);
   assert.equal(d.data.portfolio.properties, 0);
