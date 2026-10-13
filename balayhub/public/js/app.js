@@ -76,8 +76,8 @@ const routes = [
 ];
 
 const NAV_SHORT = [
-  ['/home', 'Home', 'home'],
   ['/launchpad', 'Launchpad', 'rocket'],
+  ['/home', 'Home', 'home'],
   ['/inbox', 'Inbox', 'inbox'],
   ['/calendar', 'Calendar', 'calendar'],
   ['/reservations', 'Reservations', 'bed'],
@@ -98,8 +98,8 @@ const NAV_LONG = [
   ['/settings', 'Settings', 'settings'],
 ];
 const NAV_BOTH = [
-  ['/home', 'Home', 'home'],
   ['/launchpad', 'Launchpad', 'rocket'],
+  ['/home', 'Home', 'home'],
   ['/inbox', 'Inbox', 'inbox'],
   ['/calendar', 'Calendar', 'calendar'],
   ['/reservations', 'Reservations', 'bed'],
