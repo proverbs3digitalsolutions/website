@@ -28,6 +28,7 @@ import { pricingView } from './views/pricing.js';
 import { ownersView, ownerStatementView } from './views/owners.js';
 import { guestReviewView } from './views/review.js';
 import { gatepassSettingsView, gatepassPublicView } from './views/gatepass.js';
+import { stayReportsView } from './views/stayreports.js';
 import { reviewsView, discountCodesView } from './views/guestcare.js';
 import { registerServiceWorker, forgetThisDevice } from './notifications.js';
 
@@ -76,6 +77,7 @@ const routes = [
   ['/reviews', reviewsView, APP],
   ['/discount-codes', discountCodesView, APP],
   ['/gatepass-settings', gatepassSettingsView, APP],
+  ['/stay-reports', stayReportsView, APP],
   ['/owners/:id/statement', ownerStatementView, APP],
   ['/reservations', reservationsView, APP],
   ['/reservations/:id', reservationDetailView, APP],
@@ -101,6 +103,7 @@ const NAV_SHORT = [
   ['/listings', 'Listings', 'building'],
   ['/guests', 'Guests', 'users'],
   ['/owners', 'Unit owners', 'file'],
+  ['/stay-reports', 'Reports', 'chart'],
   ['/rent?tab=expenses', 'Expenses', 'wallet'],
   ['/maintenance', 'Maintenance', 'wrench'],
   ['/settings', 'Settings', 'settings'],
@@ -125,7 +128,8 @@ const NAV_BOTH = [
   ['/dashboard', 'Long-term rentals', 'chart'],
   ['/tenants', 'Tenants', 'users'],
   ['/rent', 'Rent & Expenses', 'wallet'],
-  ['/reports', 'Reports', 'chart'],
+  ['/reports', 'Rental reports', 'chart'],
+  ['/stay-reports', 'Stay reports', 'chart'],
   ['/guests', 'Guests', 'users'],
   ['/owners', 'Unit owners', 'file'],
   ['/maintenance', 'Maintenance', 'wrench'],
@@ -133,7 +137,7 @@ const NAV_BOTH = [
 ];
 // Staff don't see guest conversations; the platform admin gets an Admin link.
 const navFor = () => [...({ short_term: NAV_SHORT, both: NAV_BOTH }[state.user?.business_type] || NAV_LONG)
-  .filter(([p]) => (p !== '/inbox' || state.user?.role !== 'staff') && (!['/launchpad', '/owners'].includes(p) || state.user?.role === 'owner')),
+  .filter(([p]) => (p !== '/inbox' || state.user?.role !== 'staff') && (!['/launchpad', '/owners'].includes(p) || state.user?.role === 'owner') && (p !== '/stay-reports' || state.user?.role !== 'staff')),
 ...(state.user?.is_platform_admin ? [['/admin', 'Admin', 'shield']] : [])];
 
 // Trial / read-only / demo notice at the top of every app page.

@@ -822,3 +822,13 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .gp__ids { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
 .gp__ids img { width: 100%; border-radius: 8px; border: 1px solid var(--line); }
 @media print { .gp__ids img { break-inside: avoid; } }
+
+/* ================================================================ stay reports */
+.table tr.is-total td { font-weight: 700; background: var(--sand-soft); }
+.table th.num { text-align: right; }
+.table td.num { text-align: right; }
+.sharebars { list-style: none; margin: 8px 0 14px; padding: 0; display: grid; gap: 8px; }
+.sharebars li { display: grid; grid-template-columns: 110px 1fr auto; gap: 10px; align-items: center; font-size: .9rem; }
+.sharebars__track { height: 10px; background: var(--line); border-radius: 99px; overflow: hidden; }
+.sharebars__bar { display: block; height: 100%; background: var(--forest); border-radius: 99px; }
+.sharebars__value { font-variant-numeric: tabular-nums; }

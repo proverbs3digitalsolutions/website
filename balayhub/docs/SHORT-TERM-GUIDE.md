@@ -89,6 +89,17 @@ appears on Home under **Deposits to return**. Press **Return deposit**: return i
 for damage with a reason the guest sees, and add photos. The guest can get an acknowledgement and a
 summary by email. Staff can record deposits; owners and managers return them.
 
+## Reports and income summary
+
+**Reports** (owners and managers) shows, for a month or a whole year: revenue, occupancy, average
+nightly rate and RevPAR, revenue by channel, results by listing, expenses, and net after channel
+fees and expenses. Revenue counts each night of a stay in the month it happens.
+
+**Income summary (for taxes)** lists, per month and quarter, revenue earned, **payments actually
+received** (cash basis, excluding security deposits), channel fees, expenses and net. Download it
+as CSV for your bookkeeper. BalayHub doesn't issue BIR official receipts or give tax advice; your
+accountant decides which figures and tax option apply.
+
 ## Pricing helpers
 
 Set them per listing (Listings → Edit → *Pricing helpers*) and in **Calendar → Pricing rules**:

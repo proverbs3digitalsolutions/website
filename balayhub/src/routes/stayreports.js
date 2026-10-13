@@ -39,7 +39,7 @@ function period(q) {
 }
 
 async function performance(user, { from, to }) {
-  const params = [from, to];
+  const params = [];
   const scope = propertyScope(user, params);
   // Listings in scope (incl. archived ones that had stays).
   const { rows: listings } = await query(
