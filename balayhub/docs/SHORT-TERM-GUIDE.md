@@ -33,6 +33,16 @@ Each workspace chooses **Short-term**, **Long-term** or **Both** in **Settings**
 - Cleaners tick checklist items on their phone, upload photos (finished unit or damage found), and tap **Mark done**.
 - The owner can change the default checklist with **Edit checklist**.
 
+## Guest check-in form
+Many condo buildings require the names and IDs of everyone staying. Each reservation has a **private check-in link** (on the reservation page, under **Guest check-in form → Copy link**). It's also filled in automatically wherever a message template uses `{{checkin_link}}`. The default booking confirmation and check-in templates for new workspaces already include it; for older workspaces, add it to your templates.
+- The guest opens the link on their phone. No account is needed. They enter everyone's names, their mobile number, arrival time and car plate number, and upload photos of valid IDs (photos are shrunk before upload, which saves mobile data).
+- You get a note in the Inbox when it's submitted. The reservation page shows the details and ID photos, and **Copy for building admin** gives you a ready-to-paste summary.
+- ID photos are visible to owners and managers only (never staff), and are **deleted automatically 30 days after check-out** (`GUEST_ID_RETENTION_DAYS`). Names stay on the record.
+- **New link** replaces the link if it was sent to the wrong person.
+
+## Getting started checklist
+New workspace owners see a **Get started** checklist on Home: add a listing, add Wi-Fi and check-in instructions, connect a calendar, add a reservation, turn on automatic messages, and invite a co-host or cleaner. It ticks itself off as you go and can be hidden.
+
 ## Connecting Airbnb, Booking.com and Agoda (calendar sync)
 
 BalayHub syncs with the channels through **calendar (iCal) links**. These are free and work for any host. Sync goes both ways.

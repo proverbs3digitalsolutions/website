@@ -19,7 +19,19 @@ const ROLE_HELP = {
   staff: 'Records payments, expenses and repair requests for assigned properties. No access to tenant contact details or lease documents.',
 };
 
-export async function settingsView(el, { rerender }) {
+export async function settingsView(el, { rerender, query = {} }) {
+  // Back from PayMongo checkout: confirm the payment with the server.
+  if (query.billing) {
+    history.replaceState(null, '', '#/settings');
+    try {
+      const r = await post(`/billing/${encodeURIComponent(query.billing)}/refresh`);
+      if (r.status === 'paid') { await refreshUser(); toast('Payment received. Thank you! Your plan is active.'); }
+      else toast('We are still waiting for the payment confirmation. This page updates within a few minutes.');
+    } catch (err) { toast(err.message, 'error'); }
+  } else if (query.billing_cancelled) {
+    history.replaceState(null, '', '#/settings');
+    toast('Payment cancelled. Nothing was charged.');
+  }
   const u = state.user;
   const sections = [];
 
@@ -147,6 +159,8 @@ async function planCard(u) {
   try { pub = await get('/public/plans'); } catch { /* ignore */ }
   let listings = [];
   try { ({ listings } = await get('/listings')); } catch { /* ignore */ }
+  let bill = { online: false, options: [], history: [] };
+  try { bill = await get('/billing'); } catch { /* ignore */ }
   const status = p.read_only
     ? h('div', { class: 'alert alert--error' }, p.reason === 'trial_ended' ? 'Your free trial has ended. Your workspace is view-only until you choose a plan.' : 'Your payment is overdue. Your workspace is view-only until you renew.')
     : p.plan === 'trial' ? h('div', { class: 'alert alert--info' }, `Free trial: ${p.trial_days_left} day${p.trial_days_left === 1 ? '' : 's'} left. All features are included.`)
@@ -158,10 +172,60 @@ async function planCard(u) {
       h('dt', null, 'Current plan'), h('dd', null, p.price ? `${p.name} — ₱${p.price.toLocaleString('en-PH')} / month` : p.name),
       h('dt', null, 'Listings'), h('dd', null, `${listings.length} of ${p.listing_limit >= 1000 ? 'unlimited' : p.listing_limit}`),
       p.paid_until && [h('dt', null, 'Paid until'), h('dd', null, p.paid_until)]),
-    pub.plans.length > 0 && h('div', { class: 'plan-mini' }, pub.plans.map((x) => h('div', { class: `plan-mini__item${x.key === p.plan ? ' is-current' : ''}` },
-      h('strong', null, x.name), h('span', null, `₱${x.price.toLocaleString('en-PH')}/mo`), h('span', { class: 'muted small' }, `Up to ${x.listings} listings${x.ai ? ' · AI drafts' : ''}`)))),
-    h('p', { class: 'small', style: { marginTop: '12px' } },
-      'To choose or renew a plan, pay by GCash, Maya or bank transfer and ',
-      pub.contact_email ? h('a', { href: `mailto:${pub.contact_email}?subject=${encodeURIComponent(`BalayHub plan for ${u.organization_name}`)}` }, `email us at ${pub.contact_email}`) : 'contact us',
-      ' with your workspace name. We activate it the same day.'));
+    bill.online ? payOnline(p, bill) : [
+      pub.plans.length > 0 && h('div', { class: 'plan-mini' }, pub.plans.map((x) => h('div', { class: `plan-mini__item${x.key === p.plan ? ' is-current' : ''}` },
+        h('strong', null, x.name), h('span', null, `₱${x.price.toLocaleString('en-PH')}/mo`), h('span', { class: 'muted small' }, `Up to ${x.listings} listings${x.ai ? ' · AI drafts' : ''}`)))),
+      h('p', { class: 'small', style: { marginTop: '12px' } },
+        'To choose or renew a plan, pay by GCash, Maya or bank transfer and ',
+        pub.contact_email ? h('a', { href: `mailto:${pub.contact_email}?subject=${encodeURIComponent(`BalayHub plan for ${u.organization_name}`)}` }, `email us at ${pub.contact_email}`) : 'contact us',
+        ' with your workspace name. We activate it the same day.')],
+    bill.history.length > 0 && [
+      h('h3', { class: 'subhead', style: { marginTop: '18px' } }, 'Payments'),
+      h('ul', { class: 'list' }, bill.history.map((b) => h('li', null, h('div', { class: 'row' },
+        h('div', { class: 'row__main' },
+          h('span', { class: 'row__title' }, `${b.plan[0].toUpperCase()}${b.plan.slice(1)} · ${b.months} month${b.months > 1 ? 's' : ''}`),
+          h('span', { class: 'row__sub' }, b.status === 'paid' ? `Paid ${fmtDateTime(b.paid_at)}${b.payment_method ? ` · ${b.payment_method}` : ''} · covers ${b.period_start} to ${b.period_end}` : `Started ${fmtDateTime(b.created_at)}, waiting for payment`)),
+        h('div', { class: 'row__end' }, h('strong', null, `₱${Number(b.amount).toLocaleString('en-PH')}`),
+          h('span', { class: `badge badge--${b.status === 'paid' ? 'paid' : 'unpaid'}` }, b.status === 'paid' ? 'Paid' : 'Pending'))))))]);
 }
+
+// Choose a plan and length, then pay on PayMongo's secure page.
+function payOnline(p, bill) {
+  const current = bill.options.some((o) => o.key === p.plan) ? p.plan : 'growth';
+  let plan = current;
+  let months = 1;
+  const amountEl = h('strong');
+  const btn = h('button', { class: 'btn btn--primary', type: 'button' }, 'Pay now');
+  const cards = h('div', { class: 'plan-mini' });
+  const drawCards = () => cards.replaceChildren(...bill.options.map((o) => h('button', {
+    type: 'button', class: `plan-mini__item plan-mini__pick${o.key === plan ? ' is-current' : ''}`, 'aria-pressed': String(o.key === plan),
+    onclick: () => { plan = o.key; drawCards(); update(); },
+  }, h('strong', null, o.name), h('span', null, `₱${o.prices[0].amount.toLocaleString('en-PH')}/mo`),
+  h('span', { class: 'muted small' }, `Up to ${o.listings} listings${o.ai ? ' · AI drafts' : ''}`))));
+  const monthSel = h('select', { class: 'input input--sm', 'aria-label': 'Months', onchange: (e) => { months = Number(e.target.value); update(); } },
+    [[1, '1 month'], [3, '3 months'], [12, '12 months (2 months free)']].map(([m, t]) => h('option', { value: m }, t)));
+  const update = () => {
+    const o = bill.options.find((x) => x.key === plan);
+    amountEl.textContent = `₱${o.prices.find((x) => x.months === months).amount.toLocaleString('en-PH')}`;
+  };
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    btn.textContent = 'Opening secure checkout…';
+    try {
+      const r = await post('/billing/checkout', { plan, months: String(months) });
+      location.href = r.checkout_url;
+    } catch (err) {
+      toast(err.message, 'error');
+      btn.disabled = false;
+      btn.textContent = 'Pay now';
+    }
+  });
+  drawCards();
+  update();
+  return h('div', { class: 'payonline' },
+    h('h3', { class: 'subhead', style: { marginTop: '16px' } }, p.plan === 'trial' || p.read_only ? 'Choose your plan' : 'Renew or change plan'),
+    cards,
+    h('div', { class: 'payonline__row' }, monthSel, h('span', null, 'Total: ', amountEl), btn),
+    h('p', { class: 'muted small' }, 'Pay securely with GCash, Maya, card or GrabPay through PayMongo. Your plan activates as soon as the payment goes through. Paying before your current period ends adds the time on top.'));
+}
+

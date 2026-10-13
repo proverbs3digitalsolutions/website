@@ -33,6 +33,8 @@ function startScheduler() {
   every(15 * 60 * 1000, 'housekeeping', housekeeping.createDueTasks, 40 * 1000);
   // Delete guest ID photos after the retention period.
   every(6 * 60 * 60 * 1000, 'guest-ids', require('../routes/checkin').purgeOldIds, 70 * 1000);
+  // Online plan payments whose webhook never arrived.
+  every(10 * 60 * 1000, 'billing', require('./billing').reconcile, 80 * 1000);
   // Keep the public demo's dates current.
   every(60 * 60 * 1000, 'demo', require('./demo').refreshDemo, 50 * 1000);
 }

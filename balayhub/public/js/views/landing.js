@@ -52,7 +52,7 @@ const FAQ = [
   ['Does it connect to my Airbnb account?', 'BalayHub syncs calendars with Airbnb, Booking.com and Agoda using their calendar (iCal) links, which every host can set up in a few minutes. Guest messages on Airbnb stay on Airbnb; BalayHub\'s inbox is for guests you reach by email, including direct bookings.'],
   ['Is my guests\' data safe?', 'Your data is stored on a private server, every page requires a login, and each team member only sees the properties you assign. BalayHub follows the Philippine Data Privacy Act (RA 10173), and you can export or delete your data at any time.'],
   ['What happens when the free trial ends?', 'Nothing is deleted. Your workspace becomes view-only until you choose a plan, so you can still see and export everything.'],
-  ['How do I pay?', 'Monthly, by GCash, Maya or bank transfer. Message us when you\'re ready and we\'ll activate your plan.'],
+  ['How do I pay?', null], // filled in below
   ['Can my co-host or cleaner use it?', 'Yes. Invite a manager or staff member and choose which properties they can see. Staff never see guests\' phone numbers or email addresses.'],
   ['Do I need to install anything?', 'No. BalayHub runs in your phone or computer browser. On a phone you can add it to your home screen like an app.'],
 ];
@@ -117,7 +117,9 @@ export async function landingView(el) {
       h('section', { class: 'lp-section lp-section--alt' },
         h('div', { class: 'lp-wrap lp-faq' },
           h('h2', { class: 'lp-h2' }, 'Questions hosts ask'),
-          FAQ.map(([q, a]) => h('details', null, h('summary', null, q), h('p', null, a))))),
+          FAQ.map(([q, a]) => h('details', null, h('summary', null, q), h('p', null, a || (pricing.online_payments
+            ? 'Online with GCash, Maya, card or GrabPay, for 1, 3 or 12 months (12 months gets 2 months free). Your plan activates right away.'
+            : 'Monthly, by GCash, Maya or bank transfer. Message us when you\'re ready and we\'ll activate your plan.')))))),
       h('section', { class: 'lp-section lp-final' },
         h('div', { class: 'lp-wrap' },
           h('h2', { class: 'lp-h2' }, 'Spend less time managing and more time hosting.'),

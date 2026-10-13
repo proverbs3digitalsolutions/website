@@ -55,7 +55,11 @@ function createApp() {
   api.use(require('./routes/housekeeping'));
   api.use(require('./routes/onboarding'));
   api.use(require('./routes/checkin').router);
+  api.use(require('./routes/billing').router);
   api.use((req, res, next) => next(new HttpError(404, 'Not found.', { code: 'NOT_FOUND' })));
+  // PayMongo webhook: raw body (for its signature), no session or CSRF header.
+  app.post('/api/public/paymongo/webhook', express.raw({ type: '*/*', limit: '200kb' }),
+    (req, res, next) => require('./routes/billing').webhook(req, res).catch(next));
   app.use('/api', api);
   // Private-by-token calendar feeds that Airbnb, Booking.com and Agoda poll.
   app.use(require('./routes/stays').publicRouter);

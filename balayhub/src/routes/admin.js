@@ -20,6 +20,7 @@ router.get('/public/plans', (req, res) => {
   res.json({
     trial_days: config.trialDays,
     contact_email: contact.endsWith('.local') ? '' : contact,
+    online_payments: Boolean(config.paymongoSecretKey),
     plans: PUBLIC_PLANS.map((k) => ({ key: k, name: PLANS[k].name, price: PLANS[k].price, listings: PLANS[k].listings, ai: PLANS[k].ai })),
   });
 });

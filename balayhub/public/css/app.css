@@ -660,3 +660,7 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .gc__foot { text-align: center; }
 .gc__ids { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; margin-top: 12px; }
 .gc__ids img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); }
+.plan-mini__pick { text-align: left; background: #fff; cursor: pointer; font: inherit; color: inherit; }
+.plan-mini__pick:hover { border-color: var(--teal); }
+.payonline__row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 14px 0 8px; }
+.payonline__row select.input { width: auto; }
