@@ -36,6 +36,7 @@ const config = {
   platformAdmins: (env.PLATFORM_ADMIN_EMAILS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
   trialDays: Number(env.TRIAL_DAYS || 14),
   salesContactEmail: env.SALES_CONTACT_EMAIL || '',
+  guestIdRetentionDays: Number(env.GUEST_ID_RETENTION_DAYS || 30),
   privacyPolicyVersion: '2026-10-01',
   timezone: 'Asia/Manila',
 };

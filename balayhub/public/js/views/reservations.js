@@ -6,6 +6,7 @@ import {
 } from '../ui.js';
 import { state, navigate } from '../app.js';
 import { messageGuest } from './inbox.js';
+import { checkinCard } from './checkin.js';
 
 export const CHANNEL_LABEL = { direct: 'Direct', airbnb: 'Airbnb', booking: 'Booking.com', agoda: 'Agoda', other: 'Other' };
 const METHOD_LABEL = { cash: 'Cash', bank_transfer: 'Bank transfer', gcash: 'GCash', maya: 'Maya', card: 'Card', channel_payout: 'Channel payout', other: 'Other' };
@@ -230,6 +231,8 @@ export async function reservationDetailView(el, { params, rerender }) {
     try { await post(`/booking-payments/${p.payment_id}/void`, { reason }); toast('Payment voided.'); rerender(); } catch (err) { toast(err.message, 'error'); }
   };
 
+  const checkin = canManage && r.status === 'confirmed' ? await checkinCard(r.booking_id, rerender) : null;
+
   const emailReceipt = async (p) => {
     try { await post(`/booking-payments/${p.payment_id}/send-receipt`); toast(`Receipt emailed to ${r.guest_email}.`); rerender(); } catch (err) { toast(err.message, 'error'); }
   };
@@ -265,7 +268,8 @@ export async function reservationDetailView(el, { params, rerender }) {
             !r.limited && [h('dt', null, 'Mobile'), h('dd', null, r.guest_phone ? h('a', { href: `tel:${r.guest_phone.replace(/[^\d+]/g, '')}` }, r.guest_phone) : '—'),
               h('dt', null, 'Email'), h('dd', null, r.guest_email ? h('a', { href: `mailto:${r.guest_email}` }, r.guest_email) : '—')]),
           canManage && confirmed && r.guest_email && h('button', { class: 'btn btn--secondary btn--sm', style: { marginTop: '12px' }, onclick: emailConfirmation }, 'Email booking confirmation'),
-          r.ical_feed_id && h('p', { class: 'muted small', style: { marginTop: '10px' } }, `Imported from ${CHANNEL_LABEL[r.channel]}. Guest details stay on ${CHANNEL_LABEL[r.channel]}.`))),
+          r.ical_feed_id && h('p', { class: 'muted small', style: { marginTop: '10px' } }, `Imported from ${CHANNEL_LABEL[r.channel]}. Guest details stay on ${CHANNEL_LABEL[r.channel]}.`)),
+        checkin),
       h('div', { class: 'stack' },
         h('div', { class: 'card' },
           h('div', { class: 'card__head' }, h('h2', null, 'Payment'), confirmed && h('button', { class: 'btn btn--primary btn--sm', onclick: recordPayment }, 'Record payment')),

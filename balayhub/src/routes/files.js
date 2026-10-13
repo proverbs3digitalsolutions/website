@@ -17,12 +17,7 @@ const { loadPayment, loadExpense } = require('./money');
 
 const router = express.Router();
 
-const ALLOWED = {
-  'application/pdf': { ext: 'pdf', magic: (b) => b.subarray(0, 4).toString('latin1') === '%PDF' },
-  'image/jpeg': { ext: 'jpg', magic: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
-  'image/png': { ext: 'png', magic: (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) },
-  'image/webp': { ext: 'webp', magic: (b) => b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP' },
-};
+const { ALLOWED } = require('../lib/storage');
 
 // Confirm the user may attach to / read files of this record.
 async function checkRecord(user, type, id) {
@@ -48,6 +43,17 @@ async function checkRecord(user, type, id) {
       if (!row) throw notFound();
       return row;
     }
+    case 'registration': {
+      // Guest IDs: owners and managers only.
+      if (user.role === 'staff') throw forbidden('Guest IDs are limited to owners and property managers.');
+      const { propertyScope } = require('../lib/access');
+      const params = [id];
+      const row = await one(`SELECT r.registration_id FROM guest_registrations r JOIN bookings b USING (booking_id)
+                               JOIN units u ON u.unit_id = b.unit_id JOIN properties p ON p.property_id = u.property_id
+                              WHERE r.registration_id = $1 AND ${propertyScope(user, params)}`, params);
+      if (!row) throw notFound();
+      return row;
+    }
     default:
       throw new HttpError(400, 'Unsupported attachment type.', { code: 'BAD_REQUEST' });
   }
@@ -57,6 +63,8 @@ router.post('/files',
   express.raw({ type: Object.keys(ALLOWED), limit: config.maxUploadBytes }),
   ah(async (req, res) => {
     const type = String(req.query.record_type || '');
+    // Guest ID photos come only from the guest's own check-in form.
+    if (type === 'registration') throw new HttpError(400, 'Unsupported attachment type.', { code: 'BAD_REQUEST' });
     const recordId = uuidParam(req.query.record_id);
     await checkRecord(req.user, type, recordId);
     const mime = String(req.get('Content-Type') || '').split(';')[0].trim();
@@ -86,7 +94,7 @@ router.get('/files/:id', ah(async (req, res) => {
   await checkRecord(req.user, file.related_record_type, file.related_record_id);
   const full = path.resolve(config.storageDir, file.storage_key);
   if (!full.startsWith(path.resolve(config.storageDir))) throw notFound();
-  if (file.related_record_type === 'lease') await audit(null, req.user, 'file.downloaded', 'lease', file.related_record_id, { file_id: id });
+  if (['lease', 'registration'].includes(file.related_record_type)) await audit(null, req.user, 'file.downloaded', file.related_record_type, file.related_record_id, { file_id: id });
   res.set('Content-Type', file.mime_type);
   res.set('Cache-Control', 'private, no-store');
   res.set('Content-Disposition', `${req.query.download ? 'attachment' : 'inline'}; filename="${file.file_name.replace(/"/g, '')}"`);

@@ -120,6 +120,8 @@ function requireWorkspace(req, res, next) {
 const PLAN_EXEMPT = /^\/(auth\/|admin\/|invitations\/)/;
 function planGuard(req, res, next) {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) || !req.user?.organization_id) return next();
+  // Guest-facing pages (opened by a private link) don't depend on who is signed in.
+  if (req.path.startsWith('/public/')) return next();
   const { planStatus, READ_ONLY_MSG } = require('./plans');
   const s = planStatus(req.user);
   if (!s.read_only) return next();

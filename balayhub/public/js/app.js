@@ -19,6 +19,7 @@ import { inboxView, inboxSettingsView, unreadCount } from './views/inbox.js';
 import { housekeepingView, housekeepingDetailView } from './views/housekeeping.js';
 import { landingView } from './views/landing.js';
 import { adminView } from './views/admin.js';
+import { guestCheckinView } from './views/checkin.js';
 
 export const state = { user: null, requireEmailVerification: true };
 
@@ -35,6 +36,7 @@ const routes = [
   ['/reset-password', authViews.resetView, OPEN],
   ['/verify', authViews.verifyView, OPEN],
   ['/privacy', privacyView, OPEN],
+  ['/checkin/:token', guestCheckinView, OPEN],
   ['/verify-pending', authViews.verifyPendingView, SIGNED_IN],
   ['/setup', authViews.setupView, SIGNED_IN],
   ['/dashboard', dashboardView, APP],

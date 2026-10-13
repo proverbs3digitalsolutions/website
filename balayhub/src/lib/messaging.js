@@ -24,6 +24,9 @@ Guests: {{num_guests}}
 Total: {{total}} · Balance due: {{balance}}
 Confirmation code: {{confirmation_code}}
 
+Before you arrive, please fill in the guest registration form (names of all guests and a photo of a valid ID; the building requires it):
+{{checkin_link}}
+
 We'll send check-in instructions before you arrive. Just reply to this email if you have any questions.
 
 See you soon!
@@ -44,6 +47,8 @@ Wi-Fi: {{wifi_name}} / Password: {{wifi_password}}
 
 House rules:
 {{house_rules}}
+
+If you haven't yet, please complete the guest registration form: {{checkin_link}}
 
 Balance due: {{balance}}. Reply to this email if you need anything.
 
@@ -115,6 +120,9 @@ const fmtTime = (t) => {
 };
 
 async function bookingContext(bookingId) {
+  // Every reservation gets a private check-in form link the first time it's needed.
+  await query(`UPDATE bookings SET checkin_token = $2 WHERE booking_id = $1 AND checkin_token IS NULL AND kind = 'reservation'`,
+    [bookingId, crypto.randomBytes(18).toString('base64url')]);
   return one(
     `SELECT b.*, u.unit_name, u.checkin_time, u.checkout_time, u.wifi_name, u.wifi_password, u.checkin_instructions, u.house_rules,
             p.property_name, p.address, p.city, p.province, p.organization_id AS org_id,
@@ -151,6 +159,7 @@ function variables(ctx, sender) {
     wifi_password: ctx.wifi_password || '(ask your host)',
     checkin_instructions: ctx.checkin_instructions || '',
     house_rules: ctx.house_rules || '',
+    checkin_link: ctx.checkin_token ? `${config.appUrl}/#/checkin/${ctx.checkin_token}` : '',
     workspace_name: ctx.workspace_name,
     host_name: sender || ctx.owner_name || ctx.workspace_name,
   };

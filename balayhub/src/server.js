@@ -41,6 +41,7 @@ function createApp() {
   api.use(require('./routes/auth'));
   api.use(require('./routes/google'));
   api.use(require('./routes/admin'));
+  api.use(require('./routes/checkin').publicRouter);
   api.use(requireWorkspace);
   api.use(require('./routes/team'));
   api.use(require('./routes/properties'));
@@ -52,6 +53,8 @@ function createApp() {
   api.use(require('./routes/stays'));
   api.use(require('./routes/inbox'));
   api.use(require('./routes/housekeeping'));
+  api.use(require('./routes/onboarding'));
+  api.use(require('./routes/checkin').router);
   api.use((req, res, next) => next(new HttpError(404, 'Not found.', { code: 'NOT_FOUND' })));
   app.use('/api', api);
   // Private-by-token calendar feeds that Airbnb, Booking.com and Agoda poll.
