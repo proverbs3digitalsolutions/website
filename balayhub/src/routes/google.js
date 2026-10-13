@@ -118,8 +118,8 @@ router.get('/auth/google/callback', limiter, ah(async (req, res) => {
          VALUES ($1,$2,$3,$4,$5,now(),$6) RETURNING *`,
         [name, email, passwordHash, invite?.organization_id || null, invite?.role || null, profile.sub]);
       // The sign-up page states that continuing with Google accepts the Privacy Notice.
-      await db.query(`INSERT INTO consent_records (user_id, consent_type, policy_version) VALUES ($1, 'privacy_notice', $2)`,
-        [u.user_id, config.privacyPolicyVersion]);
+      await db.query(`INSERT INTO consent_records (user_id, consent_type, policy_version) VALUES ($1, 'privacy_notice', $2), ($1, 'terms_of_service', $3)`,
+        [u.user_id, config.privacyPolicyVersion, config.termsVersion]);
       if (invite) {
         await db.query('UPDATE invitations SET accepted_at = now() WHERE invitation_id = $1', [invite.invitation_id]);
         await db.query(

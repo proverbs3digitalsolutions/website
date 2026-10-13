@@ -129,6 +129,7 @@ export async function landingView(el) {
     h('footer', { class: 'lp-foot' },
       h('div', { class: 'lp-wrap lp-foot__inner' },
         h('span', null, `© ${new Date().getFullYear()} BalayHub`),
+        h('a', { href: '#/terms' }, 'Terms of service'),
         h('a', { href: '#/privacy' }, 'Privacy notice'),
         pricing.contact_email && h('a', { href: `mailto:${pricing.contact_email}` }, pricing.contact_email)))));
 }

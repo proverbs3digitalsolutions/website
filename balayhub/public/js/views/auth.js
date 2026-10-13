@@ -127,8 +127,8 @@ export async function signupView(el, { query }) {
   }
   const privacy = h('div', { class: 'field', dataset: { field: 'accept_privacy' } },
     h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'accept_privacy' }),
-      h('span', null, 'I have read the ', h('a', { href: '#/privacy', target: '_blank' }, 'Privacy Notice'),
-        ' and understand how BalayHub processes my personal data.')),
+      h('span', null, 'I agree to the ', h('a', { href: '#/terms', target: '_blank' }, 'Terms of Service'), ' and have read the ',
+        h('a', { href: '#/privacy', target: '_blank' }, 'Privacy Notice'), '.')),
     h('div', { class: 'error', role: 'alert' }));
   const form = makeForm({
     submitText: 'Create Account',
@@ -159,7 +159,7 @@ export async function signupView(el, { query }) {
     invite ? `You were invited as ${invite.role === 'manager' ? 'a property manager' : 'staff'}. Create your login to get started.` : 'Free to start. Set up your first property in a few minutes.',
     form,
     google, google && h('p', { class: 'small muted', style: { marginTop: '8px', textAlign: 'center' } },
-      'By continuing with Google you accept the ', h('a', { href: '#/privacy', target: '_blank' }, 'Privacy Notice'), '.'),
+      'By continuing with Google you agree to the ', h('a', { href: '#/terms', target: '_blank' }, 'Terms of Service'), ' and accept the ', h('a', { href: '#/privacy', target: '_blank' }, 'Privacy Notice'), '.'),
     h('div', { class: 'auth-card__foot' }, 'Already have an account? ', h('a', { href: '#/login' }, 'Log in')))));
 }
 

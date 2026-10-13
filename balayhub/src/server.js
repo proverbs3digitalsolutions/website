@@ -37,10 +37,14 @@ function createApp() {
   });
   api.use(loadSession);
   api.use(planGuard);
-  api.get('/health', (req, res) => res.json({ ok: true }));
+  // For uptime monitors: also checks the database.
+  api.get('/health', async (req, res) => {
+    try { await require('./db').query('SELECT 1'); res.json({ ok: true }); } catch { res.status(503).json({ ok: false, error: 'database unavailable' }); }
+  });
   api.use(require('./routes/auth'));
   api.use(require('./routes/google'));
   api.use(require('./routes/admin'));
+  api.use(require('./routes/account').router);
   api.use(require('./routes/checkin').publicRouter);
   api.use(requireWorkspace);
   api.use(require('./routes/team'));
@@ -56,6 +60,7 @@ function createApp() {
   api.use(require('./routes/onboarding'));
   api.use(require('./routes/checkin').router);
   api.use(require('./routes/billing').router);
+  api.use(require('./routes/account').workspaceRouter);
   api.use((req, res, next) => next(new HttpError(404, 'Not found.', { code: 'NOT_FOUND' })));
   // PayMongo webhook: raw body (for its signature), no session or CSRF header.
   app.post('/api/public/paymongo/webhook', express.raw({ type: '*/*', limit: '200kb' }),
@@ -81,6 +86,8 @@ function createApp() {
       return res.status(err.status).json({ error: err.message, ...err.extra });
     }
     console.error(err);
+    require('./lib/alerts').alert('server-error', 'A server error happened',
+      `${req.method} ${req.originalUrl.split('?')[0]}\n${String(err.stack || err.message).split('\n').slice(0, 6).join('\n')}`).catch(() => {});
     res.status(500).json({ error: 'Something went wrong on our side. Your data was not changed. Please try again.', code: 'SERVER_ERROR' });
   });
   return app;

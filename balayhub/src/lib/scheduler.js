@@ -5,10 +5,18 @@
 
 function every(ms, name, fn, firstDelayMs = ms) {
   let busy = false;
+  let failures = 0;
   const run = async () => {
     if (busy) return;
     busy = true;
-    try { await fn(); } catch (err) { console.error(`[${name}]`, err.message); } finally { busy = false; }
+    try {
+      await fn();
+      failures = 0;
+    } catch (err) {
+      console.error(`[${name}]`, err.message);
+      failures += 1;
+      if (failures === 3) require('./alerts').alert(`job-${name}`, `Background job "${name}" keeps failing`, `It failed 3 times in a row. Last error: ${err.message}`).catch(() => {});
+    } finally { busy = false; }
   };
   setTimeout(run, firstDelayMs).unref();
   setInterval(run, ms).unref();
@@ -35,6 +43,8 @@ function startScheduler() {
   every(6 * 60 * 60 * 1000, 'guest-ids', require('../routes/checkin').purgeOldIds, 70 * 1000);
   // Online plan payments whose webhook never arrived.
   every(10 * 60 * 1000, 'billing', require('./billing').reconcile, 80 * 1000);
+  // Workspaces whose owner asked for deletion, after the grace period.
+  every(60 * 60 * 1000, 'account', require('./account').purgeDue, 90 * 1000);
   // Keep the public demo's dates current.
   every(60 * 60 * 1000, 'demo', require('./demo').refreshDemo, 50 * 1000);
 }

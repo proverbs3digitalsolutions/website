@@ -54,8 +54,8 @@ test('new Google user gets a verified account and a session', async () => {
   assert.equal(me.user.email, 'host@example.com');
   assert.equal(me.user.email_verified, true);
   assert.equal(me.user.organization_id, null);
-  const consent = await sql(`SELECT c.* FROM consent_records c JOIN users u USING (user_id) WHERE u.email = 'host@example.com'`);
-  assert.equal(consent.length, 1);
+  const consent = await sql(`SELECT c.consent_type FROM consent_records c JOIN users u USING (user_id) WHERE u.email = 'host@example.com' ORDER BY 1`);
+  assert.deepEqual(consent.map((c) => c.consent_type), ['privacy_notice', 'terms_of_service']);
 });
 
 test('existing password account with the same email is linked, not duplicated', async () => {

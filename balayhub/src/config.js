@@ -41,6 +41,7 @@ const config = {
   paymongoMethods: (env.PAYMONGO_METHODS || 'gcash,paymaya,card,grab_pay').split(',').map((x) => x.trim()).filter(Boolean),
   guestIdRetentionDays: Number(env.GUEST_ID_RETENTION_DAYS || 30),
   privacyPolicyVersion: '2026-10-01',
+  termsVersion: '2026-10-13',
   timezone: 'Asia/Manila',
 };
 

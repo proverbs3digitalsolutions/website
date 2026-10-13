@@ -28,8 +28,8 @@ test('full registration flow: signup -> verify -> workspace -> dashboard', async
   assert.equal(r.data.user.email, 'jose@example.com');
   assert.equal(r.data.user.email_verified, false);
   assert.ok(r.data.devVerificationLink.includes('#/verify?token='));
-  const consent = await sql(`SELECT * FROM consent_records`);
-  assert.equal(consent.length, 1);
+  const consent = await sql(`SELECT consent_type FROM consent_records ORDER BY 1`);
+  assert.deepEqual(consent.map((c) => c.consent_type), ['privacy_notice', 'terms_of_service']);
 
   // Unverified users can't use the workspace.
   let d = await c.get('/api/dashboard');

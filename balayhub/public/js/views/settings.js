@@ -42,7 +42,7 @@ export async function settingsView(el, { rerender, query = {} }) {
       h('dt', null, 'Email'), h('dd', null, u.email),
       h('dt', null, 'Workspace'), h('dd', null, u.organization_name),
       h('dt', null, 'Role'), h('dd', null, label(u.role))),
-    h('p', { class: 'muted small', style: { marginTop: '12px' } }, 'To change your password, log out and use “Forgot password”.'),
+    h('div', { style: { marginTop: '12px' } }, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: changePassword }, 'Change password')),
     u.role === 'owner' && h('div', { class: 'form', style: { marginTop: '14px' } },
       field({ name: 'business_type', label: 'Modules for this workspace', type: 'select', value: u.business_type, placeholderOption: false, options: [
         ['short_term', 'Short-term stays (Airbnb, staycations)'], ['long_term', 'Long-term rentals (leases, monthly rent)'], ['both', 'Both'],
@@ -56,6 +56,7 @@ export async function settingsView(el, { rerender, query = {} }) {
       } }, 'Save')))));
 
   if (u.role === 'owner' && u.plan && !u.plan.is_demo) sections.push(await planCard(u));
+  if (u.role === 'owner' && u.plan && !u.plan.is_demo) sections.push(dataCard(u, rerender));
 
   if (u.role === 'owner') {
     const [{ members, invitations }, { properties }] = await Promise.all([get('/team'), get('/properties')]);
@@ -229,3 +230,47 @@ function payOnline(p, bill) {
     h('p', { class: 'muted small' }, 'Pay securely with GCash, Maya, card or GrabPay through PayMongo. Your plan activates as soon as the payment goes through. Renewing the same plan early adds the time on top; switching plans converts your unused days to the new plan; paying during the free trial keeps your remaining trial days.'));
 }
 
+
+// ---------------------------------------------------------------- password
+function changePassword() {
+  formModal({
+    title: 'Change password',
+    submitText: 'Change password',
+    fields: [
+      field({ name: 'current_password', label: 'Current password', type: 'password', required: true, autocomplete: 'current-password' }),
+      field({ name: 'new_password', label: 'New password', type: 'password', required: true, autocomplete: 'new-password', hint: 'At least 8 characters.' }),
+      field({ name: 'confirm_password', label: 'Confirm new password', type: 'password', required: true, autocomplete: 'new-password' }),
+    ],
+    onSubmit: async (d) => {
+      await post('/auth/change-password', d);
+      toast('Password changed. Other devices were signed out.');
+    },
+  });
+}
+
+// ---------------------------------------------------------------- your data
+function dataCard(u, rerender) {
+  const del = () => formModal({
+    title: 'Delete this workspace?',
+    submitText: 'Delete workspace',
+    fields: [
+      h('div', { class: 'alert alert--error' },
+        'This permanently deletes all listings, reservations, guests, messages, payments, files and team accounts in ',
+        h('strong', null, u.organization_name), '. You have 14 days to change your mind; after that it cannot be undone. Download an export first if you want a copy.'),
+      field({ name: 'confirm_name', label: `Type the workspace name to confirm: ${u.organization_name}`, required: true, autocomplete: 'off' }),
+    ],
+    onSubmit: async (d) => {
+      await post('/workspace/delete', d);
+      await refreshUser();
+      toast('Deletion scheduled. You can cancel it within 14 days.');
+      location.hash = '#/settings';
+      rerender();
+    },
+  });
+  return h('div', { class: 'card' },
+    h('div', { class: 'card__head' }, h('h2', null, 'Your data')),
+    h('p', { class: 'small' }, 'Download everything in this workspace (listings, reservations, guests, messages, payments, expenses and more) as a file you can keep or move to another system. ID photos and uploaded files are listed but not included.'),
+    h('div', { class: 'chips', style: { marginTop: '10px' } },
+      h('a', { class: 'btn btn--secondary btn--sm', href: '/api/workspace/export', download: '' }, 'Download all data'),
+      !u.plan?.deletion_scheduled_at && h('button', { class: 'btn btn--danger btn--sm', type: 'button', onclick: del }, 'Delete workspace')));
+}

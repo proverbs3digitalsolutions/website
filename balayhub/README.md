@@ -24,7 +24,8 @@ In development, email isn't sent unless `SMTP_URL` is set. Verification and rese
 Multi-calendar with Airbnb, Booking.com and Agoda iCal sync, reservations, a guest inbox (email, templates, scheduled and automatic messages, AI reply drafts), housekeeping tasks, payments with emailed receipts, and revenue and occupancy reports. See:
 - [docs/SHORT-TERM-GUIDE.md](docs/SHORT-TERM-GUIDE.md): features and channel sync
 - [docs/INBOX-SETUP.md](docs/INBOX-SETUP.md): guest replies (IMAP) and AI drafts
-- [docs/SELLING.md](docs/SELLING.md): plans, free trial, live demo, platform admin
+- [docs/SELLING.md](docs/SELLING.md): plans, free trial, live demo, platform admin, PayMongo
+- [docs/LAUNCH-CHECKLIST.md](docs/LAUNCH-CHECKLIST.md): backups, uptime monitor, error alerts, legal pages
 
 Browser journeys (need a running, seeded server and Playwright): `test/e2e-stays-browser.js`, `test/e2e-inbox-browser.js` (start the server with `SMTP_URL=test://`) and `test/e2e-selling-browser.js` (with `PLATFORM_ADMIN_EMAILS=stays@balayhub.test`).
 

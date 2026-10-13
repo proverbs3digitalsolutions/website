@@ -20,6 +20,7 @@ import { housekeepingView, housekeepingDetailView } from './views/housekeeping.j
 import { landingView } from './views/landing.js';
 import { adminView } from './views/admin.js';
 import { guestCheckinView } from './views/checkin.js';
+import { termsView } from './views/terms.js';
 
 export const state = { user: null, requireEmailVerification: true };
 
@@ -36,6 +37,7 @@ const routes = [
   ['/reset-password', authViews.resetView, OPEN],
   ['/verify', authViews.verifyView, OPEN],
   ['/privacy', privacyView, OPEN],
+  ['/terms', termsView, OPEN],
   ['/checkin/:token', guestCheckinView, OPEN],
   ['/verify-pending', authViews.verifyPendingView, SIGNED_IN],
   ['/setup', authViews.setupView, SIGNED_IN],
@@ -118,6 +120,14 @@ function planBanner() {
       h('button', { class: 'btn btn--primary btn--sm', onclick: async () => { try { await post('/auth/logout'); } catch { /* ignore */ } state.user = null; navigate('#/signup', { replace: true }); } }, 'Start your free trial'));
   }
   const owner = state.user.role === 'owner';
+  if (p.reason === 'deleting') {
+    const when = new Date(p.deletion_scheduled_at).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'long' });
+    return h('div', { class: 'planbar planbar--bad', role: 'status' },
+      h('span', null, `This workspace will be permanently deleted on ${when}. It is view-only until then.`),
+      owner && h('button', { class: 'btn btn--primary btn--sm', onclick: async () => {
+        try { await post('/workspace/delete/cancel'); await refreshUser(); toast('Deletion cancelled. Your workspace is back to normal.'); render(); } catch (err) { toast(err.message, 'error'); }
+      } }, 'Cancel deletion'));
+  }
   if (p.read_only) {
     return h('div', { class: 'planbar planbar--bad', role: 'status' },
       h('span', null, p.reason === 'trial_ended' ? 'Your free trial has ended. Your data is safe and view-only.' : 'Your plan payment is overdue. Your workspace is view-only.'),

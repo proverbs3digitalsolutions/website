@@ -86,7 +86,7 @@ router.post('/auth/signup', ipLimiter, authLimiter, ah(async (req, res) => {
     throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { confirm_password: 'Passwords do not match.' } });
   }
   if (!body.accept_privacy) {
-    throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { accept_privacy: 'Please read and accept the Privacy Notice to continue.' } });
+    throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { accept_privacy: 'Please accept the Terms of Service and read the Privacy Notice to continue.' } });
   }
 
   let invite = null;
@@ -111,8 +111,8 @@ router.post('/auth/signup', ipLimiter, authLimiter, ah(async (req, res) => {
         invite ? new Date() : null], // the invite link proves control of the address
     );
     await db.query(
-      `INSERT INTO consent_records (user_id, consent_type, policy_version) VALUES ($1, 'privacy_notice', $2)`,
-      [u.user_id, config.privacyPolicyVersion],
+      `INSERT INTO consent_records (user_id, consent_type, policy_version) VALUES ($1, 'privacy_notice', $2), ($1, 'terms_of_service', $3)`,
+      [u.user_id, config.privacyPolicyVersion, config.termsVersion],
     );
     if (invite) {
       await db.query('UPDATE invitations SET accepted_at = now() WHERE invitation_id = $1', [invite.invitation_id]);

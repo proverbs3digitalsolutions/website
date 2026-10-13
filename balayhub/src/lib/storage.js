@@ -41,11 +41,16 @@ async function saveFile({ organizationId, recordType, recordId, body, mime, file
   }
 }
 
+// Remove a stored file from disk (its database row is handled by the caller).
+async function removeStoredFile(file) {
+  const full = path.resolve(config.storageDir, file.storage_key);
+  if (full.startsWith(path.resolve(config.storageDir) + path.sep)) await fs.promises.unlink(full).catch(() => {});
+}
+
 // Permanently delete a stored file and its record.
 async function deleteFile(file) {
-  const full = path.resolve(config.storageDir, file.storage_key);
-  if (full.startsWith(path.resolve(config.storageDir))) await fs.promises.unlink(full).catch(() => {});
+  await removeStoredFile(file);
   await one('DELETE FROM files WHERE file_id = $1 RETURNING file_id', [file.file_id]);
 }
 
-module.exports = { ALLOWED, checkUpload, saveFile, deleteFile };
+module.exports = { ALLOWED, checkUpload, saveFile, deleteFile, removeStoredFile };
