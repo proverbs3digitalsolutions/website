@@ -30,7 +30,7 @@ const validationError = (fields) => new HttpError(400, 'Please check the highlig
 
 function redactGuest(user, g) {
   if (!g || user.role !== 'staff') return g;
-  const { email, phone, notes, guest_email: ge, guest_phone: gp, ...rest } = g;
+  const { email, phone, notes, guest_email: ge, guest_phone: gp, review_token: rt, pay_token: pt, ...rest } = g;
   return { ...rest, limited: true };
 }
 
@@ -161,8 +161,11 @@ router.get('/guests/:id', ah(async (req, res) => {
   const params = [guest.guest_id];
   const { rows: stays } = await query(
     `${BOOKING_SELECT} WHERE b.guest_id = $1 AND ${propertyScope(req.user, params)} ORDER BY b.check_in DESC`, params);
+  const rparams = [guest.guest_id];
   const { rows: reviews } = await query(
-    `SELECT r.booking_id, r.rating, r.cleanliness, r.comment, r.created_at FROM guest_reviews r WHERE r.guest_id = $1 ORDER BY r.created_at DESC`, [guest.guest_id]);
+    `SELECT r.booking_id, r.rating, r.cleanliness, r.comment, r.created_at
+       FROM guest_reviews r JOIN bookings b ON b.booking_id = r.booking_id JOIN units u ON u.unit_id = b.unit_id JOIN properties p ON p.property_id = u.property_id
+      WHERE r.guest_id = $1 AND ${propertyScope(req.user, rparams)} ORDER BY r.created_at DESC`, rparams);
   res.json({ guest: redactGuest(req.user, guest), stays: stays.map((s) => redactGuest(req.user, s)), reviews });
 }));
 
@@ -302,9 +305,13 @@ router.post('/reservations', managers, ah(async (req, res) => {
     const id = await tx(async (db) => {
       let guestId = body.guest_id;
       // Same email as a guest you've hosted before: it's them again (repeat stays add up).
-      if (!guestId && body.guest_email) {
+      // Only a guest this user can already see, and whose first name matches what was typed.
+      if (!guestId && body.guest_email && body.guest_name) {
+        const params = [body.guest_email, body.guest_name];
         const { rows: [prev] } = await db.query(
-          'SELECT guest_id FROM guests WHERE organization_id = $1 AND lower(email) = lower($2) ORDER BY created_at LIMIT 1', [req.user.organization_id, body.guest_email]);
+          `SELECT g.guest_id FROM guests g WHERE lower(g.email) = lower($1)
+              AND lower(split_part(trim(g.full_name), ' ', 1)) = lower(split_part(trim($2), ' ', 1))
+              AND ${guestScope(req.user, params)} ORDER BY g.created_at LIMIT 1`, params);
         guestId = prev?.guest_id;
       }
       if (!guestId) {

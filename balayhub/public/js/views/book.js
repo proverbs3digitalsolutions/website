@@ -162,9 +162,9 @@ export async function bookListingView(el, { params, query }) {
       return;
     }
     try {
-      const promo = promoCode ? `&code=${encodeURIComponent(promoCode)}&email=${encodeURIComponent(form.elements.email.value || '')}` : '';
+      const promo = promoCode ? `&code=${encodeURIComponent(promoCode)}` : '';
       const q = await get(`/public/book/${encodeURIComponent(slug)}/units/${l.unit_id}/quote?check_in=${checkIn}&check_out=${checkOut}${promo}`);
-      codeMsg.textContent = q.code_error || (q.promo_code ? `Code ${q.promo_code} applied: ${q.promo_label}.` : '');
+      codeMsg.textContent = q.code_error || (q.promo_code ? `Code ${q.promo_code} applied: ${q.promo_label}.${q.promo_note ? ` ${q.promo_note}` : ''}` : '');
       codeMsg.className = q.code_error ? 'error' : 'muted small';
       current = q;
       // Show only the payment choices allowed for these dates.
@@ -207,9 +207,6 @@ export async function bookListingView(el, { params, query }) {
       h('div', { class: 'error', role: 'alert' })),
     submit,
     !host.accepting && h('p', { class: 'muted small' }, host.demo ? 'This is a demo, so booking is turned off.' : 'Online booking is paused. Please contact the host.'));
-
-  // Codes for returning guests depend on the email.
-  form.elements.email.addEventListener('change', () => { if (promoCode) updateQuote(); });
 
   let busy = false;
   form.addEventListener('submit', async (e) => {

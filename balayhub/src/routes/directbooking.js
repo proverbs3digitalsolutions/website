@@ -229,7 +229,7 @@ async function priceStay(u, checkIn, checkOut, promo = {}) {
   let accommodation = Number(q.accommodation_total);
   let applied = null; let codeError = null;
   if (promo.code) {
-    const r = await applyCode(promo.orgId, promo.code, { nights, accommodation, email: promo.email });
+    const r = await applyCode(promo.orgId, promo.code, { nights, accommodation, email: promo.email, name: promo.name }, { strict: Boolean(promo.strict) });
     if (r.error && promo.strict) throw validationError({ code: r.error });
     if (r.error) codeError = r.error;
     else if (r.code) { applied = r; accommodation = Math.round((accommodation - r.discount) * 100) / 100; }
@@ -244,6 +244,7 @@ async function priceStay(u, checkIn, checkOut, promo = {}) {
     nights, subtotal: q.subtotal, discount_label: q.discount_label, discount_amount: q.discount_amount,
     promo_code: applied?.code || null, promo_code_id: applied?.code_id || null, promo_label: applied?.label || null,
     promo_discount: applied ? applied.discount.toFixed(2) : '0.00', code_error: codeError,
+    promo_note: applied?.returning_only && !promo.strict ? 'For returning guests: checked at payment against your previous stay.' : null,
     accommodation_total: accommodation.toFixed(2), cleaning_fee: cleaning.toFixed(2), total: total.toFixed(2), deposit: deposit.toFixed(2),
     balance_due_date: due, deposit_allowed: depositAllowed, full_allowed: u.payment_option !== 'deposit' || !depositAllowed,
   };
@@ -263,7 +264,7 @@ publicRouter.get('/public/book/:slug/units/:unitId/quote', ah(async (req, res) =
   const host = await loadHost(req.params.slug);
   const u = await loadPublicUnit(host, req.params.unitId);
   const { promo_code_id: _id, ...p } = await priceStay(u, req.query.check_in, req.query.check_out,
-    { orgId: host.organization_id, code: req.query.code ? String(req.query.code).slice(0, 40) : null, email: req.query.email ? String(req.query.email).slice(0, 200) : null });
+    { orgId: host.organization_id, code: req.query.code ? String(req.query.code).slice(0, 40) : null });
   res.json({ ...p, available: await isFree(u.unit_id, req.query.check_in, req.query.check_out), payment_option: u.payment_option });
 }));
 
@@ -286,7 +287,7 @@ publicRouter.post('/public/book/:slug/units/:unitId/checkout', checkoutLimiter, 
   });
   if (!body.consent) throw validationError({ consent: 'Please agree to continue.' });
   if (u.max_guests && body.num_guests > u.max_guests) throw validationError({ num_guests: `This place allows up to ${u.max_guests} guests.` });
-  const price = await priceStay(u, body.check_in, body.check_out, { orgId: host.organization_id, code: body.code, email: body.email, strict: true });
+  const price = await priceStay(u, body.check_in, body.check_out, { orgId: host.organization_id, code: body.code, email: body.email, name: body.name, strict: true });
   if ((body.pay === 'deposit' && !price.deposit_allowed) || (body.pay === 'full' && !price.full_allowed)) {
     throw validationError({ pay: body.pay === 'deposit' && u.payment_option !== 'full'
       ? 'Your stay is too soon for a deposit. Please pay in full.' : 'That payment option is not available for this place.' });
@@ -310,7 +311,7 @@ publicRouter.post('/public/book/:slug/units/:unitId/checkout', checkoutLimiter, 
     }
     // Hold the code too, so its last use can't be taken twice.
     if (price.promo_code_id) {
-      const again = await applyCode(host.organization_id, body.code, { nights: price.nights, accommodation: Number(price.accommodation_total) + Number(price.promo_discount), email: body.email }, { db, lock: true });
+      const again = await applyCode(host.organization_id, body.code, { nights: price.nights, accommodation: Number(price.accommodation_total) + Number(price.promo_discount), email: body.email, name: body.name }, { db, lock: true });
       if (again.error || again.code_id !== price.promo_code_id) throw validationError({ code: again.error || 'This code is not valid.' });
     }
     const { rows: [c] } = await db.query(
@@ -450,8 +451,9 @@ async function finalize(ref, method) {
     try {
       // A returning guest (same email) keeps one guest record, so repeat stays add up.
       let { rows: [g] } = await db.query(
-        `SELECT guest_id, do_not_rebook, vip FROM guests WHERE organization_id = $1 AND lower(email) = lower($2) ORDER BY created_at LIMIT 1`,
-        [c.organization_id, c.guest_email]);
+        `SELECT guest_id, do_not_rebook, vip FROM guests WHERE organization_id = $1 AND lower(email) = lower($2)
+            AND lower(split_part(trim(full_name), ' ', 1)) = lower(split_part(trim($3), ' ', 1)) ORDER BY created_at LIMIT 1`,
+        [c.organization_id, c.guest_email, c.guest_name]);
       if (g) await db.query('UPDATE guests SET phone = COALESCE(phone, $2) WHERE guest_id = $1', [g.guest_id, c.guest_phone]);
       else {
         ({ rows: [g] } = await db.query(

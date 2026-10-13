@@ -94,16 +94,18 @@ test('discount codes on the booking page: percent, returning guests only, limite
   const base = `/api/public/book/${slug}/units/${unit.unit_id}`;
   const q0 = (await g.get(`${base}/quote?check_in=${d(10)}&check_out=${d(12)}`)).data;
   assert.equal(q0.total, '4500.00');
-  const newGuest = (await g.get(`${base}/quote?check_in=${d(10)}&check_out=${d(12)}&code=balik10&email=new@example.com`)).data;
-  assert.match(newGuest.code_error, /returning guests/);
-  assert.equal(newGuest.total, '4500.00');
+  // The quote doesn't reveal whether an email has stayed before; eligibility is checked at checkout.
   const back = (await g.get(`${base}/quote?check_in=${d(10)}&check_out=${d(12)}&code=BALIK10&email=lia@example.com`)).data;
+  assert.match(back.promo_note, /returning guests/);
+  assert.equal(back.code_error, null);
   assert.equal(back.promo_discount, '400.00'); // 10% of 4000 accommodation, not the cleaning fee
   assert.equal(back.total, '4100.00');
   assert.equal(back.promo_code_id, undefined, 'internal id not exposed');
 
   const form = (extra) => ({ check_in: d(10), check_out: d(12), num_guests: 2, name: 'Lia Santos', email: 'lia@example.com', phone: '09171234567', pay: 'full', consent: true, ...extra });
   assert.equal((await g.post(`${base}/checkout`, form({ code: 'BALIK10', email: 'stranger@example.com' }))).status, 400);
+  // Knowing a past guest's email isn't enough: the name must match too.
+  assert.equal((await g.post(`${base}/checkout`, form({ code: 'BALIK10', name: 'Mallory Mal' }))).status, 400);
   const r = await g.post(`${base}/checkout`, form({ code: 'balik10' }));
   assert.equal(r.status, 200, JSON.stringify(r.data));
   const s = last();
@@ -128,6 +130,20 @@ test('discount codes on the booking page: percent, returning guests only, limite
   // Turned off: no longer accepted.
   await host.post(`/api/discount-codes/${codes.find((c) => c.code === 'BALIK10').code_id}/active`, { active: false });
   assert.match((await g.get(`${base}/quote?check_in=${d(30)}&check_out=${d(32)}&code=BALIK10&email=lia@example.com`)).data.code_error, /not valid/);
+});
+
+test('scoping: a manager can\'t pull in another property\'s guest by email; a different name books as a new guest', async () => {
+  const p2 = (await host.post('/api/properties', { property_name: 'Grass', property_type: 'condominium', address: 'Road 8', city: 'Taguig', province: 'Metro Manila' })).data.property;
+  const u2 = (await host.post(`/api/properties/${p2.property_id}/units`, { unit_name: '805', unit_type: 'studio', nightly_rate: '1500' })).data.unit;
+  const inv = await host.post('/api/team/invitations', { email: 'mgr@example.com', role: 'manager', property_ids: [p2.property_id] });
+  const mgr = client(srv.base);
+  await mgr.post('/api/auth/signup', { full_name: 'Mona Manager', email: 'mgr@example.com', password: 'longenough1', confirm_password: 'longenough1', accept_privacy: true, invite_token: decodeURIComponent(inv.data.inviteLink.split('invite=')[1]) });
+  const r = (await mgr.post('/api/reservations', { unit_id: u2.unit_id, check_in: d(50), check_out: d(51), guest_name: 'Lia Santos', guest_email: 'lia@example.com' })).data.reservation;
+  assert.notEqual(r.guest_id, pastBooking.guest_id);
+  assert.equal((await mgr.get(`/api/guests/${pastBooking.guest_id}`)).status, 404);
+  // Owner, different first name: a new guest, not Lia.
+  const o = (await host.post('/api/reservations', { unit_id: unit.unit_id, check_in: d(55), check_out: d(56), guest_name: 'Mallory', guest_email: 'lia@example.com' })).data.reservation;
+  assert.notEqual(o.guest_id, pastBooking.guest_id);
 });
 
 test('a do-not-rebook guest booking online is flagged to the host', async () => {
