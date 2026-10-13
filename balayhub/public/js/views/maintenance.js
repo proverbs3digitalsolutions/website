@@ -3,8 +3,7 @@
 import { get, post, patch, qs, uploadFile } from '../api.js';
 import {
   h, icon, peso, fmtDate, fmtDateTime, badge, label, options, field, formModal, emptyState, searchBox, pageHead, toast,
-  todayManila, filesList, openModal,
-} from '../ui.js';
+  todayManila, filesList, openModal, unitLabel } from '../ui.js';
 import { state, navigate } from '../app.js';
 
 const PRIORITIES = ['low', 'medium', 'high', 'urgent'];
@@ -19,14 +18,14 @@ export async function newMaintenanceModal({ onSaved, propertyId, unitId } = {}) 
   }
   const unitField = field({ name: 'unit_id', label: 'Unit (optional)', type: 'select', placeholderOption: 'Common area / whole property', options: [] });
   const fillUnits = (pid) => unitField.querySelector('select').replaceChildren(h('option', { value: '' }, 'Common area / whole property'),
-    units.filter((u) => u.property_id === pid).map((u) => h('option', { value: u.unit_id, selected: u.unit_id === unitId }, `Unit ${u.unit_name}`)));
+    units.filter((u) => u.property_id === pid).map((u) => h('option', { value: u.unit_id, selected: u.unit_id === unitId }, unitLabel(u.unit_name))));
   const propField = field({ name: 'property_id', label: 'Property', type: 'select', required: true, value: propertyId || (properties.length === 1 ? properties[0].property_id : ''), options: properties.map((p) => [p.property_id, p.property_name]) });
   propField.querySelector('select').addEventListener('change', (e) => fillUnits(e.target.value));
   fillUnits(propField.querySelector('select').value);
 
   formModal({
     title: 'New maintenance request',
-    submitText: 'Save Request',
+    submitText: 'Save request',
     draftKey: 'maintenance-new',
     fields: [
       propField, unitField,
@@ -71,12 +70,12 @@ export async function maintenanceView(el, { query }) {
         h('div', { class: 'row__end' }, badge(m.status), badge(m.priority))))))
       : (filters.q || filters.property_id
         ? emptyState({ title: 'No results found', text: 'Try clearing your search or filters.', action: h('button', { class: 'btn btn--secondary', onclick: () => { filters.q = ''; filters.property_id = ''; propertySelect.value = ''; search.querySelector('input').value = ''; load(); } }, 'Clear filters') })
-        : emptyState({ iconName: 'wrench', title: filters.status === 'active' ? 'No open repair requests' : 'No requests here', text: 'Log repairs as they’re reported so nothing gets lost in chat threads.', action: h('button', { class: 'btn btn--primary', onclick: () => newMaintenanceModal() }, icon('plus'), 'New Request') })));
+        : emptyState({ iconName: 'wrench', title: filters.status === 'active' ? 'No open repair requests' : 'No requests here', text: 'Log repairs as they’re reported so nothing gets lost in chat threads.', action: h('button', { class: 'btn btn--primary', onclick: () => newMaintenanceModal() }, icon('plus'), 'New request') })));
   }
   const search = searchBox({ value: filters.q, placeholder: 'Search issue, property or unit', onSearch: (q) => { filters.q = q; load(); } });
   await load();
   el.replaceChildren(
-    pageHead({ title: 'Maintenance', sub: 'Repair requests from report to resolution', actions: h('button', { class: 'btn btn--primary', onclick: () => newMaintenanceModal() }, icon('plus'), 'New Request') }),
+    pageHead({ title: 'Maintenance', sub: 'Repair requests from report to resolution', actions: h('button', { class: 'btn btn--primary', onclick: () => newMaintenanceModal() }, icon('plus'), 'New request') }),
     h('div', { class: 'toolbar' }, search, propertySelect),
     tabs, listCard);
 }
@@ -108,7 +107,7 @@ export async function maintenanceDetailView(el, { params, rerender }) {
   });
 
   const addCost = () => formModal({
-    title: 'Add repair cost', submitText: 'Save Cost', idempotent: true,
+    title: 'Add repair cost', submitText: 'Save cost', idempotent: true,
     fields: [
       h('p', { class: 'muted small' }, 'This is saved as a Repairs expense for the property, so it appears in your reports.'),
       h('div', { class: 'form-row form-row--2' },
@@ -127,7 +126,7 @@ export async function maintenanceDetailView(el, { params, rerender }) {
       title: m.title,
       sub: `${m.property_name}${m.unit_name ? ` · Unit ${m.unit_name}` : ''}`,
       back: { href: '#/maintenance', label: 'Maintenance' },
-      actions: [canManage && h('button', { class: 'btn btn--secondary', onclick: edit }, 'Edit'), h('button', { class: 'btn btn--primary', onclick: addCost }, icon('plus'), 'Add Cost')],
+      actions: [canManage && h('button', { class: 'btn btn--secondary', onclick: edit }, 'Edit'), h('button', { class: 'btn btn--primary', onclick: addCost }, icon('plus'), 'Add cost')],
     }),
     h('div', { class: 'grid grid--2' },
       h('div', { class: 'stack' },

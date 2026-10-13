@@ -47,7 +47,7 @@ function statusAlerts(status) {
   if (!status.sending) {
     out.push(h('div', { class: 'alert alert--warn' }, 'Email sending is not set up on the server yet, so messages can\'t be sent. Follow EMAIL-SETUP.md (step 7 of the server guide).'));
   } else if (!status.replies.configured) {
-    out.push(h('div', { class: 'alert alert--info' }, 'Guest replies currently arrive in your email inbox only. To see them here too, add IMAP_URL on the server (see INBOX-SETUP.md).'));
+    out.push(h('div', { class: 'alert alert--info' }, 'Guest replies currently arrive in your email inbox only. Showing them here needs a one-time setup on the server; ask whoever set up BalayHub for you.'));
   } else if (status.replies.last_error) {
     out.push(h('div', { class: 'alert alert--warn' }, `Couldn't check for guest replies: ${status.replies.last_error}`));
   }

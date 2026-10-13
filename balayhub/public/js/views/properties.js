@@ -2,8 +2,7 @@
 
 import { get, post, patch, qs, ApiError } from '../api.js';
 import {
-  h, icon, peso, badge, label, options, field, formModal, confirmDialog, emptyState, searchBox, pageHead, toast,
-} from '../ui.js';
+  h, icon, peso, badge, label, options, field, formModal, confirmDialog, emptyState, searchBox, pageHead, toast, unitLabel } from '../ui.js';
 import { state, navigate } from '../app.js';
 import { assignTenantModal } from './tenants.js';
 
@@ -37,7 +36,7 @@ export function newPropertyModal({ onSaved } = {}) {
   let confirmDuplicate = false;
   const modal = formModal({
     title: 'Add property',
-    submitText: 'Save Property',
+    submitText: 'Save property',
     draftKey: 'property-new',
     fields: propertyFields(),
     onSubmit: async (data) => {
@@ -71,7 +70,7 @@ function unitFields(u = {}) {
 function unitModal(property, unit, onSaved) {
   return formModal({
     title: unit ? `Edit unit ${unit.unit_name}` : `Add unit to ${property.property_name}`,
-    submitText: unit ? 'Save changes' : 'Save Unit',
+    submitText: unit ? 'Save changes' : 'Save unit',
     draftKey: unit ? null : `unit-new-${property.property_id}`,
     fields: unitFields(unit || {}),
     onSubmit: async (data) => {
@@ -110,14 +109,14 @@ export async function propertiesView(el, { query }) {
           iconName: 'building',
           title: filters.status === 'archived' ? 'No archived properties' : (isOwner ? 'No properties yet' : 'No properties assigned to you'),
           text: filters.status === 'archived' ? '' : (isOwner ? 'Add a property — like an apartment building or boarding house — then add its rental units.' : 'Ask the workspace owner to assign you to a property.'),
-          action: filters.status === 'active' && isOwner && h('button', { class: 'btn btn--primary', onclick: () => newPropertyModal() }, icon('plus'), 'Add Property'),
+          action: filters.status === 'active' && isOwner && h('button', { class: 'btn btn--primary', onclick: () => newPropertyModal() }, icon('plus'), 'Add property'),
         })));
   }
 
   const search = searchBox({ value: filters.q, placeholder: 'Search name, address or city', onSearch: (q) => { filters.q = q; load().catch((e) => toast(e.message, 'error')); } });
   await load();
   el.replaceChildren(
-    pageHead({ title: 'Properties', sub: 'Buildings, houses and their rental units', actions: isOwner && h('button', { class: 'btn btn--primary', onclick: () => newPropertyModal() }, icon('plus'), 'Add Property') }),
+    pageHead({ title: 'Properties', sub: 'Buildings, houses and their rental units', actions: isOwner && h('button', { class: 'btn btn--primary', onclick: () => newPropertyModal() }, icon('plus'), 'Add property') }),
     h('div', { class: 'toolbar' }, search, tabs),
     listCard);
 
@@ -167,7 +166,7 @@ export async function propertyDetailView(el, { params, query, rerender }) {
     }
     return h('li', null, h('div', { class: 'row' },
       h('div', { class: 'row__main' },
-        h('span', { class: 'row__title' }, `Unit ${u.unit_name}`, ' ', badge(u.occupancy_status)),
+        h('span', { class: 'row__title' }, unitLabel(u.unit_name), ' ', badge(u.occupancy_status)),
         h('span', { class: 'row__sub' }, `${label(u.unit_type)} · ${peso(u.monthly_rent)}/month${Number(u.security_deposit_amount) ? ` · deposit ${peso(u.security_deposit_amount)}` : ''}`),
         u.tenant_name && h('span', { class: 'row__sub' }, 'Tenant: ', h('a', { href: `#/tenants/${u.tenant_id}` }, u.tenant_name))),
       h('div', { class: 'row__end' }, h('div', { class: 'chips' }, actions))));
@@ -179,7 +178,7 @@ export async function propertyDetailView(el, { params, query, rerender }) {
       sub: `${label(property.property_type)} · ${property.address}, ${property.city}, ${property.province}${property.postal_code ? ` ${property.postal_code}` : ''}`,
       back: { href: '#/properties', label: 'Properties' },
       actions: [
-        canManage && !archived && h('button', { class: 'btn btn--primary', onclick: addUnit }, icon('plus'), 'Add Unit'),
+        canManage && !archived && h('button', { class: 'btn btn--primary', onclick: addUnit }, icon('plus'), 'Add unit'),
         canManage && !archived && h('button', { class: 'btn btn--secondary', onclick: editProperty }, 'Edit'),
         isOwner && !archived && h('button', { class: 'btn btn--danger', onclick: archiveProperty }, 'Archive'),
         isOwner && archived && h('button', { class: 'btn btn--secondary', onclick: restoreProperty }, 'Restore'),
@@ -194,7 +193,7 @@ export async function propertyDetailView(el, { params, query, rerender }) {
     h('div', { class: 'card' },
       h('div', { class: 'card__head' }, h('h2', null, 'Units')),
       units.length ? h('ul', { class: 'list' }, units.map(unitRow))
-        : emptyState({ title: 'No units yet', text: 'Add each rentable room, apartment or space so you can assign tenants and track rent.', action: canManage && !archived && h('button', { class: 'btn btn--primary', onclick: addUnit }, icon('plus'), 'Add Unit') })),
+        : emptyState({ title: 'No units yet', text: 'Add each rentable room, apartment or space so you can assign tenants and track rent.', action: canManage && !archived && h('button', { class: 'btn btn--primary', onclick: addUnit }, icon('plus'), 'Add unit') })),
     property.description && h('div', { class: 'card' }, h('h2', null, 'Notes'), h('p', { style: { marginTop: '8px', whiteSpace: 'pre-wrap' } }, property.description)),
   );
 

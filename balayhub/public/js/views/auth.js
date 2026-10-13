@@ -67,7 +67,7 @@ export async function welcomeView(el) {
       h('p', null, 'BalayHub replaces scattered spreadsheets, notebooks and chat threads. Track properties, tenants, leases, rent, expenses and repairs — and see who has paid at a glance.'),
       h('div', { class: 'welcome__actions' },
         h('a', { class: 'btn btn--primary', href: '#/signup' }, 'Get Started'),
-        h('a', { class: 'btn btn--secondary', href: '#/login' }, 'Log In')),
+        h('a', { class: 'btn btn--secondary', href: '#/login' }, 'Log in')),
       h('ul', { class: 'welcome__points' },
         h('li', null, 'See occupied and vacant units, rent collected and unpaid balances'),
         h('li', null, 'Record full and partial payments — cash, bank, GCash or Maya'),
@@ -89,7 +89,7 @@ export async function welcomeView(el) {
 // ---------------------------------------------------------------- Screen 2: Log in
 export async function loginView(el, { query }) {
   const form = makeForm({
-    submitText: 'Log In',
+    submitText: 'Log in',
     fields: [
       field({ name: 'email', label: 'Email', type: 'email', required: true, autocomplete: 'email' }),
       field({ name: 'password', label: 'Password', type: 'password', required: true, autocomplete: 'current-password' }),
@@ -131,7 +131,7 @@ export async function signupView(el, { query }) {
         h('a', { href: '#/privacy', target: '_blank' }, 'Privacy Notice'), '.')),
     h('div', { class: 'error', role: 'alert' }));
   const form = makeForm({
-    submitText: 'Create Account',
+    submitText: 'Create account',
     fields: [
       field({ name: 'full_name', label: 'Full name', required: true, autocomplete: 'name', maxlength: 120 }),
       field({ name: 'email', label: 'Email', type: 'email', required: true, autocomplete: 'email', value: invite?.email }),
@@ -206,7 +206,7 @@ export async function verifyView(el, { query }) {
     await refreshUser();
     toast('Email verified.');
     if (state.user) afterLogin();
-    else card.replaceChildren(h('h1', null, 'Email verified'), h('p', { class: 'lead' }, 'You can now log in.'), h('a', { class: 'btn btn--primary btn--block', href: '#/login' }, 'Log In'));
+    else card.replaceChildren(h('h1', null, 'Email verified'), h('p', { class: 'lead' }, 'You can now log in.'), h('a', { class: 'btn btn--primary btn--block', href: '#/login' }, 'Log in'));
   } catch (err) {
     card.replaceChildren(h('h1', null, "Couldn't verify"), h('div', { class: 'alert alert--error' }, err.message),
       h('p', { class: 'auth-card__foot' }, h('a', { href: state.user ? '#/verify-pending' : '#/login' }, 'Request a new link')));

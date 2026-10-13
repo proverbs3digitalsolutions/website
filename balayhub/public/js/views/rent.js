@@ -3,8 +3,7 @@
 import { get, post, patch, qs, uploadFile } from '../api.js';
 import {
   h, icon, peso, fmtDate, fmtDateTime, fmtMonth, badge, label, options, field, formModal, confirmDialog, emptyState,
-  searchBox, pageHead, toast, todayManila, filesList, openModal,
-} from '../ui.js';
+  searchBox, pageHead, toast, todayManila, filesList, openModal, unitLabel } from '../ui.js';
 import { state, navigate } from '../app.js';
 
 const METHODS = ['cash', 'bank_transfer', 'gcash', 'maya', 'check', 'other'];
@@ -57,7 +56,7 @@ export async function recordPaymentModal({ leaseId, onSaved } = {}) {
 
   formModal({
     title: 'Record payment',
-    submitText: 'Save Payment',
+    submitText: 'Save payment',
     idempotent: true,
     draftKey: leaseId ? null : 'payment-new',
     fields: [
@@ -96,7 +95,7 @@ export async function addExpenseModal({ onSaved, expense } = {}) {
     const sel = unitField.querySelector('select');
     const current = sel.value || e.unit_id || '';
     sel.replaceChildren(h('option', { value: '' }, 'Whole property'),
-      units.filter((u) => u.property_id === pid).map((u) => h('option', { value: u.unit_id, selected: u.unit_id === current }, `Unit ${u.unit_name}`)));
+      units.filter((u) => u.property_id === pid).map((u) => h('option', { value: u.unit_id, selected: u.unit_id === current }, unitLabel(u.unit_name))));
   };
   const propField = field({ name: 'property_id', label: 'Property', type: 'select', required: true, value: e.property_id || (properties.length === 1 ? properties[0].property_id : ''), options: properties.map((p) => [p.property_id, p.property_name]) });
   propField.querySelector('select').addEventListener('change', (ev) => fillUnits(ev.target.value));
@@ -104,7 +103,7 @@ export async function addExpenseModal({ onSaved, expense } = {}) {
 
   formModal({
     title: expense ? 'Correct expense' : 'Add expense',
-    submitText: expense ? 'Save correction' : 'Save Expense',
+    submitText: expense ? 'Save correction' : 'Save expense',
     idempotent: !expense,
     draftKey: expense ? null : 'expense-new',
     fields: [
@@ -166,7 +165,7 @@ export async function rentView(el, { query }) {
     const { charges, totals } = await get(`/rent${qs({ status: filters.status, q: filters.q, property_id: filters.property_id, month: filters.month })}`);
     summary.replaceChildren(h('div', { class: 'stats' },
       h('div', { class: 'stat' }, h('div', { class: 'stat__label' }, 'Outstanding'), h('div', { class: 'stat__value' }, peso(totals.outstanding))),
-      h('div', { class: `stat${Number(totals.overdue) > 0 ? ' stat--alert' : ''}` }, h('div', { class: 'stat__label' }, 'Overdue'), h('div', { class: 'stat__value' }, peso(totals.overdue)), h('div', { class: 'stat__sub' }, `${totals.overdue_count} month(s)`)),
+      h('div', { class: `stat${Number(totals.overdue) > 0 ? ' stat--alert' : ''}` }, h('div', { class: 'stat__label' }, 'Overdue'), h('div', { class: 'stat__value' }, peso(totals.overdue)), h('div', { class: 'stat__sub' }, `${totals.overdue_count} month${totals.overdue_count === 1 ? '' : 's'}`)),
       h('div', { class: 'stat' }, h('div', { class: 'stat__label' }, 'Partially paid'), h('div', { class: 'stat__value' }, totals.partial_count)),
       h('div', { class: 'stat' }, h('div', { class: 'stat__label' }, 'Due, not yet paid'), h('div', { class: 'stat__value' }, totals.unpaid_count))));
     body.replaceChildren(h('div', { class: 'card' }, charges.length
@@ -196,7 +195,7 @@ export async function rentView(el, { query }) {
         h('ul', { class: 'list' }, payments.map((p) => h('li', null, h('a', { class: 'row', href: `#/payments/${p.payment_id}` },
           h('div', { class: 'row__main' }, h('span', { class: `row__title${p.voided_at ? ' strike' : ''}` }, p.tenant_name), h('span', { class: 'row__sub' }, `${fmtDate(p.payment_date)} · ${label(p.payment_method)} · ${p.property_name}, Unit ${p.unit_name}`)),
           h('div', { class: 'row__end' }, h('span', { class: `amount${p.voided_at ? ' strike muted' : ''}` }, peso(p.amount_paid)), p.voided_at && badge('voided', 'Voided'))))))]
-      : emptyState({ title: filters.q || filters.property_id ? 'No results found' : 'No payments recorded yet', text: filters.q || filters.property_id ? 'Try clearing your filters.' : 'Record the first rent payment to see it here.', action: h('button', { class: 'btn btn--primary', onclick: () => recordPaymentModal({ onSaved: reload }) }, 'Record Payment') })));
+      : emptyState({ title: filters.q || filters.property_id ? 'No results found' : 'No payments recorded yet', text: filters.q || filters.property_id ? 'Try clearing your filters.' : 'Record the first rent payment to see it here.', action: h('button', { class: 'btn btn--primary', onclick: () => recordPaymentModal({ onSaved: reload }) }, 'Record payment') })));
   }
 
   async function loadExpenses() {
@@ -209,7 +208,7 @@ export async function rentView(el, { query }) {
         h('ul', { class: 'list' }, expenses.map((x) => h('li', null, h('a', { class: 'row', href: `#/expenses/${x.expense_id}` },
           h('div', { class: 'row__main' }, h('span', { class: `row__title${x.voided_at ? ' strike' : ''}` }, x.description || label(x.category)), h('span', { class: 'row__sub' }, `${fmtDate(x.expense_date)} · ${label(x.category)} · ${x.property_name}${x.unit_name ? `, Unit ${x.unit_name}` : ''}`)),
           h('div', { class: 'row__end' }, h('span', { class: `amount${x.voided_at ? ' strike muted' : ''}` }, peso(x.amount)), x.voided_at && badge('voided', 'Voided'))))))]
-      : emptyState({ title: filters.q || filters.property_id ? 'No results found' : 'No expenses recorded yet', text: 'Track repairs, utilities, dues and other operating costs per property.', action: h('button', { class: 'btn btn--primary', onclick: () => addExpenseModal({ onSaved: reload }) }, 'Add Expense') })));
+      : emptyState({ title: filters.q || filters.property_id ? 'No results found' : 'No expenses recorded yet', text: 'Track repairs, utilities, dues and other operating costs per property.', action: h('button', { class: 'btn btn--primary', onclick: () => addExpenseModal({ onSaved: reload }) }, 'Add expense') })));
   }
 
   const search = searchBox({ value: filters.q, placeholder: 'Search tenant, unit or reference', onSearch: (q) => { filters.q = q; load(); } });
@@ -229,8 +228,8 @@ export async function rentView(el, { query }) {
       title: stayOnly ? 'Expenses' : 'Rent & Expenses',
       sub: stayOnly ? 'Cleaning, utilities, dues and other costs of running your listings' : 'What’s due, what’s been paid, and what it costs to run your rentals',
       actions: [
-        !stayOnly && h('button', { class: 'btn btn--primary', onclick: () => recordPaymentModal({ onSaved: reload }) }, icon('cash'), 'Record Payment'),
-        h('button', { class: stayOnly ? 'btn btn--primary' : 'btn btn--secondary', onclick: () => addExpenseModal({ onSaved: reload }) }, icon('plus'), 'Add Expense')],
+        !stayOnly && h('button', { class: 'btn btn--primary', onclick: () => recordPaymentModal({ onSaved: reload }) }, icon('cash'), 'Record payment'),
+        h('button', { class: stayOnly ? 'btn btn--primary' : 'btn btn--secondary', onclick: () => addExpenseModal({ onSaved: reload }) }, icon('plus'), 'Add expense')],
     }),
     !stayOnly && mainTabs,
     h('div', { class: 'toolbar' }, search, propertySelect),
@@ -247,7 +246,7 @@ export async function paymentDetailView(el, { params, rerender }) {
       title: `Payment · ${peso(p.amount_paid)}`, sub: `${p.tenant_name} · ${p.property_name}, Unit ${p.unit_name}`,
       back: { href: '#/rent?tab=payments', label: 'Payments' },
       actions: [
-        h('a', { class: 'btn btn--secondary', href: `#/tenants/${p.tenant_id}` }, 'View Tenant'),
+        h('a', { class: 'btn btn--secondary', href: `#/tenants/${p.tenant_id}` }, 'View tenant'),
         h('button', { class: 'btn btn--secondary', onclick: () => window.print() }, 'Print receipt'),
         canVoid && h('button', {
           class: 'btn btn--danger',

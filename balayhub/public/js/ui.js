@@ -138,9 +138,11 @@ export const LABELS = {
   low: 'Low', medium: 'Medium', high: 'High', urgent: 'Urgent',
   vacant: 'Vacant', occupied: 'Occupied', unavailable: 'Unavailable', archived: 'Archived',
   active: 'Active', ended: 'Ended', terminated: 'Terminated',
-  owner: 'Owner', manager: 'Property manager', staff: 'Staff / accountant',
+  owner: 'Owner', manager: 'Property manager', staff: 'Staff',
 };
 export const label = (k) => LABELS[k] || k;
+// "Unit 3B", but not "Unit Unit 1" when the name already says it.
+export const unitLabel = (name) => (/^unit\b/i.test(String(name || '')) ? String(name) : `Unit ${name}`);
 export const badge = (status, text) => h('span', { class: `badge badge--${status}` }, text || label(status));
 export const options = (keys) => keys.map((k) => [k, label(k)]);
 
@@ -161,7 +163,7 @@ export function errorState(err, retry) {
   return h('div', { class: 'card' }, emptyState({
     title: err?.status === 404 ? 'Not found' : "Couldn't load this page",
     text: err?.message || 'Something went wrong.',
-    action: retry && err?.status !== 404 && h('button', { class: 'btn btn--secondary', onclick: retry }, 'Try again'),
+    action: retry && ![403, 404].includes(err?.status) && h('button', { class: 'btn btn--secondary', onclick: retry }, 'Try again'),
   }));
 }
 
@@ -184,7 +186,7 @@ export function openModal({ title, body, onClose, wide }) {
   return { close, el: dlg };
 }
 
-export function confirmDialog({ title, text, confirmText = 'Confirm', danger = false, reason = false }) {
+export function confirmDialog({ title, text, confirmText = 'Confirm', cancelText = 'Cancel', danger = false, reason = false }) {
   return new Promise((resolve) => {
     let done = false;
     const reasonInput = reason ? h('textarea', { class: 'input', name: 'reason', required: true, maxlength: 300, placeholder: 'Required — explain why (kept in the audit log)' }) : null;
@@ -196,7 +198,7 @@ export function confirmDialog({ title, text, confirmText = 'Confirm', danger = f
         h('p', null, text),
         reasonInput && h('div', { class: 'field' }, h('label', null, 'Reason ', h('span', { class: 'req' }, '*')), reasonInput, err),
         h('div', { class: 'form-actions' },
-          h('button', { class: 'btn btn--secondary', type: 'button', onclick: () => m.close() }, 'Cancel'),
+          h('button', { class: 'btn btn--secondary', type: 'button', onclick: () => m.close() }, cancelText),
           h('button', {
             class: `btn ${danger ? 'btn--danger' : 'btn--primary'}`, type: 'button',
             onclick: () => {

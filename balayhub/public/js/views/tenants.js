@@ -3,8 +3,7 @@
 import { get, post, patch, qs, uploadFile, ApiError } from '../api.js';
 import {
   h, icon, peso, fmtDate, badge, label, field, formModal, confirmDialog, emptyState, searchBox, pageHead, toast,
-  todayManila, filesList, openModal,
-} from '../ui.js';
+  todayManila, filesList, openModal, unitLabel } from '../ui.js';
 import { state, navigate } from '../app.js';
 import { recordPaymentModal } from './rent.js';
 
@@ -23,7 +22,7 @@ export function newTenantModal({ onSaved } = {}) {
   let confirmDuplicate = false;
   const modal = formModal({
     title: 'Add tenant',
-    submitText: 'Save Tenant',
+    submitText: 'Save tenant',
     draftKey: 'tenant-new',
     fields: tenantFields(),
     onSubmit: async (data) => {
@@ -62,7 +61,7 @@ export async function assignTenantModal({ tenant, unit, onSaved } = {}) {
     return;
   }
   if (!tenants.length) {
-    openModal({ title: 'No tenants to assign', body: h('div', { class: 'form' }, h('p', null, 'All tenants already have a unit. Add a new tenant first.'), h('button', { class: 'btn btn--primary', onclick: () => { document.querySelector('dialog.modal')?.close(); newTenantModal(); } }, 'Add Tenant')) });
+    openModal({ title: 'No tenants to assign', body: h('div', { class: 'form' }, h('p', null, 'All tenants already have a unit. Add a new tenant first.'), h('button', { class: 'btn btn--primary', onclick: () => { document.querySelector('dialog.modal')?.close(); newTenantModal(); } }, 'Add tenant')) });
     return;
   }
 
@@ -83,7 +82,7 @@ export async function assignTenantModal({ tenant, unit, onSaved } = {}) {
 
   const modal = formModal({
     title: tenant ? `Assign ${tenant.full_name} to a unit` : 'Assign tenant to unit',
-    submitText: 'Save Lease',
+    submitText: 'Save lease',
     fields: [
       field({ name: 'tenant_id', label: 'Tenant', type: 'select', required: true, value: tenant?.tenant_id, options: tenants.map((t) => [t.tenant_id, t.full_name]) }),
       unitSelect,
@@ -150,7 +149,7 @@ export async function tenantsView(el, { query }) {
           title: filters.status === 'archived' ? 'No archived tenants' : 'No tenants yet',
           text: filters.status === 'archived' ? '' : 'Add a tenant, then assign them to a unit with their rent and lease dates. If you have no units yet, add a property first.',
           action: filters.status === 'active' && canManage && h('div', { class: 'chips' },
-            h('button', { class: 'btn btn--primary', onclick: () => newTenantModal() }, icon('plus'), 'Add Tenant'),
+            h('button', { class: 'btn btn--primary', onclick: () => newTenantModal() }, icon('plus'), 'Add tenant'),
             h('a', { class: 'btn btn--secondary', href: '#/properties' }, 'Go to Properties')),
         })));
   }
@@ -160,7 +159,7 @@ export async function tenantsView(el, { query }) {
     pageHead({
       title: 'Tenants & Leases', sub: 'Who rents each unit, on what terms, and what they owe',
       actions: canManage && [
-        h('button', { class: 'btn btn--primary', onclick: () => newTenantModal() }, icon('plus'), 'Add Tenant'),
+        h('button', { class: 'btn btn--primary', onclick: () => newTenantModal() }, icon('plus'), 'Add tenant'),
         h('button', { class: 'btn btn--secondary', onclick: () => assignTenantModal() }, 'Assign Unit')],
     }),
     h('div', { class: 'toolbar' }, search, tabs),
@@ -183,9 +182,9 @@ export async function tenantDetailView(el, { params, query, rerender }) {
 
   const endLease = (lease) => formModal({
     title: 'End lease',
-    submitText: 'End Lease',
+    submitText: 'End lease',
     fields: [
-      h('p', null, `Unit ${lease.unit_name} becomes vacant. Any unpaid balance stays on record and can still be collected.`),
+      h('p', null, `${unitLabel(lease.unit_name)} becomes vacant. Any unpaid balance stays on record and can still be collected.`),
       field({ name: 'end_date', label: 'Move-out date', type: 'date', required: true, value: todayManila(), max: todayManila(), hint: 'Planning a future move-out? Use “Change terms” to set the lease end date, then end the lease on moving day.' }),
       field({ name: 'lease_status', label: 'Reason', type: 'select', required: true, value: 'ended', placeholderOption: false, options: [['ended', 'Lease ended / tenant moved out'], ['terminated', 'Terminated early']] }),
       field({ name: 'note', label: 'Note (optional)', type: 'textarea', maxlength: 500 }),
@@ -249,7 +248,7 @@ export async function tenantDetailView(el, { params, query, rerender }) {
       h('dt', null, 'Balance'), h('dd', { class: Number(l.outstanding) > 0 ? 'amount--neg' : '' }, peso(l.outstanding), Number(l.overdue) > 0 ? ` (${peso(l.overdue)} overdue)` : ''),
       Number(l.credit) > 0 && [h('dt', null, 'Advance / credit'), h('dd', null, peso(l.credit))]),
     h('div', { class: 'chips', style: { marginTop: '14px' } },
-      (l.lease_status === 'active' || Number(l.outstanding) > 0) && h('button', { class: 'btn btn--primary btn--sm', onclick: () => recordPaymentModal({ leaseId: l.lease_id, onSaved: rerender }) }, 'Record Payment'),
+      (l.lease_status === 'active' || Number(l.outstanding) > 0) && h('button', { class: 'btn btn--primary btn--sm', onclick: () => recordPaymentModal({ leaseId: l.lease_id, onSaved: rerender }) }, 'Record payment'),
       canManage && h('button', { class: 'btn btn--secondary btn--sm', onclick: () => leaseDocs(l) }, 'Documents'),
       canManage && l.lease_status === 'active' && [
         h('button', { class: 'btn btn--ghost btn--sm', onclick: () => editTerms(l) }, 'Change terms'),

@@ -333,7 +333,7 @@ dialog.modal::backdrop { background: rgba(10, 20, 35, .45); }
 .prose ul { padding-left: 20px; }
 
 @media print {
-  .sidebar, .topbar, .bottomnav, .page-head__actions, .toolbar, .no-print { display: none !important; }
+  .sidebar, .topbar, .bottomnav, .page-head__actions, .toolbar, .no-print, .toast, #toasts, .toasts { display: none !important; }
   .shell { display: block; }
   .content { padding: 0; }
   .card { box-shadow: none; border: 1px solid #ccc; break-inside: avoid; }

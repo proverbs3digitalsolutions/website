@@ -67,7 +67,7 @@ export async function depositCard(r, rerender) {
       h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: record }, 'Record deposit'));
   }
   const [cls, text] = STATUS[dep.status];
-  const due = dep.status === 'held' && r.check_out <= todayManila();
+  const due = dep.status === 'held' && (r.check_out <= todayManila() || Boolean(r.checked_out_at));
   return h('div', { class: 'card' },
     h('div', { class: 'card__head' }, h('h2', null, 'Security deposit'), badge(due ? 'overdue' : cls, due ? 'To return' : text)),
     h('dl', { class: 'dl' },

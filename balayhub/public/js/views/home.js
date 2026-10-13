@@ -132,7 +132,7 @@ function revenueSection() {
         h('div', { class: 'card' },
           h('div', { class: 'stat__label' }, 'Total revenue'),
           h('div', { class: 'hero-num' }, pesoWhole(r.current.total_revenue)), change(r.current.total_revenue, r.previous.total_revenue),
-          h('p', { class: 'muted small' }, `Stays ${peso(r.current.accommodation)} + fees ${peso(r.current.fees)}`),
+          h('p', { class: 'muted small' }, `Stays ${pesoWhole(r.current.accommodation)} + fees ${pesoWhole(r.current.fees)}`),
           barChart({
             labels: weekLabels, height: 180, ariaLabel: 'Accommodation revenue by week, this month vs previous month',
             series: [{ name: fmtMonth(`${month}-01`), values: byWeek(r.current.weekly) }, { name: fmtMonth(`${r.previous.month}-01`), values: byWeek(r.previous.weekly), color: SERIES[2] }],
@@ -152,7 +152,7 @@ export async function homeView(el, { rerender } = {}) {
   const head = h('div', { class: 'page-head' },
     h('div', { class: 'page-head__title' }, h('h1', null, `Welcome back, ${first}`), h('p', null, `${state.user.organization_name} · ${fmtDate(todayManila())}`)),
     listings.length > 0 && h('div', { class: 'page-head__actions' },
-      h('a', { class: 'btn btn--primary', href: '#/reservations?new=1' }, icon('plus'), 'New reservation'),
+      state.user.role !== 'staff' && h('a', { class: 'btn btn--primary', href: '#/reservations?new=1' }, icon('plus'), 'New reservation'),
       h('a', { class: 'btn btn--secondary', href: '#/calendar' }, 'Calendar')));
   if (!listings.length) {
     el.replaceChildren(head, onboard, h('div', { class: 'card' }, emptyState({

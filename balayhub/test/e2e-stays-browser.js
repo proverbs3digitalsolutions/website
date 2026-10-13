@@ -18,7 +18,7 @@ const OFF = 400 + (Math.floor(Date.now() / 60000) % 5000) * 4; // unique future 
     await page.goto(BASE + '/#/login');
     await page.locator('[name=email]').fill('stays@balayhub.test');
     await page.locator('[name=password]').fill('demo-password-1');
-    await page.getByRole('button', { name: 'Log In' }).click();
+    await page.getByRole('button', { name: 'Log in' }).click();
     await page.getByRole('heading', { name: /Welcome back, Bea/ }).waitFor();
     await page.getByRole('heading', { name: 'Trends overview' }).waitFor();
     await page.waitForTimeout(800);

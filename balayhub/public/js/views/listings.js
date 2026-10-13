@@ -116,7 +116,7 @@ async function photosModal(listing) {
         h('img', { src: `/api/files/${p.file_id}`, alt: '', loading: 'lazy' }),
         h('figcaption', null,
           i === 0 ? h('span', { class: 'badge badge--paid' }, 'Cover') : h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: async () => { await post(`/listing-photos/${p.file_id}/cover`); draw(); } }, 'Make cover'),
-          h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: async () => { await post(`/listing-photos/${p.file_id}/remove`); draw(); } }, 'Delete')))))
+          h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: async () => { if (!await confirmDialog({ title: 'Delete this photo?', text: 'It is removed from your booking page.', confirmText: 'Delete photo', danger: true })) return; await post(`/listing-photos/${p.file_id}/remove`); draw(); } }, 'Delete')))))
         : h('p', { class: 'muted' }, 'No photos yet.'),
       h('div', { class: 'form' }, input,
         h('div', { class: 'chips' }, h('button', { class: 'btn btn--primary btn--sm', type: 'button', onclick: async (e) => {
@@ -280,7 +280,7 @@ export async function guestDetailView(el, { params, rerender }) {
   el.replaceChildren(
     h('a', { class: 'back', href: '#/guests' }, '‹ Guests'),
     h('div', { class: 'page-head' },
-      h('div', { class: 'page-head__title' }, h('h1', null, g.full_name), h('p', null, `${stays.filter((s) => s.status === 'confirmed').length} stay(s)`),
+      h('div', { class: 'page-head__title' }, h('h1', null, g.full_name), h('p', null, ((n) => `${n} stay${n === 1 ? '' : 's'}`)(stays.filter((s) => s.status === 'confirmed').length)),
         h('div', { class: 'chips' }, g.vip && badge('paid', 'VIP'), g.do_not_rebook && badge('overdue', 'Do not rebook'))),
       canManage && h('div', { class: 'page-head__actions' }, h('button', { class: 'btn btn--secondary', onclick: () => formModal({
         title: 'Edit guest', submitText: 'Save',

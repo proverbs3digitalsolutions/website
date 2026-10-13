@@ -15,10 +15,18 @@ function propertyChecks(properties, selected = []) {
     h('div', { class: 'error', role: 'alert' }));
 }
 
-const ROLE_HELP = {
-  manager: 'Manages assigned properties: tenants, leases, rent, expenses, repairs and reports.',
-  staff: 'Records payments, expenses and repair requests for assigned properties. No access to tenant contact details or lease documents.',
+// What each role can do, worded for the kind of rentals the workspace has.
+const ROLE_TEXT = {
+  short_term: {
+    manager: 'Co-host for assigned buildings: reservations, guests, inbox, calendar and prices, cleaning, payments and deposits.',
+    staff: 'Cleaners and front desk: see stays and cleaning tasks for assigned buildings, check guests in and out, record payments and deposits. No guest phone numbers or emails, no inbox or reports.',
+  },
+  long_term: {
+    manager: 'Manages assigned properties: tenants, leases, rent, expenses, repairs and reports.',
+    staff: 'Records payments, expenses and repair requests for assigned properties. No access to tenant contact details or lease documents.',
+  },
 };
+let ROLE_HELP = ROLE_TEXT.short_term;
 
 export async function settingsView(el, { rerender, query = {} }) {
   // Back from PayMongo checkout: confirm the payment with the server.
@@ -34,6 +42,8 @@ export async function settingsView(el, { rerender, query = {} }) {
     toast('Payment cancelled. Nothing was charged.');
   }
   const u = state.user;
+  ROLE_HELP = u.business_type === 'long_term' ? ROLE_TEXT.long_term : u.business_type === 'both'
+    ? { manager: `${ROLE_TEXT.short_term.manager} For long-term rentals: tenants, leases and rent.`, staff: ROLE_TEXT.short_term.staff } : ROLE_TEXT.short_term;
   const sections = [];
 
   sections.push(h('div', { class: 'card' },
@@ -71,13 +81,14 @@ export async function settingsView(el, { rerender, query = {} }) {
       submitText: 'Create invitation',
       fields: [
         field({ name: 'email', label: 'Their email', type: 'email', required: true }),
-        field({ name: 'role', label: 'Role', type: 'select', required: true, value: 'manager', placeholderOption: false, options: [['manager', 'Property manager'], ['staff', 'Staff / accountant']], hint: `${ROLE_HELP.manager} Staff: ${ROLE_HELP.staff}` }),
+        field({ name: 'role', label: 'Role', type: 'select', required: true, value: 'manager', placeholderOption: false, options: [['manager', 'Property manager'], ['staff', 'Staff (cleaner, front desk, accountant)']], hint: `Property manager: ${ROLE_HELP.manager} Staff: ${ROLE_HELP.staff}` }),
         propertyChecks(properties),
       ],
       onSubmit: async (data) => {
         const res = await post('/team/invitations', { ...data, property_ids: data.property_ids || [] });
+        // Re-render first (it clears open dialogs), then show the link so it stays open.
+        await rerender();
         showInviteLink(res);
-        rerender();
       },
     });
 
@@ -96,7 +107,7 @@ export async function settingsView(el, { rerender, query = {} }) {
       title: `Access for ${m.full_name}`,
       submitText: 'Save access',
       fields: [
-        field({ name: 'role', label: 'Role', type: 'select', value: m.role, placeholderOption: false, options: [['manager', 'Property manager'], ['staff', 'Staff / accountant']] }),
+        field({ name: 'role', label: 'Role', type: 'select', value: m.role, placeholderOption: false, options: [['manager', 'Property manager'], ['staff', 'Staff (cleaner, front desk, accountant)']] }),
         propertyChecks(properties, m.property_ids),
       ],
       onSubmit: async (data) => { await patch(`/team/members/${m.user_id}`, { role: data.role, property_ids: data.property_ids || [] }); toast('Access updated.'); rerender(); },
@@ -120,6 +131,10 @@ export async function settingsView(el, { rerender, query = {} }) {
       invitations.length > 0 && [h('h3', { style: { margin: '16px 0 6px' } }, 'Pending invitations'),
         h('ul', { class: 'list' }, invitations.map((i) => h('li', null, h('div', { class: 'row' },
           h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, i.email), h('span', { class: 'row__sub' }, `${label(i.role)} · expires ${fmtDateTime(i.expires_at)}`)),
+          h('button', { class: 'btn btn--secondary btn--sm', onclick: async () => {
+            // Links are stored hashed, so "copy" means issuing a fresh one (the old one stops working).
+            try { const res = await post('/team/invitations', { email: i.email, role: i.role, property_ids: i.property_ids || [] }); await rerender(); showInviteLink(res); } catch (err) { toast(err.message, 'error'); }
+          } }, 'New link'),
           h('button', { class: 'btn btn--ghost btn--sm', onclick: async () => { await post(`/team/invitations/${i.invitation_id}/revoke`); toast('Invitation revoked.'); rerender(); } }, 'Revoke')))))],
       h('p', { class: 'muted small', style: { marginTop: '12px' } }, `Property managers: ${ROLE_HELP.manager} Staff: ${ROLE_HELP.staff}`)));
   }
@@ -140,7 +155,9 @@ export async function settingsView(el, { rerender, query = {} }) {
 
   sections.push(h('div', { class: 'card' },
     h('div', { class: 'card__head' }, h('h2', null, 'Privacy')),
-    h('p', null, 'BalayHub stores tenant and property records to help you manage your rentals. Collect only what you need. Owners can export a tenant’s data from their profile to answer access requests under the Data Privacy Act.'),
+    h('p', null, u.business_type === 'long_term'
+      ? 'BalayHub stores tenant and property records to help you manage your rentals. Collect only what you need. Owners can export a tenant’s data from their profile to answer access requests under the Data Privacy Act.'
+      : 'BalayHub stores guest, booking and property records to help you run your stays. Collect only what you need: guest ID photos are deleted automatically after the stay, and the owner can export or delete the workspace data under the Data Privacy Act.'),
     h('p', { style: { marginTop: '10px' } }, h('a', { href: '#/privacy' }, 'Read the Privacy Notice'))));
 
   el.replaceChildren(pageHead({ title: 'Settings', sub: u.organization_name }), h('div', { class: 'stack' }, sections));

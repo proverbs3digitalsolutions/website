@@ -36,6 +36,7 @@ test('monthly statement: stays by check-out month, channel and cleaning fees, ma
   // Checks out in September: counted. Airbnb stay with a channel fee.
   const r1 = await host.post('/api/reservations', { unit_id: a.unit_id, check_in: '2026-09-10', check_out: '2026-09-12', guest_name: 'Ana Cruz', channel: 'airbnb', channel_fee: '600' });
   assert.equal(r1.status, 201, JSON.stringify(r1.data));
+  assert.equal(r1.data.reservation.balance, '3900.00', 'the channel keeps its fee, so only the payout is owed');
   // Crosses into October: counted in October, not September.
   await host.post('/api/reservations', { unit_id: a.unit_id, check_in: '2026-09-30', check_out: '2026-10-02', guest_name: 'Ben Reyes' });
   // Another owner's unit: not counted.

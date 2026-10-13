@@ -30,7 +30,7 @@ export async function dashboardView(el, { rerender }) {
       text: isOwner
         ? 'Start by adding a property (an apartment building, boarding house or house) and its rental units. Your occupancy, rent and expense summary will appear here.'
         : 'Ask the workspace owner to assign you to a property. Once assigned, its tenants, rent and repairs will show here.',
-      action: isOwner && h('button', { class: 'btn btn--primary', onclick: () => newPropertyModal() }, icon('plus'), 'Add Property'),
+      action: isOwner && h('button', { class: 'btn btn--primary', onclick: () => newPropertyModal() }, icon('plus'), 'Add property'),
     })));
     return;
   }
@@ -46,11 +46,11 @@ export async function dashboardView(el, { rerender }) {
   const quick = h('div', { class: 'card' },
     h('div', { class: 'card__head' }, h('h2', null, 'Quick actions')),
     h('div', { class: 'quick' },
-      isOwner ? h('button', { onclick: () => newPropertyModal() }, icon('building'), 'Add Property')
+      isOwner ? h('button', { onclick: () => newPropertyModal() }, icon('building'), 'Add property')
         : h('a', { href: '#/properties' }, icon('building'), 'Properties'),
-      canManage ? h('button', { onclick: () => newTenantModal() }, icon('users'), 'Add Tenant')
+      canManage ? h('button', { onclick: () => newTenantModal() }, icon('users'), 'Add tenant')
         : h('a', { href: '#/tenants' }, icon('users'), 'Tenants'),
-      h('button', { onclick: () => recordPaymentModal({ onSaved: rerender }) }, icon('cash'), 'Record Payment'),
+      h('button', { onclick: () => recordPaymentModal({ onSaved: rerender }) }, icon('cash'), 'Record payment'),
       h('button', { onclick: () => newMaintenanceModal({ onSaved: rerender }) }, icon('wrench'), 'Maintenance')));
 
   const rentRows = d.rent_this_month.map((c) => h('li', null, h('a', { class: 'row', href: `#/tenants/${c.tenant_id}` },
@@ -59,7 +59,7 @@ export async function dashboardView(el, { rerender }) {
   const rentCard = h('div', { class: 'card' },
     h('div', { class: 'card__head' }, h('h2', null, `Rent for ${fmtMonth(d.month_start)}`), h('a', { href: '#/rent' }, 'View all')),
     rentRows.length ? h('ul', { class: 'list' }, rentRows)
-      : emptyState({ title: d.has_tenants ? 'No rent due this month' : 'No tenants yet', text: d.has_tenants ? 'Rent appears here once a lease is active this month.' : 'Add a tenant and assign them to a unit to start tracking rent.', action: canManage && !d.has_tenants && h('button', { class: 'btn btn--primary btn--sm', onclick: () => newTenantModal() }, 'Add Tenant') }));
+      : emptyState({ title: d.has_tenants ? 'No rent due this month' : 'No tenants yet', text: d.has_tenants ? 'Rent appears here once a lease is active this month.' : 'Add a tenant and assign them to a unit to start tracking rent.', action: canManage && !d.has_tenants && h('button', { class: 'btn btn--primary btn--sm', onclick: () => newTenantModal() }, 'Add tenant') }));
 
   const recent = h('div', { class: 'card' },
     h('div', { class: 'card__head' }, h('h2', null, 'Recent payments'), h('a', { href: '#/rent?tab=payments' }, 'View all')),

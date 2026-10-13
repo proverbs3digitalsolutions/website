@@ -30,7 +30,7 @@ async function receiptData(paymentId) {
     `SELECT bp.*, b.confirmation_code, b.check_in, b.check_out, b.total_amount, b.guest_id,
             COALESCE(g.full_name, b.guest_label, 'Guest') AS guest_name, g.email AS guest_email,
             u.unit_name, p.property_name, o.name AS workspace_name, ru.full_name AS recorded_by_name,
-            (b.total_amount - COALESCE((SELECT SUM(x.amount) FROM booking_payments x WHERE x.booking_id = b.booking_id AND x.voided_at IS NULL
+            (b.total_amount - b.channel_fee - COALESCE((SELECT SUM(x.amount) FROM booking_payments x WHERE x.booking_id = b.booking_id AND x.voided_at IS NULL
                                           AND (x.payment_date, x.created_at) <= (bp.payment_date, bp.created_at)), 0))::numeric(12,2) AS balance_after
        FROM booking_payments bp
        JOIN bookings b ON b.booking_id = bp.booking_id

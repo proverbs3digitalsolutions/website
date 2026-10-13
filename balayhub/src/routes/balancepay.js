@@ -25,7 +25,7 @@ const METHOD_MAP = { gcash: 'gcash', paymaya: 'maya', maya: 'maya', card: 'card'
 const payLink = (token) => `${config.appUrl}/#/pay/${token}`;
 
 const REUSE_MS = 30 * 60 * 1000;
-const BALANCE = `(b.total_amount - COALESCE((SELECT SUM(x.amount) FROM booking_payments x WHERE x.booking_id = b.booking_id AND x.voided_at IS NULL), 0))::numeric(12,2)`;
+const BALANCE = `(b.total_amount - b.channel_fee - COALESCE((SELECT SUM(x.amount) FROM booking_payments x WHERE x.booking_id = b.booking_id AND x.voided_at IS NULL), 0))::numeric(12,2)`;
 
 async function ensurePayToken(bookingId) {
   const r = await one(`UPDATE bookings SET pay_token = COALESCE(pay_token, $2) WHERE booking_id = $1 RETURNING pay_token`,

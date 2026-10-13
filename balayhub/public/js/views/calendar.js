@@ -123,7 +123,7 @@ export async function calendarView(el, { query }) {
   async function blockMenu(b) {
     if (b.from_channel) { toast('This block comes from a channel calendar. Change it on the channel.'); return; }
     if (!canManage) return;
-    if (!await confirmDialog({ title: 'Remove this block?', text: `${b.block_reason || 'Blocked'}: ${fmtDate(b.check_in)} to ${fmtDate(addDays(b.check_out, -1))}. The nights become available again.`, confirmText: 'Remove block' })) return;
+    if (!await confirmDialog({ title: 'Remove this block?', text: `${b.block_reason || 'Blocked'}: ${addDays(b.check_in, 1) === b.check_out ? `the night of ${fmtDate(b.check_in)}` : `${fmtDate(b.check_in)} to ${fmtDate(addDays(b.check_out, -1))}`}. ${addDays(b.check_in, 1) === b.check_out ? 'The night becomes' : 'The nights become'} available again.`, confirmText: 'Remove block' })) return;
     try { await post(`/blocks/${b.booking_id}/remove`); toast('Block removed.'); load(); } catch (err) { toast(err.message, 'error'); }
   }
 

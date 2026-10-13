@@ -56,7 +56,7 @@ const BOOKING_SELECT = `
          (SELECT row_to_json(r) FROM (SELECT rating, cleanliness, comment, created_at FROM guest_reviews WHERE booking_id = b.booking_id) r) AS review,
          (b.check_out - b.check_in) AS nights,
          COALESCE((SELECT SUM(bp.amount) FROM booking_payments bp WHERE bp.booking_id = b.booking_id AND bp.voided_at IS NULL), 0)::numeric(12,2) AS amount_paid,
-         (b.total_amount - COALESCE((SELECT SUM(bp.amount) FROM booking_payments bp WHERE bp.booking_id = b.booking_id AND bp.voided_at IS NULL), 0))::numeric(12,2) AS balance
+         (b.total_amount - b.channel_fee - COALESCE((SELECT SUM(bp.amount) FROM booking_payments bp WHERE bp.booking_id = b.booking_id AND bp.voided_at IS NULL), 0))::numeric(12,2) AS balance
     FROM bookings b
     JOIN units u ON u.unit_id = b.unit_id
     JOIN properties p ON p.property_id = u.property_id
@@ -76,8 +76,11 @@ async function overlapError(unitId, checkIn, checkOut, exceptId) {
        FROM bookings b LEFT JOIN guests g ON g.guest_id = b.guest_id
       WHERE b.unit_id = $1 AND b.status = 'confirmed' AND daterange(b.check_in, b.check_out) && daterange($2::date, $3::date)
         AND b.booking_id IS DISTINCT FROM $4 LIMIT 1`, [unitId, checkIn, checkOut, exceptId || null]);
+  // Readable dates; blocks are shown by their nights (last night = the day before the end date).
+  const fmt = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+  const nights = (a, b) => (addDays(a, 1) === b ? `the night of ${fmt(a)}` : `the nights of ${fmt(a)} to ${fmt(addDays(b, -1))}`);
   const what = clash
-    ? (clash.kind === 'block' ? `a block (${clash.check_in} to ${clash.check_out})` : `${clash.who || 'another guest'}'s stay ${clash.check_in} to ${clash.check_out} (${clash.confirmation_code})`)
+    ? (clash.kind === 'block' ? `a block on ${nights(clash.check_in, clash.check_out)}` : `${clash.who || 'another guest'}'s stay ${fmt(clash.check_in)} – ${fmt(clash.check_out)} (${clash.confirmation_code})`)
     : 'another booking';
   return new HttpError(409, `These dates overlap ${what} on this listing.`, { code: 'DATES_TAKEN', fields: { check_in: 'Dates not available', check_out: 'Dates not available' } });
 }

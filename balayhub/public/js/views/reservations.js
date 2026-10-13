@@ -95,6 +95,7 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
       const res = await post('/reservations', data);
       if (res.confirmation && !res.confirmation.sent) toast(`Reservation saved, but the confirmation was not emailed: ${res.confirmation.error}`, 'error');
       else toast(`Reservation ${res.reservation.confirmation_code} saved${res.confirmation?.sent ? ' and confirmation emailed' : ''}.`);
+      if (res.reservation.guest_do_not_rebook) toast(`Heads up: ${res.reservation.guest_name || 'this guest'} is marked "Do not rebook" in Guests.`, 'error');
       if (onSaved) onSaved(res.reservation); else navigate(`#/reservations/${res.reservation.booking_id}`);
     },
   });
@@ -105,7 +106,8 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
     const { unit_id: u, check_in: ci, check_out: co } = Object.fromEntries(['unit_id', 'check_in', 'check_out'].map((k) => [k, form.elements[k].value]));
     if (e?.target.name === 'check_in' && ci && (!co || co <= ci)) form.elements.check_out.value = addDays(ci, 1);
     const coNow = form.elements.check_out.value;
-    if (!u || !ci || !coNow || coNow <= ci) { quoteBox.textContent = 'Check-out must be after check-in.'; return; }
+    if (!u) { quoteBox.textContent = 'Choose a listing to see the price.'; return; }
+    if (!ci || !coNow || coNow <= ci) { quoteBox.textContent = 'Check-out must be after check-in.'; return; }
     const mySeq = ++seq;
     try {
       const q = await get(`/reservations/quote${qs({ unit_id: u, check_in: ci, check_out: coNow })}`);
@@ -207,15 +209,17 @@ export async function reservationDetailView(el, { params, rerender }) {
   const recordPayment = () => formModal({
     title: 'Record payment', submitText: 'Save payment', idempotent: true,
     fields: [
-      h('div', { class: 'alert alert--info' }, `Balance: ${peso(r.balance)} of ${peso(r.total_amount)}`),
+      h('div', { class: 'alert alert--info' }, `Balance: ${peso(r.balance)} of ${peso(r.total_amount)}${Number(r.channel_fee) > 0 ? ` (after the ${peso(r.channel_fee)} channel fee)` : ''}`),
       field({ name: 'amount', label: 'Amount received', type: 'money', required: true, value: Number(r.balance) > 0 ? r.balance : '' }),
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'payment_date', label: 'Date received', type: 'date', required: true, value: today, max: today }),
         field({ name: 'payment_method', label: 'Method', type: 'select', required: true, value: r.channel === 'direct' ? 'gcash' : 'channel_payout', placeholderOption: false, options: Object.entries(METHOD_LABEL) })),
       field({ name: 'reference_number', label: 'Reference no.', maxlength: 100 }),
-      r.guest_email && field({ name: 'send_receipt', label: `Email a receipt to ${r.guest_email}`, type: 'checkbox', value: true }),
+      // Channel payouts come from Airbnb/Booking.com, not the guest: no guest receipt by default.
+      r.guest_email && field({ name: 'send_receipt', label: `Email a receipt to ${r.guest_email}`, type: 'checkbox', value: r.channel === 'direct' }),
     ],
     onSubmit: async (d, { idempotencyKey }) => {
+      if (d.payment_method === 'channel_payout') d.send_receipt = false;
       const res = await post(`/reservations/${r.booking_id}/payments`, d, { idempotencyKey });
       if (res.receipt && !res.receipt.sent) toast(`Payment saved, but the receipt was not emailed: ${res.receipt.error}`, 'error');
       else toast(res.receipt?.sent ? 'Payment saved and receipt emailed.' : 'Payment saved.');
@@ -245,7 +249,7 @@ export async function reservationDetailView(el, { params, rerender }) {
   });
 
   const cancel = async () => {
-    const reason = await confirmDialog({ title: 'Cancel this reservation?', text: 'The dates become available again. Payments stay on record; refund them outside BalayHub and void them here if needed.', confirmText: 'Cancel reservation', danger: true, reason: true });
+    const reason = await confirmDialog({ title: 'Cancel this reservation?', text: 'The dates become available again. Payments stay on record; refund them outside BalayHub and void them here if needed.', confirmText: 'Cancel reservation', cancelText: 'Keep reservation', danger: true, reason: true });
     if (!reason) return;
     try { await post(`/reservations/${r.booking_id}/cancel`, { reason }); toast('Reservation cancelled.'); rerender(); } catch (err) { toast(err.message, 'error'); }
   };
@@ -285,7 +289,7 @@ export async function reservationDetailView(el, { params, rerender }) {
       h('div', { class: 'page-head__actions' }, stayButtons,
         canManage && h('button', { class: 'btn btn--secondary', onclick: () => messageGuest(r.booking_id, navigate) }, icon('inbox'), 'Message guest'),
         canManage && confirmed && h('button', { class: 'btn btn--secondary', onclick: editDetails }, 'Edit'),
-        canManage && confirmed && !r.ical_feed_id && h('button', { class: 'btn btn--danger', onclick: cancel }, 'Cancel'))),
+        canManage && confirmed && !r.ical_feed_id && !r.checked_out_at && h('button', { class: 'btn btn--danger', onclick: cancel }, 'Cancel'))),
     !confirmed && h('div', { class: 'alert alert--error', style: { marginBottom: '16px' } }, `Cancelled ${fmtDateTime(r.cancelled_at)}${r.cancel_reason ? `: ${r.cancel_reason}` : ''}`),
     h('div', { class: 'grid grid--2' },
       h('div', { class: 'stack' },

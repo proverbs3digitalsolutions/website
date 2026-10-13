@@ -18,7 +18,7 @@ const BASE = process.env.BASE_URL || 'http://localhost:3000';
   await step('new owner is guided by the Launchpad', async () => {
     const email = `new${Date.now()}@example.com`;
     await page.goto(BASE + '/#/signup');
-    await page.locator('[name=full_name]').fill('New Host');
+    await page.locator('[name=full_name]').fill('New host');
     await page.locator('[name=email]').fill(email);
     await page.locator('[name=password]').fill('long-password-1');
     await page.locator('[name=confirm_password]').fill('long-password-1');
@@ -46,13 +46,13 @@ const BASE = process.env.BASE_URL || 'http://localhost:3000';
     if (await page.locator('[name=email]').isVisible().catch(() => false)) {
       await page.locator('[name=email]').fill('stays@balayhub.test');
       await page.locator('[name=password]').fill('demo-password-1');
-      await page.getByRole('button', { name: 'Log In' }).click();
+      await page.getByRole('button', { name: 'Log in' }).click();
     } else {
       await page.evaluate(() => fetch('/api/auth/logout', { method: 'POST', headers: { 'X-Requested-With': 'BalayHub' } }));
       await page.goto(BASE + '/#/login');
       await page.locator('[name=email]').fill('stays@balayhub.test');
       await page.locator('[name=password]').fill('demo-password-1');
-      await page.getByRole('button', { name: 'Log In' }).click();
+      await page.getByRole('button', { name: 'Log in' }).click();
     }
     await page.getByRole('heading', { name: /Welcome back/ }).waitFor();
     await page.goto(BASE + '/#/reservations?view=upcoming');

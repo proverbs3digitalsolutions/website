@@ -134,7 +134,7 @@ router.get('/deposits/due', ah(async (req, res) => {
     `SELECT d.booking_id, d.amount, b.check_out::text, u.unit_name, COALESCE(g.full_name, b.guest_label) AS guest_name
        FROM stay_deposits d JOIN bookings b USING (booking_id) JOIN units u ON u.unit_id = b.unit_id JOIN properties p ON p.property_id = u.property_id
        LEFT JOIN guests g ON g.guest_id = b.guest_id
-      WHERE d.status = 'held' AND b.check_out <= $1 AND ${propertyScope(req.user, params)} ORDER BY b.check_out LIMIT 20`, params);
+      WHERE d.status = 'held' AND (b.check_out <= $1 OR b.checked_out_at IS NOT NULL) AND ${propertyScope(req.user, params)} ORDER BY b.check_out LIMIT 20`, params);
   res.json({ deposits: rows });
 }));
 

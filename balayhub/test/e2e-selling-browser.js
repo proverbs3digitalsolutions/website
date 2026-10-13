@@ -51,7 +51,7 @@ const BASE = process.env.BASE_URL || 'http://localhost:3000';
     await page.goto(BASE + '/#/login');
     await page.locator('[name=email]').fill('stays@balayhub.test');
     await page.locator('[name=password]').fill('demo-password-1');
-    await page.getByRole('button', { name: 'Log In' }).click();
+    await page.getByRole('button', { name: 'Log in' }).click();
     await page.getByRole('heading', { name: /Welcome back/ }).waitFor();
     await page.goto(BASE + '/#/settings');
     await page.getByRole('heading', { name: 'Plan & billing' }).waitFor();
