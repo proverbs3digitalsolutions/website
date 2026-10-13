@@ -30,7 +30,7 @@ const validationError = (fields) => new HttpError(400, 'Please check the highlig
 
 function redactGuest(user, g) {
   if (!g || user.role !== 'staff') return g;
-  const { email, phone, notes, guest_email: ge, guest_phone: gp, review_token: rt, pay_token: pt, ...rest } = g;
+  const { email, phone, notes, guest_email: ge, guest_phone: gp, review_token: rt, pay_token: pt, checkin_token: ct, ...rest } = g;
   return { ...rest, limited: true };
 }
 

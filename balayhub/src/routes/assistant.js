@@ -28,7 +28,7 @@ const anthropic = () => {
 const ROLE_TEXT = {
   owner: 'Owner: full access, including billing, team, owner statements and deleting data.',
   manager: 'Property manager: runs day-to-day operations for the properties assigned to them; no billing, team or data deletion.',
-  staff: 'Staff: sees reservations, calendar, housekeeping and deposits for their assigned properties; guest contact details, the guest inbox, reports, pricing and settings are hidden from staff.',
+  staff: 'Staff: sees reservations, calendar, housekeeping and deposits for their assigned properties (and long-term rent, expenses and reports for those properties); guest contact details, the guest inbox, stay reports, pricing changes, team and billing are hidden from staff.',
 };
 
 // One stable system prompt per role, so the long knowledge part is cached.

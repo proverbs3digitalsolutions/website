@@ -35,7 +35,7 @@ This project follows the Proverbs3 toolkit (github.com/proverbs3digitalsolutions
 - **Access:**
   - Scope every query with `propertyScope()`/`loadX()` helpers from `src/lib/access.js`.
   - Use `requireRole()` for role-only actions.
-  - Staff never see guest phone/email (`redactGuest`).
+  - Staff never see guest phone/email or private guest links (`redactGuest` in `src/routes/stays.js`).
   - Read-only workspaces are blocked by `planGuard`. Add a path to `PLAN_EXEMPT` only if it must keep working when view-only (support, account, billing).
 - **Validation:** validate every input with `src/lib/validate.js` and keep SQL parameterised. Use allow-lists for enums and sort keys.
 - **Money:** `pg` returns NUMERIC as strings, so never compare money as floats in SQL. The guest balance is `total_amount - channel_fee - payments`.

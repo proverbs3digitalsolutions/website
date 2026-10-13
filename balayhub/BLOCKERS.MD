@@ -39,6 +39,12 @@ Last updated: 2026-10-13
   - a monthly SMS limit per workspace, and whether SMS costs are included in plans or charged extra
 - [ ] **Facebook Messenger inbox (last).** Needs a Meta developer app and Meta's app review, which can take weeks.
 
+## Access decisions (found while writing BACKEND-SCHEMA)
+
+- [ ] **Managers and workspace-wide settings.** Managers limited to some properties can still create discount codes, edit message templates and switch the template language for the whole workspace. Is that OK, or should these be owner-only?
+- [ ] **Cleaning task assignment.** A cleaning task can be assigned to a team member who isn't assigned to that property, so they can't open it. Should BalayHub block this or warn?
+- [ ] **Encryption keys.** Make sure `DATA_ENCRYPTION_KEY` and the VAPID keys are set in `deploy/.env`. Otherwise BalayHub generates them inside the uploads folder, and that folder is backed up together with the data they protect.
+
 ## Process decisions
 
 - [ ] **Branches.** Keep deploying from `claude/trusting-hopper-lyg8vu`, or merge it into `main` and have the server pull `main`?

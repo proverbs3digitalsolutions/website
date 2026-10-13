@@ -42,6 +42,18 @@ Before starting, run `/proverbs3-dfss` analysis on this feature so the requireme
 - **Old docs:** update `docs/ARCHITECTURE.md`, `docs/PROJECT-PLAN.md` ("Deferred" list) and `docs/SHORT-TERM-GUIDE.md` (the Launchpad replaced the Home checklist). Align README on 1–10 units and Node 22.
 - **Design polish:** fix the dark-mode contrast and hard-coded colour list at the end of DESIGN-BRIEF.MD (soft-green text pairs, login caption, modal background, printing in dark mode, channel colour drift, small tap targets).
 
+### Security and privacy fixes found while writing BACKEND-SCHEMA (do before or with Sprint A)
+
+- ✅ 2026-10-13: Staff no longer receive the guest's private check-in link (it exposed guest phone and email). Covered by a test.
+- **Gate pass link:** hide guest ID photos when "Attach IDs" is off. Today the setting only affects the email.
+- **Clean-up job:** delete expired sessions and one-time sign-in tokens.
+- **Workspace export:** include support messages, events and consent records.
+- **Encryption key backups:** keep the encryption key out of the uploads backup by always setting DATA_ENCRYPTION_KEY and the VAPID keys in `deploy/.env`. The founder action is in BLOCKERS.
+- **Lower priority:**
+  - Store guest link tokens hashed.
+  - Tighten the file path check.
+  - Pass ANTHROPIC_BASE_URL through compose only if ever needed.
+
 ### Later
 
 - **Sprint B: Facebook Messenger inbox.** Page messages appear in the Inbox next to email, with replies sent from BalayHub. Needs a Meta app and app review (BLOCKERS).

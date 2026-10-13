@@ -193,6 +193,11 @@ test('isolation and roles for stays', async () => {
   const list = await staff.get('/api/reservations?view=all');
   assert.ok(list.data.reservations.length > 0);
   assert.equal(list.data.reservations[0].guest_phone, undefined);
+  // The private check-in link would expose the guest's form (phone, email, IDs).
+  await owner.get(`/api/reservations/${resA.booking_id}/checkin`);
+  assert.ok((await owner.get(`/api/reservations/${resA.booking_id}`)).data.reservation.checkin_token, 'owner still has it');
+  assert.equal((await staff.get(`/api/reservations/${resA.booking_id}`)).data.reservation.checkin_token, undefined);
+  assert.ok(list.data.reservations.every((r) => r.checkin_token === undefined));
   assert.equal((await staff.post('/api/reservations', { unit_id: unit.unit_id, check_in: d(50), check_out: d(51), guest_name: 'X' })).status, 403);
   assert.equal((await staff.post(`/api/units/${unit.unit_id}/cleaning`, { status: 'dirty' })).status, 200);
   assert.equal((await staff.raw('PUT', '/api/rates', { unit_id: unit.unit_id, start_date: today, end_date: today, price: '1' })).status, 403);
