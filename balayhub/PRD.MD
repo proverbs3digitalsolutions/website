@@ -755,6 +755,97 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 
 **Out of scope:** Recurring expenses and vendor scheduling.
 
+### F40. Guidebook per listing, with private guest link
+**Status:** Phase 4 (built 2026-10-13, D-57)
+
+**For:** Owners and managers write it. Guests read it.
+
+**What it does:**
+- Each listing has one guidebook: arrival and directions, parking, building and gate notes, local tips, and emergency contacts. Each section can have a Taglish version.
+- Owners and managers store the door code once, encrypted. They can show it with a button.
+- Each booking gets a private link. It works from 14 days before check-in until 2 days after check-out, and only for confirmed stays.
+- The Wi-Fi password and door code show from the day before check-in through check-out day (Manila time). Before that, the page says when they'll appear.
+- Messages can include the guide link, the door code and the Wi-Fi password, with the same time window.
+
+**Done looks like:**
+- Staff and cleaners never see the door code, and the guidebook screens are not open to them.
+- A cancelled stay gets no link, and its link returns "not available".
+- A guest never sees the codes outside the window.
+
+**Out of scope:** Guest accounts or logins. Photos in the guidebook. Taglish for the listing's own check-in instructions and house rules (not yet).
+
+### F41. House rules accepted by the guest
+**Status:** Phase 4 (built 2026-10-13, D-58)
+
+**What it does:**
+- If a listing has house rules, the guest ticks "I agree to the house rules" before paying (booking page and quote page) and on the check-in form.
+- The time and the exact text are saved on the booking. Owners and managers see "House rules accepted on …" on the reservation.
+
+**Done looks like:** A guest can't pay, or submit check-in, without ticking the box when the listing has rules. A listing without rules shows no box.
+
+### F42. Paid add-ons
+**Status:** Phase 4 (built 2026-10-13, D-59)
+
+**For:** Owners create and change add-ons. Managers can see them. Guests buy them.
+
+**What it does:**
+- An add-on has a name (English and optional Taglish), a description, a price, a pricing rule (per stay, per night, per guest, or per guest per night), a maximum quantity, and the listings it applies to.
+- It can be offered on the booking page, before arrival (on the guest's pay page), or both.
+- Guests pay for add-ons in full, up front, with their deposit. The deposit percentage counts the stay only.
+- Each add-on bought shows as an extra charge on the reservation, in the bill, receipt, balance, P&L and owner statement.
+- Archiving hides an add-on. Past stays keep it.
+
+**Done looks like:** The booking total equals accommodation plus cleaning plus add-ons, to the centavo. An add-on bought twice by a retried request is recorded once.
+
+### F43. Quotes for Facebook and Messenger inquiries
+**Status:** Phase 4 (built 2026-10-13, D-60)
+
+**For:** Owners and managers, and the guest who receives the link.
+
+**What it does:**
+- The host makes a quote for one listing and dates: price (prefilled, editable), add-ons, discount, full or deposit payment, a note, and how long it lasts (default 48 hours, maximum 14 days).
+- The host copies the link, or emails it if the guest has an email address.
+- The guest opens the link, sees the offer, accepts the house rules, fills in any missing details, and pays through PayMongo.
+- A paid quote becomes a booking with the source "quote".
+- A quote can be cancelled. Expired quotes show as expired. Cancelled quotes show as cancelled.
+
+**Done looks like:** A quote can't be paid after it expires, and can't be paid twice. Its dates aren't held until the guest starts paying.
+
+**Out of scope:** Posting to Facebook or Messenger. Any outside integration.
+
+### F44. Share links and booking sources
+**Status:** Phase 4 (built 2026-10-13, D-61)
+
+**What it does:**
+- A listing's booking page link with `?src=facebook` (or another allowed source) is kept through the visit and saved on the booking.
+- Stay reports get a "By source" table for direct bookings: stays, nights and revenue per source.
+
+**Done looks like:** No tracking cookies. A source outside the allowed list is ignored.
+
+### F45. Public review links, returning-guest codes and abandoned-booking follow-up
+**Status:** Phase 4 (built 2026-10-13, D-62)
+
+**What it does:**
+- Owners add up to 4 public review links (their own Google, Facebook or other pages). Guests who rate 4 or 5 stars see them after the private rating. Ratings of 3 or fewer never see them.
+- Owners can turn on a returning-guest discount (1 to 50 percent). Each guest who has checked out gets one personal, single-use code, made the first time a message uses `{{returning_guest_code}}`.
+- Owners can turn on a follow-up email for unfinished online bookings. It goes once, about 2 hours after the attempt ended, and only if the guest hasn't booked those nights.
+
+**Done looks like:** A personal code doesn't count toward the 50-code limit. Quote payments never get the follow-up.
+
+### F46. Search-friendly listing pages
+**Status:** Phase 4 (built 2026-10-13, D-63)
+
+**What it does:**
+- Each listing has its own public page address, for example `/stay/<host>/<listing>`. Owners and managers set it under Listings.
+- The page shows the name, a "from" price (lowest of the nightly, weekend and holiday rates), max guests, city and province, photos, house rules, the cancellation policy, and a "Check dates and book" button.
+- The page follows the workspace language. `/sitemap.xml` lists the pages. `/robots.txt` allows them.
+
+**Done looks like:** The street address and guest data never appear on these pages. Host text is escaped, so a name containing a script tag shows as text.
+
+**Out of scope:** Google indexing control, and search rankings. BalayHub can't force Google to show a page.
+
+---
+
 ## Cross-cutting requirements (built)
 
 - **Security:** workspace scoping on every query, 404 for out-of-scope records, CSRF header on writes, strict Content-Security-Policy, text-only rendering, rate limits, scrypt passwords, HttpOnly cookies (7-day absolute, 12-hour idle).
@@ -775,7 +866,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 | BIR-ready invoices and monthly tax summary | **Waiting on a tax practitioner** | See BLOCKERS.MD. |
 | **Phase 2: Owners and co-hosts** (owner portal login, owner date blocks, fee models, statement approval, payout record, reserve, per-unit P&L, monthly emailed report) | **Built 2026-10-13** | Spec: docs/specs/PHASE-2-OWNERS.md. Decisions D-39 to D-45. Features F16 and F30–F32. |
 | **Phase 3: Operations** (cleaner-only access, cleaner calendar, status board with inspected, inspections and scores, damage reports linked to deposits, cleaner pay, supplies par levels, lost and found, maintenance for stays) | Next | |
-| **Phase 4: Guest experience and direct booking** (guidebook in English and Taglish, house rules acceptance, paid add-ons, quote-and-pay links for Facebook inquiries, private feedback, returning-guest codes, unpaid-booking follow-up, search-friendly listing pages) | Planned | Covers the "Booking page upgrades" idea below. |
+| **Phase 4: Guest experience and direct booking** (guidebook in English and Taglish, house rules acceptance, paid add-ons, quote-and-pay links for Facebook inquiries, private feedback, returning-guest codes, unpaid-booking follow-up, search-friendly listing pages) | **Built 2026-10-13** | Covers the "Booking page upgrades" idea below. |
 | **Phase 5: Pricing rules and team** (gap nights, last-minute and far-out rules, events, bulk changes, booking activity log, conversation assignment, notification rules, unit tags, group bookings, room types, sync-health alerts) | Planned | Covers the "Smarter reports" idea below. |
 | Booking page upgrades | Idea | Not specified in the repo docs yet. Scope to be defined. |
 | Smarter reports | Idea | Not specified in the repo docs yet. Scope to be defined. |
@@ -796,3 +887,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - Monthly schedules step from the last due date, so a schedule on the 31st can drift to the 28th after February.
 - Monthly maintenance schedules count from the last due date, so a due date on the 31st can slide to the 28th.
 - Cleaners get no push notifications for cleaning jobs yet (the cleaning topic goes to owners, managers and staff only).
+- Phase 4: fixed — the `/stay` pages and sitemap are rate limited and the sitemap is cached (D-65).
+- Phase 4: the listing's own check-in instructions and house rules have no Taglish text yet, so the guide shows English for them.
+- Phase 4: door code and Wi-Fi password become plain text in the inbox history once a message with them is sent (D-64).
+- Phase 4: Google decides when to show the listing pages. BalayHub can't force it.

@@ -230,3 +230,82 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 - Cleaners see the cost estimate and outcome only on damage reports they filed themselves.
 - Cleaners now get the "cleaning assigned to you" notification. Recurring maintenance due dates must be between a year ago and five years ahead, and the next due date is worked out in one step.
 - The browser check also hid the Reopen button from cleaners, stopped the app asking for the inbox count and the help assistant for cleaners, and redrew the cleaning calendar as one row per day.
+
+**D-57 · 2026-10-13 · Guidebook per listing (as built, Phase 4).**
+- One guidebook per listing: arrival, parking, building and gate notes, local tips, emergency contacts. Each has an optional Taglish version. The listing's own check-in instructions and house rules have no Taglish version yet.
+- The door code is stored encrypted. Owners and managers can read it; nobody else can.
+- Each booking gets a private guest link (`#/guide/<token>`). The link is made the first time it's needed. It works from 14 days before check-in to 2 days after check-out, and only for confirmed stays. Cancelled stays get no link.
+- The Wi-Fi password and door code show from the day before check-in through check-out day (Manila time). Before that, the page says the day they'll appear.
+- Messages: `{{guidebook_link}}`, `{{door_code}}` and `{{wifi_password}}`. The two codes follow the same window; outside it they read "(shared the day before check-in)".
+- The audit log records which fields changed, never their values.
+*Why:* guests need the codes at the right time, and a door code shouldn't sit in plain sight for months.
+
+**D-58 · 2026-10-13 · House rules acceptance (as built, Phase 4).**
+- If a listing has house rules, the booking page and the quote page refuse payment until the guest ticks the box.
+- The check-in form asks once, and only if no acceptance is on file yet. The time and the exact text go on the booking.
+- The reservation shows "House rules accepted on …" with the text, for owners and managers.
+*Why:* a dated record of what the guest agreed to is the host's protection if there's a dispute.
+
+**D-59 · 2026-10-13 · Paid add-ons (as built, Phase 4).**
+- Owners create, edit and archive add-ons. Managers can read them. Staff and cleaners can't see them.
+- Pricing: per stay, per night, per guest, or per guest per night. Quantity 1 to 20. Each add-on can be limited to some listings (none picked means all).
+- An add-on can be offered on the booking page, before arrival, or both. Before arrival means on the guest's pay page, until check-in day.
+- Each add-on bought becomes an "addon" extra charge. The name and unit price are copied onto the charge, so editing the add-on later never changes past stays.
+- Add-ons can't be bought on cancelled stays, demo workspaces, or read-only workspaces.
+*Why:* add-ons earn money without new screens, and each one lands in the same bill, receipt and statement as other charges.
+
+**D-60 · 2026-10-13 · Quotes (as built, Phase 4).**
+- Owners and managers make a quote for one listing and one set of dates. Price fills in from the pricing engine and can be changed. Payment is full or deposit, as the listing allows.
+- The dates are checked as free when the quote is made, but not held. The usual 30-minute hold starts only when the guest starts paying.
+- The quote link is `#/quote/<token>`. The guest accepts the house rules, fills in any missing details, and pays through the host's PayMongo key, the same way as a direct booking.
+- Confirmed quotes make a booking with channel direct and source quote.
+- Quotes expire by themselves. Default 48 hours; the maximum is 14 days. Expiry is checked on every read and in the follow-up job.
+- The host can cancel an open quote. That also ends any open payment page for it.
+- "Send by email" works only if the quote has a guest email. Otherwise the host copies the link.
+*Why:* a Facebook or Messenger inquiry needs a real price and a link the guest can pay from, without blocking the dates for people who never pay.
+
+**D-61 · 2026-10-13 · Sources and share links (as built, Phase 4).**
+- Share a listing's booking page with `?src=<source>`. The source is kept for the whole visit and saved on the booking.
+- Allowed sources: facebook, instagram, messenger, viber, tiktok, google, whatsapp, email, referral, quote and other. Anything else is ignored.
+- Stay reports have a "By source" table for direct bookings: stays, nights and revenue per source.
+- No tracking cookies.
+*Why:* the host learns which posts bring bookings, without tracking guests.
+
+**D-62 · 2026-10-13 · Reviews, returning guests and follow-up (as built, Phase 4).**
+- Public review links: up to 4 links, each with a label and an https address of 300 characters or fewer. Only guests who rate 4 or 5 stars see them, after the private rating. Ratings of 3 or fewer stay private, and the host is alerted as before.
+- Returning-guest codes: the owner sets a percentage from 1 to 50, or turns it off. Each guest who has checked out gets one personal code, used once, valid 12 months. The code is made the first time a message uses `{{returning_guest_code}}`. Personal codes don't count toward the 50-code limit.
+- Abandoned booking follow-up: off by default. When on, a guest whose online booking ended unpaid gets one plain email, about 2 hours after it ended, with a link back to the same dates.
+- The follow-up is sent once. It is claimed before sending, so a failed send is never retried.
+*Why:* happy guests are asked for a public review at the moment they're happiest, and a personal code brings them back without a public code leaking.
+
+**D-63 · 2026-10-13 · Search-friendly listing pages (as built, Phase 4).**
+- Each listing has a page address (`units.public_slug`), set from its name and editable. It is unique within the workspace.
+- Pages: `/stay/<host>` for the host and `/stay/<host>/<listing>` for each listing. They show only when direct booking is on, and not for demo or read-only workspaces. Unknown pages get a plain 404.
+- Each page has a title, description, canonical link, Open Graph tags, the listing's details and photos, house rules, the cancellation policy, and a "Check dates and book" button to the app.
+- The page shows the city and province, never the street address. It shows no guest data, and only a "from" price.
+- `/sitemap.xml` lists the pages. `/robots.txt` allows `/stay/` and blocks `/api/`.
+- Every value on the page is HTML-escaped. Pages are cached for 5 minutes.
+*Why:* a search engine can only show a listing that has its own address.
+
+**D-64 · 2026-10-13 · Deviations from the Phase 4 spec, agreed in the build.**
+- Add-ons are paid in full, up front, together with the deposit. The deposit and the balance count the accommodation only, so add-ons are never part of a deposit percentage.
+- Quote dates aren't held until the guest pays. A new payment attempt on a quote ends the older unpaid attempt.
+- A cancelled quote shows as "cancelled", not as an error. An expired quote shows as "expired".
+- Follow-up email: only for direct checkouts that ended 2 to 24 hours ago. Skipped if the same email booked overlapping nights, or has a newer pending checkout. Sent once, never retried. Quote payments never get it.
+- Returning-guest codes don't count toward the 50-code limit. The code is only offered while the setting is on.
+- Welcome codes sit in their own section on the discount codes page, apart from the owner's codes.
+- Search pages: the "from" price is the lowest of the nightly, weekend and holiday rates. They follow the workspace language. `robots.txt` doesn't block the app, so its stylesheet still loads. The sitemap has no `lastmod` dates, because listings don't store an update time.
+- Listings made by the demo or the seed have no public address until the host sets one.
+- Door code and Wi-Fi password become plain text in the inbox history once a message containing them is sent. This is the same as any other message content.
+- P&L and owner statements include add-ons, through extras.
+*Why:* each one was a choice made during the build, to keep money simple to explain, keep dates from being blocked, and keep guest data out of search engines.
+
+**D-65 · 2026-10-13 · Phase 4 security review fixes.** The first review blocked the release; the re-review passed. Fixed before release:
+- **Quotes can't take money without a booking.** A quote's discount can't be more than the accommodation, a deposit quote must leave something after the discount, and the amount due now must be at least ₱100 (the same minimum as the booking page). The database also refuses a checkout with a negative accommodation amount.
+- **Quote emails are limited:** 3 per quote and 30 per workspace per day. They aren't sent from the demo or by hosts who can't take online payments.
+- **Unfinished-booking reminder:** sent only when the guest reached the payment page, at most once per email address per 30 days across BalayHub, and it greets the guest by first name only if it looks like a real name.
+- **A quote cancelled by the host but paid anyway** still makes the booking (the money was taken), stays marked cancelled, and leaves a note on the reservation.
+- **Personal welcome codes** work only with the email of the guest they were made for.
+- **Search pages and the sitemap** are rate limited, and the sitemap is cached for 5 minutes.
+- **Other fixes:** adding an extra on the pay page can't be charged twice by a double tap. Quote checkout asks for privacy consent. The consent box no longer repeats the house rules, which have their own box.
+- **Accepted risk:** a host with a test payment key could make BalayHub send one reminder in 30 days to an address they type in.

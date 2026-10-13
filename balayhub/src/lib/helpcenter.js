@@ -464,6 +464,96 @@ const ARTICLES = [
       'Follow the progress under Help → My tickets: Received → In progress → Waiting for you → Resolved. Reply there to add details.',
     ],
   },
+  {
+    slug: 'guidebook', category: 'guests', roles: MANAGERS, title: 'Guidebook and door code: what guests see, and when',
+    keywords: 'guidebook guide wifi password door code gate arrival parking local tips emergency link private message',
+    body: [
+      'Listings → pick a listing → Guidebook. Fill in arrival, parking, building and gate notes, local tips and emergency contacts. Add a Taglish version of any section if you want; guests see the language set for your workspace, with a switch.',
+      'The door code is stored encrypted and is masked here; use Show to read it. Owners and managers only.',
+      'To send the guidebook, open the reservation and press Copy guidebook link, then send it to the guest, or use {{guidebook_link}} in a message template. The link opens from 14 days before check-in until 2 days after check-out, and only for confirmed stays. Cancelled stays get no link.',
+      'The Wi-Fi password and door code show only from the day before check-in through check-out day (Manila time). Before that, the page says the day they will appear.',
+      'In messages, {{wifi_password}} and {{door_code}} follow the same rule. Before that day they read "(shared the day before check-in)".',
+      'Heads-up: once a message containing the Wi-Fi password or door code is sent, that text stays in the inbox history as plain text.',
+    ],
+  },
+  {
+    slug: 'house-rules-acceptance', category: 'guests', roles: MANAGERS, title: 'House rules: guests agree before paying and at check-in',
+    keywords: 'house rules agree accept checkbox consent terms check-in booking page guest',
+    body: [
+      'If a listing has house rules (Listings → Edit), guests must tick "I agree to the house rules" on the booking page before they can pay, and again on the check-in form before they submit it.',
+      'BalayHub saves the time they agreed and the exact text they saw. On the reservation, owners and managers see "House rules accepted on …" with that text under the details.',
+      'A listing with no house rules has no checkbox.',
+    ],
+  },
+  {
+    slug: 'addons', category: 'money', roles: MANAGERS, title: 'Paid add-ons: airport pickup, early check-in and more',
+    keywords: 'add-on addon extra optional airport pickup early check-in extra bed breakfast upsell price per night per guest',
+    body: [
+      'Owners add them under Add-ons: name, optional Taglish name, description, price, and how the price works. Choices are per stay, per night, per guest, or per guest per night. Set a maximum quantity (1 to 20) and choose which listings offer it (none picked means all).',
+      'Each add-on can appear on the booking page, before arrival (on the guest\'s payment page, until check-in day), or both.',
+      'Guests pay for add-ons in full, up front, together with the deposit. The deposit is still a percentage of the stay only.',
+      'Each add-on a guest buys becomes an extra charge on the reservation, so it shows on the bill, receipt, balance and the owner statement. Archive an add-on to hide it; past stays keep it.',
+    ],
+  },
+  {
+    slug: 'quotes', category: 'bookings', roles: MANAGERS, title: 'Send a quote to a Facebook or Messenger inquiry',
+    keywords: 'quote offer inquiry facebook messenger viber price custom booking send link pay expire cancel',
+    body: [
+      'Quotes → New quote. Pick the listing, dates, number of guests, guest name, and an email or mobile number. The price fills in from your rates; you can change the accommodation, cleaning fee, add-ons and discount.',
+      'Choose full payment or deposit (the listing\'s setting applies), add a note if you like, and set how long the offer lasts. The default is 48 hours; the maximum is 14 days.',
+      'Copy the link and send it yourself, or press Send by email if the guest has an email address. The link opens the offer, the house rules, and a payment page.',
+      'The dates are checked as free when you make the quote, but they are not held until the guest pays. Once they start paying, the usual 30-minute hold applies.',
+      'When the guest pays, the booking is created with the source "quote". Cancel an open quote to stop its link. A quote past its time shows as expired; a cancelled one shows as cancelled.',
+      'If a guest starts a new payment on the same quote, the older unpaid payment page is ended.',
+    ],
+  },
+  {
+    slug: 'share-links-sources', category: 'bookings', roles: MANAGERS, title: 'Share links and where guests came from',
+    keywords: 'share link source facebook instagram messenger viber tiktok google whatsapp referral report campaign tag',
+    body: [
+      'Open a listing\'s booking page and add ?src= with a source to the end of the link, for example ?src=facebook. Copy that link into your post or message. Sources: Facebook, Instagram, Messenger, Viber, TikTok, Google, WhatsApp, email, referral, or other.',
+      'The source is kept during the guest\'s visit and saved on the booking. Quotes are tagged "quote" automatically.',
+      'Stay reports show a "By source" table for direct bookings: stays, nights and revenue per source.',
+      'BalayHub sets no tracking cookies. A booking with no source simply has none.',
+    ],
+  },
+  {
+    slug: 'public-reviews', category: 'guests', roles: OWNER, title: 'Public review links: ask happy guests to post a review',
+    keywords: 'review google facebook public share links rating 4 5 stars private feedback thank you',
+    body: [
+      'Settings → Guest experience → Public review links. Add up to 4 links to your own pages (Google, Facebook or another page). Each must start with https:// and be 300 characters or fewer.',
+      'The guest always gives a private rating first. Only guests who rate 4 or 5 stars then see "Would you share your experience?" and your links.',
+      'Ratings of 3 or fewer never see the links. They stay private and you are alerted, as before.',
+    ],
+  },
+  {
+    slug: 'returning-guest-codes', category: 'money', roles: OWNER, title: 'Returning-guest discount codes',
+    keywords: 'returning guest welcome back personal code discount repeat guest loyalty thank you message',
+    body: [
+      'Settings → Guest experience → Returning-guest discount. Enter a percentage from 1 to 50, or leave it blank to turn it off.',
+      'When it is on, each guest who has checked out gets one personal code, used once and valid for 12 months. The code is made the first time a message uses {{returning_guest_code}}, for example in your thank-you template.',
+      'With the setting off, that message variable is empty. Personal codes do not count toward your 50-code limit.',
+    ],
+  },
+  {
+    slug: 'abandoned-booking-followup', category: 'bookings', roles: OWNER, title: 'Follow up guests who didn\'t finish paying',
+    keywords: 'abandoned unfinished unpaid booking follow up email reminder checkout expired failed still want',
+    body: [
+      'Settings → Guest experience → Abandoned-booking follow-up. It is off by default.',
+      'When it is on, a guest whose online booking ended unpaid gets one plain email about 2 hours later. It links back to the listing with the same dates. It only goes to checkouts that ended 2 to 24 hours ago.',
+      'No email is sent if the same email address has booked overlapping nights or started a newer payment. Quotes never get this email. Each unfinished booking gets at most one email.',
+    ],
+  },
+  {
+    slug: 'listing-pages-google', category: 'bookings', roles: MANAGERS, title: 'Listing pages for Google and search',
+    keywords: 'seo google search listing page address sitemap public web page stay find search engine indexing',
+    body: [
+      'Each listing with direct booking turned on has its own public page, for example /stay/your-workspace/your-listing. Set its address under Listings → Page address.',
+      'The page shows the name, a "from" price (the lowest of the nightly, weekend and holiday rates), max guests, city and province, photos, house rules, the cancellation policy, and a "Check dates and book" button. It never shows the street address.',
+      'The page follows your workspace language. Your pages are listed in /sitemap.xml.',
+      'Listings made by the demo or seed have no page address until you set one. Google decides when to show new pages; BalayHub can\'t force it.',
+    ],
+  },
 ];
 
 const norm = (s) => String(s || '').toLowerCase();

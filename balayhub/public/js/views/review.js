@@ -2,7 +2,13 @@
 
 import { get, post } from '../api.js';
 import { h, brand, toast } from '../ui.js';
-import { t, tServer, initGuestLang, langToggle, fmtDateL as fmtDate } from '../i18n.js';
+import { t, tServer, initGuestLang, langToggle, fmtDateL as fmtDate, extendTranslations } from '../i18n.js';
+
+extendTranslations({
+  'Would you share your experience?': 'Gusto mo bang ibahagi ang karanasan mo?',
+  'A public review helps other travellers find {host}. It only takes a minute.': 'Nakakatulong ang public review para mahanap ng ibang biyahero si {host}. Isang minuto lang ito.',
+  'Opens in a new tab': 'Bubukas sa bagong tab',
+});
 
 const LABELS = ['', 'Poor', 'Fair', 'Good', 'Very good', 'Excellent'];
 
@@ -36,10 +42,14 @@ export async function guestReviewView(el, { params }) {
     return;
   }
   initGuestLang(d.guest_language);
-  const thanks = () => el.replaceChildren(page(h('div', { class: 'card bk-done' },
+  const thanks = (links = []) => el.replaceChildren(page(h('div', { class: 'card bk-done' },
     h('div', { class: 'gc__tick', 'aria-hidden': 'true' }, '✓'),
     h('h1', null, 'Salamat po!'),
-    h('p', { class: 'muted' }, t('Thank you for your feedback. {host} will read it personally. We hope to host you again!', { host: d.host })))));
+    h('p', { class: 'muted' }, t('Thank you for your feedback. {host} will read it personally. We hope to host you again!', { host: d.host })),
+    links.length > 0 && h('section', { class: 'gp-share', 'aria-labelledby': 'share-h' },
+      h('h2', { id: 'share-h', style: { width: '100%', textAlign: 'center' } }, t('Would you share your experience?')),
+      h('p', { class: 'muted small', style: { width: '100%', textAlign: 'center' } }, t('A public review helps other travellers find {host}. It only takes a minute.', { host: d.host })),
+      links.map((l) => h('a', { class: 'btn btn--secondary', href: l.url, target: '_blank', rel: 'noopener noreferrer', 'aria-label': `${l.label} (${t('Opens in a new tab')})` }, l.label))))));
   if (d.reviewed) { thanks(); return; }
   if (!d.open) {
     el.replaceChildren(page(h('div', { class: 'card' }, d.not_yet
@@ -56,9 +66,9 @@ export async function guestReviewView(el, { params }) {
     if (!overall.get()) { toast(t('Please choose a star rating first.'), 'error'); return; }
     btn.disabled = true;
     try {
-      await post(`/public/review/${encodeURIComponent(token)}`, { rating: overall.get(), cleanliness: clean.get(), comment: comment.value.trim() || undefined });
+      const res = await post(`/public/review/${encodeURIComponent(token)}`, { rating: overall.get(), cleanliness: clean.get(), comment: comment.value.trim() || undefined });
       d.reviewed = true;
-      thanks();
+      thanks(overall.get() >= 4 && Array.isArray(res?.share_links) ? res.share_links.filter((l) => /^https:\/\//i.test(l?.url || '')) : []);
     } catch (err) { toast(tServer(err.message), 'error'); btn.disabled = false; }
   } },
   overall.el, clean.el,

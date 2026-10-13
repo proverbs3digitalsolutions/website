@@ -7,7 +7,7 @@
 const crypto = require('crypto');
 const express = require('express');
 const config = require('../config');
-const { query, one, tx } = require('../db');
+const { query, one, tx, pool } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
 const { uuidParam } = require('../lib/validate');
 const { requireRole, rateLimit } = require('../lib/auth');
@@ -15,6 +15,7 @@ const { propertyScope } = require('../lib/access');
 const { planStatus } = require('../lib/plans');
 const secretbox = require('../lib/secretbox');
 const paymongo = require('../lib/paymongo');
+const { priceAddons, createAddonCharges, listAddonsForUnit } = require('../lib/addons');
 
 const router = express.Router();
 const publicRouter = express.Router();
@@ -80,7 +81,7 @@ function manualRefusal(b) {
 async function loadByToken(token) {
   if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{20,40}$/.test(token)) throw notFound('This payment link is not valid. Please ask your host for a new one.');
   const b = await one(
-    `SELECT b.booking_id, b.organization_id, b.check_in, b.check_out, b.status, b.total_amount, b.confirmation_code, ${BALANCE} AS balance,
+    `SELECT b.booking_id, b.organization_id, b.unit_id, b.check_in, b.check_out, b.status, b.total_amount, b.confirmation_code, ${BALANCE} AS balance,
             b.accommodation_total, b.cleaning_fee, b.other_fees, b.extras_total, (b.check_out - b.check_in)::int AS nights,
             u.unit_name, p.property_name, o.name AS host_name, o.paymongo_key_enc, o.paymongo_key_hint, o.plan, o.trial_ends_at, o.paid_until,
             o.is_demo, o.deletion_scheduled_at, o.guest_language, o.manual_payments_enabled, o.manual_payment_instructions,
@@ -125,6 +126,71 @@ publicRouter.get('/public/pay/:token', ah(async (req, res) => {
     // Only when the host turned manual payments on: their instructions, and whether a proof can be sent now.
     manual_payments: b.manual_payments_enabled ? { instructions: b.manual_payment_instructions, accepting: !manualRefusal(b) } : null,
   });
+}));
+
+// ---------------------------------------------------------------- pre-arrival add-ons (D-59)
+// Add-ons the guest can still buy: a confirmed stay up to and including check-in
+// day, in a workspace that can take changes. The reason is returned otherwise.
+function addonRefusal(b) {
+  if (b.is_demo) return new HttpError(403, 'This is a demo.', { code: 'DEMO_READ_ONLY' });
+  if (planStatus(b).read_only) return new HttpError(409, "Add-ons can't be booked for this stay right now. Please contact your host.", { code: 'NOT_ACCEPTING' });
+  if (b.status !== 'confirmed') return new HttpError(409, 'This booking was cancelled, so add-ons cannot be booked on it.', { code: 'CANCELLED' });
+  if (manilaToday() > String(b.check_in)) return new HttpError(409, 'Add-ons can only be booked up to check-in day.', { code: 'AFTER_CHECK_IN' });
+  return null;
+}
+
+const addonsLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 20, key: (req) => `payaddons|${req.params.token}` });
+
+// A purchase's idempotency key: the Idempotency-Key header, or request_key in the body. Optional; validated like refunds.js.
+function requestKeyOf(req) {
+  const key = req.get('Idempotency-Key') || req.body?.request_key;
+  if (key === undefined || key === null || key === '') return null;
+  if (typeof key !== 'string' || !/^[A-Za-z0-9_-]{8,100}$/.test(key)) throw new HttpError(400, 'Invalid Idempotency-Key header.', { code: 'BAD_REQUEST' });
+  return key;
+}
+
+publicRouter.get('/public/pay/:token/addons', ah(async (req, res) => {
+  const b = await loadByToken(req.params.token);
+  const open = !addonRefusal(b);
+  res.json({ addons: open ? await listAddonsForUnit(pool, b.organization_id, b.unit_id, 'before_arrival') : [] });
+}));
+
+// A retry with the same key (a double tap, a dropped connection) gets the bill the first try made,
+// and no new charges. Without a key each request buys again.
+publicRouter.post('/public/pay/:token/addons', addonsLimiter, ah(async (req, res) => {
+  const b = await loadByToken(req.params.token);
+  const refused = addonRefusal(b);
+  if (refused) throw refused;
+  const selections = req.body?.selections;
+  if (!Array.isArray(selections) || !selections.length) {
+    throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { addons: 'Choose at least one add-on.' } });
+  }
+  const key = requestKeyOf(req);
+  let bought = false;
+  try {
+    bought = await tx(async (db) => {
+      // Read the stay under its row lock: a cancellation, or check-in day passing, meanwhile must still refuse.
+      // The lock also makes a second tap with the same key wait, then see the first tap's charges below.
+      const { rows: [now] } = await db.query(
+        `SELECT status, check_in, organization_id, unit_id, num_guests, (check_out - check_in)::int AS nights
+           FROM bookings WHERE booking_id = $1 FOR UPDATE`, [b.booking_id]);
+      const late = addonRefusal({ ...b, ...now });
+      if (late) throw late;
+      // Includes charges the host has since voided: a retry must not put back what was bought once.
+      if (key && (await db.query('SELECT 1 FROM booking_charges WHERE booking_id = $1 AND starts_with(request_key, $2)',
+        [b.booking_id, `${key}:`])).rowCount) return false;
+      const { items } = await priceAddons(db, {
+        orgId: now.organization_id, unitId: now.unit_id, nights: now.nights, guests: now.num_guests, selections, context: 'before_arrival',
+      });
+      await createAddonCharges(db, b.booking_id, items, null, key);
+      return true;
+    });
+  } catch (err) {
+    // Two taps with one key got past each other and the second insert hit the unique key: the first tap's charges stand.
+    if (err.constraint !== 'booking_charges_request_key_uq') throw err;
+  }
+  if (bought) await closeOpenCheckouts(b.booking_id); // the amount owed went up: an open pay session must not still work
+  res.json({ ok: true, bill: await billFor(await loadByToken(req.params.token)) });
 }));
 
 const checkoutLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 10, key: (req) => `paycheckout|${req.params.token}` });

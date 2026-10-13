@@ -21,6 +21,21 @@ const validationError = (fields) => new HttpError(400, 'Please check the highlig
 const manilaToday = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
 const daysBetween = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
 
+// Public review links (D-62): a name of 1–40 characters and an https address of at most 300.
+const REVIEW_LINKS_MAX = 4;
+const isHttps = (url) => { try { return new URL(url).protocol === 'https:'; } catch { return false; } };
+function reviewLinkProblem(l) {
+  const label = typeof l?.label === 'string' ? l.label.trim() : '';
+  const url = typeof l?.url === 'string' ? l.url.trim() : '';
+  if (label.length < 1 || label.length > 40) return 'Each link needs a name of 1 to 40 characters.';
+  if (url.length > 300 || !isHttps(url)) return 'Each link needs an https:// address of at most 300 characters.';
+  return null;
+}
+// Stored links are checked again on read, so a bad row never reaches a guest.
+const storedReviewLinks = (raw) => (Array.isArray(raw)
+  ? raw.filter((l) => !reviewLinkProblem(l)).slice(0, REVIEW_LINKS_MAX).map((l) => ({ label: l.label.trim(), url: l.url.trim() }))
+  : []);
+
 // ---------------------------------------------------------------- guest review page
 const reviewLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 40, key: (req) => `review|${req.ip}` });
 publicRouter.use('/public/review', reviewLimiter);
@@ -28,7 +43,7 @@ publicRouter.use('/public/review', reviewLimiter);
 async function loadForReview(token) {
   if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{20,40}$/.test(token)) throw notFound('This review link is not valid.');
   const b = await one(
-    `SELECT b.booking_id, b.organization_id, b.guest_id, b.check_in::text, b.check_out::text, b.status, u.unit_name, o.name AS host_name, o.is_demo, o.guest_language,
+    `SELECT b.booking_id, b.organization_id, b.guest_id, b.check_in::text, b.check_out::text, b.status, u.unit_name, o.name AS host_name, o.is_demo, o.guest_language, o.review_links,
             split_part(COALESCE(g.full_name, b.guest_label, ''), ' ', 1) AS guest_first_name,
             r.rating, r.created_at AS reviewed_at
        FROM bookings b JOIN units u USING (unit_id) JOIN organizations o ON o.organization_id = b.organization_id
@@ -67,7 +82,9 @@ publicRouter.post('/public/review/:token', ah(async (req, res) => {
     throw err;
   }
   afterReview(b, body).catch((err) => console.error('[review] after-review steps failed:', err.message));
-  res.status(201).json({ ok: true });
+  // Happy guests (4–5 stars) are invited to share on the host's public pages; 3 or less stay private.
+  const shareLinks = body.rating >= 4 ? storedReviewLinks(b.review_links) : [];
+  res.status(201).json(shareLinks.length ? { ok: true, share_links: shareLinks } : { ok: true });
 }));
 
 async function afterReview(b, r) {
@@ -135,7 +152,7 @@ const codeSpec = {
 };
 
 // Filters: status (active / scheduled / expired / used up / off), type
-// (percent or amount), returning-guests-only, and search on the code or note.
+// (percent or amount), returning-guests-only, issued to a guest (yes / no), and search on the code or note.
 router.get('/discount-codes', managers, ah(async (req, res) => {
   const q = req.query;
   const params = [req.user.organization_id, manilaToday()];
@@ -152,14 +169,17 @@ router.get('/discount-codes', managers, ah(async (req, res) => {
   if (q.type === 'percent') where.push('d.percent_off IS NOT NULL');
   if (q.type === 'amount') where.push('d.amount_off IS NOT NULL');
   if (q.returning === '1') where.push('d.returning_only');
+  // Issued = a personal returning-guest code (issued_to_booking_id is set); the rest were made by the host.
+  if (q.issued === 'yes') where.push('d.issued_to_booking_id IS NOT NULL');
+  if (q.issued === 'no') where.push('d.issued_to_booking_id IS NULL');
   if (q.q) { params.push(`%${String(q.q).slice(0, 60)}%`); where.push(`(d.code ILIKE $${params.length} OR d.description ILIKE $${params.length})`); }
   const SORTS = { newest: 'd.created_at DESC', code: 'd.code', most_used: 'uses DESC, d.code', ending: 'd.valid_until NULLS LAST, d.code' };
   const { rows } = await query(
-    `SELECT d.*, ${USES} AS uses,
+    `SELECT d.*, (d.issued_to_booking_id IS NOT NULL) AS issued, ${USES} AS uses,
             (SELECT COALESCE(SUM(c.discount_amount), 0) FROM direct_checkouts c WHERE c.discount_code_id = d.code_id AND c.status = 'confirmed') AS total_discounted,
             (d.valid_until IS NOT NULL AND d.valid_until < $2) AS expired, (d.valid_from IS NOT NULL AND d.valid_from > $2) AS scheduled, ${usedUp} AS used_up
        FROM discount_codes d WHERE ${where.join(' AND ')} ORDER BY ${SORTS[q.sort] || 'd.active DESC, d.created_at DESC'}`, params);
-  const total = q.status || q.type || q.returning || q.q
+  const total = q.status || q.type || q.returning || q.issued || q.q
     ? (await one('SELECT COUNT(*)::int AS n FROM discount_codes WHERE organization_id = $1', [req.user.organization_id])).n : rows.length;
   res.json({ codes: rows, total });
 }));
@@ -172,7 +192,8 @@ router.post('/discount-codes', owners, ah(async (req, res) => {
     throw validationError({ percent_off: 'Set either a percent off or an amount off.' });
   }
   if (body.valid_from && body.valid_until && body.valid_until < body.valid_from) throw validationError({ valid_until: 'The end date must be after the start date.' });
-  const { n } = await one('SELECT COUNT(*)::int AS n FROM discount_codes WHERE organization_id = $1 AND active', [req.user.organization_id]);
+  // Personal codes issued to returning guests don't count toward the owner's limit.
+  const { n } = await one('SELECT COUNT(*)::int AS n FROM discount_codes WHERE organization_id = $1 AND active AND issued_to_booking_id IS NULL', [req.user.organization_id]);
   if (n >= 50) throw new HttpError(409, 'You can have up to 50 active codes. Turn some off first.', { code: 'LIMIT' });
   try {
     const d = await one(
@@ -194,6 +215,47 @@ router.post('/discount-codes/:id/active', owners, ah(async (req, res) => {
   if (!d) throw notFound();
   await audit(null, req.user, active ? 'discount_code.enabled' : 'discount_code.disabled', 'discount_code', req.params.id, { code: d.code });
   res.json({ ok: true });
+}));
+
+// ---------------------------------------------------------------- host: guest settings (D-62)
+// Owners only. PATCH changes just the fields sent; returning_guest_pct: null turns the discount off.
+async function guestSettings(orgId) {
+  const o = await one('SELECT review_links, returning_guest_pct, abandoned_followup FROM organizations WHERE organization_id = $1', [orgId]);
+  return { review_links: storedReviewLinks(o.review_links), returning_guest_pct: o.returning_guest_pct, abandoned_followup: o.abandoned_followup };
+}
+
+router.get('/workspace/guest-settings', owners, ah(async (req, res) => {
+  res.json(await guestSettings(req.user.organization_id));
+}));
+
+router.patch('/workspace/guest-settings', owners, ah(async (req, res) => {
+  const b = req.body && typeof req.body === 'object' ? req.body : {};
+  const body = validate(b, {
+    returning_guest_pct: { type: 'int', min: 1, max: 50, label: 'Returning-guest discount' },
+    abandoned_followup: { type: 'bool', label: 'Abandoned-booking follow-up' },
+  }, { partial: true });
+  const sets = [];
+  const params = [req.user.organization_id];
+  const changed = {};
+  const set = (column, value, cast = '') => {
+    params.push(cast ? JSON.stringify(value) : value);
+    sets.push(`${column} = $${params.length}${cast}`);
+    changed[column] = value;
+  };
+  if ('returning_guest_pct' in body) set('returning_guest_pct', body.returning_guest_pct);
+  if ('abandoned_followup' in body) set('abandoned_followup', body.abandoned_followup);
+  if (b.review_links !== undefined) {
+    const links = b.review_links ?? [];
+    if (!Array.isArray(links) || links.length > REVIEW_LINKS_MAX) throw validationError({ review_links: `Add up to ${REVIEW_LINKS_MAX} review links.` });
+    const problem = links.map((l) => reviewLinkProblem(l)).find(Boolean);
+    if (problem) throw validationError({ review_links: problem });
+    set('review_links', links.map((l) => ({ label: l.label.trim(), url: l.url.trim() })), '::jsonb');
+  }
+  if (sets.length) {
+    await query(`UPDATE organizations SET ${sets.join(', ')} WHERE organization_id = $1`, params);
+    await audit(null, req.user, 'workspace.guest_settings_updated', 'organization', req.user.organization_id, changed);
+  }
+  res.json(await guestSettings(req.user.organization_id));
 }));
 
 module.exports = { router, publicRouter };

@@ -2,9 +2,9 @@
 // Shows the itemised bill, the online payment button and, when the host allows it,
 // the manual payment details with a form to send a proof of payment.
 
-import { get, post, api, ApiError } from '../api.js';
+import { get, post, api, ApiError, newIdempotencyKey } from '../api.js';
 import { h, brand, toast, field, readForm, showErrors, clearErrors } from '../ui.js';
-import { t, tServer, tFields, initGuestLang, langToggle, fmtDateL as fmtDate, extendTranslations } from '../i18n.js';
+import { t, tServer, guestLang, tFields, initGuestLang, langToggle, fmtDateL as fmtDate, extendTranslations } from '../i18n.js';
 
 // Same peso format as the booking pages: no centavos when it's a whole amount.
 const peso = (v) => { const n = Number(v || 0); return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`; };
@@ -46,7 +46,20 @@ extendTranslations({
   'Thank you! Your proof was sent.': 'Salamat! Naipadala na ang patunay.',
   '{host} will check the payment and confirm it. You will get an email when it is confirmed.': 'Titingnan ni {host} ang bayad at kukumpirmahin ito. Makakatanggap ka ng email kapag kumpirmado na.',
   'Other': 'Iba pa',
+  'Add to your stay': 'Idagdag sa stay mo',
+  'Pick extras before you arrive. They are added to your bill.': 'Pumili ng dagdag bago ka dumating. Idadagdag ito sa bill mo.',
+  'Quantity for {name}': 'Dami para sa {name}',
+  'Add to my bill': 'Idagdag sa bill ko',
+  'Adding…': 'Idinadagdag…',
+  'Choose at least one extra.': 'Pumili ng kahit isang dagdag.',
+  'Added to your bill.': 'Naidagdag na sa bill mo.',
+  'per stay': 'bawat stay',
+  'per night': 'bawat gabi',
+  'per guest': 'bawat bisita',
+  'per guest per night': 'bawat bisita bawat gabi',
 });
+
+const PRICING_TEXT = { per_stay: 'per stay', per_night: 'per night', per_guest: 'per guest', per_guest_night: 'per guest per night' };
 
 export async function payBalanceView(el, { params, query }) {
   initGuestLang();
@@ -103,7 +116,51 @@ export async function payBalanceView(el, { params, query }) {
           : d.accepting ? [btn, h('p', { class: 'muted small' }, t('GCash, Maya, cards and GrabPay. You get an email receipt.'))]
             : d.manual_payments?.accepting ? null
               : h('div', { class: 'alert alert--info' }, t('Online payment is not available for this booking. Please contact your host.'))),
+    !d.cancelled && addonsCard(token, () => payBalanceView(el, { params, query: {} })),
     d.manual_payments?.accepting && manualCard(d, token)));
+}
+
+// Pre-arrival extras the host offers (airport pickup, early check-in…). Hidden when there are none or the
+// server says it is too late; choosing some adds charges to the bill, then the page reloads with the new balance.
+function addonsCard(token, reload) {
+  const card = h('div', { class: 'card', hidden: true });
+  get(`/public/pay/${encodeURIComponent(token)}/addons`).then((r) => {
+    const list = r?.addons || [];
+    if (!list.length) return;
+    const qty = {};
+    const err = h('div', { role: 'alert' });
+    const rows = list.map((a) => {
+      const name = (guestLang() === 'tl' && a.name_tl) || a.name;
+      const max = Math.max(1, Number(a.max_quantity) || 1);
+      const input = h('input', { class: 'input', type: 'number', min: 0, max, value: 0, inputmode: 'numeric', id: `addon-${a.addon_id}`, 'aria-label': t('Quantity for {name}', { name }) });
+      input.addEventListener('input', () => { qty[a.addon_id] = Math.max(0, Math.min(max, Math.floor(Number(input.value) || 0))); });
+      return h('div', { class: 'gp-addon' },
+        h('div', null, h('strong', null, name), a.description && h('div', { class: 'muted small' }, a.description)),
+        h('div', { class: 'gp-addon__price' }, `${peso(a.price)} `, h('span', { class: 'muted small' }, t(PRICING_TEXT[a.pricing] || ''))),
+        max > 1 ? h('div', { class: 'gp-addon__qty' }, h('label', { for: input.id, class: 'small' }, t('Quantity for {name}', { name })), input)
+          : h('label', { class: 'check gp-addon__qty' }, h('input', { type: 'checkbox', 'aria-label': name, onchange: (e) => { qty[a.addon_id] = e.target.checked ? 1 : 0; } }), h('span', null, t('Add to my bill'))));
+    });
+    const btn = h('button', { class: 'btn btn--primary btn--block', type: 'button' }, t('Add to my bill'));
+    btn.addEventListener('click', async () => {
+      err.replaceChildren();
+      const selections = Object.entries(qty).filter(([, q]) => q > 0).map(([addon_id, quantity]) => ({ addon_id, quantity }));
+      if (!selections.length) { err.replaceChildren(h('div', { class: 'alert alert--error' }, t('Choose at least one extra.'))); return; }
+      btn.disabled = true;
+      btn.textContent = t('Adding…');
+      try {
+        await post(`/public/pay/${encodeURIComponent(token)}/addons`, { selections }, { idempotencyKey: newIdempotencyKey() });
+        toast(t('Added to your bill.'));
+        reload();
+      } catch (e) {
+        err.replaceChildren(h('div', { class: 'alert alert--error' }, e.offline ? t("You're offline. Please try again when you're connected.") : tServer(e.message)));
+        btn.disabled = false;
+        btn.textContent = t('Add to my bill');
+      }
+    });
+    card.replaceChildren(h('h2', null, t('Add to your stay')), h('p', { class: 'muted small' }, t('Pick extras before you arrive. They are added to your bill.')), h('div', { class: 'gp-addons' }, rows), err, btn);
+    card.hidden = false;
+  }).catch(() => {}); // not offered, or too late: simply don't show the card
+  return card;
 }
 
 // The itemised bill: the stay, fees and extra charges, then payments received and what is still owed.

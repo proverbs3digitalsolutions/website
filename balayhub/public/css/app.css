@@ -1345,3 +1345,61 @@ a.op__row:hover { background: var(--surface-2); }
   .hk-supply select { grid-column: 1 / -1; }
 }
 @media (prefers-reduced-motion: reduce) { .hk-card, .hk-unit { transition: none; } }
+
+/* Phase 4: guest pages */
+.gg-h { display: flex; align-items: center; gap: 10px; font-size: 1.05rem; margin-bottom: 8px; }
+.gg-h svg { width: 22px; height: 22px; flex: none; color: var(--accent); }
+.gg-text { white-space: pre-line; overflow-wrap: anywhere; line-height: 1.6; }
+.gg-from { font-weight: 700; color: var(--amber); margin: 0 0 4px; }
+.gg-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; }
+.gg-row + .gg-row { border-top: 1px solid var(--line); }
+.gg-row__text { display: grid; gap: 2px; min-width: 0; }
+.gg-val { font-size: 1.15rem; font-weight: 700; overflow-wrap: anywhere; user-select: all; color: var(--text); }
+.gg-secret .btn { min-width: 76px; min-height: 44px; }
+.gp-addons { display: grid; gap: 10px; margin-top: 8px; }
+.gp-addon { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); }
+.gp-addon__price { font-variant-numeric: tabular-nums; font-weight: 700; }
+.gp-addon__qty { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; }
+.gp-addon__qty .input { width: 84px; }
+.gp-rules { max-height: 220px; overflow: auto; white-space: pre-line; overflow-wrap: anywhere; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin: 8px 0; }
+.gp-share { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 8px; }
+.gp-share .btn { min-height: 44px; }
+
+/* Phase 4: booking */
+.bk-addons { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 8px; min-width: 0; margin: 0; }
+.bk-addons legend { font-weight: 700; padding: 0 4px; }
+.bk-addons__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.bk-addon { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+.bk-addon:first-child { border-top: 0; }
+.bk-addon__main { min-height: 44px; min-width: 0; }
+.bk-addon__main span { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.bk-addon__qty { width: 72px; min-height: 44px; text-align: center; }
+.bk-addon__amt { grid-column: 1 / -1; text-align: right; }
+.bk-addon__amt:empty { display: none; }
+.bk-rules { display: grid; gap: 8px; }
+.bk-rules__text { max-height: 180px; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); font-size: .9rem; }
+.bk-rules__text:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.bk-quote { max-width: 640px; display: grid; gap: 16px; }
+.bk-quote__offer { display: grid; gap: 10px; }
+.bk-quote__offer h2 { margin: 0; }
+.bk-quote__note { white-space: pre-wrap; overflow-wrap: anywhere; }
+.bk-quote .dl dd { text-align: right; }
+@media (prefers-reduced-motion: reduce) { .bk-rules__text { scroll-behavior: auto; } }
+
+/* Phase 4: host */
+.form-row--3 { grid-template-columns: 1fr; }
+@media (min-width: 640px) { .form-row--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.hp-fieldset { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px 14px; margin: 0; min-width: 0; }
+.hp-fieldset legend { font-weight: 700; padding: 0 6px; }
+.hp-secret, .hp-copy { display: flex; gap: 8px; align-items: center; }
+.hp-secret .input, .hp-copy .input { flex: 1 1 auto; min-width: 0; }
+.hp-secret .btn, .hp-copy .btn { min-height: 44px; flex: 0 0 auto; }
+.hp-wrap { overflow-wrap: anywhere; }
+.hp-actions { margin-top: 12px; }
+.hp-total { font-weight: 700; font-variant-numeric: tabular-nums; margin: 4px 0; }
+.hp-addon { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; }
+.hp-addon + .hp-addon { border-top: 1px solid var(--line); }
+.hp-qty { width: 84px; }
+.hp-rules { margin-top: 6px; }
+.hp-rules summary { cursor: pointer; color: var(--forest); font-weight: 600; min-height: 24px; }
+.hp-rules p { white-space: pre-line; overflow-wrap: anywhere; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; margin: 6px 0 0; font-size: .9rem; }

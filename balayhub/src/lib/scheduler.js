@@ -49,6 +49,8 @@ function startScheduler() {
   every(10 * 60 * 1000, 'billing', require('./billing').reconcile, 80 * 1000);
   // Guests' online bookings whose payment went through but who didn't return to the page.
   every(2 * 60 * 1000, 'direct-booking', require('../routes/directbooking').reconcileDirect, 25 * 1000);
+  // Guests who started a direct booking and didn't pay get one follow-up email, two hours later (D-62).
+  every(15 * 60 * 1000, 'abandoned-followup', () => require('../routes/directbooking').sendAbandonedFollowups(new Date()), 45 * 1000);
   // Balance payments whose guest didn't return to the page.
   every(3 * 60 * 1000, 'balance-pay', require('../routes/balancepay').reconcileBalance, 35 * 1000);
   // Workspaces whose owner asked for deletion, after the grace period.

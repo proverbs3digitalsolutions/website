@@ -235,6 +235,33 @@ Key constraint: **`bookings_no_overlap`** is an `EXCLUDE USING gist (unit_id WIT
 | percent_off (1–90) / amount_off (> 0) | | Exactly one must be set (CHECK) |
 | min_nights, valid_from, valid_until, max_uses, returning_only, active, description, created_by, created_at | | |
 
+### 2.4a Phase 4 guests (migration 031, 2026-10-13)
+
+**Column and constraint changes**
+
+| Where | Change |
+|---|---|
+| `bookings` | Add `guide_token` (unique where set; the private guidebook link), `rules_accepted_at`, `rules_text` (≤ 4000, the exact house rules accepted), `source` (facebook, instagram, messenger, viber, tiktok, google, whatsapp, email, referral, quote, other; null allowed). |
+| `direct_checkouts` | Add `rules_accepted_at`, `rules_text` (≤ 4000), `source` (same list), `addons` (jsonb snapshot: addon_id, name, quantity, unit_price, amount), `addons_total` (≥ 0), `quote_id` → booking_quotes, `followup_sent_at`. Index on `(status, followup_sent_at)`. |
+| `booking_charges` | `category` now also allows `addon`. Add `addon_id` → listing_addons and `request_key` (unique per booking where set; a pre-arrival purchase stores `<idempotency key>:<addon_id>`, so a retried request can't add a charge twice). |
+| `organizations` | Add `review_links` (jsonb, up to 4 `{label, url}`, https only), `returning_guest_pct` (1 to 50, null = off), `abandoned_followup` (boolean, default false). |
+| `discount_codes` | Add `issued_to_booking_id` → bookings (unique where set). A personal returning-guest code. |
+| `units` | Add `public_slug` (listing page address). Indexed, not unique in the database, because `units` has no organization column; uniqueness is checked in code under a per-workspace lock (`pg_advisory_xact_lock`). Existing listings were backfilled from their names. |
+
+**New tables**
+
+| Table | Key columns and rules |
+|---|---|
+| `listing_addons` | `addon_id` PK, `organization_id`, `name` (1 to 80), `name_tl` (≤ 80), `description` (≤ 300), `price` > 0, `pricing` (per_stay, per_night, per_guest, per_guest_night), `max_quantity` 1 to 20, `unit_ids` (uuid array; empty means every listing), `on_booking_page`, `before_arrival`, `active`, `sort_order`, `created_at`, `updated_at`. |
+| `unit_guides` | `unit_id` PK → units, `organization_id`. Five text sections, each ≤ 2000 with a `_tl` twin: `arrival`, `parking`, `building_notes`, `local_tips`, `emergency_contacts`. `door_code_enc` (encrypted with `src/lib/secretbox.js`), `updated_at`, `updated_by`. |
+| `booking_quotes` | `quote_id` PK, `organization_id`, `unit_id`, `public_token` (unique, 24 random bytes, base64url), `check_in`, `check_out` (check_out after check_in), `num_guests` 1 to 50, `guest_name` (≤ 120), `guest_email`, `guest_phone`, `accommodation_total` ≥ 0, `cleaning_fee` ≥ 0, `addons` (jsonb snapshot), `addons_total` ≥ 0, `discount_amount` ≥ 0, `total_amount` > 0, `pay_type` (full or deposit), `note` (≤ 1000), `expires_at`, `status` (open, paid, expired, cancelled), `booking_id` → bookings (set when paid), `created_by`, `created_at`, `cancelled_at`. Indexes on `(organization_id, status)`, `unit_id`, and `booking_id`. |
+
+**Money rules for these tables.** All amounts are `numeric(12,2)`. Add-on amounts are worked out in centavos. A booking's `total_amount` is accommodation + cleaning + other fees + extras (add-ons are extras), so owner statements and P&L include them with no extra code.
+
+**Purge and export.** The three new tables are in `PURGED_TABLES` and in the purge order in `src/lib/account.js`. The export includes `unit_guides` without `door_code_enc`, and includes `booking_quotes` (the public token is removed by the secret-key filter). `listing_addons` is included in the export by workspace.
+
+---
+
 ### 2.5 Payments and receipts (short-term)
 
 **booking_payments**: money received for a reservation. Voided, never deleted.
@@ -759,6 +786,32 @@ The cleaner role is denied by default in code (`cleanerGuard`, D-48). Any row no
 | Invite a cleaner (team) | Yes | No | No | No |
 | Account, notifications, help and support | Own | Own | Own | Own |
 
+### 6.2 Phase 4 access matrix (guests, quotes, add-ons, settings)
+
+The cleaner role is denied by `cleanerGuard` (D-48) unless a route is on its allow-list. None of the Phase 4 routes are on that list, so cleaners get 403 on every one. "Assigned" means the properties the manager is assigned to, as in section 6.1.
+
+| Data area | Owner | Manager | Staff | Cleaner | Public (with the private link or no login) |
+|---|---|---|---|---|---|
+| Guidebook: read and edit text | Full | Assigned | No | No | No |
+| Guidebook: door code (read, set, clear) | Yes (masked; shown on request) | Yes (assigned) | No | No | No |
+| Send the guidebook link (create the token) | Yes | Yes (assigned) | No | No | No |
+| Guest guidebook page `/#/guide/<token>` | Own view | Own view | No | No | Yes, confirmed stays inside the link window. Wi-Fi and door code only from the day before check-in through check-out day. Otherwise 404 or "shown from …" |
+| Add-on catalogue: create, edit, archive | Yes | No (read only) | No | No | No |
+| Add-on catalogue: read | Yes | Yes | No | No | No |
+| Add-on purchase after booking (pay page) | Yes | Yes | No | No | Yes, with the balance link. Before or on check-in day, confirmed, not demo, not read-only; 20 tries per link per hour |
+| Booking page: add-ons, house rules, source | No | No | No | No | Yes. Only add-ons offered on the booking page for that listing |
+| House rules accepted (time and text) | Yes (on the reservation) | Yes (on the reservation, assigned) | No | No | Written by the guest on the booking page, quote page or check-in form |
+| Quotes: list, create, cancel, send | Yes | Yes (assigned) | No | No | No |
+| Quotes: guest name, email and phone on a quote | Yes | Yes (assigned) | No | No | The guest sees the details on their own quote only |
+| Quote page `/#/quote/<token>` | No | No | No | No | Yes, with the token. Shows the offer, the rules and the price. No host keys. Pay: 20 tries per IP per hour |
+| Booking sources and "By source" report | Yes | Yes (assigned) | No | No | No |
+| Guest settings: review links, returning-guest percentage, abandoned follow-up | Yes | No | No | No | No |
+| Public review links | Set by owner | No | No | No | Shown to a guest only after a 4 or 5 star rating |
+| Personal returning-guest codes | View (discount codes) | View (discount codes) | No | No | Guest receives it in a message. Created by the system, once per booking |
+| Listing page address (`public_slug`) | Yes | Yes (assigned) | No | No | Shown in the URL of the public page |
+| Public listing pages `/stay/<host>[/<listing>]`, sitemap, robots | — | — | — | — | Yes, no login. Shows name, from-price (lowest of nightly, weekend and holiday), max guests, city and province, photos, house rules, cancellation policy. Never the street address, guest data or other bookings |
+| Abandoned-booking follow-up email | Set by owner | No | No | No | Sent by the system to the guest's email, once per unfinished checkout |
+
 ---
 
 ## 7. Known gaps and risks found while checking
@@ -782,3 +835,8 @@ The cleaner role is denied by default in code (`cleanerGuard`, D-48). Any row no
 - Paused maintenance schedules are resumed with `PATCH /maintenance-schedules/:id { active: true }` (the Resume button on the Maintenance page).
 - Monthly schedules step from the last due date, so a due date on the 31st can drift to the 28th (`src/lib/maintschedule.js`).
 - Section 6 (the older matrix) has no Cleaner column. Cleaners are denied by default by `cleanerGuard`, and section 6.1 covers the Phase 3 rows.
+
+- Phase 4: the `/stay` pages and `/sitemap.xml` share a limit of 300 requests per visitor per 15 minutes, and the sitemap is cached in memory for 5 minutes (D-65).
+- Phase 4: the listing's own check-in instructions and house rules have no Taglish text, so the guide shows English for those two sections.
+- Phase 4: the Wi-Fi password and the door code are stored as plain text in the inbox history once a message containing them is sent. This is a known trade-off (D-64), not a bug.
+- Phase 4: the discount code list shows the welcome codes in their own section, apart from the owner's codes (see D-64).

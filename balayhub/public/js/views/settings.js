@@ -79,6 +79,7 @@ export async function settingsView(el, { rerender, query = {} }) {
   if (!u.plan?.is_demo) sections.push(await notificationsCard(rerender).catch(() => null));
   if (u.role === 'owner' && u.plan && !u.plan.is_demo) sections.push(await planCard(u));
   if (u.role === 'owner' && u.plan && !u.plan.is_demo && u.business_type !== 'long_term') sections.push(await bookingCard(rerender));
+  if (u.role === 'owner' && u.plan && !u.plan.is_demo && u.business_type !== 'long_term') sections.push(await guestExperienceCard());
   if (u.role === 'owner' && u.plan && !u.plan.is_demo && u.business_type !== 'long_term') sections.push(await manualPaymentsCard(rerender));
   if (u.role === 'owner' && u.plan && !u.plan.is_demo) sections.push(dataCard(u, rerender));
 
@@ -409,4 +410,40 @@ async function bookingCard(rerender) {
       b.enabled && b.url && h('button', { class: 'btn btn--secondary btn--sm', onclick: copy }, 'Copy link'),
       h('button', { class: 'btn btn--ghost btn--sm', onclick: edit }, 'Page settings'),
       b.paymongo_connected && h('button', { class: 'btn btn--ghost btn--sm', onclick: connect }, 'Change key')));
+}
+
+// Guest experience: public review links, returning-guest discount, abandoned-booking follow-up.
+async function guestExperienceCard() {
+  let g;
+  try { g = await get('/workspace/guest-settings'); } catch { return null; }
+  const links = g.review_links || [];
+  const rows = Array.from({ length: 4 }, (_, i) => ({
+    label: h('input', { class: 'input', maxlength: 40, value: links[i]?.label || '', 'aria-label': `Review link ${i + 1} name`, placeholder: i ? 'Name' : 'Google' }),
+    url: h('input', { class: 'input', type: 'url', maxlength: 300, value: links[i]?.url || '', 'aria-label': `Review link ${i + 1} address`, placeholder: 'https://…' }),
+  }));
+  const pct = h('input', { class: 'input', type: 'number', min: 1, max: 50, inputmode: 'numeric', value: g.returning_guest_pct ?? '', id: 'gx-pct', 'aria-describedby': 'gx-pct-hint' });
+  const followup = h('input', { type: 'checkbox', checked: Boolean(g.abandoned_followup) });
+  const err = h('div', { class: 'error', role: 'alert' });
+  const save = async (e) => {
+    err.textContent = '';
+    const review_links = rows.map((r) => ({ label: r.label.value.trim(), url: r.url.value.trim() })).filter((r) => r.label || r.url);
+    if (review_links.some((r) => !r.label || !/^https:\/\//i.test(r.url))) { err.textContent = 'Each review link needs a name and an address starting with https://'; return; }
+    e.target.disabled = true;
+    try {
+      await patch('/workspace/guest-settings', { review_links, returning_guest_pct: pct.value.trim() === '' ? null : Number(pct.value), abandoned_followup: followup.checked });
+      toast('Guest experience saved.');
+    } catch (ex) { err.textContent = ex.fields ? Object.values(ex.fields).join(' ') : ex.message; }
+    e.target.disabled = false;
+  };
+  return h('div', { class: 'card' },
+    h('div', { class: 'card__head' }, h('h2', null, 'Guest experience')),
+    h('div', { class: 'form' },
+      h('fieldset', { class: 'hp-fieldset' }, h('legend', null, 'Public review links'),
+        h('p', { class: 'muted small' }, 'Guests who rate 4 or 5 stars are invited to share on these pages (up to 4). Lower ratings stay private.'),
+        rows.map((r) => h('div', { class: 'form-row form-row--2' }, r.label, r.url))),
+      h('div', { class: 'field' }, h('label', { for: 'gx-pct' }, 'Returning-guest discount (%)'), pct,
+        h('div', { class: 'hint', id: 'gx-pct-hint' }, 'From 1 to 50. Each guest who has checked out gets one personal code. Leave blank to turn off.')),
+      h('label', { class: 'check' }, followup, h('span', null, 'Send one follow-up email when someone starts a direct booking but does not pay')),
+      err,
+      h('div', null, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: save }, 'Save'))));
 }

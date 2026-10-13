@@ -28,9 +28,13 @@ async function exportOrganization(orgId) {
     'message_templates', 'automations', 'cleaning_tasks', 'ical_feeds', 'tenants', 'leases', 'payments', 'expenses',
     'maintenance_requests', 'files', 'billing_payments', 'invitations', 'audit_logs', 'direct_checkouts', 'balance_checkouts', 'seasons', 'unit_owners', 'guest_reviews', 'discount_codes', 'gate_passes', 'stay_deposits', 'support_tickets', 'booking_charges', 'booking_refunds', 'payment_proofs',
     'owner_statements', 'owner_payouts', 'owner_reserve_entries',
-    'cleaner_rates', 'cleaning_inspections', 'damage_reports', 'lost_found_items', 'supplies', 'supply_movements', 'maintenance_schedules']) {
+    'cleaner_rates', 'cleaning_inspections', 'damage_reports', 'lost_found_items', 'supplies', 'supply_movements', 'maintenance_schedules',
+    'listing_addons']) {
     out[t] = await byOrg(t);
   }
+  // Phase 4: the guidebook without the encrypted door code; quotes (public_token is stripped by SECRET_KEYS).
+  out.unit_guides = await q('SELECT unit_id, organization_id, arrival, arrival_tl, parking, parking_tl, building_notes, building_notes_tl, local_tips, local_tips_tl, emergency_contacts, emergency_contacts_tl, updated_at, updated_by FROM unit_guides WHERE organization_id = $1');
+  out.booking_quotes = await byOrg('booking_quotes');
   // Support conversation as the customer sees it: internal staff notes are left
   // out, and BalayHub staff are not identified (the app shows "BalayHub Support").
   const tickets = 'SELECT ticket_id FROM support_tickets WHERE organization_id = $1';
@@ -46,6 +50,7 @@ async function exportOrganization(orgId) {
 // Tables purgeOrganization() clears. test/account.test.js fails if a new table
 // is added to the schema without being listed here.
 const PURGED_TABLES = [
+  'unit_guides', 'listing_addons', 'booking_quotes',
   'owner_sessions', 'owner_login_tokens', 'owner_reserve_entries', 'owner_payouts', 'owner_statements',
   'supply_movements', 'supplies', 'cleaning_inspections', 'damage_reports', 'lost_found_items', 'cleaner_rates', 'maintenance_schedules',
   'support_events', 'support_messages', 'support_tickets', 'push_subscriptions', 'seasons', 'gate_passes', 'stay_deposits', 'payment_proofs', 'booking_refunds', 'booking_charges', 'guest_reviews', 'balance_checkouts', 'direct_checkouts', 'discount_codes', 'automation_runs', 'messages', 'conversations', 'guest_registrations', 'files', 'cleaning_tasks', 'booking_payments',
@@ -65,7 +70,9 @@ async function purgeOrganization(orgId) {
     await run('DELETE FROM push_subscriptions WHERE organization_id = $1');
     await run('DELETE FROM seasons WHERE organization_id = $1');
     await run('DELETE FROM balance_checkouts WHERE organization_id = $1');
-    await run('DELETE FROM direct_checkouts WHERE organization_id = $1');
+    await run('DELETE FROM direct_checkouts WHERE organization_id = $1'); // points at quotes and discount codes
+    await run('DELETE FROM booking_quotes WHERE organization_id = $1'); // points at bookings and units
+    await run('DELETE FROM unit_guides WHERE organization_id = $1'); // points at units
     await run('DELETE FROM discount_codes WHERE organization_id = $1');
     await run('DELETE FROM guest_reviews WHERE organization_id = $1');
     await run('DELETE FROM gate_passes WHERE organization_id = $1');
@@ -87,6 +94,7 @@ async function purgeOrganization(orgId) {
     await run('DELETE FROM payment_proofs WHERE organization_id = $1');
     await run('DELETE FROM booking_refunds WHERE organization_id = $1');
     await run('DELETE FROM booking_charges WHERE organization_id = $1');
+    await run('DELETE FROM listing_addons WHERE organization_id = $1'); // charges point at add-ons
     await run(`DELETE FROM automation_runs WHERE automation_id IN (SELECT automation_id FROM automations WHERE organization_id = $1)
                  OR booking_id IN (SELECT booking_id FROM bookings WHERE organization_id = $1)`);
     for (const t of ['messages', 'conversations', 'guest_registrations', 'files', 'cleaning_tasks', 'booking_payments', 'billing_payments', 'receipt_counters']) {

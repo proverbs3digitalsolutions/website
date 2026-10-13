@@ -37,6 +37,10 @@ import { helpView, helpNewView, helpTicketView, adminSupportView, adminSupportTi
 import { cleanerPayView, myPayView } from './views/cleanerpay.js';
 import { suppliesView } from './views/supplies.js';
 import { lostFoundView } from './views/lostfound.js';
+import { quoteView } from './views/quote.js';
+import { guideView } from './views/guide.js';
+import { addonsView } from './views/addons.js';
+import { quotesView, quoteDetailView } from './views/quotes.js';
 import { registerServiceWorker, forgetThisDevice } from './notifications.js';
 import { themeSwitch } from './themeswitch.js';
 import { assistantButton, resetAssistant } from './assistant.js';
@@ -64,6 +68,8 @@ const routes = [
   ['/book/:slug/done/:token', bookDoneView, OPEN],
   ['/book/:slug/:unitId', bookListingView, OPEN],
   ['/checkin/:token', guestCheckinView, OPEN],
+  ['/quote/:token', quoteView, OPEN],
+  ['/guide/:token', guideView, OPEN],
   // Owner portal: its own sign-in (D-39), rendered bare (no team sidebar).
   ['/owner', portal.ownerSignInView, OPEN],
   ['/owner/signin', portal.ownerLinkView, OPEN],
@@ -121,6 +127,9 @@ const routes = [
   ['/my-pay', myPayView, APP],
   ['/supplies', suppliesView, APP],
   ['/lost-found', lostFoundView, APP],
+  ['/addons', addonsView, APP],
+  ['/quotes', quotesView, APP],
+  ['/quotes/:id', quoteDetailView, APP],
 ];
 
 const NAV_SHORT = [
@@ -132,6 +141,8 @@ const NAV_SHORT = [
   ['/housekeeping', 'Housekeeping', 'sparkle'],
   ['/listings', 'Listings', 'building'],
   ['/guests', 'Guests', 'users'],
+  ['/quotes', 'Quotes', 'file'],
+  ['/addons', 'Add-ons', 'sparkle'],
   ['/owners', 'Unit owners', 'file'],
   ['/stay-reports', 'Reports', 'chart'],
   ['/pnl', 'Profit and loss', 'chart'],
@@ -163,6 +174,8 @@ const NAV_BOTH = [
   ['/stay-reports', 'Stay reports', 'chart'],
   ['/pnl', 'Profit and loss', 'chart'],
   ['/guests', 'Guests', 'users'],
+  ['/quotes', 'Quotes', 'file'],
+  ['/addons', 'Add-ons', 'sparkle'],
   ['/owners', 'Unit owners', 'file'],
   ['/maintenance', 'Maintenance', 'wrench'],
   ['/settings', 'Settings', 'settings'],
@@ -175,7 +188,7 @@ const isCleanerPath = (path) => CLEANER_PATHS.some((p) => path === p || path.sta
 const OPS_NAV = [['/cleaner-pay', 'Cleaner pay', 'wallet'], ['/supplies', 'Supplies', 'wallet'], ['/lost-found', 'Lost and found', 'file']];
 // Staff don't see guest conversations; the platform admin gets an Admin link.
 const navFor = () => state.user?.role === 'cleaner' ? CLEANER_NAV : [...({ short_term: NAV_SHORT, both: NAV_BOTH }[state.user?.business_type] || NAV_LONG)
-  .filter(([p]) => (p !== '/inbox' || state.user?.role !== 'staff') && (!['/launchpad', '/owners'].includes(p) || state.user?.role === 'owner') && (!['/stay-reports', '/pnl'].includes(p) || state.user?.role !== 'staff')),
+  .filter(([p]) => (p !== '/inbox' || state.user?.role !== 'staff') && (!['/launchpad', '/owners'].includes(p) || state.user?.role === 'owner') && (!['/stay-reports', '/pnl'].includes(p) || state.user?.role !== 'staff') && (!['/quotes', '/addons'].includes(p) || ['owner', 'manager'].includes(state.user?.role))),
 ['/help', 'Help & support', 'help'],
 ...(state.user?.is_platform_admin ? [['/admin', 'Admin', 'shield']] : [])].flatMap((n) => (n[0] === '/housekeeping' && state.user?.business_type !== 'long_term' && state.user?.role !== 'staff' ? [n, ...OPS_NAV] : [n]));
 

@@ -69,8 +69,8 @@ const uploadLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 30, key: (req) 
 async function loadByToken(token) {
   if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{20,40}$/.test(token)) throw notFound('This check-in link is not valid. Please ask your host for a new one.');
   const b = await one(
-    `SELECT b.booking_id, b.organization_id, b.check_in, b.check_out, b.num_guests, b.status, b.confirmation_code,
-            u.unit_name, u.max_guests, to_char(u.checkin_time, 'HH24:MI') AS checkin_time, to_char(u.checkout_time, 'HH24:MI') AS checkout_time,
+    `SELECT b.booking_id, b.organization_id, b.check_in, b.check_out, b.num_guests, b.status, b.confirmation_code, b.rules_accepted_at,
+            u.unit_name, u.max_guests, u.house_rules, to_char(u.checkin_time, 'HH24:MI') AS checkin_time, to_char(u.checkout_time, 'HH24:MI') AS checkout_time,
             p.property_name, p.city, o.name AS workspace_name, o.is_demo, o.guest_language,
             COALESCE(g.full_name, b.guest_label) AS guest_name,
             (b.status <> 'confirmed' OR b.check_out < ${TODAY}) AS closed
@@ -92,6 +92,7 @@ publicRouter.get('/public/checkin/:token', ah(async (req, res) => {
       guests_allowed: b.max_guests || 20, num_guests: b.num_guests, code: b.confirmation_code,
       guest_first_name: String(b.guest_name || '').split(' ')[0] || null, closed: b.closed,
       id_retention_days: config.guestIdRetentionDays, guest_language: b.guest_language,
+      house_rules: b.house_rules || null, rules_accepted_at: b.rules_accepted_at,
     },
     // The guest's own answers so they can review and edit them (ID photos are never sent back).
     registration: r && {
@@ -113,8 +114,15 @@ publicRouter.post('/public/checkin/:token', express.json({ limit: '50kb' }), ah(
     vehicle_plate: { type: 'string', max: 20, label: 'Plate number' },
     notes: { type: 'text', max: 1000, label: 'Notes' },
     consent: { type: 'bool', label: 'Consent' },
+    accept_rules: { type: 'bool', label: 'House rules' },
   });
   if (!body.consent) throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { consent: 'Please agree so your host can register you with the building.' } });
+  // The guest agrees to the house rules once; the time and the exact text are kept (D-58).
+  const houseRules = typeof b.house_rules === 'string' && b.house_rules.trim() ? b.house_rules : null;
+  const acceptsRules = Boolean(houseRules) && !b.rules_accepted_at;
+  if (acceptsRules && !body.accept_rules) {
+    throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { accept_rules: 'Please agree to the house rules.' } });
+  }
   const raw = Array.isArray(req.body.guests) ? req.body.guests : [];
   const guests = raw.map((g) => (typeof g === 'string' ? g.trim().slice(0, 120) : '')).filter(Boolean);
   if (guests.length + 1 > (b.max_guests || 20)) {
@@ -129,6 +137,10 @@ publicRouter.post('/public/checkin/:token', express.json({ limit: '50kb' }), ah(
        notes = $9, consent_at = now(), updated_at = now()
      RETURNING registration_id`,
     [b.organization_id, b.booking_id, body.lead_name, body.phone, body.email, JSON.stringify(guests), body.arrival_time, plate, body.notes]);
+  if (acceptsRules) {
+    await query('UPDATE bookings SET rules_accepted_at = now(), rules_text = $2 WHERE booking_id = $1 AND rules_accepted_at IS NULL',
+      [b.booking_id, houseRules]);
+  }
   // Let the host know in the guest's inbox thread.
   if (!existed) {
     const { notify, propertyOfBooking } = require('../lib/push');

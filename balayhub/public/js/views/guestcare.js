@@ -90,7 +90,20 @@ export async function discountCodesView(el, { rerender, query = {} }) {
   // Why a code can't be used right now (or nothing if it can).
   const stateBadge = (c) => (!c.active ? badge('voided', 'Off') : c.expired ? badge('overdue', 'Expired') : c.used_up ? badge('partial', 'Used up')
     : c.scheduled ? badge('unpaid', `Starts ${fmtDate(c.valid_from)}`) : null);
+  const codeTable = (codes) => h('div', { class: 'table-wrap' }, h('table', { class: 'table' },
+    h('thead', null, h('tr', null, ['Code', 'Discount', 'Rules', 'Used', ''].map((t) => h('th', null, t)))),
+    h('tbody', null, codes.map((c) => h('tr', null,
+      h('td', null, h('strong', null, c.code), c.description && h('div', { class: 'muted small' }, c.description), stateBadge(c)),
+      h('td', null, c.percent_off ? `${c.percent_off}% off` : `${peso(c.amount_off)} off`),
+      h('td', { class: 'small' }, [
+        c.min_nights > 1 ? `${c.min_nights}+ nights` : null,
+        c.returning_only ? 'returning guests' : null,
+        c.valid_from || c.valid_until ? `${c.valid_from ? fmtDate(c.valid_from) : '…'} – ${c.valid_until ? fmtDate(c.valid_until) : '…'}` : null,
+      ].filter(Boolean).join(' · ') || 'Anyone'),
+      h('td', null, `${c.uses}${c.max_uses ? ` / ${c.max_uses}` : ''}`, Number(c.total_discounted) > 0 && h('div', { class: 'muted small' }, `${peso(c.total_discounted)} given`)),
+      h('td', null, canManage && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => toggle(c) }, c.active ? 'Turn off' : 'Turn on')))))));
   const listBox = h('div', { class: 'card' });
+  const welcomeBox = h('div');
 
   async function load() {
     history.replaceState(null, '', `#/discount-codes${qs(changed(filters, defaults))}`);
@@ -104,18 +117,7 @@ export async function discountCodesView(el, { rerender, query = {} }) {
     }
     listBox.replaceChildren(
       filtered ? h('p', { class: 'muted small' }, `Showing ${codes.length} of ${total} code${total === 1 ? '' : 's'}`) : '',
-      h('div', { class: 'table-wrap' }, h('table', { class: 'table' },
-        h('thead', null, h('tr', null, ['Code', 'Discount', 'Rules', 'Used', ''].map((t) => h('th', null, t)))),
-        h('tbody', null, codes.map((c) => h('tr', null,
-          h('td', null, h('strong', null, c.code), c.description && h('div', { class: 'muted small' }, c.description), stateBadge(c)),
-          h('td', null, c.percent_off ? `${c.percent_off}% off` : `${peso(c.amount_off)} off`),
-          h('td', { class: 'small' }, [
-            c.min_nights > 1 ? `${c.min_nights}+ nights` : null,
-            c.returning_only ? 'returning guests' : null,
-            c.valid_from || c.valid_until ? `${c.valid_from ? fmtDate(c.valid_from) : '…'} – ${c.valid_until ? fmtDate(c.valid_until) : '…'}` : null,
-          ].filter(Boolean).join(' · ') || 'Anyone'),
-          h('td', null, `${c.uses}${c.max_uses ? ` / ${c.max_uses}` : ''}`, Number(c.total_discounted) > 0 && h('div', { class: 'muted small' }, `${peso(c.total_discounted)} given`)),
-          h('td', null, canManage && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => toggle(c) }, c.active ? 'Turn off' : 'Turn on'))))))));
+      codeTable(codes));
   }
   const bar = filterBar({
     key: 'discount-codes', values: filters, defaults, onChange: load,
@@ -129,10 +131,20 @@ export async function discountCodesView(el, { rerender, query = {} }) {
       { name: 'sort', label: 'Sort by', all: 'Active first, newest', options: [['newest', 'Newest first'], ['code', 'Code (A–Z)'], ['most_used', 'Most used'], ['ending', 'Ending soonest']] },
     ],
   });
-  await load();
+  // Automatic welcome codes (issued to one returning guest each) sit apart from the host's own codes.
+  const loadWelcome = async () => {
+    try {
+      const { codes } = await get('/discount-codes?issued=yes');
+      welcomeBox.replaceChildren(codes.length ? h('details', { class: 'card' },
+        h('summary', null, `Automatic welcome codes (${codes.length})`),
+        h('p', { class: 'muted small' }, 'Made for returning guests by BalayHub. They do not count toward your limit.'),
+        codeTable(codes)) : '');
+    } catch { welcomeBox.replaceChildren(); }
+  };
+  await Promise.all([load(), loadWelcome()]);
   el.replaceChildren(
     pageHead({ title: 'Discount codes', sub: 'For your direct booking page', back: { href: '#/guests', label: 'Guests' },
       actions: canManage && h('button', { class: 'btn btn--primary', type: 'button', onclick: add }, '+ New code') }),
     !canManage && h('p', { class: 'muted small' }, 'Only the workspace owner can change these.'),
-    bar, listBox);
+    bar, listBox, welcomeBox);
 }

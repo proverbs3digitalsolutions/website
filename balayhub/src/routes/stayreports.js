@@ -148,9 +148,29 @@ async function performance(user, { from, to }, f = {}) {
   };
 }
 
+// Direct bookings by how the guest found the listing (D-61). Same period and scope rules as
+// the stays count: check-in date inside the period, confirmed stays only. A channel filter
+// other than direct leaves nothing to show.
+async function bySource(user, { from, to }, f = {}) {
+  if (f.channel && f.channel !== 'direct') return [];
+  const params = [];
+  const where = [propertyScope(user, params)];
+  params.push(from); where.push(`b.check_in >= $${params.length}`);
+  params.push(to); where.push(`b.check_in < $${params.length}`);
+  if (f.property_id) { params.push(f.property_id); where.push(`p.property_id = $${params.length}`); }
+  if (f.unit_id) { params.push(f.unit_id); where.push(`u.unit_id = $${params.length}`); }
+  const { rows } = await query(
+    `SELECT b.source, COUNT(*)::int AS stays, SUM(b.check_out - b.check_in)::int AS nights, SUM(b.total_amount) AS revenue
+       FROM bookings b JOIN units u ON u.unit_id = b.unit_id JOIN properties p ON p.property_id = u.property_id
+      WHERE ${where.join(' AND ')} AND b.kind = 'reservation' AND b.channel = 'direct' AND b.status = 'confirmed'
+      GROUP BY b.source ORDER BY SUM(b.total_amount) DESC, b.source NULLS LAST`, params);
+  return rows.map((r) => ({ source: r.source, stays: r.stays, nights: r.nights, revenue: m2(cents(r.revenue)) }));
+}
+
 router.get('/stay-reports', managers, ah(async (req, res) => {
   const p = period(req.query);
-  res.json({ period: p.label, ...(await performance(req.user, p, reportFilters(req.query))) });
+  const f = reportFilters(req.query);
+  res.json({ period: p.label, ...(await performance(req.user, p, f)), by_source: await bySource(req.user, p, f) });
 }));
 
 // Yearly income summary: per month, earned revenue, money received, channel fees, expenses.

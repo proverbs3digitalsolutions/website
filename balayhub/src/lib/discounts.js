@@ -41,6 +41,13 @@ async function applyCode(orgId, rawCode, { nights, accommodation, email, name },
       [orgId, email, today, name]) : { rows: [] };
     if (!past) return { error: 'This code is for returning guests. Use the same name and email as your previous stay.' };
   }
+  // A personal code is for the guest it was issued to. Checked at checkout (strict) only; the quote preview has no email yet.
+  if (d.issued_to_booking_id && strict) {
+    const { rows: [mine] } = email ? await run.query(
+      `SELECT 1 FROM bookings b JOIN guests g ON g.guest_id = b.guest_id WHERE b.booking_id = $1 AND lower(g.email) = lower($2)`,
+      [d.issued_to_booking_id, email]) : { rows: [] };
+    if (!mine) return invalid;
+  }
   const acc = Math.round(Number(accommodation) * 100);
   const off = d.percent_off ? Math.round((acc * d.percent_off) / 100) : Math.min(acc, Math.round(Number(d.amount_off) * 100));
   return { code: d.code, code_id: d.code_id, returning_only: d.returning_only, label: d.percent_off ? `${d.percent_off}% off` : `₱${Number(d.amount_off).toLocaleString('en-PH')} off`, discount: off / 100 };

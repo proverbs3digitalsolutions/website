@@ -34,6 +34,7 @@ function nightsNote(q) {
 }
 
 export const CHANNEL_LABEL = { direct: 'Direct', airbnb: 'Airbnb', booking: 'Booking.com', agoda: 'Agoda', vrbo: 'Vrbo', expedia: 'Expedia', tripcom: 'Trip.com', other: 'Other' };
+export const SOURCE_LABEL = { facebook: 'Facebook', instagram: 'Instagram', messenger: 'Messenger', viber: 'Viber', tiktok: 'TikTok', google: 'Google', whatsapp: 'WhatsApp', email: 'Email', referral: 'Referral', quote: 'Quote', other: 'Other' };
 const METHOD_LABEL = { cash: 'Cash', bank_transfer: 'Bank transfer', gcash: 'GCash', maya: 'Maya', card: 'Card', channel_payout: 'Channel payout', other: 'Other' };
 
 export function addDays(dateStr, n) {
@@ -373,6 +374,12 @@ export async function reservationDetailView(el, { params, rerender }) {
     } catch (err) { toast(err.message, 'error'); }
   };
 
+  const copyGuideLink = async () => {
+    try {
+      const { url } = await post(`/reservations/${r.booking_id}/guide-link`);
+      try { await navigator.clipboard.writeText(url); toast('Guidebook link copied. Send it to the guest.'); } catch { window.prompt('Copy the guidebook link:', url); }
+    } catch (err) { toast(err.message, 'error'); }
+  };
   const emailReceipt = async (p) => {
     try { await post(`/booking-payments/${p.payment_id}/send-receipt`); toast(`Receipt emailed to ${r.guest_email}.`); rerender(); } catch (err) { toast(err.message, 'error'); }
   };
@@ -400,6 +407,9 @@ export async function reservationDetailView(el, { params, rerender }) {
             h('dt', null, 'Check-in'), h('dd', null, fmtDate(r.check_in), r.checked_in_at ? h('div', { class: 'muted small' }, `Checked in ${fmtDateTime(r.checked_in_at)}`) : null),
             h('dt', null, 'Check-out'), h('dd', null, fmtDate(r.check_out), r.checked_out_at ? h('div', { class: 'muted small' }, `Checked out ${fmtDateTime(r.checked_out_at)}`) : null),
             h('dt', null, 'Guests'), h('dd', null, r.num_guests ? String(r.num_guests) : '—'),
+            r.source && [h('dt', null, 'Source'), h('dd', null, SOURCE_LABEL[r.source] || r.source)],
+            canManage && r.rules_accepted_at && [h('dt', null, 'House rules'), h('dd', null, `House rules accepted on ${fmtDateTime(r.rules_accepted_at)}`,
+              r.rules_text && h('details', { class: 'hp-rules' }, h('summary', null, 'Show the accepted text'), h('p', null, r.rules_text)))],
             r.notes && [h('dt', null, 'Notes'), h('dd', { style: { whiteSpace: 'pre-wrap' } }, r.notes)])),
         h('div', { class: 'card' },
           h('div', { class: 'card__head' }, h('h2', null, 'Guest'), r.guest_id && h('a', { href: `#/guests/${r.guest_id}` }, 'Guest profile')),
@@ -409,6 +419,7 @@ export async function reservationDetailView(el, { params, rerender }) {
             !r.limited && [h('dt', null, 'Mobile'), h('dd', null, r.guest_phone ? h('a', { href: `tel:${r.guest_phone.replace(/[^\d+]/g, '')}` }, r.guest_phone) : '—'),
               h('dt', null, 'Email'), h('dd', null, r.guest_email ? h('a', { href: `mailto:${r.guest_email}` }, r.guest_email) : '—')]),
           canManage && confirmed && r.guest_email && h('button', { class: 'btn btn--secondary btn--sm', style: { marginTop: '12px' }, onclick: emailConfirmation }, 'Email booking confirmation'),
+          canManage && confirmed && h('button', { class: 'btn btn--secondary btn--sm', style: { marginTop: '12px' }, onclick: copyGuideLink }, 'Copy guidebook link'),
           r.ical_feed_id && h('p', { class: 'muted small', style: { marginTop: '10px' } }, `Imported from ${CHANNEL_LABEL[r.channel]}. Guest details stay on ${CHANNEL_LABEL[r.channel]}.`)),
         r.review && h('div', { class: 'card' },
           h('div', { class: 'card__head' }, h('h2', null, 'Guest review'), h('span', { class: 'muted small' }, 'Private')),

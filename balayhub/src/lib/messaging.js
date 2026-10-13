@@ -9,8 +9,15 @@ const config = require('../config');
 const { pool, one, query, tx } = require('../db');
 const { sendMail, mailEnabled } = require('./mailer');
 const { describePolicy } = require('./policies');
+const secretbox = require('./secretbox');
+const guidebook = require('./guidebook');
 
 // ---------------------------------------------------------------- default content
+// The guidebook line in the check-in templates. New workspaces get it from the seed text;
+// existing workspaces keep their own copy.
+const GUIDEBOOK_LINE_EN = 'Your digital guidebook (directions, parking and house info): {{guidebook_link}}\n\n';
+const GUIDEBOOK_LINE_TL = 'Ang digital guidebook mo (direksyon, parking at iba pang info): {{guidebook_link}}\n\n';
+
 const DEFAULT_TEMPLATES = [
   {
     system_key: 'confirmation', name: 'Booking confirmation', subject: 'Your stay at {{listing_name}} is confirmed ({{confirmation_code}})',
@@ -46,7 +53,7 @@ Address: {{property_address}}
 
 Wi-Fi: {{wifi_name}} / Password: {{wifi_password}}
 
-House rules:
+${GUIDEBOOK_LINE_EN}House rules:
 {{house_rules}}
 
 If you haven't yet, please complete the guest registration form: {{checkin_link}}
@@ -119,7 +126,7 @@ Address: {{property_address}}
 
 Wi-Fi: {{wifi_name}} / Password: {{wifi_password}}
 
-House rules:
+${GUIDEBOOK_LINE_TL}House rules:
 {{house_rules}}
 
 Kung hindi mo pa nagagawa, paki-fill up ang guest registration form: {{checkin_link}}
@@ -165,7 +172,13 @@ async function setTemplateLanguage(organizationId, language, userId) {
   const all = [...DEFAULT_TEMPLATES, ...Object.values(TAGLISH_TEMPLATES)];
   // Also the older thank-you text that migration 018 appended {{review_link}} to.
   const oldThanks = DEFAULT_TEMPLATES.find((t) => t.system_key === 'thanks').body.replace('\n\n{{review_link}}', '');
-  const stockBodies = new Set([...all.map((t) => t.body), `${oldThanks}\n\n{{review_link}}`]);
+  // The check-in text from before the guidebook line was added. Existing workspaces keep it,
+  // so it still counts as built-in and switching language doesn't make a "my version" copy.
+  const oldCheckin = [
+    DEFAULT_TEMPLATES.find((t) => t.system_key === 'checkin').body.replace(GUIDEBOOK_LINE_EN, ''),
+    TAGLISH_TEMPLATES.checkin.body.replace(GUIDEBOOK_LINE_TL, ''),
+  ];
+  const stockBodies = new Set([...all.map((t) => t.body), `${oldThanks}\n\n{{review_link}}`, ...oldCheckin]);
   const stockSubjects = new Set(all.map((t) => t.subject));
   let copied = 0;
   await tx(async (db) => {
@@ -227,6 +240,8 @@ const fmtTime = (t) => {
 };
 
 async function bookingContext(bookingId) {
+  // The guidebook link, for confirmed stays only, created on first use.
+  await guidebook.ensureGuideToken(bookingId);
   // Every reservation gets a private check-in form link the first time it's needed.
   await query(`UPDATE bookings SET checkin_token = $2 WHERE booking_id = $1 AND checkin_token IS NULL AND kind = 'reservation'`,
     [bookingId, crypto.randomBytes(18).toString('base64url')]);
@@ -240,7 +255,7 @@ async function bookingContext(bookingId) {
     [bookingId, crypto.randomBytes(18).toString('base64url')]);
   return one(
     `SELECT b.*, u.unit_name, u.checkin_time, u.checkout_time, u.wifi_name, u.wifi_password, u.checkin_instructions, u.house_rules,
-            u.cancellation_policy, u.cancellation_policy_text,
+            u.cancellation_policy, u.cancellation_policy_text, ug.door_code_enc,
             p.property_name, p.address, p.city, p.province, p.organization_id AS org_id,
             g.full_name AS guest_name, g.email AS guest_email,
             o.name AS workspace_name, o.paymongo_key_hint, o.manual_payments_enabled, o.guest_language, o.plan, o.trial_ends_at, o.paid_until, o.is_demo, o.deletion_scheduled_at,
@@ -252,6 +267,7 @@ async function bookingContext(bookingId) {
        JOIN properties p ON p.property_id = u.property_id
        JOIN organizations o ON o.organization_id = b.organization_id
        LEFT JOIN guests g ON g.guest_id = b.guest_id
+       LEFT JOIN unit_guides ug ON ug.unit_id = u.unit_id
       WHERE b.booking_id = $1`, [bookingId]);
 }
 
@@ -271,8 +287,23 @@ function cancellationPolicy(ctx) {
   return p ? ((ctx.guest_language === 'tl' && p.tl) || p.en) : '';
 }
 
+// {{returning_guest_code}} is created on first use, so it is looked up only when a template uses it.
+// lib/returning may not exist yet; then the variable is empty.
+async function returningGuestCode(bookingId, ...texts) {
+  if (!texts.some((t) => /\{\{\s*returning_guest_code\s*\}\}/.test(String(t || '')))) return '';
+  let returning;
+  try { returning = require('./returning'); } catch (err) {
+    if (err.code === 'MODULE_NOT_FOUND') return '';
+    throw err;
+  }
+  return (await returning.codeFor(bookingId)) || '';
+}
+
 function variables(ctx, sender) {
   const guest = ctx.guest_name || ctx.guest_label || 'Guest';
+  // The Wi-Fi password and door code show only from the day before check-in through check-out day.
+  const secretsShown = guidebook.secretsOpen(ctx);
+  const sharedLater = ctx.guest_language === 'tl' ? '(ibabahagi isang araw bago ang check-in)' : '(shared the day before check-in)';
   return {
     guest_name: guest,
     guest_first_name: guest.split(' ')[0],
@@ -289,7 +320,10 @@ function variables(ctx, sender) {
     balance: fmtPeso(Math.max(0, Number(ctx.balance))),
     confirmation_code: ctx.confirmation_code,
     wifi_name: ctx.wifi_name || '(ask your host)',
-    wifi_password: ctx.wifi_password || '(ask your host)',
+    wifi_password: !ctx.wifi_password ? '(ask your host)' : (secretsShown ? ctx.wifi_password : sharedLater),
+    door_code: !ctx.door_code_enc ? '(ask your host)' : (secretsShown ? (guidebook.doorCodeOf(ctx.door_code_enc) || '(ask your host)') : sharedLater),
+    guidebook_link: ctx.guide_token && ctx.status === 'confirmed' ? guidebook.guideLink(ctx.guide_token) : '',
+    returning_guest_code: ctx.returning_guest_code || '',
     checkin_instructions: ctx.checkin_instructions || '',
     house_rules: ctx.house_rules || '',
     checkin_link: ctx.checkin_token ? `${config.appUrl}/#/checkin/${ctx.checkin_token}` : '',
@@ -404,6 +438,7 @@ async function renderTemplateFor(templateId, bookingId, sender) {
   const t = await one('SELECT * FROM message_templates WHERE template_id = $1', [templateId]);
   const ctx = await bookingContext(bookingId);
   if (!t || !ctx || t.organization_id !== ctx.organization_id) return null;
+  ctx.returning_guest_code = await returningGuestCode(bookingId, t.subject, t.body);
   const vars = variables(ctx, sender);
   return { subject: render(t.subject, vars), body: render(t.body, vars), template: t };
 }
@@ -479,6 +514,7 @@ async function runAutomations() {
         await query('UPDATE automation_runs SET skipped = $3 WHERE automation_id = $1 AND booking_id = $2', [a.automation_id, b.booking_id, 'fully paid']);
         continue;
       }
+      ctx.returning_guest_code = await returningGuestCode(b.booking_id, a.subject, a.body);
       const vars = variables(ctx);
       const res = await queueMessage({
         bookingId: b.booking_id, subject: render(a.subject, vars), body: render(a.body, vars), kind: 'automated', automationId: a.automation_id,

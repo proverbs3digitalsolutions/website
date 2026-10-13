@@ -7,7 +7,7 @@ import { h, peso, pageHead, todayManila, emptyState, toast } from '../ui.js';
 import { navigate } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 import { depositsPanel } from './deposits.js';
-import { CHANNEL_LABEL } from './reservations.js';
+import { CHANNEL_LABEL, SOURCE_LABEL } from './reservations.js';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const CATEGORY = { repairs: 'Repairs', utilities: 'Utilities', taxes: 'Taxes', insurance: 'Insurance', association_dues: 'Association dues', supplies: 'Supplies', salaries: 'Salaries', cleaning: 'Cleaning', other: 'Other' };
@@ -164,6 +164,11 @@ export async function stayReportsView(el, { query = {} }) {
             : r.expenses_by_category.length ? h('dl', { class: 'dl' }, r.expenses_by_category.map((e) => [h('dt', null, CATEGORY[e.category] || e.category), h('dd', null, peso(e.amount))]))
               : h('p', { class: 'muted' }, 'No expenses recorded for this period.'),
           h('p', { class: 'small' }, h('a', { href: '#/rent?tab=expenses' }, 'Record an expense')))),
+      Array.isArray(r.by_source) && r.by_source.length > 0 && h('div', { class: 'card' }, h('h2', null, 'Direct bookings by source'),
+        h('div', { class: 'table-wrap' }, h('table', { class: 'table table--compact' },
+          h('thead', null, h('tr', null, ['Source', 'Stays', 'Nights', 'Revenue'].map((x, i) => h('th', { class: i ? 'num' : null }, x)))),
+          h('tbody', null, r.by_source.map((s) => h('tr', null, h('td', null, s.source ? (SOURCE_LABEL[s.source] || s.source) : 'No source'),
+            h('td', { class: 'num' }, String(s.stays)), h('td', { class: 'num' }, String(s.nights)), h('td', { class: 'num' }, peso(s.revenue)))))))),
       h('div', { class: 'card card--flush' },
         h('div', { class: 'card__head', style: { padding: '16px 16px 0' } }, h('h2', null, 'By listing')),
         h('div', { class: 'table-wrap' }, h('table', { class: 'table table--compact' },

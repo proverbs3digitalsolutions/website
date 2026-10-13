@@ -50,6 +50,8 @@ function createApp() {
   api.use(require('./routes/balancepay').publicRouter);
   api.use(require('./routes/proofs').publicRouter);
   api.use(require('./routes/ownerportal').publicRouter);
+  api.use(require('./routes/guidebook').publicRouter);
+  api.use(require('./routes/quotes').publicRouter);
   api.use(require('./routes/guestcare').publicRouter);
   api.use(require('./routes/gatepass').publicRouter);
   api.use(require('./routes/support').adminRouter);
@@ -90,6 +92,9 @@ function createApp() {
   api.use(require('./routes/damage'));
   api.use(require('./routes/lostfound'));
   api.use(require('./routes/supplies'));
+  api.use(require('./routes/guidebook').router);
+  api.use(require('./routes/addons'));
+  api.use(require('./routes/quotes').router);
   api.use((req, res, next) => next(new HttpError(404, 'Not found.', { code: 'NOT_FOUND' })));
   // PayMongo webhook: raw body (for its signature), no session or CSRF header.
   app.post('/api/public/paymongo/webhook', express.raw({ type: '*/*', limit: '200kb' }),
@@ -97,6 +102,7 @@ function createApp() {
   app.use('/api', api);
   // Private-by-token calendar feeds that Airbnb, Booking.com and Agoda poll.
   app.use(require('./routes/stays').publicRouter);
+  app.use(require('./routes/seo'));
 
   // App code (html/js/css) is revalidated on every load (cheap 304s via ETag) so
   // updates reach users immediately; fonts and images may be cached for a day.

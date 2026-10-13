@@ -2,11 +2,11 @@
 
 import { get, post, patch, qs, api } from '../api.js';
 import {
-  h, icon, peso, fmtDate, fmtDateTime, badge, field, formModal, openModal, confirmDialog, emptyState, toast, options, todayManila,
+  h, icon, peso, fmtDate, fmtDateTime, badge, field, formModal, makeForm, openModal, confirmDialog, emptyState, toast, options, todayManila,
 } from '../ui.js';
 import { state } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
-import { CHANNEL_LABEL, addDays } from './reservations.js';
+import { CHANNEL_LABEL, SOURCE_LABEL, addDays } from './reservations.js';
 
 const UNIT_TYPES = ['studio', 'apartment', 'room', 'house', 'other'];
 const PROPERTY_TYPES = ['condominium', 'apartment', 'house', 'boarding_house', 'other'];
@@ -204,6 +204,88 @@ async function channelsModal(listing, onChange) {
   });
 }
 
+// Guest pages: the guidebook (English and Taglish), the public page address and share links.
+const GUIDE_FIELDS = [
+  ['arrival', 'Arrival and directions'], ['parking', 'Parking'], ['building_notes', 'Building and gate notes'],
+  ['local_tips', 'Local tips'], ['emergency_contacts', 'Emergency contacts'],
+];
+
+async function guestPagesModal(listing) {
+  let guide; let unit; let booking = null;
+  try {
+    const [g, p] = await Promise.all([get(`/units/${listing.unit_id}/guide`), get(`/properties/${listing.property_id}`)]);
+    guide = g.guide;
+    unit = p.units.find((x) => x.unit_id === listing.unit_id) || {};
+    booking = await get('/direct-booking').catch(() => null);
+  } catch (err) { toast(err.message, 'error'); return; }
+
+  // ---- guidebook
+  let lang = 'en';
+  const langBox = { en: h('div', { class: 'stack' }), tl: h('div', { class: 'stack' }) };
+  for (const [key, text] of GUIDE_FIELDS) {
+    langBox.en.append(field({ name: key, label: text, type: 'textarea', value: guide[key], maxlength: 2000 }));
+    langBox.tl.append(field({ name: `${key}_tl`, label: `${text} (Taglish)`, type: 'textarea', value: guide[`${key}_tl`], maxlength: 2000 }));
+  }
+  const showBtn = h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'aria-pressed': 'false' }, 'Show');
+  const codeInput = h('input', { class: 'input', type: 'password', name: 'door_code', maxlength: 40, autocomplete: 'off', value: guide.door_code || '', 'aria-label': 'Door code' });
+  showBtn.addEventListener('click', () => {
+    const on = codeInput.type === 'password';
+    codeInput.type = on ? 'text' : 'password'; showBtn.textContent = on ? 'Hide' : 'Show'; showBtn.setAttribute('aria-pressed', String(on));
+  });
+  const langTabs = h('div', { class: 'tabs tabs--compact', role: 'tablist' });
+  const setLang = (v) => {
+    lang = v; langBox.en.hidden = v !== 'en'; langBox.tl.hidden = v !== 'tl';
+    langTabs.replaceChildren(...[['en', 'English'], ['tl', 'Taglish']].map(([k, t]) => h('button', { type: 'button', role: 'tab', 'aria-selected': String(lang === k), onclick: () => setLang(k) }, t)));
+  };
+  setLang('en');
+  const guideForm = makeForm({
+    submitText: 'Save guidebook',
+    fields: [
+      h('p', { class: 'muted small' }, 'Guests open this from a private link. The Taglish version is optional; empty parts show the English text. Wi-Fi and check-in instructions come from the listing details (Edit).'),
+      langTabs, langBox.en, langBox.tl,
+      h('div', { class: 'field' }, h('label', null, 'Door code'), h('div', { class: 'hp-secret' }, codeInput, showBtn),
+        h('div', { class: 'hint' }, 'Stored encrypted. Guests see it only from the day before check-in until check-out day. Empty means no code.')),
+    ],
+    onSubmit: async (d) => { await api('PUT', `/units/${listing.unit_id}/guide`, d); toast('Guidebook saved.'); },
+  });
+
+  // ---- page address and share links
+  const slugForm = makeForm({
+    submitText: 'Save address',
+    fields: [field({ name: 'public_slug', label: 'Public page address', value: unit.public_slug, maxlength: 60, hint: 'Lowercase letters, numbers and dashes, 3 to 60. Used in the web address of this listing\'s page.' })],
+    onSubmit: async (d) => { const r = await patch(`/units/${listing.unit_id}`, { public_slug: d.public_slug }); unit.public_slug = (r.unit || d).public_slug || d.public_slug; toast('Page address saved.'); drawLinks(); },
+  });
+  const linksBox = h('div', { class: 'stack' });
+  const src = h('select', { class: 'input', 'aria-label': 'Where will you share it?' }, Object.entries(SOURCE_LABEL).filter(([k]) => k !== 'quote').map(([k, t]) => h('option', { value: k }, t)));
+  const shareUrl = () => `${booking.url.replace(/#.*$/, '')}#/book/${booking.slug}/${listing.unit_id}?src=${src.value}`;
+  const out = h('input', { class: 'input', readonly: true, 'aria-label': 'Share link' });
+  const copy = async (text) => { try { await navigator.clipboard.writeText(text); toast('Link copied.'); } catch { window.prompt('Copy the link:', text); } };
+  function drawLinks() {
+    const live = booking?.slug && booking.enabled && listing.bookable_online;
+    const pageUrl = booking?.slug && unit.public_slug ? `${location.origin}/stay/${booking.slug}/${unit.public_slug}` : null;
+    out.value = booking?.url ? shareUrl() : '';
+    linksBox.replaceChildren(
+      pageUrl ? h('p', { class: 'small' }, h('a', { class: 'btn btn--secondary btn--sm', href: pageUrl, target: '_blank', rel: 'noopener' }, 'View page'), ' ', h('span', { class: 'muted hp-wrap' }, pageUrl))
+        : h('p', { class: 'muted small' }, 'Set your booking page address in Settings and a page address here to get a public page.'),
+      !live && h('div', { class: 'alert alert--warn' }, 'This listing is not live on your booking page yet. Turn on your booking page in Settings and tick "Show this listing on my booking page" in Edit.'),
+      booking?.url ? h('div', { class: 'field' }, h('label', null, 'Share link for'), src,
+        h('div', { class: 'hp-copy' }, out, h('button', { class: 'btn btn--primary btn--sm', type: 'button', onclick: () => copy(out.value) }, 'Copy')),
+        h('div', { class: 'hint' }, 'Bookings made from this link are tagged with where it was shared, so Reports can show what works.'))
+        : h('p', { class: 'muted small' }, 'Set up your booking page in Settings to get share links.'));
+  }
+  src.addEventListener('change', () => { if (booking?.url) out.value = shareUrl(); });
+  drawLinks();
+
+  const panels = { guide: guideForm, page: h('div', { class: 'stack' }, slugForm, h('hr', { class: 'divider' }), linksBox) };
+  const mainTabs = h('div', { class: 'tabs', role: 'tablist' });
+  const setTab = (k) => {
+    for (const [name, el] of Object.entries(panels)) el.hidden = name !== k;
+    mainTabs.replaceChildren(...[['guide', 'Guidebook'], ['page', 'Page and share links']].map(([n, t]) => h('button', { type: 'button', role: 'tab', 'aria-selected': String(n === k), onclick: () => setTab(n) }, t)));
+  };
+  setTab('guide');
+  openModal({ title: `Guest pages · ${listing.unit_name}`, wide: true, body: h('div', { class: 'stack' }, mainTabs, panels.guide, panels.page) });
+}
+
 // Listings are few (1–10 for most hosts), so they're filtered here in the browser.
 const LISTING_SORTS = {
   rate: (a, b) => Number(b.nightly_rate || 0) - Number(a.nightly_rate || 0),
@@ -280,6 +362,7 @@ export async function listingsView(el, { query }) {
         } }, l.cleaning_status === 'dirty' ? 'Mark clean' : 'Mark dirty'),
         canManage && h('button', { class: 'btn btn--secondary btn--sm', onclick: () => channelsModal(l, load) }, 'Channels'),
         canManage && h('button', { class: 'btn btn--secondary btn--sm', onclick: () => photosModal(l) }, 'Photos'),
+        canManage && h('button', { class: 'btn btn--secondary btn--sm', onclick: () => guestPagesModal(l) }, 'Guest pages'),
         canManage && h('button', { class: 'btn btn--ghost btn--sm', onclick: async () => {
           const { units } = await get(`/properties/${l.property_id}`).then((r) => ({ units: r.units }));
           const unit = units.find((u) => u.unit_id === l.unit_id);

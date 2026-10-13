@@ -69,7 +69,7 @@ test('start a conversation from a reservation, templates are filled in', async (
   const r = await owner.get(`/api/message-templates/${checkin.template_id}/render?booking_id=${resA.booking_id}`);
   assert.equal(r.status, 200);
   assert.match(r.data.body, /Hi Rafael/);
-  assert.match(r.data.body, /beach-please/);
+  assert.match(r.data.body, /\(shared the day before check-in\)/);
   assert.match(r.data.body, /Get the key at the lobby/);
   assert.match(r.data.body, /2:00 PM/);
   assert.doesNotMatch(r.data.body, /\{\{/);

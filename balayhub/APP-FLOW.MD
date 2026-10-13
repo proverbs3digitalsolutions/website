@@ -523,3 +523,89 @@ Unit owners never see the workspace app. They use the owner portal at `#/owner`,
 - A block that overlaps another stay shows "These dates overlap a stay or block on this unit." It doesn't name the guest.
 - The login page has a small "Are you a unit owner? Sign in here" link to `#/owner`.
 - Host side: the invite and turn-off buttons are on the owner row in `#/owners` (section 7.16).
+
+## 13. Phase 4 flows: guest experience and direct booking (built 2026-10-13)
+
+Spec: `docs/specs/PHASE-4-GUESTS.md`. Decisions D-57 to D-64. Both the English and Taglish text go through `public/js/i18n.js`.
+
+### 13.1 Booking page add-ons, house rules and sources (changes to 6.2)
+
+- The booking page shows an "Add-ons" picker for the listing's add-ons that are offered on the booking page. Each row has a quantity, and the total updates live.
+- The total is the stay, plus add-ons. "Pay in full now" pays the total. With a deposit, the guest pays the deposit on the stay plus the add-ons, in full.
+- If the listing has house rules, "I agree to the house rules" must be ticked before "Continue to payment". Without it, the page says "Please read and agree to the house rules."
+- A `?src=<source>` in the link is kept for the whole visit and sent with the payment. Unknown sources are ignored.
+
+### 13.2 Quote page `#/quote/<token>`
+
+- Shows the quote: dates, guests, price lines (accommodation, cleaning, add-ons, discount), the total, the amount due now, the expiry time, the host's note, and the house rules.
+- A details form asks only for the fields the quote does not already have (name, email, mobile). Then "I agree to the house rules" (if there are rules), then the privacy consent box (required, the same notice as the booking page), then the pay button. The page says "Your dates are held only when you pay."
+- States: **expired** ("This offer has expired"), **paid** ("This quote is already paid", with the booking code), **cancelled** ("This quote was cancelled"). A cancelled quote is not an error page. An expired one is the only state that uses the 410 error.
+- If a payment for the quote is still in progress, the page checks it first. A guest who has just paid comes back to a confirmed booking.
+
+### 13.3 Guidebook `#/guide/<token>`
+
+- Phone-first sections with icons: arrival, parking, building and gate notes, local tips, emergency contacts, plus the listing's check-in instructions and house rules (English only).
+- A switch between English and Taglish. Sections without a Taglish version show English.
+- Wi-Fi and door code appear as cards with a Copy button, only inside the window. Outside it, a note says "For your safety, the Wi-Fi password and door code appear the day before check-in."
+- After check-out day, the page says the stay has ended and hides both codes.
+- A link that doesn't work (wrong, cancelled, or outside its period) shows "Guidebook not available" with a note to ask the host for a new link.
+
+### 13.4 Pay page: add-ons before arrival (changes to 6.4)
+
+- An "Add-ons" section lists the add-ons offered before arrival. It appears only while the stay is confirmed, not a demo, and check-in day has not passed.
+- Choosing add-ons adds them to the bill right away. The guest then pays the balance as before. Adding the same choices twice (for example after a retry) records them once.
+- After check-in day the section is gone, and a message says add-ons can only be booked up to check-in day.
+
+### 13.5 Check-in form (changes to 6.5)
+
+- If the listing has house rules and none were accepted yet, the form shows the rules and a required checkbox "I have read and agree to the house rules." The form won't submit without it.
+- If the rules were already accepted (from the booking page), the checkbox doesn't appear.
+
+### 13.6 Review step (changes to 6.6)
+
+- After a private rating of 4 or 5 stars, the thank-you step asks "Would you share your experience?" and lists the owner's public review links.
+- A rating of 3 or fewer shows the usual thank-you only, with no links.
+
+### 13.7 Host: listings (changes to 7.11)
+
+- A listing has a **Guidebook** tab with English and Taglish text for each section. The door code field is masked, with a Show button.
+- A **Page address** field sets the listing's public address. A "View page" link opens the public page, once direct booking is on.
+- A **Guest pages** tab has a share-link builder: pick a source, then copy the link.
+
+### 13.8 Host: reservations (changes to 7.6)
+
+- The reservation shows the source (for example "from Facebook" or "quote").
+- "Copy guidebook link" creates the guest's private link, if needed, and copies it. The button is hidden for cancelled stays.
+- "House rules accepted on …" shows the time, with the accepted text in a toggle. Owners and managers only.
+- Add-ons appear as extra charges, the same as other charges.
+
+### 13.9 Host: add-ons `#/addons`
+
+- Owners see the catalogue and can add, edit and archive. Managers can view it, but the add-on forms are hidden.
+- Each add-on shows its price, pricing rule, maximum quantity, listings, and whether it is offered on the booking page, before arrival, or both.
+- Archive shows "Add-on archived." Archived add-ons stay on past stays.
+
+### 13.10 Host: quotes `#/quotes`, `#/quotes/<id>`
+
+- The list has a status filter (open, paid, expired, cancelled) and a **New quote** button.
+- **New quote** opens a form: listing, dates, guests, guest name, email or mobile, and the price. The price comes from the pricing engine and can be edited (accommodation, cleaning, add-ons, discount). It shows whether the dates are free. Pay type and expiry are set here, and a note can be added.
+- The quote detail page has: **Copy**, **Send by email** (only when the guest has an email), and **Cancel quote** (only while open). A paid quote links to its booking.
+
+### 13.11 Host: stay reports (changes to 7.17)
+
+- A "By source" table lists direct bookings by source: stays, nights and revenue. Quotes show as "quote".
+
+### 13.12 Host: settings, Guest experience card (changes to 7.19, owners only)
+
+- **Public review links:** up to 4 labelled https links.
+- **Returning-guest discount:** a percentage from 1 to 50. Blank means off.
+- **Abandoned-booking follow-up:** a switch, off by default.
+- Saved with "Guest experience saved."
+
+### 13.13 Host: discount codes (changes to 7.15)
+
+- The welcome codes made for returning guests sit in their own section, apart from the owner's codes, with the note "They do not count toward your limit."
+
+### 13.14 Menu (changes to 3)
+
+- Owners and managers in short-term workspaces see **Quotes** and **Add-ons** in the menu.

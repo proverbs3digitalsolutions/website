@@ -95,6 +95,7 @@ Jobs run inside the app process. A job never overlaps itself. After 3 failures i
 | `guest-ids` | 6 h | 70 s | Deletes guest ID photos after the retention period (section 5.1) |
 | `billing` | 10 min | 80 s | Re-checks pending platform plan checkouts with PayMongo (20 per run) and expires checkouts older than 2 days |
 | `direct-booking` | 2 min | 25 s | Confirms guests' online bookings whose payment went through but who didn't return to the page |
+| `abandoned-followup` | 15 min | 45 s | Emails one follow-up to guests whose direct booking ended unpaid 2 to 24 hours earlier, only where the workspace has the setting on. Skips quotes, and guests who have since booked those nights or started a newer payment. Claims each checkout before sending, so a failed send is never retried. |
 | `balance-pay` | 3 min | 35 s | Same for online balance payments |
 | `support` | 60 min | 95 s | Closes support tickets 7 days after they were resolved |
 | `account` | 60 min | 90 s | Permanently deletes workspaces whose 14-day deletion grace period has passed |
@@ -118,6 +119,14 @@ Note: in `scheduler.js` the comment "Workspaces whose owner asked for deletion" 
 | Proxy trust | `TRUST_PROXY` is fixed to 1 hop in the production compose file, so client IPs (used for rate limits) come from Caddy's `X-Forwarded-For` |
 
 ---
+
+### 2.6 Search pages, sitemap and robots (Phase 4)
+
+- Routes are in `src/routes/seo.js`, mounted on the app before the static files: `/stay/:slug`, `/stay/:slug/:unitSlug`, `/sitemap.xml` and `/robots.txt`.
+- The pages are server-rendered HTML that uses `/css/app.css` only, so the strict CSP still holds: no scripts and no inline styles.
+- Cache-Control is `public, max-age=300`. Robots allows `/stay/`, disallows `/api/`, and names the sitemap. The sitemap has no `lastmod`, because listings have no update time.
+- Phase 4 public routes and their limits (per IP unless stated): the guidebook page 60 per 15 minutes; the quote page 300 per 15 minutes; quote payment 20 per hour; add-on purchase 20 per hour per link. The `/stay` pages and the sitemap have no limiter of their own (see the gaps in PRD.MD).
+- Guidebook, quote and listing links are built from `APP_URL`. No new environment variables.
 
 ## 3. External services and integrations
 
@@ -218,7 +227,7 @@ Note: `ANTHROPIC_BASE_URL` is only used by the assistant (the drafts code ignore
 
 ## 4. Environment variables (names and purpose only)
 
-Phase 3 added no environment variables.
+Phase 3 added no environment variables. Phase 4 added none either.
 
 Production values live in `deploy/.env` on the server. No values are listed here. Phase 2 (owners, 2026-10-13) added no new variables: it uses `APP_URL` for portal links and the existing mail settings.
 

@@ -9,7 +9,32 @@ import { t, tServer, tFields, locale, initGuestLang, langToggle, guestLang, exte
 extendTranslations({
   'Cancellation policy': 'Patakaran sa pagkansela',
   'Pay a {pct}% deposit now, the rest before check-in': '{pct}% deposit ngayon, ang natitira bago mag-check-in',
+  'Add-ons': 'Mga add-on',
+  'Optional extras for your stay. Add-ons are paid in full now, together with your deposit.': 'Mga dagdag na pwede mong idagdag sa stay mo. Bayad na agad ang buong halaga ng add-ons ngayon, kasama ng deposit.',
+  'Optional extras for your stay.': 'Mga dagdag na pwede mong idagdag sa stay mo.',
+  '{price} per stay': '{price} kada stay',
+  '{price} per night': '{price} kada gabi',
+  '{price} per guest': '{price} kada guest',
+  '{price} per guest per night': '{price} kada guest kada gabi',
+  'Quantity of {name}': 'Dami ng {name}',
+  'Add-ons ({n})': 'Mga add-on ({n})',
+  'I agree that my details are shared with {host} to manage my booking (see the ': 'Sumasang-ayon ako na ibabahagi ang details ko kay {host} para sa booking ko (tingnan ang ',
+  'I agree to the house rules': 'Sumasang-ayon ako sa house rules',
+  'Please read and agree to the house rules.': 'Basahin at sang-ayunan ang house rules.',
+  'Please tick this box to continue.': 'I-tick ang box na ito para makapagpatuloy.',
+  'House rules': 'House rules',
+  'Due now': 'Babayaran ngayon',
 });
+
+// Where the guest came from (?src=facebook etc.); kept for the whole visit and sent with checkout.
+let source = '';
+const srcQs = () => (source ? `?src=${encodeURIComponent(source)}` : '');
+const rememberSource = (q) => { if (q?.src) source = String(q.src).toLowerCase().slice(0, 20); };
+const PRICING_KEY = { per_stay: '{price} per stay', per_night: '{price} per night', per_guest: '{price} per guest', per_guest_night: '{price} per guest per night' };
+function addonAmount(a, qty, nights, guests) {
+  const mult = { per_stay: 1, per_night: nights, per_guest: guests, per_guest_night: guests * nights }[a.pricing] || 1;
+  return Number(a.price) * mult * qty;
+}
 
 const peso = (v) => { const n = Number(v || 0); return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`; };
 const photoUrl = (id) => `/api/public/listing-photos/${id}`;
@@ -33,7 +58,8 @@ function cover(l, cls = 'bk-card__img') {
 }
 
 // ---------------------------------------------------------------- host page
-export async function bookHostView(el, { params }) {
+export async function bookHostView(el, { params, query }) {
+  rememberSource(query);
   initGuestLang();
   let data;
   try { data = await get(`/public/book/${encodeURIComponent(params.slug)}`); } catch (err) {
@@ -42,7 +68,7 @@ export async function bookHostView(el, { params }) {
   }
   const { host, listings } = data;
   initGuestLang(host.guest_language);
-  redraw = () => bookHostView(el, { params });
+  redraw = () => bookHostView(el, { params, query: {} });
   document.title = `${host.name} — Book direct`;
   el.replaceChildren(shell(host.name, params.slug,
     h('section', { class: 'bk-hero' }, h('h1', null, host.name), host.intro && h('p', null, host.intro),
@@ -50,7 +76,7 @@ export async function bookHostView(el, { params }) {
       host.test_mode && h('p', { class: 'alert alert--warn' }, t('TEST MODE: this page uses a PayMongo test key, so payments are not real.'))),
     !host.accepting && !host.demo && h('div', { class: 'alert alert--warn' }, t('Online booking is paused right now. Please contact the host directly.')),
     listings.length
-      ? h('div', { class: 'bk-grid' }, listings.map((l) => h('a', { class: 'bk-card', href: `#/book/${params.slug}/${l.unit_id}` },
+      ? h('div', { class: 'bk-grid' }, listings.map((l) => h('a', { class: 'bk-card', href: `#/book/${params.slug}/${l.unit_id}${srcQs()}` },
         cover(l),
         h('div', { class: 'bk-card__body' },
           h('strong', null, l.unit_name),
@@ -62,6 +88,7 @@ export async function bookHostView(el, { params }) {
 
 // ---------------------------------------------------------------- one listing
 export async function bookListingView(el, { params, query }) {
+  rememberSource(query);
   initGuestLang();
   const slug = params.slug;
   let data;
@@ -80,7 +107,7 @@ export async function bookListingView(el, { params, query }) {
   document.title = `${l.unit_name} — ${host.name}`;
   if (query.cancelled) {
     // Release the held dates right away so they can be booked again.
-    history.replaceState(null, '', `#/book/${slug}/${params.unitId}`);
+    history.replaceState(null, '', `#/book/${slug}/${params.unitId}${srcQs()}`);
     post(`/public/book/cancel/${encodeURIComponent(query.cancelled)}`).catch(() => {});
     toast(t('Payment cancelled. Nothing was charged and your dates were not booked.'));
   }
@@ -169,6 +196,41 @@ export async function bookListingView(el, { params, query }) {
     codeMsg, h('div', { class: 'error', role: 'alert' }));
   const submit = h('button', { class: 'btn btn--primary btn--block', type: 'submit', disabled: true }, t('Continue to payment'));
   let current = null;
+  // Add-ons: addon_id -> quantity (only entries above 0).
+  const addonList = l.addons || [];
+  const picked = new Map();
+  const guestsNow = () => Math.max(1, Number(form.elements.num_guests?.value) || 1);
+  const selections = () => [...picked].map(([addon_id, quantity]) => ({ addon_id, quantity }));
+  const addonRows = addonList.map((a) => {
+    const qtyInput = h('input', { class: 'input bk-addon__qty', type: 'number', min: 1, max: a.max_quantity || 1, value: 1, inputmode: 'numeric', disabled: true, 'aria-label': t('Quantity of {name}', { name: (guestLang() === 'tl' && a.name_tl) || a.name }) });
+    const box = h('input', { type: 'checkbox' });
+    const amountEl = h('span', { class: 'bk-addon__amt small muted' });
+    const sync = () => {
+      qtyInput.disabled = !box.checked;
+      const q = Math.min(a.max_quantity || 1, Math.max(1, Math.floor(Number(qtyInput.value)) || 1));
+      if (box.checked) picked.set(a.id || a.addon_id, q); else picked.delete(a.id || a.addon_id);
+      amountEl.textContent = box.checked && current ? peso(addonAmount(a, q, current.nights || 1, guestsNow())) : '';
+    };
+    box.addEventListener('change', () => { sync(); updateQuote(); });
+    qtyInput.addEventListener('change', () => { sync(); updateQuote(); });
+    return { a, sync, node: h('li', { class: 'bk-addon' },
+      h('label', { class: 'check bk-addon__main' }, box,
+        h('span', null, h('strong', null, (guestLang() === 'tl' && a.name_tl) || a.name),
+          h('span', { class: 'small muted bk-addon__price' }, t(PRICING_KEY[a.pricing] || PRICING_KEY.per_stay, { price: peso(a.price) })),
+          a.description && h('span', { class: 'small muted bk-addon__desc' }, a.description))),
+      (a.max_quantity || 1) > 1 ? qtyInput : null, amountEl) };
+  });
+  const addonBox = addonList.length && h('fieldset', { class: 'field bk-addons', dataset: { field: 'addons' } },
+    h('legend', null, t('Add-ons')),
+    h('p', { class: 'small muted' }, l.payment_option === 'full' ? t('Optional extras for your stay.') : t('Optional extras for your stay. Add-ons are paid in full now, together with your deposit.')),
+    h('ul', { class: 'bk-addons__list' }, addonRows.map((r) => r.node)),
+    h('div', { class: 'error', role: 'alert' }));
+  // House rules: shown in a scrollable box with a required checkbox.
+  const rulesBox = l.house_rules && h('div', { class: 'field bk-rules', dataset: { field: 'accept_rules' } },
+    h('strong', { id: 'bk-rules-h' }, t('House rules')),
+    h('div', { class: 'bk-rules__text', tabindex: 0, role: 'region', 'aria-labelledby': 'bk-rules-h' }, l.house_rules),
+    h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'accept_rules' }), h('span', null, t('I agree to the house rules'))),
+    h('div', { class: 'error', role: 'alert' }));
   async function updateQuote() {
     current = null;
     submit.disabled = true;
@@ -180,10 +242,12 @@ export async function bookListingView(el, { params, query }) {
     }
     try {
       const promo = promoCode ? `&code=${encodeURIComponent(promoCode)}` : '';
-      const q = await get(`/public/book/${encodeURIComponent(slug)}/units/${l.unit_id}/quote?check_in=${checkIn}&check_out=${checkOut}${promo}`);
+      const ad = picked.size ? `&addons=${encodeURIComponent(JSON.stringify(selections()))}` : '';
+      const q = await get(`/public/book/${encodeURIComponent(slug)}/units/${l.unit_id}/quote?check_in=${checkIn}&check_out=${checkOut}&guests=${guestsNow()}${promo}${ad}`);
       codeMsg.textContent = tServer(q.code_error) || (q.promo_code ? `${t('Code {code} applied: −{amount}.', { code: q.promo_code, amount: peso(q.promo_discount) })}${q.promo_note ? ` ${tServer(q.promo_note)}` : ''}` : '');
       codeMsg.className = q.code_error ? 'error' : 'muted small';
       current = q;
+      addonRows.forEach((r) => r.sync());
       // Show only the payment choices allowed for these dates.
       const full = payChoice.querySelector('input[value=full]');
       const dep = payChoice.querySelector('input[value=deposit]');
@@ -198,8 +262,13 @@ export async function bookListingView(el, { params, query }) {
         q.discount_label && [h('dt', null, tServer(q.discount_label).replace(/^./, (c) => c.toUpperCase())), h('dd', null, `− ${peso(q.discount_amount)}`)],
         q.promo_code && [h('dt', null, t('Code {code}', { code: q.promo_code })), h('dd', null, `− ${peso(q.promo_discount)}`)],
         Number(q.cleaning_fee) > 0 && [h('dt', null, t('Cleaning fee')), h('dd', null, peso(q.cleaning_fee))],
+        Number(q.addons_total) > 0 && [h('dt', null, t('Add-ons')), h('dd', null, peso(q.addons_total))],
         h('dt', null, t('Total')), h('dd', null, h('strong', null, peso(q.total))),
-        q.deposit_allowed && [h('dt', null, t('{pct}% deposit', { pct: l.deposit_pct })), h('dd', null, t('{now} now, {rest} due by {date}', { now: peso(q.deposit), rest: peso(Number(q.total) - Number(q.deposit)), date: fmtDate(q.balance_due_date) }))]),
+        q.deposit_allowed && (() => {
+          // Deposit covers the stay only; add-ons are paid in full now.
+          const now = Number(q.deposit) + Number(q.addons_total || 0);
+          return [h('dt', null, t('{pct}% deposit', { pct: l.deposit_pct })), h('dd', null, t('{now} now, {rest} due by {date}', { now: peso(now), rest: peso(Number(q.total) - now), date: fmtDate(q.balance_due_date) }))];
+        })()),
       !q.available && h('div', { class: 'alert alert--error' }, t('Sorry, these dates are no longer available.')));
       submit.disabled = !q.available || !host.accepting;
     } catch (err) {
@@ -223,21 +292,29 @@ export async function bookListingView(el, { params, query }) {
       field({ name: 'phone', label: t('Mobile number'), type: 'tel', required: true, inputmode: 'tel', autocomplete: 'tel', placeholder: '0917 123 4567' })),
     field({ name: 'notes', label: t('Message to the host (optional)'), type: 'textarea', maxlength: 1000, placeholder: t('Arrival time, special requests…') }),
     codeBox,
+    addonBox || null,
     policyBlock,
+    rulesBox || null,
     payChoice,
     h('div', { class: 'field', dataset: { field: 'consent' } },
       h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'consent' }),
-        h('span', null, t('I agree to the house rules, and that my details are shared with {host} to manage my booking (see the ', { host: host.name }), h('a', { href: '#/privacy', target: '_blank' }, t('privacy notice')), ').')),
+        h('span', null, t('I agree that my details are shared with {host} to manage my booking (see the ', { host: host.name }), h('a', { href: '#/privacy', target: '_blank' }, t('privacy notice')), ').')),
       h('div', { class: 'error', role: 'alert' })),
     submit,
     !host.accepting && h('p', { class: 'muted small' }, host.demo ? t('This is a demo, so booking is turned off.') : t('Online booking is paused. Please contact the host.')));
 
   let busy = false;
+  form.elements.num_guests?.addEventListener('change', () => { if (picked.size) updateQuote(); else addonRows.forEach((r) => r.sync()); });
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (busy || !current) return;
-    busy = true;
     clearErrors(form);
+    if (rulesBox && !form.elements.accept_rules.checked) {
+      showErrors(form, { accept_rules: t('Please read and agree to the house rules.') });
+      rulesBox.querySelector('input').focus();
+      return;
+    }
+    busy = true;
     formError.replaceChildren();
     const d = readForm(form);
     submit.disabled = true;
@@ -248,6 +325,9 @@ export async function bookListingView(el, { params, query }) {
         pay: current.deposit_allowed ? (form.querySelector('input[name=pay]:checked')?.value || 'full') : 'full',
         consent: form.elements.consent.checked,
         code: promoCode || undefined,
+        addons: selections(),
+        accept_rules: rulesBox ? form.elements.accept_rules.checked : undefined,
+        source: source || undefined,
       });
       location.href = r.checkout_url;
     } catch (err) {
@@ -261,8 +341,13 @@ export async function bookListingView(el, { params, query }) {
     }
   });
 
+  // Dates from the follow-up email link (?check_in=&check_out=): used only when valid and still free.
+  const okDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v || '') && new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) === v;
+  const pre = okDate(query.check_in) && okDate(query.check_out) && query.check_in >= todayManila() && query.check_out > query.check_in;
+  if (pre) monthStart = query.check_in.slice(0, 7);
   await loadDays(monthStart);
   await loadDays(nextMonth(monthStart));
+  if (pre && !takenBetween(query.check_in, query.check_out)) { checkIn = query.check_in; checkOut = query.check_out; }
   // The lowest price on the open nights shown (weekend, holiday and season rates differ).
   const open = [...days.values()].filter((x) => !x.taken && x.price !== null && x.date >= todayManila()).map((x) => Number(x.price));
   const fromPrice = open.length ? Math.min(...open) : Number(l.nightly_rate);
@@ -271,7 +356,7 @@ export async function bookListingView(el, { params, query }) {
 
   el.replaceChildren(shell(host.name, slug,
     testBanner,
-    h('a', { class: 'back', href: `#/book/${slug}` }, t('‹ All places')),
+    h('a', { class: 'back', href: `#/book/${slug}${srcQs()}` }, t('‹ All places')),
     h('h1', { class: 'bk-title' }, l.unit_name),
     h('p', { class: 'muted' }, [l.property_name, l.city, l.province].filter(Boolean).join(', ')),
     gallery,
@@ -282,7 +367,6 @@ export async function bookListingView(el, { params, query }) {
           h('span', null, `🕑 ${t('Check-in {in} · Check-out {out}', { in: fmtTime(l.checkin_time), out: fmtTime(l.checkout_time) })}`),
           l.min_nights > 1 && h('span', null, `🌙 ${t('{n}-night minimum', { n: l.min_nights })}`)),
         l.description && h('p', { class: 'bk-desc' }, l.description),
-        l.house_rules && [h('h2', null, t('House rules')), h('p', { class: 'bk-desc' }, l.house_rules)],
         h('h2', null, t('Availability')),
         calBox),
       h('aside', { class: 'card bk-book' },

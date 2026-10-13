@@ -3,13 +3,20 @@
 
 import { get, post, api, ApiError } from '../api.js';
 import { h, brand, field, fmtDateTime, toast, clearErrors, showErrors, readForm, confirmDialog } from '../ui.js';
-import { t, tServer, tFields, initGuestLang, langToggle, fmtDateL, fmtDateTimeL } from '../i18n.js';
+import { t, tServer, tFields, extendTranslations, initGuestLang, langToggle, fmtDateL, fmtDateTimeL } from '../i18n.js';
 
 const fmtTime = (t) => {
   if (!t) return '';
   const [hh, mm] = t.split(':').map(Number);
   return `${((hh + 11) % 12) + 1}:${String(mm).padStart(2, '0')} ${hh < 12 ? 'AM' : 'PM'}`;
 };
+
+extendTranslations({
+  'House rules': 'Mga patakaran sa bahay',
+  'I have read and agree to the house rules.': 'Nabasa ko at sumasang-ayon ako sa mga patakaran sa bahay.',
+  'Please accept the house rules to continue.': 'Pakisang-ayunan ang mga patakaran sa bahay para magpatuloy.',
+  'You accepted the house rules on {when}.': 'Sinang-ayunan mo ang mga patakaran sa bahay noong {when}.',
+});
 
 // Shrink phone photos (often 4–8 MB) to about 1600 px JPEG before upload.
 async function shrinkImage(file) {
@@ -71,6 +78,9 @@ export async function guestCheckinView(el, { params }) {
   };
   // Keep "Guest 2, Guest 3…" labels in order after removing someone.
   function renumber() { [...others.querySelectorAll('input')].forEach((inp, i) => inp.setAttribute('aria-label', t('Guest {n} full name', { n: i + 2 }))); }
+  // House rules: shown when the listing has some; the box is required until they were accepted once.
+  const rules = String(s.house_rules || '').trim();
+  const rulesAt = s.rules_accepted_at;
   const initial = r?.guests?.length ? r.guests : Array.from({ length: Math.max(0, (s.num_guests || 1) - 1) }, () => '');
   initial.forEach((g) => addGuest(g));
 
@@ -104,6 +114,13 @@ export async function guestCheckinView(el, { params }) {
     h('div', { class: 'field' },
       h('p', { class: 'hint' }, `${t("A photo of a valid government ID for each adult (driver's license, passport, UMID, PhilID…). ")}${r?.id_count ? t('Photos you already sent are kept; add more only if needed.') : ''}`),
       photos, progress),
+    rules && h('h2', null, t('House rules')),
+    rules && h('div', { class: 'gp-rules', tabindex: 0, role: 'region', 'aria-label': t('House rules') }, rules),
+    rules && (rulesAt
+      ? h('p', { class: 'muted small' }, t('You accepted the house rules on {when}.', { when: fmtDateTimeL(rulesAt) }))
+      : h('div', { class: 'field', dataset: { field: 'accept_rules' } },
+        h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'accept_rules' }), h('span', null, t('I have read and agree to the house rules.'))),
+        h('div', { class: 'error', role: 'alert' }))),
     h('div', { class: 'field', dataset: { field: 'consent' } },
       h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'consent', checked: Boolean(r) }),
         h('span', null, t("I agree that {host} may use these details and ID photos to register our stay with the building, as required under the Data Privacy Act. BalayHub deletes the ID photos {days} days after check-out; copies given to the building follow the building's own rules.", { host: s.workspace_name, days: s.id_retention_days }))),
@@ -119,9 +136,17 @@ export async function guestCheckinView(el, { params }) {
     formError.replaceChildren();
     submit.disabled = true;
     const d = readForm(form);
+    if (rules && !rulesAt && !form.elements.accept_rules.checked) {
+      showErrors(form, { accept_rules: t('Please accept the house rules to continue.') });
+      form.elements.accept_rules.focus();
+      busy = false;
+      submit.disabled = false;
+      return;
+    }
     const payload = {
       lead_name: d.lead_name, phone: d.phone, email: d.email, arrival_time: d.arrival_time, vehicle_plate: d.vehicle_plate,
       notes: d.notes, consent: Boolean(form.elements.consent.checked),
+      ...(rules && !rulesAt ? { accept_rules: true } : {}),
       guests: [...others.querySelectorAll('input')].map((i) => i.value.trim()).filter(Boolean),
     };
     try {

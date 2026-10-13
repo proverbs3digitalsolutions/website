@@ -9,7 +9,7 @@ const express = require('express');
 const config = require('../config');
 const { query, one, tx } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
-const { validate, uuidParam, isValidDate } = require('../lib/validate');
+const { validate, uuidParam, isValidDate, UUID_RE } = require('../lib/validate');
 const { audit } = require('../lib/audit');
 const { requireRole, rateLimit } = require('../lib/auth');
 const { loadUnit } = require('../lib/access');
@@ -21,6 +21,7 @@ const secretbox = require('../lib/secretbox');
 const paymongo = require('../lib/paymongo');
 const storage = require('../lib/storage');
 const { describePolicy } = require('../lib/policies');
+const { sendMail } = require('../lib/mailer');
 
 const router = express.Router();
 const publicRouter = express.Router();
@@ -36,6 +37,54 @@ const manilaToday = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().s
 const nightsBetween = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000);
 const slugify = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
 const bookingUrl = (slug) => `${config.appUrl}/#/book/${slug}`;
+
+// Money is added in centavos so totals are exact to the centavo.
+const cents = (v) => Math.round(Number(v || 0) * 100);
+const money = (c) => (c / 100).toFixed(2);
+
+// Add-on pricing lives in src/lib/addons.js. It is loaded on first use, not at startup, so a
+// missing module fails the request closed (503) instead of stopping the server.
+function addonsLib() {
+  try { return require('../lib/addons'); } catch (err) {
+    if (err.code !== 'MODULE_NOT_FOUND') throw err;
+    throw new HttpError(503, 'Add-ons are not available right now.', { code: 'ADDONS_UNAVAILABLE' });
+  }
+}
+
+// Add-on choices as [{ addon_id, quantity }], from a JSON string (URL) or an array (body).
+function parseSelections(raw) {
+  let list = raw;
+  if (typeof raw === 'string') {
+    try { list = raw === '' ? [] : JSON.parse(raw); } catch { throw validationError({ addons: 'Choose add-ons and quantities from the list.' }); }
+  }
+  if (list === undefined || list === null) return [];
+  const ok = Array.isArray(list) && list.length <= 20 && list.every((s) => s && typeof s === 'object'
+    && typeof s.addon_id === 'string' && UUID_RE.test(s.addon_id) && Number.isInteger(s.quantity) && s.quantity >= 1 && s.quantity <= 20);
+  if (!ok) throw validationError({ addons: 'Choose add-ons and quantities from the list.' });
+  return list.map((s) => ({ addon_id: s.addon_id.toLowerCase(), quantity: s.quantity }));
+}
+
+// Add-ons for a stay: { items, total }. Nothing selected means nothing to look up.
+async function priceAddonSelections({ orgId, unitId, nights, guests, selections, context }) {
+  if (!selections.length) return { items: [], total: '0.00' };
+  const priced = await addonsLib().priceAddons({ query }, { orgId, unitId, nights, guests, selections, context });
+  return { items: priced.items, total: money(cents(priced.total)) };
+}
+
+// Where a guest came from (D-61). Anything not on the list is ignored. A quote's source is set by the quote.
+const DIRECT_SOURCES = ['facebook', 'instagram', 'messenger', 'viber', 'tiktok', 'google', 'whatsapp', 'email', 'referral', 'other'];
+const directSource = (raw) => {
+  const s = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  return DIRECT_SOURCES.includes(s) ? s : null;
+};
+
+// Whether a workspace can take payments right now, and whether its PayMongo key is a test key.
+function withHostState(o) {
+  const st = planStatus(o);
+  o.accepting = Boolean(o.paymongo_key_enc) && !st.read_only;
+  o.test_mode = Boolean(o.paymongo_key_hint && o.paymongo_key_hint.startsWith('sk_test_'));
+  return o;
+}
 
 // ---------------------------------------------------------------- host settings
 router.get('/direct-booking', owners, ah(async (req, res) => {
@@ -168,14 +217,11 @@ async function loadHost(slug) {
             is_demo, deletion_scheduled_at, guest_language
        FROM organizations WHERE lower(booking_slug) = lower($1)`, [String(slug || '').slice(0, 60)]);
   if (!o || (!o.booking_enabled && !o.is_demo)) throw notFound('This booking page is not available.');
-  const st = planStatus(o);
-  o.accepting = Boolean(o.paymongo_key_enc) && !st.read_only;
-  o.test_mode = Boolean(o.paymongo_key_hint && o.paymongo_key_hint.startsWith('sk_test_'));
-  return o;
+  return withHostState(o);
 }
 
 const PUBLIC_UNIT = `
-  SELECT u.unit_id, u.unit_name, u.description, u.max_guests, u.nightly_rate, u.cleaning_fee, u.min_nights, u.payment_option,
+  SELECT u.unit_id, u.unit_name, u.public_slug, u.description, u.max_guests, u.nightly_rate, u.cleaning_fee, u.min_nights, u.payment_option,
          u.deposit_pct, u.cancellation_policy, u.cancellation_policy_text,
          u.balance_due_days, u.house_rules, to_char(u.checkin_time, 'HH24:MI') AS checkin_time, to_char(u.checkout_time, 'HH24:MI') AS checkout_time,
          p.property_name, p.city, p.province,
@@ -197,7 +243,13 @@ async function loadPublicUnit(host, unitId) {
 publicRouter.get('/public/book/:slug', ah(async (req, res) => {
   const host = await loadHost(req.params.slug);
   const { rows } = await query(`${PUBLIC_UNIT} ORDER BY p.property_name, u.unit_name`, [host.organization_id]);
-  res.json({ host: { name: host.name, intro: host.booking_intro, accepting: host.accepting, demo: host.is_demo, test_mode: host.test_mode, guest_language: host.guest_language }, listings: rows.map(guestListing) });
+  const lib = addonsLib();
+  const listings = await Promise.all(rows.map(async (u) => ({
+    ...guestListing(u),
+    public_url: u.public_slug && host.booking_slug ? `/stay/${host.booking_slug}/${u.public_slug}` : null,
+    addons: await lib.listAddonsForUnit({ query }, host.organization_id, u.unit_id, 'booking'),
+  })));
+  res.json({ host: { name: host.name, intro: host.booking_intro, accepting: host.accepting, demo: host.is_demo, test_mode: host.test_mode, guest_language: host.guest_language }, listings });
 }));
 
 // Taken nights and prices for a date range (for the availability calendar).
@@ -269,7 +321,12 @@ publicRouter.get('/public/book/:slug/units/:unitId/quote', ah(async (req, res) =
   const u = await loadPublicUnit(host, req.params.unitId);
   const { promo_code_id: _id, ...p } = await priceStay(u, req.query.check_in, req.query.check_out,
     { orgId: host.organization_id, code: req.query.code ? String(req.query.code).slice(0, 40) : null });
-  res.json({ ...p, available: await isFree(u.unit_id, req.query.check_in, req.query.check_out), payment_option: u.payment_option });
+  const guests = validate(req.query, { guests: { type: 'int', min: 1, max: 50, label: 'Guests' } }).guests ?? 1;
+  const addons = await priceAddonSelections({ orgId: host.organization_id, unitId: u.unit_id, nights: p.nights, guests,
+    selections: parseSelections(req.query.addons), context: 'booking' });
+  // The total includes add-ons; the deposit is on the stay only (add-ons are paid in full when booked).
+  res.json({ ...p, total: money(cents(p.total) + cents(addons.total)), addons_total: addons.total,
+    available: await isFree(u.unit_id, req.query.check_in, req.query.check_out), payment_option: u.payment_option });
 }));
 
 publicRouter.post('/public/book/:slug/units/:unitId/checkout', checkoutLimiter, ah(async (req, res) => {
@@ -288,64 +345,95 @@ publicRouter.post('/public/book/:slug/units/:unitId/checkout', checkoutLimiter, 
     pay: { type: 'enum', values: ['full', 'deposit'], required: true, label: 'Payment' },
     code: { type: 'string', max: 40, label: 'Discount code' },
     consent: { type: 'bool', label: 'Consent' },
+    accept_rules: { type: 'bool', label: 'House rules' },
   });
   if (!body.consent) throw validationError({ consent: 'Please agree to continue.' });
   if (u.max_guests && body.num_guests > u.max_guests) throw validationError({ num_guests: `This place allows up to ${u.max_guests} guests.` });
+  const rules = u.house_rules && u.house_rules.trim() ? u.house_rules : null;
+  if (rules && !body.accept_rules) throw validationError({ accept_rules: 'Please read and agree to the house rules.' });
   const price = await priceStay(u, body.check_in, body.check_out, { orgId: host.organization_id, code: body.code, email: body.email, name: body.name, strict: true });
   if ((body.pay === 'deposit' && !price.deposit_allowed) || (body.pay === 'full' && !price.full_allowed)) {
     throw validationError({ pay: body.pay === 'deposit' && u.payment_option !== 'full'
       ? 'Your stay is too soon for a deposit. Please pay in full.' : 'That payment option is not available for this place.' });
   }
-  const dueNow = body.pay === 'deposit' ? price.deposit : price.total;
+  const addons = await priceAddonSelections({ orgId: host.organization_id, unitId: u.unit_id, nights: price.nights, guests: body.num_guests,
+    selections: parseSelections(req.body?.addons), context: 'booking' });
+  // Paid now: the whole stay, or the deposit on the stay. Add-ons are always paid in full up front.
+  const dueNow = money(body.pay === 'deposit' ? cents(price.deposit) + cents(addons.total) : cents(price.total) + cents(addons.total));
   if (Number(dueNow) < 100) throw validationError({ pay: 'The amount is too small to pay online. Please contact the host.' });
 
-  // Hold the dates (one hold at a time per listing, so two guests can't pay for the same nights).
   const token = crypto.randomBytes(18).toString('base64url');
-  const clientHash = crypto.createHash('sha256').update(`${req.ip}|${config.appUrl}`).digest('hex').slice(0, 32);
+  const label = `${u.unit_name} · ${price.nights} night${price.nights > 1 ? 's' : ''} (${body.check_in} to ${body.check_out})${body.pay === 'deposit' ? ` · ${u.deposit_pct}% deposit` : ''}${cents(addons.total) > 0 ? ' · add-ons' : ''}`;
+  const url = await startCheckout({
+    host, token, ip: req.ip, label,
+    returnUrls: {
+      success: `${config.appUrl}/#/book/${host.booking_slug}/done/${token}`,
+      cancel: `${config.appUrl}/#/book/${host.booking_slug}/${u.unit_id}?cancelled=${token}`,
+    },
+    row: {
+      unit_id: u.unit_id, check_in: body.check_in, check_out: body.check_out, num_guests: body.num_guests,
+      name: body.name, email: body.email, phone: body.phone, notes: body.notes, pay_type: body.pay,
+      accommodation_total: price.accommodation_total, cleaning_fee: price.cleaning_fee, total_amount: price.total,
+      amount_due_now: dueNow, discount_code_id: price.promo_code_id, discount_amount: price.promo_discount,
+      addons: addons.items, addons_total: addons.total,
+      rules_accepted_at: rules ? new Date() : null, rules_text: rules, source: directSource(req.body?.source), quote_id: null,
+    },
+    // Hold the code too, so its last use can't be taken twice.
+    beforeHold: price.promo_code_id ? async (db) => {
+      const again = await applyCode(host.organization_id, body.code, { nights: price.nights, accommodation: Number(price.accommodation_total) + Number(price.promo_discount), email: body.email, name: body.name }, { db, lock: true });
+      if (again.error || again.code_id !== price.promo_code_id) throw validationError({ code: again.error || 'This code is not valid.' });
+    } : null,
+  });
+  res.json({ checkout_url: url });
+}));
+
+// Hold the dates, record the checkout, and open PayMongo's payment page for it. Direct bookings and
+// quotes both pay through here, so both are confirmed the same way (see finalize). Returns the URL.
+// `row` holds the direct_checkouts columns; `host` needs organization_id, name, paymongo_key_enc, test_mode.
+async function startCheckout({ host, token, ip, label, returnUrls, row: r, beforeHold }) {
+  const clientHash = crypto.createHash('sha256').update(`${ip}|${config.appUrl}`).digest('hex').slice(0, 32);
   const open = await one(
     `SELECT COUNT(*)::int AS n FROM direct_checkouts WHERE status = 'pending' AND hold_until > now() AND (client_hash = $1 OR lower(guest_email) = $2)`,
-    [clientHash, body.email]);
+    [clientHash, r.email]);
   if (open.n >= MAX_OPEN_HOLDS) {
     throw new HttpError(429, 'You already have a booking waiting for payment. Please finish or cancel it first, or try again in 30 minutes.', { code: 'TOO_MANY_HOLDS' });
   }
+  // Hold the dates (one hold at a time per listing, so two guests can't pay for the same nights).
   const hold = await tx(async (db) => {
-    await db.query('SELECT unit_id FROM units WHERE unit_id = $1 FOR UPDATE', [u.unit_id]);
-    if (!await isFree(u.unit_id, body.check_in, body.check_out, null, db)) {
+    await db.query('SELECT unit_id FROM units WHERE unit_id = $1 FOR UPDATE', [r.unit_id]);
+    if (!await isFree(r.unit_id, r.check_in, r.check_out, null, db)) {
       throw new HttpError(409, 'Sorry, those dates were just booked. Please choose other dates.', { code: 'DATES_TAKEN' });
     }
-    // Hold the code too, so its last use can't be taken twice.
-    if (price.promo_code_id) {
-      const again = await applyCode(host.organization_id, body.code, { nights: price.nights, accommodation: Number(price.accommodation_total) + Number(price.promo_discount), email: body.email, name: body.name }, { db, lock: true });
-      if (again.error || again.code_id !== price.promo_code_id) throw validationError({ code: again.error || 'This code is not valid.' });
-    }
+    if (beforeHold) await beforeHold(db);
     const { rows: [c] } = await db.query(
       `INSERT INTO direct_checkouts (public_token, organization_id, unit_id, check_in, check_out, num_guests, guest_name, guest_email, guest_phone, notes,
                                      pay_type, accommodation_total, cleaning_fee, total_amount, amount_due_now, hold_until, consent_at,
-                                     key_enc, client_hash, test_mode, discount_code_id, discount_amount)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15, now() + make_interval(mins => $16), now(), $17, $18, $19, $20, $21) RETURNING *`,
-      [token, host.organization_id, u.unit_id, body.check_in, body.check_out, body.num_guests, body.name, body.email, body.phone, body.notes,
-        body.pay, price.accommodation_total, price.cleaning_fee, price.total, dueNow, HOLD_MINUTES,
-        host.paymongo_key_enc, clientHash, host.test_mode, price.promo_code_id, price.promo_discount]);
+                                     key_enc, client_hash, test_mode, discount_code_id, discount_amount,
+                                     addons, addons_total, rules_accepted_at, rules_text, source, quote_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15, now() + make_interval(mins => $16), now(), $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27) RETURNING *`,
+      [token, host.organization_id, r.unit_id, r.check_in, r.check_out, r.num_guests, r.name, r.email, r.phone, r.notes,
+        r.pay_type, r.accommodation_total, r.cleaning_fee, r.total_amount, r.amount_due_now, HOLD_MINUTES,
+        host.paymongo_key_enc, clientHash, host.test_mode, r.discount_code_id, r.discount_amount,
+        JSON.stringify(r.addons), r.addons_total, r.rules_accepted_at, r.rules_text, r.source, r.quote_id]);
     return c;
   });
 
   const key = secretbox.decrypt(host.paymongo_key_enc);
-  const label = `${u.unit_name} · ${price.nights} night${price.nights > 1 ? 's' : ''} (${body.check_in} to ${body.check_out})${body.pay === 'deposit' ? ` · ${u.deposit_pct}% deposit` : ''}`;
   try {
     if (!key) throw Object.assign(new Error('Online payment is not set up correctly for this host.'), { status: 502 });
     const data = await paymongo.request(key, 'POST', '/checkout_sessions', {
       data: {
         attributes: {
-          line_items: [{ currency: 'PHP', amount: Math.round(Number(dueNow) * 100), name: label, quantity: 1 }],
+          line_items: [{ currency: 'PHP', amount: Math.round(Number(r.amount_due_now) * 100), name: label, quantity: 1 }],
           payment_method_types: config.paymongoMethods,
           description: `Booking at ${host.name}`,
           reference_number: hold.checkout_ref,
           send_email_receipt: true,
           show_description: true,
           show_line_items: true,
-          billing: { name: body.name, email: body.email, phone: body.phone },
-          success_url: `${config.appUrl}/#/book/${host.booking_slug}/done/${token}`,
-          cancel_url: `${config.appUrl}/#/book/${host.booking_slug}/${u.unit_id}?cancelled=${token}`,
+          billing: { name: r.name, email: r.email, phone: r.phone },
+          success_url: returnUrls.success,
+          cancel_url: returnUrls.cancel,
           metadata: { checkout_ref: hold.checkout_ref },
         },
       },
@@ -354,12 +442,12 @@ publicRouter.post('/public/book/:slug/units/:unitId/checkout', checkoutLimiter, 
     const url = data?.data?.attributes?.checkout_url;
     if (!id || !url) throw Object.assign(new Error('The payment service returned an unexpected response.'), { status: 502 });
     await query('UPDATE direct_checkouts SET provider_checkout_id = $2 WHERE checkout_ref = $1', [hold.checkout_ref, id]);
-    res.json({ checkout_url: url });
+    return url;
   } catch (err) {
     await query(`UPDATE direct_checkouts SET status = 'failed', hold_until = now() WHERE checkout_ref = $1`, [hold.checkout_ref]);
     throw new HttpError(502, err.status === 502 ? err.message : 'Online payment is not available right now. Please contact the host.', { code: 'PAYMENT_FAILED' });
   }
-}));
+}
 
 // The guest's return page: confirm with PayMongo, then create the reservation.
 publicRouter.get('/public/book/status/:token', ah(async (req, res) => {
@@ -367,7 +455,7 @@ publicRouter.get('/public/book/status/:token', ah(async (req, res) => {
   if (!c) throw notFound('Booking not found.');
   const status = await refreshCheckout(c.checkout_ref).catch(() => null);
   const row = await one(
-    `SELECT c.status, c.check_in, c.check_out, c.num_guests, c.guest_name, c.pay_type, c.total_amount, c.amount_due_now,
+    `SELECT c.status, c.check_in, c.check_out, c.num_guests, c.guest_name, c.pay_type, c.total_amount, c.addons_total, c.amount_due_now,
             u.unit_name, u.balance_due_days, u.cancellation_policy, u.cancellation_policy_text,
             p.property_name, o.name AS host_name, o.guest_language, b.confirmation_code, b.checkin_token
        FROM direct_checkouts c JOIN units u USING (unit_id) JOIN properties p ON p.property_id = u.property_id
@@ -377,8 +465,8 @@ publicRouter.get('/public/book/status/:token', ah(async (req, res) => {
     status: status || row.status,
     stay: {
       host: row.host_name, listing: row.unit_name, property: row.property_name, check_in: row.check_in, check_out: row.check_out,
-      guests: row.num_guests, guest_name: row.guest_name, pay_type: row.pay_type, total: row.total_amount, paid: row.amount_due_now,
-      balance: (Number(row.total_amount) - Number(row.amount_due_now)).toFixed(2), balance_due_days: row.balance_due_days,
+      guests: row.num_guests, guest_name: row.guest_name, pay_type: row.pay_type, total: money(cents(row.total_amount) + cents(row.addons_total)), paid: row.amount_due_now,
+      balance: balanceOf(row), balance_due_days: row.balance_due_days,
       guest_language: row.guest_language, code: row.confirmation_code, checkin_link: row.checkin_token ? `${config.appUrl}/#/checkin/${row.checkin_token}` : null,
       cancellation: describePolicy(row.cancellation_policy, row.cancellation_policy_text),
     },
@@ -437,7 +525,10 @@ const METHOD_MAP = { gcash: 'gcash', paymaya: 'maya', maya: 'maya', card: 'card'
 
 // The share of the total paid as a deposit. Checkouts don't store the percentage, so it is
 // worked out from the two amounts (the checkout total is fixed when the guest pays).
-const depositPctOf = (c) => Math.round((Number(c.amount_due_now) * 100) / Number(c.total_amount));
+const depositPctOf = (c) => Math.round(((cents(c.amount_due_now) - cents(c.addons_total)) * 100) / cents(c.total_amount));
+
+// What the guest still owes on the stay. Add-ons are paid in full when booked, so they are not part of the balance.
+const balanceOf = (c) => money(cents(c.total_amount) + cents(c.addons_total) - cents(c.amount_due_now));
 
 // Turn a paid checkout into a confirmed reservation with its payment (once).
 async function finalize(ref, method) {
@@ -474,14 +565,22 @@ async function finalize(ref, method) {
       const code = `BH-${crypto.randomBytes(5).toString('base64url').replace(/[^A-Za-z0-9]/g, 'X').slice(0, 7).toUpperCase()}`;
       const { rows: [b] } = await db.query(
         `INSERT INTO bookings (organization_id, unit_id, kind, guest_id, channel, check_in, check_out, num_guests, accommodation_total, cleaning_fee,
-                               confirmation_code, notes)
-         VALUES ($1,$2,'reservation',$3,'direct',$4,$5,$6,$7,$8,$9,$10) RETURNING booking_id`,
+                               confirmation_code, notes, source, rules_accepted_at, rules_text)
+         VALUES ($1,$2,'reservation',$3,'direct',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING booking_id`,
         [c.organization_id, c.unit_id, g.guest_id, c.check_in, c.check_out, c.num_guests, c.accommodation_total, c.cleaning_fee, code,
           [c.test_mode ? 'TEST MODE booking (PayMongo test key, no real payment).' : null,
             `Booked online (${c.pay_type === 'deposit' ? `${depositPctOf(c)}% deposit paid` : 'paid in full'}).`,
             promo ? `Discount code ${promo.code}: −₱${Number(c.discount_amount).toLocaleString('en-PH')} (already taken off the accommodation).` : null,
             g.do_not_rebook ? '⚠ This guest is marked "Do not rebook" in Guests.' : null,
-            c.notes ? `Guest's message: ${c.notes}` : null].filter(Boolean).join('\n')]);
+            c.notes ? `Guest's message: ${c.notes}` : null].filter(Boolean).join('\n'), c.source, c.rules_accepted_at, c.rules_text]);
+      // Add-ons become stay charges in this same transaction, so the booking total includes them.
+      if (c.addons.length) await addonsLib().createAddonCharges(db, b.booking_id, c.addons, null);
+      // A quote the host cancelled while the guest was paying stays cancelled, but the money was taken, so the booking stands and the host is told.
+      let quoteCancelled = false;
+      if (c.quote_id) {
+        const { rowCount } = await db.query(`UPDATE booking_quotes SET status = 'paid', booking_id = $2 WHERE quote_id = $1 AND status IN ('open', 'expired')`, [c.quote_id, b.booking_id]);
+        quoteCancelled = rowCount === 0;
+      }
       const receipts = require('../lib/receipts');
       const receiptNo = await receipts.nextReceiptNumber(db, c.organization_id);
       await db.query(
@@ -494,7 +593,7 @@ async function finalize(ref, method) {
       await db.query(
         `INSERT INTO audit_logs (organization_id, action, record_type, record_id, details) VALUES ($1,'reservation.booked_online','booking',$2,$3)`,
         [c.organization_id, b.booking_id, JSON.stringify({ amount: c.amount_due_now, pay_type: c.pay_type })]);
-      return { status: 'confirmed', bookingId: b.booking_id, ownerId: recorder, c, flagged: g.do_not_rebook };
+      return { status: 'confirmed', bookingId: b.booking_id, ownerId: recorder, c, flagged: g.do_not_rebook, quoteCancelled };
     } catch (err) {
       if (err.constraint !== 'bookings_no_overlap') throw err;
       // Paid, but the dates were taken meanwhile (e.g. an Airbnb booking synced in).
@@ -508,7 +607,7 @@ async function finalize(ref, method) {
   return result.status;
 }
 
-async function afterBooking({ bookingId, ownerId, c, flagged }) {
+async function afterBooking({ bookingId, ownerId, c, flagged, quoteCancelled }) {
   const { notify, propertyOfBooking } = require('../lib/push');
   notify(c.organization_id, 'new_booking', {
     title: `New direct booking · ₱${Number(c.amount_due_now).toLocaleString('en-PH')} paid`,
@@ -526,7 +625,12 @@ async function afterBooking({ bookingId, ownerId, c, flagged }) {
   await query(
     `INSERT INTO messages (conversation_id, organization_id, direction, from_name, body, status) VALUES ($1,$2,'note','BalayHub',$3,'note')`,
     [conv.conversation_id, conv.organization_id,
-      `New direct booking: ${c.guest_name}, ${c.check_in} to ${c.check_out}, ${c.num_guests} guest(s). Paid ₱${Number(c.amount_due_now).toLocaleString('en-PH')} online${c.pay_type === 'deposit' ? ` (${depositPctOf(c)}% deposit; balance ₱${(Number(c.total_amount) - Number(c.amount_due_now)).toLocaleString('en-PH')} due before check-in)` : ' (in full)'}.${flagged ? ' ⚠ This guest is marked "Do not rebook" in Guests.' : ''}`]);
+      `New direct booking: ${c.guest_name}, ${c.check_in} to ${c.check_out}, ${c.num_guests} guest(s). Paid ₱${Number(c.amount_due_now).toLocaleString('en-PH')} online${c.pay_type === 'deposit' ? ` (${depositPctOf(c)}% deposit; balance ₱${Number(balanceOf(c)).toLocaleString('en-PH')} due before check-in)` : ' (in full)'}.${flagged ? ' ⚠ This guest is marked "Do not rebook" in Guests.' : ''}`]);
+  if (quoteCancelled) {
+    await query(`INSERT INTO messages (conversation_id, organization_id, direction, from_name, body, status) VALUES ($1,$2,'note','BalayHub',$3,'note')`,
+      [conv.conversation_id, conv.organization_id,
+        'Paid after the quote was cancelled. The payment went through, so the booking was made. Check with the guest before check-in.']);
+  }
   await query(`UPDATE conversations SET unread = true, status = 'open', last_message_at = now() WHERE conversation_id = $1`, [conv.conversation_id]);
 }
 
@@ -596,4 +700,73 @@ async function giveUp(ref, reason) {
   }
 }
 
-module.exports = { router, publicRouter, reconcileDirect, refreshCheckout, releaseCheckout, finalize, slugify };
+// The follow-up email, in the workspace's guest language. Plain text, no tracking.
+function followupEmail(c) {
+  const day = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' });
+  // The first name only when it is a plain name; digits or markup in a name would read badly.
+  const first = String(c.guest_name || '').trim().split(/\s+/)[0];
+  const plain = /^[\p{L}'.-]{1,30}$/u.test(first);
+  const link = `${config.appUrl}/#/book/${c.booking_slug}/${c.unit_id}?check_in=${c.check_in}&check_out=${c.check_out}`;
+  const dates = `${day(c.check_in)} to ${day(c.check_out)}`;
+  if (c.guest_language === 'tl') {
+    return {
+      subject: `Gusto mo pa ba ang ${c.unit_name}?`,
+      text: `${plain ? `Hi ${first}` : 'Hi po'},\n\nNagsimula kang mag-book ng ${c.unit_name} sa ${c.host_name} para sa ${dates}, pero hindi pa natapos ang bayad.\n\nKung gusto mo pa ring mag-stay, tingnan ang dates at magbayad dito:\n${link}\n\nKung naka-book ka na, pakibalewala na lang ang message na ito.\n\n— BalayHub`,
+    };
+  }
+  return {
+    subject: `Still want ${c.unit_name}?`,
+    text: `${plain ? `Hi ${first}` : 'Hi there'},\n\nYou started booking ${c.unit_name} at ${c.host_name} for ${dates}, but the payment was not finished.\n\nIf you still want to stay, check the dates and pay here:\n${link}\n\nIf you already booked, please ignore this message.\n\n— BalayHub`,
+  };
+}
+
+// Scheduler (every 15 minutes). A guest whose direct booking ended unpaid gets one plain email two
+// hours later (D-62), only when the host has turned it on. Never for quotes, demo or read-only
+// workspaces, switched-off booking pages, or guests who have since booked those nights. Only attempts
+// that reached the payment page count, and an address gets at most one every 30 days across all workspaces.
+// `hold_until` is when the attempt ended (the hold ran out, or it was released or failed).
+async function sendAbandonedFollowups(now = new Date()) {
+  await require('./quotes').expireDueQuotes();
+  const { rows } = await query(
+    `SELECT c.checkout_ref, c.organization_id, c.unit_id, c.check_in, c.check_out, c.guest_name, c.guest_email, c.created_at,
+            u.unit_name, o.name AS host_name, o.guest_language, o.booking_slug, o.is_demo, o.plan, o.trial_ends_at, o.paid_until, o.deletion_scheduled_at
+       FROM direct_checkouts c
+       JOIN units u ON u.unit_id = c.unit_id
+       JOIN organizations o ON o.organization_id = c.organization_id
+      WHERE c.status = 'expired' AND c.provider_checkout_id IS NOT NULL AND c.followup_sent_at IS NULL AND c.quote_id IS NULL
+        AND c.hold_until <= $1::timestamptz - interval '2 hours' AND c.hold_until > $1::timestamptz - interval '1 day'
+        AND o.abandoned_followup AND o.booking_enabled
+      ORDER BY c.hold_until
+      LIMIT 100`, [now.toISOString()]);
+  let sent = 0;
+  for (const c of rows) {
+    if (c.is_demo || planStatus(c).read_only) continue;
+    const { rows: [seen] } = await query(
+      `SELECT EXISTS (SELECT 1 FROM bookings b JOIN guests g ON g.guest_id = b.guest_id
+                       WHERE b.organization_id = $1 AND b.status = 'confirmed' AND lower(g.email) = lower($2)
+                         AND daterange(b.check_in, b.check_out) && daterange($3::date, $4::date))
+          OR EXISTS (SELECT 1 FROM direct_checkouts x
+                      WHERE x.organization_id = $1 AND x.checkout_ref <> $5 AND lower(x.guest_email) = lower($2)
+                        AND ((x.status = 'confirmed' AND daterange(x.check_in, x.check_out) && daterange($3::date, $4::date))
+                          OR (x.status = 'pending' AND x.hold_until > $6::timestamptz AND x.created_at > $7::timestamptz))) AS booked`,
+      [c.organization_id, c.guest_email, c.check_in, c.check_out, c.checkout_ref, now.toISOString(), c.created_at]);
+    if (seen.booked) continue;
+    // Claim the checkout before sending, so it can never get a second email. The address is checked
+    // here, one checkout at a time, so two attempts by one guest in the same run send only one email.
+    const claimed = await query(
+      `UPDATE direct_checkouts c SET followup_sent_at = now()
+        WHERE c.checkout_ref = $1 AND c.followup_sent_at IS NULL
+          AND NOT EXISTS (SELECT 1 FROM direct_checkouts x WHERE lower(x.guest_email) = lower(c.guest_email)
+                           AND x.followup_sent_at > now() - interval '30 days')`, [c.checkout_ref]);
+    if (!claimed.rowCount) continue;
+    const msg = followupEmail(c);
+    const r = await sendMail({ to: c.guest_email, subject: msg.subject, text: msg.text });
+    if (r.delivered) sent += 1;
+  }
+  return sent;
+}
+
+module.exports = {
+  router, publicRouter, reconcileDirect, sendAbandonedFollowups, refreshCheckout, releaseCheckout, finalize, slugify,
+  startCheckout, priceStay, isFree, withHostState, parseSelections, priceAddonSelections, cents, money, manilaToday, nightsBetween, validationError,
+};

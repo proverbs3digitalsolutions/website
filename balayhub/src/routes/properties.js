@@ -14,6 +14,8 @@ const managers = requireRole('owner', 'manager');
 
 const PROPERTY_TYPES = ['apartment', 'boarding_house', 'condominium', 'house', 'commercial', 'dormitory', 'other'];
 const UNIT_TYPES = ['room', 'studio', 'apartment', 'bedspace', 'house', 'commercial_space', 'other'];
+// A listing's public page address (/stay/<host>/<address>).
+const SLUG_RE = /^[a-z0-9-]{3,60}$/;
 
 const propertySpec = {
   property_name: { type: 'string', required: true, max: 120, label: 'Property name' },
@@ -53,6 +55,7 @@ const unitSpec = {
   cancellation_policy: { type: 'enum', values: POLICY_KEYS, label: 'Cancellation policy' },
   cancellation_policy_text: { type: 'text', max: 1000, label: 'Custom policy text' },
   deposit_pct: { type: 'int', min: 10, max: 90, label: 'Deposit' },
+  public_slug: { type: 'string', max: 60, label: 'Page address' },
 };
 
 // A custom policy is the host's own wording, so it can't be blank.
@@ -62,9 +65,43 @@ function checkCustomPolicy(policy, text) {
   }
 }
 
+// Only lowercase letters, numbers and hyphens, 3 to 60 characters. A blank address is refused too.
+function checkSlugFormat(slug) {
+  if (!SLUG_RE.test(slug || '')) {
+    throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { public_slug: 'Use 3 to 60 lowercase letters, numbers or hyphens.' } });
+  }
+}
+
+// Page addresses are unique within a workspace. No database index enforces that (units have no
+// organization column), so the workspace is locked while an address is chosen or changed.
+const slugTakenError = () => new HttpError(409, 'Another listing in your workspace already uses that page address.', { code: 'SLUG_TAKEN' });
+async function lockSlugs(db, orgId) {
+  await db.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`unit-slugs:${orgId}`]);
+}
+async function slugTaken(db, orgId, slug, unitId) {
+  const { rows } = await db.query(
+    `SELECT 1 FROM units u JOIN properties p USING (property_id)
+      WHERE p.organization_id = $1 AND u.public_slug = $2 AND u.unit_id IS DISTINCT FROM $3 LIMIT 1`,
+    [orgId, slug, unitId]);
+  return rows.length > 0;
+}
+// "Paris 1208" -> paris-1208, then paris-1208-2, paris-1208-3 while taken. A name too short for
+// the 3-character rule gets a prefix: "A" -> listing-a.
+async function freeSlug(db, orgId, name) {
+  let base = String(name).toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60).replace(/-+$/, '');
+  if (base.length < 3) base = base ? `listing-${base}` : 'listing';
+  let slug = base;
+  for (let n = 2; await slugTaken(db, orgId, slug, null); n += 1) {
+    const suffix = `-${n}`;
+    slug = `${base.slice(0, 60 - suffix.length).replace(/-+$/, '')}${suffix}`;
+  }
+  return slug;
+}
+
 // Occupancy is derived from active leases, never stored by hand.
 const UNIT_SELECT = `
-  SELECT u.unit_id, u.property_id, u.unit_name, u.unit_type, u.monthly_rent, u.security_deposit_amount,
+  SELECT u.unit_id, u.property_id, u.unit_name, u.public_slug, u.unit_type, u.monthly_rent, u.security_deposit_amount,
          u.availability, u.availability_date, u.status, u.created_at,
          u.nightly_rate, u.cleaning_fee, u.max_guests, to_char(u.checkin_time, 'HH24:MI') AS checkin_time,
          to_char(u.checkout_time, 'HH24:MI') AS checkout_time, u.cleaning_status,
@@ -232,25 +269,30 @@ router.post('/properties/:id/units', managers, ah(async (req, res) => {
   if (property.status !== 'active') throw new HttpError(409, 'Restore this property before adding units.', { code: 'ARCHIVED' });
   const body = validate(req.body, unitSpec);
   checkCustomPolicy(body.cancellation_policy, body.cancellation_policy_text);
+  if (body.public_slug) checkSlugFormat(body.public_slug);
   try {
     const unit = await tx(async (db) => {
+      const org = req.user.organization_id;
+      await lockSlugs(db, org);
+      if (body.public_slug && await slugTaken(db, org, body.public_slug, null)) throw slugTakenError();
+      const publicSlug = body.public_slug || await freeSlug(db, org, body.unit_name);
       const { rows: [u] } = await db.query(
         `INSERT INTO units (property_id, unit_name, unit_type, monthly_rent, security_deposit_amount, availability, availability_date,
                             nightly_rate, cleaning_fee, max_guests, checkin_time, checkout_time,
                             wifi_name, wifi_password, checkin_instructions, house_rules,
                             description, bookable_online, payment_option, min_nights, balance_due_days,
                             weekend_rate, holiday_rate, weekly_discount, monthly_discount,
-                            cancellation_policy, cancellation_policy_text, deposit_pct)
+                            cancellation_policy, cancellation_policy_text, deposit_pct, public_slug)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,COALESCE($11::time, '14:00'),COALESCE($12::time, '12:00'),$13,$14,$15,$16,
                  $17, $18, COALESCE($19, 'either'), COALESCE($20, 1), COALESCE($21, 3),
-                 $22, $23, COALESCE($24, 0), COALESCE($25, 0), $26, $27, COALESCE($28, 50)) RETURNING *`,
+                 $22, $23, COALESCE($24, 0), COALESCE($25, 0), $26, $27, COALESCE($28, 50), $29) RETURNING *`,
         [property.property_id, body.unit_name, body.unit_type, body.monthly_rent || '0.00', body.security_deposit_amount || '0.00',
           body.availability || 'available', body.availability_date, body.nightly_rate, body.cleaning_fee || '0.00',
           body.max_guests, body.checkin_time, body.checkout_time,
           body.wifi_name, body.wifi_password, body.checkin_instructions, body.house_rules,
           body.description, Boolean(body.bookable_online), body.payment_option, body.min_nights, body.balance_due_days,
           body.weekend_rate, body.holiday_rate, body.weekly_discount, body.monthly_discount,
-          body.cancellation_policy, body.cancellation_policy_text, body.deposit_pct]);
+          body.cancellation_policy, body.cancellation_policy_text, body.deposit_pct, publicSlug]);
       await audit(db, req.user, 'unit.created', 'unit', u.unit_id, { property_id: property.property_id, name: u.unit_name });
       return u;
     });
@@ -269,6 +311,7 @@ router.patch('/units/:id', managers, ah(async (req, res) => {
   checkCustomPolicy(
     'cancellation_policy' in body ? body.cancellation_policy : unit.cancellation_policy,
     'cancellation_policy_text' in body ? body.cancellation_policy_text : unit.cancellation_policy_text);
+  if ('public_slug' in body) checkSlugFormat(body.public_slug);
   // Giving a long-term unit a nightly rate turns it into a listing.
   if (body.nightly_rate && !unit.nightly_rate && unit.status === 'active') await checkListingLimit(req.user);
   // deposit_pct is NOT NULL, so a blank deposit leaves it unchanged rather than clearing it.
@@ -279,6 +322,11 @@ router.patch('/units/:id', managers, ah(async (req, res) => {
   const sets = keys.map((k, i) => `${k} = $${i + 2}`);
   try {
     const updated = await tx(async (db) => {
+      if ('public_slug' in body) {
+        const org = req.user.organization_id;
+        await lockSlugs(db, org);
+        if (await slugTaken(db, org, body.public_slug, unit.unit_id)) throw slugTakenError();
+      }
       const { rows: [u] } = await db.query(`UPDATE units SET ${sets.join(', ')} WHERE unit_id = $1 RETURNING *`,
         [unit.unit_id, ...keys.map((k) => body[k])]);
       await audit(db, req.user, 'unit.updated', 'unit', u.unit_id, {
