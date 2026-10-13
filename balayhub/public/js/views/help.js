@@ -7,6 +7,7 @@ import {
   h, icon, fmtDateTime, badge, field, makeForm, emptyState, searchBox, pageHead, toast, confirmDialog, filesList, label } from '../ui.js';
 import { state, navigate } from '../app.js';
 import { currentTheme } from '../themeswitch.js';
+import { assistantEnabled, openAssistant } from '../assistant.js';
 
 const TOPICS = [
   ['question', 'Question — how do I…?'],
@@ -67,7 +68,11 @@ export async function helpView(el, { query }) {
   const sync = () => history.replaceState(null, '', `#/help${qs({ q: filters.q, view: filters.view === 'open' ? '' : filters.view, tq: filters.tq })}`);
   const articleSearch = searchBox({ value: filters.q, placeholder: 'Search help — e.g. connect Airbnb, refund, gate pass', onSearch: (q) => { filters.q = q; sync(); drawArticles(); } });
   articleSearch.classList.add('search--wide');
-  await Promise.all([drawArticles(), drawTickets()]);
+  const [aiOn] = await Promise.all([assistantEnabled(), drawArticles(), drawTickets()]);
+  const askInput = h('input', { class: 'input', maxlength: 2000, placeholder: 'e.g. Paano i-connect ang Airbnb calendar ko?', 'aria-label': 'Ask the assistant' });
+  const askCard = aiOn && h('form', { class: 'card help-ask', onsubmit: (e) => { e.preventDefault(); openAssistant(askInput.value.trim() || undefined); askInput.value = ''; } },
+    h('div', { class: 'help-ask__title' }, icon('chat'), h('div', null, h('h2', null, 'Ask the BalayHub assistant'), h('p', { class: 'muted small' }, 'Instant answers in English, Tagalog or Taglish, any time.'))),
+    h('div', { class: 'help-ask__row' }, askInput, h('button', { class: 'btn btn--primary', type: 'submit' }, 'Ask')));
 
   el.replaceChildren(
     pageHead({ title: 'Help & support', sub: 'Guides for every part of BalayHub, and a direct line to our team', actions: h('a', { class: 'btn btn--primary', href: '#/help/new' }, icon('plus'), 'Contact support') }),
@@ -75,6 +80,7 @@ export async function helpView(el, { query }) {
       h('h2', null, 'How can we help?'),
       articleSearch,
       h('p', { class: 'muted small' }, 'Can’t find it? ', h('a', { href: '#/help/new' }, 'Open a support ticket'), ' — we usually reply within 1 business day.')),
+    askCard,
     h('div', { class: 'grid grid--help' },
       articlesBox,
       h('div', { class: 'stack' },
@@ -145,7 +151,15 @@ export async function helpNewView(el, { query }) {
       navigate(`#/help/tickets/${res.ticket_id}`, { replace: true });
     },
   });
-  if (query.subject) suggest(query.subject);
+  // Handed over from the assistant chat.
+  let prefill = null;
+  try { prefill = JSON.parse(sessionStorage.getItem('bh-support-prefill')); sessionStorage.removeItem('bh-support-prefill'); } catch { /* ignore */ }
+  if (prefill) {
+    subject.querySelector('input').value = prefill.subject || '';
+    form.querySelector('textarea[name=body]').value = prefill.body || '';
+    if (!form.querySelector('select[name=category]').value) form.querySelector('select[name=category]').value = 'question';
+  }
+  if (query.subject || prefill?.subject) suggest(query.subject || prefill.subject);
 
   el.replaceChildren(
     pageHead({ title: 'Contact support', sub: 'Tell us what’s going on. You’ll get a ticket number and can follow every step here.', back: { href: '#/help', label: 'Help & support' } }),

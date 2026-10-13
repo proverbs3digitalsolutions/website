@@ -11,6 +11,7 @@ const CATEGORIES = [
   ['guests', 'Guests & messages'],
   ['operations', 'Cleaning, condo & deposits'],
   ['business', 'Reports, owners & team'],
+  ['longterm', 'Long-term rentals (monthly tenants)'],
   ['account', 'Account, plan & privacy'],
 ];
 
@@ -185,6 +186,36 @@ const ARTICLES = [
       'Settings → Team & permissions → Invite. Choose Property manager (co-host) or Staff (cleaner, front desk, accountant) and which buildings they can access.',
       'Share the invite link if the email doesn\'t arrive; pending invites have a New link button.',
       'Staff don\'t see guest phone numbers/emails, the inbox or reports.',
+    ],
+  },
+  {
+    slug: 'long-term-setup', category: 'longterm', roles: MANAGERS, title: 'Set up monthly rentals: properties, tenants and leases',
+    keywords: 'long-term monthly tenant lease boarding house apartment dorm room bedspace contract rent due day advance deposit renew end lease',
+    body: [
+      'For monthly rentals (apartments, boarding houses, dorms, bedspaces), go to Properties → Add property, then Add unit with the monthly rent.',
+      'Go to Tenants → Add tenant for each person renting, then create their lease from the tenant page: unit, start and end date, monthly rent, due day, advance and deposit.',
+      'Rent charges are created from the lease every month, so Rent & Expenses always shows who has paid and who is overdue.',
+      'When a tenant moves out, open the lease and choose End lease. Leases that are about to expire are listed on the Dashboard so you can renew in time.',
+    ],
+  },
+  {
+    slug: 'rent-payments', category: 'longterm', roles: ALL, title: 'Record rent payments and see who is overdue',
+    keywords: 'rent payment collect overdue unpaid partial receipt gcash cash bank void tenant balance monthly',
+    body: [
+      'Go to Rent & Expenses → Record payment. Choose the tenant/lease, amount, date and method (cash, GCash, Maya, bank transfer, check) and add the reference number if any.',
+      'Partial payments are allowed. The rent status shows Paid, Partial, Unpaid or Overdue.',
+      'You can attach a photo of the receipt or deposit slip on the payment page.',
+      'Made a mistake? Owners and managers can void a payment with a reason (it stays in the history and audit log instead of being deleted).',
+    ],
+  },
+  {
+    slug: 'expenses-maintenance', category: 'longterm', roles: ALL, title: 'Expenses, repairs and maintenance requests',
+    keywords: 'expense repair maintenance plumber electricity water association dues taxes cost receipt request fix broken',
+    body: [
+      'Expenses: Rent & Expenses → Expenses tab → Add expense (category, amount, date, vendor). Attach the receipt photo. Expenses appear in Reports.',
+      'Repairs: Maintenance → New request. Set the property/unit, priority and who is assigned. Move it to In progress and Mark resolved when done.',
+      'Use Add cost on a maintenance request to record what you paid; it is saved as a Repairs expense automatically.',
+      'Reports show income, expenses and net per property and month, and can be exported to Excel/CSV.',
     ],
   },
   {

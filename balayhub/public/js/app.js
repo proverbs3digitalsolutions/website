@@ -33,6 +33,7 @@ import { reviewsView, discountCodesView } from './views/guestcare.js';
 import { helpView, helpNewView, helpTicketView, adminSupportView, adminSupportTicketView } from './views/help.js';
 import { registerServiceWorker, forgetThisDevice } from './notifications.js';
 import { themeSwitch } from './themeswitch.js';
+import { assistantButton, resetAssistant } from './assistant.js';
 
 export const state = { user: null, requireEmailVerification: true };
 
@@ -238,6 +239,7 @@ function navLink([path, text, ic], current) {
 
 async function logout() {
   await forgetThisDevice();
+  resetAssistant();
   try { await post('/auth/logout'); } catch { /* ignore */ }
   state.user = null;
   try { sessionStorage.clear(); } catch { /* ignore */ }
@@ -272,7 +274,8 @@ function buildShell(path) {
     h('div', { class: 'shell__main' }, planBanner(), content),
     h('nav', { class: 'bottomnav', 'aria-label': 'Main' },
       bottomKeys.map(([p, t, ic]) => h('a', { href: `#${p}`, 'aria-current': isCurrent(p, path) ? 'page' : null }, icon(ic), t === 'Rent & Expenses' ? 'Rent' : t)),
-      h('button', { type: 'button', onclick: () => openMore(path), 'aria-current': moreNav().some(([p]) => isCurrent(p, path)) ? 'page' : null }, icon('more'), 'More')));
+      h('button', { type: 'button', onclick: () => openMore(path), 'aria-current': moreNav().some(([p]) => isCurrent(p, path)) ? 'page' : null }, icon('more'), 'More')),
+    assistantButton());
   // Unread guest messages badge on the Inbox link.
   unreadCount().then((n) => {
     if (!n) return;

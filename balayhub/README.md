@@ -30,6 +30,8 @@ Multi-calendar with Airbnb, Booking.com and Agoda iCal sync, reservations, a gue
 
 **Help & support.** Every member gets *Help & support* in the menu: searchable guides (`src/lib/helpcenter.js`) and support tickets with a progress tracker (Received → In progress → Waiting for you → Resolved), a two-way conversation, screenshots, reopening within 14 days and a 1–5 rating. Tickets email the addresses in `PLATFORM_ADMIN_EMAILS`, who answer from *Admin → Support queue* (internal notes, assign, status). Resolved tickets close automatically after 7 days.
 
+**BalayHub assistant.** With `ANTHROPIC_API_KEY` set, a chat button on every app page answers how-to questions in English, Tagalog or Taglish. It knows the help-center guides and the user's role, workspace type, plan and current page — not their guest or booking data — and hands off to a support ticket (with the chat attached) when it can't solve something. Limits: 40 questions per person per hour, 300 per workspace per day.
+
 Browser journeys (need a running, seeded server and Playwright): `test/e2e-stays-browser.js`, `test/e2e-inbox-browser.js` (start the server with `SMTP_URL=test://`) and `test/e2e-selling-browser.js` (with `PLATFORM_ADMIN_EMAILS=stays@balayhub.test`).
 
 ## What's in the MVP (long-term)
@@ -81,6 +83,7 @@ See `.env.example`. Important settings for production:
 | `NODE_ENV=production` | Secure cookies, HSTS, and hides development links |
 | `IMAP_URL` | Optional. Reads guest replies into the Inbox ([INBOX-SETUP.md](docs/INBOX-SETUP.md)) |
 | `ANTHROPIC_API_KEY` / `AI_MODEL` | Optional. AI reply drafts in the Inbox |
+| `ASSISTANT_MODEL` | Optional. Model for the in-app BalayHub assistant (default `claude-opus-5-5`; needs `ANTHROPIC_API_KEY`) |
 | `PLATFORM_ADMIN_EMAILS` | Emails that can open the platform Admin page ([SELLING.md](docs/SELLING.md)) |
 | `SALES_CONTACT_EMAIL` / `TRIAL_DAYS` | Contact shown on the landing page; free-trial length (default 14) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Optional. "Continue with Google" ([GOOGLE-SIGNIN.md](docs/GOOGLE-SIGNIN.md)) |

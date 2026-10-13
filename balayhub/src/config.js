@@ -32,6 +32,9 @@ const config = {
   // AI reply drafts (optional).
   anthropicApiKey: env.ANTHROPIC_API_KEY || '',
   aiModel: env.AI_MODEL || 'claude-haiku-5-5',
+  // In-app BalayHub assistant (Help & support chat). Uses the same API key.
+  assistantModel: env.ASSISTANT_MODEL || 'claude-opus-5-5',
+  anthropicBaseUrl: env.ANTHROPIC_BASE_URL || '',
   // Comma-separated emails allowed to open the platform admin page (plans/trials).
   platformAdmins: (env.PLATFORM_ADMIN_EMAILS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
   trialDays: Number(env.TRIAL_DAYS || 14),

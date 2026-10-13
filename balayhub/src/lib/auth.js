@@ -117,7 +117,7 @@ function requireWorkspace(req, res, next) {
 
 // Read-only workspaces (the public demo, an ended trial, an overdue plan) can
 // view and export everything but not change anything.
-const PLAN_EXEMPT = /^\/(auth\/|admin\/|invitations\/|billing\/|push\/|support\/|workspace\/delete\/cancel$)/;
+const PLAN_EXEMPT = /^\/(auth\/|admin\/|invitations\/|billing\/|push\/|support\/|assistant\/|workspace\/delete\/cancel$)/;
 function planGuard(req, res, next) {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) || !req.user?.organization_id) return next();
   // Guest-facing pages (opened by a private link) don't depend on who is signed in.
