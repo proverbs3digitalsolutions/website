@@ -815,3 +815,10 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .stars button:focus-visible { outline: 2px solid var(--forest, #0f5132); }
 .stars--sm button { font-size: 1.4rem; }
 .rating { color: #b7791f; letter-spacing: 1px; white-space: nowrap; }
+
+/* ================================================================ gate pass */
+.gp .receipt { max-width: 720px; }
+.gp__names { margin: 0; padding-left: 18px; }
+.gp__ids { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.gp__ids img { width: 100%; border-radius: 8px; border: 1px solid var(--line); }
+@media print { .gp__ids img { break-inside: avoid; } }

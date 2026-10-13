@@ -11,6 +11,7 @@ const GUIDES = [
   ['Block dates or change a price', ['Open the Calendar and tap an open night.', 'Choose Block (owner stay, repairs) or Set nightly price for that night.']],
   ['Charge more on weekends and holidays', ['Edit a listing and fill in Pricing helpers: weekend rate, holiday rate, weekly and monthly discounts.', 'For peak months or a minimum stay over Holy Week or Christmas, open Calendar → Pricing rules → Add season.', 'PH holidays are applied automatically.']],
   ['Reply to a guest', ['Open Inbox, choose the conversation and type your message, or insert a template.', 'Use ✨ Draft reply with AI if it is turned on. Always read before sending.']],
+  ['Send the gate pass to your condo admin', ['Open Listings → Gate pass and enter the building admin\'s email.', 'Turn on automatic sending. BalayHub emails the guests\' names (and IDs from the check-in form) before arrival.', 'The admin clicks "Confirm received" and you see it on the reservation.']],
   ['Handle cleaning', ['Open Housekeeping to see today\'s cleanings and the next guest\'s arrival.', 'Use "Copy for cleaner" to send the checklist by Messenger or Viber.']],
   ['Use BalayHub on your phone', ['Open BalayHub in your phone\'s browser and log in.', 'iPhone: Share → Add to Home Screen. Android: menu ⋮ → Add to Home screen.', 'It then opens like an app.']],
 ];

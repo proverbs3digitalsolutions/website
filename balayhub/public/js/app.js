@@ -27,6 +27,7 @@ import { payBalanceView } from './views/pay.js';
 import { pricingView } from './views/pricing.js';
 import { ownersView, ownerStatementView } from './views/owners.js';
 import { guestReviewView } from './views/review.js';
+import { gatepassSettingsView, gatepassPublicView } from './views/gatepass.js';
 import { reviewsView, discountCodesView } from './views/guestcare.js';
 import { registerServiceWorker, forgetThisDevice } from './notifications.js';
 
@@ -48,6 +49,7 @@ const routes = [
   ['/terms', termsView, OPEN],
   ['/pay/:token', payBalanceView, OPEN],
   ['/review/:token', guestReviewView, OPEN],
+  ['/gatepass/:token', gatepassPublicView, OPEN],
   ['/book/:slug', bookHostView, OPEN],
   ['/book/:slug/done/:token', bookDoneView, OPEN],
   ['/book/:slug/:unitId', bookListingView, OPEN],
@@ -73,6 +75,7 @@ const routes = [
   ['/owners', ownersView, APP],
   ['/reviews', reviewsView, APP],
   ['/discount-codes', discountCodesView, APP],
+  ['/gatepass-settings', gatepassSettingsView, APP],
   ['/owners/:id/statement', ownerStatementView, APP],
   ['/reservations', reservationsView, APP],
   ['/reservations/:id', reservationDetailView, APP],

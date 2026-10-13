@@ -26,10 +26,10 @@ const mailEnabled = () => Boolean(transport);
 
 // Send an email. Without SMTP configured, the message is logged (development
 // only) so flows can still be exercised locally. Never throws.
-async function sendMail({ to, subject, text, from, replyTo, messageId, headers }) {
+async function sendMail({ to, cc, subject, text, from, replyTo, messageId, headers, attachments }) {
   if (transport) {
     try {
-      await transport.sendMail({ from: from || config.mailFrom, to, subject, text, replyTo, messageId, headers });
+      await transport.sendMail({ from: from || config.mailFrom, to, cc, subject, text, replyTo, messageId, headers, attachments });
       return { delivered: true };
     } catch (err) {
       const reason = String(err.response || err.message);

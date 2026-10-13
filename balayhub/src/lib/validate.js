@@ -131,4 +131,4 @@ function uuidParam(value) {
   return value.toLowerCase();
 }
 
-module.exports = { validate, parseMoney, isValidDate, uuidParam, UUID_RE };
+module.exports = { validate, parseMoney, isValidDate, uuidParam, UUID_RE, EMAIL_RE };

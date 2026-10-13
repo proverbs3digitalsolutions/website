@@ -66,6 +66,21 @@ Each host can have a public booking page, such as `https://balayhub.proverbs3dig
 
 The booking page is paused automatically if your plan ends.
 
+## Gate pass for your condo admin
+
+Open **Listings → Gate pass**, choose a building and enter the admin's email (up to 3, e.g. admin
+and security). Turn on automatic sending and choose how many days before check-in.
+
+- BalayHub emails the admin the guests' names, dates and times, number of guests, plate number,
+  your notes (e.g. parking slot) and "Authorized by" (the unit owner name the admin has on file).
+- The email has a private link to a printable gate pass with the guests' ID photos, and a
+  **Confirm received** button. You see "Received by admin" on the reservation and in the Inbox.
+- Names and IDs come from the guest check-in form. BalayHub waits for it until the day before
+  arrival, then sends what it has and tells you; send it again from the reservation once the guest
+  fills it in.
+- IDs are shown through the private link by default (it stops working the day after check-out).
+  You can choose to attach them to the email instead.
+
 ## Pricing helpers
 
 Set them per listing (Listings → Edit → *Pricing helpers*) and in **Calendar → Pricing rules**:

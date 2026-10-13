@@ -242,7 +242,9 @@ export async function listingsView(el, { query }) {
   el.replaceChildren(
     h('div', { class: 'page-head' },
       h('div', { class: 'page-head__title' }, h('h1', null, 'Listings'), h('p', null, 'Your units, rates, cleaning status and channel connections')),
-      canManage && h('div', { class: 'page-head__actions' }, h('button', { class: 'btn btn--primary', onclick: () => addListingModal(load) }, icon('plus'), 'Add listing'))),
+      canManage && h('div', { class: 'page-head__actions' },
+        h('a', { class: 'btn btn--secondary', href: '#/gatepass-settings' }, 'Gate pass'),
+        h('button', { class: 'btn btn--primary', onclick: () => addListingModal(load) }, icon('plus'), 'Add listing'))),
     box);
   if (query.new && canManage) { history.replaceState(null, '', '#/listings'); addListingModal(load); }
 }

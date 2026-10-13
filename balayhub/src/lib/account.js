@@ -8,7 +8,7 @@ const storage = require('./storage');
 
 // Never exported: secrets and internal tokens.
 const SECRET_KEYS = ['password_hash', 'google_sub', 'token_hash', 'checkin_token', 'reply_token', 'idempotency_key', 'storage_key',
-  'checkout_url', 'export_token', 'ical_token', 'url', 'paymongo_key_enc', 'public_token', 'provider_checkout_id', 'key_enc', 'pay_token', 'p256dh', 'auth', 'endpoint'];
+  'checkout_url', 'export_token', 'ical_token', 'url', 'paymongo_key_enc', 'public_token', 'provider_checkout_id', 'key_enc', 'pay_token', 'review_token', 'token', 'p256dh', 'auth', 'endpoint'];
 const strip = (rows) => rows.map((r) => Object.fromEntries(Object.entries(r).filter(([k]) => !SECRET_KEYS.includes(k))));
 
 async function exportOrganization(orgId) {
@@ -26,7 +26,7 @@ async function exportOrganization(orgId) {
   };
   for (const t of ['properties', 'guests', 'bookings', 'booking_payments', 'guest_registrations', 'conversations', 'messages',
     'message_templates', 'automations', 'cleaning_tasks', 'ical_feeds', 'tenants', 'leases', 'payments', 'expenses',
-    'maintenance_requests', 'files', 'billing_payments', 'invitations', 'audit_logs', 'direct_checkouts', 'balance_checkouts', 'seasons', 'unit_owners', 'guest_reviews', 'discount_codes']) {
+    'maintenance_requests', 'files', 'billing_payments', 'invitations', 'audit_logs', 'direct_checkouts', 'balance_checkouts', 'seasons', 'unit_owners', 'guest_reviews', 'discount_codes', 'gate_passes']) {
     out[t] = await byOrg(t);
   }
   return out;
@@ -35,7 +35,7 @@ async function exportOrganization(orgId) {
 // Tables purgeOrganization() clears. test/account.test.js fails if a new table
 // is added to the schema without being listed here.
 const PURGED_TABLES = [
-  'push_subscriptions', 'seasons', 'guest_reviews', 'balance_checkouts', 'direct_checkouts', 'discount_codes', 'automation_runs', 'messages', 'conversations', 'guest_registrations', 'files', 'cleaning_tasks', 'booking_payments',
+  'push_subscriptions', 'seasons', 'gate_passes', 'guest_reviews', 'balance_checkouts', 'direct_checkouts', 'discount_codes', 'automation_runs', 'messages', 'conversations', 'guest_registrations', 'files', 'cleaning_tasks', 'booking_payments',
   'billing_payments', 'receipt_counters', 'bookings', 'ical_feeds', 'guests', 'nightly_rates', 'payments', 'rent_charges',
   'leases', 'tenants', 'expenses', 'maintenance_requests', 'automations', 'message_templates', 'property_assignments',
   'units', 'unit_owners', 'properties', 'invitations', 'audit_logs', 'sessions', 'auth_tokens', 'consent_records', 'users', 'organizations',
@@ -54,6 +54,7 @@ async function purgeOrganization(orgId) {
     await run('DELETE FROM direct_checkouts WHERE organization_id = $1');
     await run('DELETE FROM discount_codes WHERE organization_id = $1');
     await run('DELETE FROM guest_reviews WHERE organization_id = $1');
+    await run('DELETE FROM gate_passes WHERE organization_id = $1');
     await run(`DELETE FROM automation_runs WHERE automation_id IN (SELECT automation_id FROM automations WHERE organization_id = $1)
                  OR booking_id IN (SELECT booking_id FROM bookings WHERE organization_id = $1)`);
     for (const t of ['messages', 'conversations', 'guest_registrations', 'files', 'cleaning_tasks', 'booking_payments', 'billing_payments', 'receipt_counters']) {

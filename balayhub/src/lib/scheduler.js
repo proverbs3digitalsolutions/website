@@ -40,6 +40,7 @@ function startScheduler() {
   // Cleaning tasks for today's and tomorrow's departures.
   every(15 * 60 * 1000, 'housekeeping', housekeeping.createDueTasks, 40 * 1000);
   // Delete guest ID photos after the retention period.
+  every(15 * 60 * 1000, 'gate-pass', require('../routes/gatepass').sendDuePasses, 55 * 1000);
   every(6 * 60 * 60 * 1000, 'guest-ids', require('../routes/checkin').purgeOldIds, 70 * 1000);
   // Online plan payments whose webhook never arrived.
   every(10 * 60 * 1000, 'billing', require('./billing').reconcile, 80 * 1000);

@@ -8,6 +8,7 @@ import { state, navigate } from '../app.js';
 import { messageGuest } from './inbox.js';
 import { checkinCard } from './checkin.js';
 import { stars } from './guestcare.js';
+import { gatepassCard } from './gatepass.js';
 
 const ordinal = (n) => { const s = ['th', 'st', 'nd', 'rd']; const v = n % 100; return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`; };
 // "VIP", "Returning guest · 3rd stay", "Do not rebook"
@@ -255,6 +256,7 @@ export async function reservationDetailView(el, { params, rerender }) {
   };
 
   const checkin = canManage && r.status === 'confirmed' ? await checkinCard(r.booking_id, rerender) : null;
+  const gatepass = canManage && r.status === 'confirmed' && r.check_out >= todayManila() ? await gatepassCard(r.booking_id, rerender) : null;
 
   // Private link where the guest pays the balance online (host's PayMongo).
   const copyPayLink = async () => {
@@ -306,7 +308,7 @@ export async function reservationDetailView(el, { params, rerender }) {
           h('div', { class: 'card__head' }, h('h2', null, 'Guest review'), h('span', { class: 'muted small' }, 'Private')),
           h('p', null, stars(r.review.rating), ` ${r.review.rating}/5`, r.review.cleanliness ? h('span', { class: 'muted small' }, ` · cleanliness ${r.review.cleanliness}/5`) : null),
           r.review.comment && h('p', { style: { whiteSpace: 'pre-wrap' } }, `“${r.review.comment}”`)),
-        checkin),
+        checkin, gatepass),
       h('div', { class: 'stack' },
         h('div', { class: 'card' },
           h('div', { class: 'card__head' }, h('h2', null, 'Payment'), h('div', { class: 'chips' },
