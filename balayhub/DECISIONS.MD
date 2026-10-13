@@ -116,3 +116,5 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 - The guest's bill no longer shows the booking platform's commission. Anything already settled outside BalayHub shows as one neutral "Adjustments" line, so the bill still adds up.
 - Downloads of payment proofs and payment files are recorded in the audit log.
 
+
+**D-37 confirmed · 2026-10-13 · Founder kept the D-37 owner-statement choices and the manual-payment cutoff at check-out** ("keep your choices"). Phase 2 starts on that basis.

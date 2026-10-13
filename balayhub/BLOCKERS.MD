@@ -49,14 +49,14 @@ Last updated: 2026-10-13
 
 ## Decisions from the competitor research (2026-10-13)
 
-- [ ] **What to build next.** Phase 1 (money done right: itemised bills, payment proofs, cancellation policies, host net) or SMS reminders first? SMS needs an outside SMS provider. Recommendation: Phase 1 first.
+- [x] **What to build next.** Decided 2026-10-13: Phase 1 first, then Phase 2. Phase 1 (money done right: itemised bills, payment proofs, cancellation policies, host net) or SMS reminders first? SMS needs an outside SMS provider. Recommendation: Phase 1 first.
 - [ ] **Tax practitioner check before BIR features.** Confirm for Filipino STR hosts:
   - the percentage tax rate vs VAT and the 8% option
   - the invoice wording and numbering under the EOPT Act
   - the monthly and quarterly filing rules
 
   Until confirmed, BalayHub won't generate "BIR-compliant" invoices.
-- [ ] **Owner fees.** Also confirm D-37: should extras go to the owner's gross, should refunds reduce the owner's statement, and should the management fee be charged after refunds? Which fee rule do most of your owners use: % of gross, % of net after channel fees, or a flat monthly fee? Do owners need a login, or is an emailed PDF enough?
+- [x] **Owner fees.** Decided 2026-10-13: keep D-37 as is. Phase 2 offers all three fee types and both an owner login and an emailed statement, so each owner can be set up their own way. Original question: confirm D-37: should extras go to the owner's gross, should refunds reduce the owner's statement, and should the management fee be charged after refunds? Which fee rule do most of your owners use: % of gross, % of net after channel fees, or a flat monthly fee? Do owners need a login, or is an emailed PDF enough?
 - [ ] **Free plan.** Offer a permanent free plan for 1 unit, as Hospitable and Zeevou do, to win the largest group of hosts? Today there's a 14-day trial.
 - [ ] **Smarter pricing scope.** Simple rules (gap nights, last-minute, events) are planned. Should BalayHub also adjust prices automatically from your own occupancy? This is not AI, but it is more complex.
 
