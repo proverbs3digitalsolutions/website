@@ -18,13 +18,13 @@ BalayHub checks your inbox every 2 minutes and **only reads emails with a `+bh-`
 ## Step 1: Turn on guest replies (IMAP)
 Use the **same Google account and App Password** you used for `SMTP_URL`.
 
-1. Check that IMAP is on: in Gmail, go to **⚙ Settings → See all settings → Forwarding and POP/IMAP → IMAP access: Enable IMAP → Save**. On Google Workspace it is usually already on.
+1. Check that IMAP is on: in Gmail, go to **⚙ Settings → See all settings → Forwarding and POP/IMAP**. Google now keeps IMAP always on, so there's usually no "Enable IMAP" switch. If that page shows IMAP options ("When I mark a message in IMAP as deleted…"), IMAP is on and you can leave every option as it is.
 2. In the Hostinger **Web console**:
    ```bash
    cd /opt/balayhub-src/balayhub
    nano deploy/.env
    ```
-3. Add this line. It's the same as your `SMTP_URL`, with `smtps` changed to `imaps`, `smtp` to `imap`, and `465` to `993`:
+3. Add this line. It's the same as your `SMTP_URL`, with **three** changes: `smtps://` → `imaps://`, `smtp.gmail.com` → `imap.gmail.com`, and `465` → `993`. (The host is the easy one to miss.)
    ```
    IMAP_URL=imaps://admin%40proverbs3digitalsolutions.com:YOURAPPPASSWORD@imap.gmail.com:993
    ```
