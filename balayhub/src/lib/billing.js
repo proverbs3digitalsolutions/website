@@ -10,7 +10,6 @@ const { tx, one, query } = require('../db');
 const { PLANS } = require('./plans');
 const { audit } = require('./audit');
 
-const API = 'https://api.paymongo.com/v1';
 const MONTH_OPTIONS = { 1: 1, 3: 3, 12: 10 }; // months → months charged (12 months = 2 free)
 
 const enabled = () => Boolean(config.paymongoSecretKey);
@@ -21,33 +20,8 @@ function price(plan, months) {
   return p.price * MONTH_OPTIONS[months];
 }
 
-const serviceError = (msg) => Object.assign(new Error(msg), { status: 502 });
-
-async function paymongo(method, path, body) {
-  let res;
-  try {
-    res = await fetch(`${API}${path}`, {
-    method,
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${config.paymongoSecretKey}:`).toString('base64')}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(20000),
-    });
-  } catch (err) {
-    console.error(`[billing] PayMongo ${method} ${path} unreachable: ${err.message}`);
-    throw serviceError("Couldn't reach the payment service. Please try again in a moment.");
-  }
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const detail = data?.errors?.[0]?.detail || `HTTP ${res.status}`;
-    console.error(`[billing] PayMongo ${method} ${path} failed: ${detail}`);
-    throw serviceError('The payment service could not start the checkout. Please try again in a moment.');
-  }
-  return data;
-}
+const paymongoClient = require('./paymongo');
+const paymongo = (method, path, body) => paymongoClient.request(config.paymongoSecretKey, method, path, body);
 
 async function createCheckout(user, plan, months) {
   const amount = price(plan, months);

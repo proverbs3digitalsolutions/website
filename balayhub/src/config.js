@@ -36,6 +36,7 @@ const config = {
   platformAdmins: (env.PLATFORM_ADMIN_EMAILS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
   trialDays: Number(env.TRIAL_DAYS || 14),
   salesContactEmail: env.SALES_CONTACT_EMAIL || '',
+  dataEncryptionKey: env.DATA_ENCRYPTION_KEY || '',
   paymongoSecretKey: env.PAYMONGO_SECRET_KEY || '',
   paymongoWebhookSecret: env.PAYMONGO_WEBHOOK_SECRET || '',
   paymongoMethods: (env.PAYMONGO_METHODS || 'gcash,paymaya,card,grab_pay').split(',').map((x) => x.trim()).filter(Boolean),

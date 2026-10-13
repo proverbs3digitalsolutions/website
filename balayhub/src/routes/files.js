@@ -35,6 +35,10 @@ async function checkRecord(user, type, id) {
       if (!row) throw notFound();
       return row;
     }
+    case 'listing': {
+      const { loadUnit } = require('../lib/access');
+      return loadUnit(user, id);
+    }
     case 'cleaning': {
       const { propertyScope } = require('../lib/access');
       const params = [id];
@@ -64,7 +68,7 @@ router.post('/files',
   ah(async (req, res) => {
     const type = String(req.query.record_type || '');
     // Guest ID photos come only from the guest's own check-in form.
-    if (type === 'registration') throw new HttpError(400, 'Unsupported attachment type.', { code: 'BAD_REQUEST' });
+    if (type === 'registration' || type === 'listing') throw new HttpError(400, 'Unsupported attachment type.', { code: 'BAD_REQUEST' });
     const recordId = uuidParam(req.query.record_id);
     await checkRecord(req.user, type, recordId);
     const mime = String(req.get('Content-Type') || '').split(';')[0].trim();

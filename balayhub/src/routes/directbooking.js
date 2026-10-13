@@ -1,0 +1,463 @@
+'use strict';
+
+// Direct booking: each host's public booking page, paid through the host's own
+// PayMongo account (full payment or a 50% deposit). A booking is created only
+// after BalayHub confirms the payment with PayMongo using the host's key.
+
+const crypto = require('crypto');
+const express = require('express');
+const config = require('../config');
+const { query, one, tx } = require('../db');
+const { HttpError, ah, notFound } = require('../lib/http');
+const { validate, uuidParam, isValidDate } = require('../lib/validate');
+const { audit } = require('../lib/audit');
+const { requireRole, rateLimit } = require('../lib/auth');
+const { loadUnit } = require('../lib/access');
+const { planStatus } = require('../lib/plans');
+const { quote } = require('../lib/pricing');
+const secretbox = require('../lib/secretbox');
+const paymongo = require('../lib/paymongo');
+const storage = require('../lib/storage');
+
+const router = express.Router();
+const publicRouter = express.Router();
+const owners = requireRole('owner');
+const managers = requireRole('owner', 'manager');
+
+const TODAY = `(now() AT TIME ZONE 'Asia/Manila')::date`;
+const HOLD_MINUTES = 30;
+const MAX_PHOTOS = 12;
+const validationError = (fields) => new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields });
+const manilaToday = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+const nightsBetween = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000);
+const slugify = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+const bookingUrl = (slug) => `${config.appUrl}/#/book/${slug}`;
+
+// ---------------------------------------------------------------- host settings
+router.get('/direct-booking', owners, ah(async (req, res) => {
+  const o = await one('SELECT name, booking_slug, booking_enabled, booking_intro, paymongo_key_hint FROM organizations WHERE organization_id = $1', [req.user.organization_id]);
+  const { rows: listings } = await query(
+    `SELECT u.unit_id, u.unit_name, p.property_name, u.bookable_online, u.nightly_rate,
+            (SELECT COUNT(*)::int FROM files f WHERE f.related_record_type = 'listing' AND f.related_record_id = u.unit_id) AS photo_count
+       FROM units u JOIN properties p USING (property_id)
+      WHERE p.organization_id = $1 AND u.status = 'active' AND p.status = 'active' AND u.nightly_rate IS NOT NULL
+      ORDER BY p.property_name, u.unit_name`, [req.user.organization_id]);
+  res.json({
+    slug: o.booking_slug || slugify(o.name),
+    enabled: o.booking_enabled,
+    intro: o.booking_intro,
+    paymongo_connected: Boolean(o.paymongo_key_hint),
+    paymongo_key_hint: o.paymongo_key_hint,
+    url: o.booking_slug ? bookingUrl(o.booking_slug) : null,
+    listings,
+  });
+}));
+
+router.patch('/direct-booking', owners, ah(async (req, res) => {
+  const body = validate(req.body, {
+    enabled: { type: 'bool', label: 'Booking page' },
+    slug: { type: 'string', max: 40, label: 'Page address' },
+    intro: { type: 'text', max: 1500, label: 'Welcome text' },
+    paymongo_secret_key: { type: 'string', max: 200, label: 'PayMongo secret key' },
+  }, { partial: true });
+  const sets = []; const params = [req.user.organization_id];
+  const set = (col, v) => { params.push(v); sets.push(`${col} = $${params.length}`); };
+  if ('slug' in body) {
+    const slug = slugify(body.slug);
+    if (slug.length < 3) throw validationError({ slug: 'Use at least 3 letters or numbers.' });
+    if (['admin', 'api', 'demo', 'login', 'signup', 'settings'].includes(slug)) throw validationError({ slug: 'That address is reserved. Try another.' });
+    const taken = await one('SELECT 1 FROM organizations WHERE lower(booking_slug) = $1 AND organization_id <> $2', [slug, req.user.organization_id]);
+    if (taken) throw validationError({ slug: 'That address is already taken. Try another.' });
+    set('booking_slug', slug);
+  }
+  if ('intro' in body) set('booking_intro', body.intro);
+  if (body.paymongo_secret_key) {
+    const key = body.paymongo_secret_key.trim();
+    if (!/^sk_(test|live)_[A-Za-z0-9]{10,}$/.test(key)) throw validationError({ paymongo_secret_key: 'Paste the Secret key from PayMongo (it starts with sk_live_ or sk_test_).' });
+    set('paymongo_key_enc', secretbox.encrypt(key));
+    set('paymongo_key_hint', `${key.slice(0, 8)}…${key.slice(-4)}`);
+  }
+  if (req.body?.disconnect_paymongo === true) { set('paymongo_key_enc', null); set('paymongo_key_hint', null); }
+  if ('enabled' in body) {
+    if (body.enabled) {
+      const o = await one('SELECT booking_slug, paymongo_key_hint FROM organizations WHERE organization_id = $1', [req.user.organization_id]);
+      const willHaveKey = Boolean(o.paymongo_key_hint || body.paymongo_secret_key) && req.body?.disconnect_paymongo !== true;
+      if (!willHaveKey) throw new HttpError(409, 'Connect your PayMongo account first, so guests can pay you.', { code: 'NO_PAYMONGO' });
+      if (!o.booking_slug && !('slug' in body)) {
+        let slug = slugify(req.user.organization_name) || 'stays';
+        if (slug.length < 3) slug = `${slug}-stays`;
+        const taken = await one('SELECT 1 FROM organizations WHERE lower(booking_slug) = $1', [slug]);
+        set('booking_slug', taken ? `${slug}-${crypto.randomBytes(2).toString('hex')}` : slug);
+      }
+    }
+    set('booking_enabled', body.enabled);
+  }
+  if (sets.length) {
+    await query(`UPDATE organizations SET ${sets.join(', ')} WHERE organization_id = $1`, params);
+    await audit(null, req.user, 'direct_booking.settings_changed', 'organization', req.user.organization_id,
+      { enabled: body.enabled, slug: body.slug, paymongo_key_changed: Boolean(body.paymongo_secret_key) || req.body?.disconnect_paymongo === true });
+  }
+  const o = await one('SELECT booking_slug FROM organizations WHERE organization_id = $1', [req.user.organization_id]);
+  res.json({ ok: true, url: o.booking_slug ? bookingUrl(o.booking_slug) : null });
+}));
+
+// ---------------------------------------------------------------- listing photos (host)
+router.get('/units/:id/photos', ah(async (req, res) => {
+  const unit = await loadUnit(req.user, uuidParam(req.params.id));
+  const { rows } = await query(
+    `SELECT file_id, file_name, sort_order FROM files WHERE related_record_type = 'listing' AND related_record_id = $1 ORDER BY sort_order, uploaded_at`, [unit.unit_id]);
+  res.json({ photos: rows });
+}));
+
+router.post('/units/:id/photos', managers, express.raw({ type: ['image/jpeg', 'image/png', 'image/webp'], limit: config.maxUploadBytes }), ah(async (req, res) => {
+  const unit = await loadUnit(req.user, uuidParam(req.params.id));
+  const mime = String(req.get('Content-Type') || '').split(';')[0].trim();
+  if (!storage.checkUpload(mime, req.body, { imagesOnly: true })) throw new HttpError(415, 'Upload a photo (JPG, PNG or WEBP) up to 10 MB.', { code: 'UNSUPPORTED_FILE' });
+  const file = await tx(async (db) => {
+    await db.query('SELECT unit_id FROM units WHERE unit_id = $1 FOR UPDATE', [unit.unit_id]);
+    const { rows: [{ n }] } = await db.query(`SELECT COUNT(*)::int AS n FROM files WHERE related_record_type = 'listing' AND related_record_id = $1`, [unit.unit_id]);
+    if (n >= MAX_PHOTOS) throw new HttpError(409, `A listing can have up to ${MAX_PHOTOS} photos.`, { code: 'TOO_MANY' });
+    const f = await storage.saveFile({
+      organizationId: req.user.organization_id, recordType: 'listing', recordId: unit.unit_id, body: req.body, mime,
+      fileName: `${unit.unit_name}-${n + 1}.${storage.ALLOWED[mime].ext}`, uploadedBy: req.user.user_id, db,
+    });
+    await db.query('UPDATE files SET sort_order = $2 WHERE file_id = $1', [f.file_id, n]);
+    return f;
+  });
+  res.status(201).json({ photo: file });
+}));
+
+async function loadListingPhoto(user, id) {
+  const f = await one(`SELECT * FROM files WHERE file_id = $1 AND organization_id = $2 AND related_record_type = 'listing'`, [id, user.organization_id]);
+  if (!f) throw notFound();
+  await loadUnit(user, f.related_record_id);
+  return f;
+}
+
+router.post('/listing-photos/:id/remove', managers, ah(async (req, res) => {
+  const f = await loadListingPhoto(req.user, uuidParam(req.params.id));
+  await storage.deleteFile(f);
+  res.json({ ok: true });
+}));
+
+router.post('/listing-photos/:id/cover', managers, ah(async (req, res) => {
+  const f = await loadListingPhoto(req.user, uuidParam(req.params.id));
+  await query(`UPDATE files SET sort_order = sort_order + 1 WHERE related_record_type = 'listing' AND related_record_id = $1`, [f.related_record_id]);
+  await query('UPDATE files SET sort_order = 0 WHERE file_id = $1', [f.file_id]);
+  res.json({ ok: true });
+}));
+
+// ---------------------------------------------------------------- public booking page
+const publicLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 300, key: (req) => `book|${req.ip}` });
+const checkoutLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 20, key: (req) => `bookpay|${req.ip}` });
+publicRouter.use('/public/book', publicLimiter);
+
+async function loadHost(slug) {
+  const o = await one(
+    `SELECT organization_id, name, booking_slug, booking_enabled, booking_intro, paymongo_key_enc, plan, trial_ends_at, paid_until,
+            is_demo, deletion_scheduled_at
+       FROM organizations WHERE lower(booking_slug) = lower($1)`, [String(slug || '').slice(0, 60)]);
+  if (!o || (!o.booking_enabled && !o.is_demo)) throw notFound('This booking page is not available.');
+  const st = planStatus(o);
+  o.accepting = Boolean(o.paymongo_key_enc) && !st.read_only;
+  return o;
+}
+
+const PUBLIC_UNIT = `
+  SELECT u.unit_id, u.unit_name, u.description, u.max_guests, u.nightly_rate, u.cleaning_fee, u.min_nights, u.payment_option,
+         u.balance_due_days, u.house_rules, to_char(u.checkin_time, 'HH24:MI') AS checkin_time, to_char(u.checkout_time, 'HH24:MI') AS checkout_time,
+         p.property_name, p.city, p.province,
+         COALESCE((SELECT json_agg(f.file_id ORDER BY f.sort_order, f.uploaded_at) FROM files f
+                    WHERE f.related_record_type = 'listing' AND f.related_record_id = u.unit_id), '[]') AS photos
+    FROM units u JOIN properties p USING (property_id)
+   WHERE p.organization_id = $1 AND u.bookable_online AND u.status = 'active' AND p.status = 'active' AND u.nightly_rate IS NOT NULL`;
+
+async function loadPublicUnit(host, unitId) {
+  if (!/^[0-9a-f-]{36}$/i.test(String(unitId))) throw notFound('This listing is not available.');
+  const u = await one(`${PUBLIC_UNIT} AND u.unit_id = $2`, [host.organization_id, unitId]);
+  if (!u) throw notFound('This listing is not available.');
+  return u;
+}
+
+publicRouter.get('/public/book/:slug', ah(async (req, res) => {
+  const host = await loadHost(req.params.slug);
+  const { rows } = await query(`${PUBLIC_UNIT} ORDER BY p.property_name, u.unit_name`, [host.organization_id]);
+  res.json({ host: { name: host.name, intro: host.booking_intro, accepting: host.accepting, demo: host.is_demo }, listings: rows });
+}));
+
+// Taken nights and prices for a date range (for the availability calendar).
+publicRouter.get('/public/book/:slug/units/:unitId/availability', ah(async (req, res) => {
+  const host = await loadHost(req.params.slug);
+  const u = await loadPublicUnit(host, req.params.unitId);
+  const from = isValidDate(req.query.from) && req.query.from >= manilaToday() ? req.query.from : manilaToday();
+  const to = new Date(Date.parse(`${from}T00:00:00Z`) + 62 * 86400000).toISOString().slice(0, 10);
+  const { rows } = await query(
+    `SELECT d::date::text AS date, COALESCE(r.price, $4::numeric) AS price,
+            EXISTS (SELECT 1 FROM bookings b WHERE b.unit_id = $1 AND b.status = 'confirmed' AND d::date >= b.check_in AND d::date < b.check_out)
+         OR EXISTS (SELECT 1 FROM direct_checkouts c WHERE c.unit_id = $1 AND c.status = 'pending' AND c.hold_until > now()
+                      AND d::date >= c.check_in AND d::date < c.check_out) AS taken
+       FROM generate_series($2::date, $3::date, interval '1 day') d
+       LEFT JOIN nightly_rates r ON r.unit_id = $1 AND r.rate_date = d::date
+      ORDER BY d`, [u.unit_id, from, to, u.nightly_rate]);
+  res.json({ from, to, days: rows });
+}));
+
+async function priceStay(u, checkIn, checkOut) {
+  if (!isValidDate(checkIn) || !isValidDate(checkOut) || checkOut <= checkIn) throw validationError({ check_out: 'Choose a check-out date after check-in.' });
+  if (checkIn < manilaToday()) throw validationError({ check_in: 'Choose a date from today onwards.' });
+  const nights = nightsBetween(checkIn, checkOut);
+  if (nights > 60) throw validationError({ check_out: 'For stays longer than 60 nights, please contact the host.' });
+  if (nights < u.min_nights) throw validationError({ check_out: `This place has a minimum stay of ${u.min_nights} nights.` });
+  const q = await quote(u.unit_id, checkIn, checkOut);
+  const accommodation = Number(q.accommodation_total);
+  const cleaning = Number(u.cleaning_fee || 0);
+  const total = Math.round((accommodation + cleaning) * 100) / 100;
+  const deposit = Math.round(total * 50) / 100;
+  const due = new Date(Date.parse(`${checkIn}T00:00:00Z`) - u.balance_due_days * 86400000).toISOString().slice(0, 10);
+  return { nights, accommodation_total: accommodation.toFixed(2), cleaning_fee: cleaning.toFixed(2), total: total.toFixed(2), deposit: deposit.toFixed(2), balance_due_date: due };
+}
+
+async function isFree(unitId, checkIn, checkOut, exceptRef, db) {
+  const sql = `SELECT
+      EXISTS (SELECT 1 FROM bookings b WHERE b.unit_id = $1 AND b.status = 'confirmed' AND daterange(b.check_in, b.check_out) && daterange($2::date, $3::date))
+   OR EXISTS (SELECT 1 FROM direct_checkouts c WHERE c.unit_id = $1 AND c.status = 'pending' AND c.hold_until > now()
+                AND c.checkout_ref IS DISTINCT FROM $4 AND daterange(c.check_in, c.check_out) && daterange($2::date, $3::date)) AS taken`;
+  const params = [unitId, checkIn, checkOut, exceptRef || null];
+  const row = db ? (await db.query(sql, params)).rows[0] : await one(sql, params);
+  return !row.taken;
+}
+
+publicRouter.get('/public/book/:slug/units/:unitId/quote', ah(async (req, res) => {
+  const host = await loadHost(req.params.slug);
+  const u = await loadPublicUnit(host, req.params.unitId);
+  const p = await priceStay(u, req.query.check_in, req.query.check_out);
+  res.json({ ...p, available: await isFree(u.unit_id, req.query.check_in, req.query.check_out), payment_option: u.payment_option });
+}));
+
+publicRouter.post('/public/book/:slug/units/:unitId/checkout', checkoutLimiter, ah(async (req, res) => {
+  const host = await loadHost(req.params.slug);
+  if (host.is_demo) throw new HttpError(403, 'This is a demo booking page, so it can\'t take real bookings.', { code: 'DEMO_READ_ONLY' });
+  if (!host.accepting) throw new HttpError(409, 'This host is not taking online bookings right now. Please contact them directly.', { code: 'NOT_ACCEPTING' });
+  const u = await loadPublicUnit(host, req.params.unitId);
+  const body = validate(req.body, {
+    check_in: { type: 'date', required: true, label: 'Check-in' },
+    check_out: { type: 'date', required: true, label: 'Check-out' },
+    num_guests: { type: 'int', required: true, min: 1, max: 50, label: 'Guests' },
+    name: { type: 'string', required: true, max: 120, label: 'Full name' },
+    email: { type: 'email', required: true, label: 'Email' },
+    phone: { type: 'phone', required: true, label: 'Mobile number' },
+    notes: { type: 'text', max: 1000, label: 'Message to the host' },
+    pay: { type: 'enum', values: ['full', 'deposit'], required: true, label: 'Payment' },
+    consent: { type: 'bool', label: 'Consent' },
+  });
+  if (!body.consent) throw validationError({ consent: 'Please agree to continue.' });
+  if (u.max_guests && body.num_guests > u.max_guests) throw validationError({ num_guests: `This place allows up to ${u.max_guests} guests.` });
+  if ((u.payment_option === 'full' && body.pay === 'deposit') || (u.payment_option === 'deposit' && body.pay === 'full')) {
+    throw validationError({ pay: 'That payment option is not available for this place.' });
+  }
+  const price = await priceStay(u, body.check_in, body.check_out);
+  const dueNow = body.pay === 'deposit' ? price.deposit : price.total;
+  if (Number(dueNow) < 100) throw validationError({ pay: 'The amount is too small to pay online. Please contact the host.' });
+
+  // Hold the dates (one hold at a time per listing, so two guests can't pay for the same nights).
+  const token = crypto.randomBytes(18).toString('base64url');
+  const hold = await tx(async (db) => {
+    await db.query('SELECT unit_id FROM units WHERE unit_id = $1 FOR UPDATE', [u.unit_id]);
+    if (!await isFree(u.unit_id, body.check_in, body.check_out, null, db)) {
+      throw new HttpError(409, 'Sorry, those dates were just booked. Please choose other dates.', { code: 'DATES_TAKEN' });
+    }
+    const { rows: [c] } = await db.query(
+      `INSERT INTO direct_checkouts (public_token, organization_id, unit_id, check_in, check_out, num_guests, guest_name, guest_email, guest_phone, notes,
+                                     pay_type, accommodation_total, cleaning_fee, total_amount, amount_due_now, hold_until, consent_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15, now() + make_interval(mins => $16), now()) RETURNING *`,
+      [token, host.organization_id, u.unit_id, body.check_in, body.check_out, body.num_guests, body.name, body.email, body.phone, body.notes,
+        body.pay, price.accommodation_total, price.cleaning_fee, price.total, dueNow, HOLD_MINUTES]);
+    return c;
+  });
+
+  const key = secretbox.decrypt(host.paymongo_key_enc);
+  const label = `${u.unit_name} · ${price.nights} night${price.nights > 1 ? 's' : ''} (${body.check_in} to ${body.check_out})${body.pay === 'deposit' ? ' · 50% deposit' : ''}`;
+  try {
+    if (!key) throw Object.assign(new Error('Online payment is not set up correctly for this host.'), { status: 502 });
+    const data = await paymongo.request(key, 'POST', '/checkout_sessions', {
+      data: {
+        attributes: {
+          line_items: [{ currency: 'PHP', amount: Math.round(Number(dueNow) * 100), name: label, quantity: 1 }],
+          payment_method_types: config.paymongoMethods,
+          description: `Booking at ${host.name}`,
+          reference_number: hold.checkout_ref,
+          send_email_receipt: true,
+          show_description: true,
+          show_line_items: true,
+          billing: { name: body.name, email: body.email, phone: body.phone },
+          success_url: `${config.appUrl}/#/book/${host.booking_slug}/done/${token}`,
+          cancel_url: `${config.appUrl}/#/book/${host.booking_slug}/${u.unit_id}?cancelled=1`,
+          metadata: { checkout_ref: hold.checkout_ref },
+        },
+      },
+    });
+    const id = data?.data?.id;
+    const url = data?.data?.attributes?.checkout_url;
+    if (!id || !url) throw Object.assign(new Error('The payment service returned an unexpected response.'), { status: 502 });
+    await query('UPDATE direct_checkouts SET provider_checkout_id = $2 WHERE checkout_ref = $1', [hold.checkout_ref, id]);
+    res.json({ checkout_url: url });
+  } catch (err) {
+    await query(`UPDATE direct_checkouts SET status = 'failed', hold_until = now() WHERE checkout_ref = $1`, [hold.checkout_ref]);
+    throw new HttpError(502, err.status === 502 ? err.message : 'Online payment is not available right now. Please contact the host.', { code: 'PAYMENT_FAILED' });
+  }
+}));
+
+// The guest's return page: confirm with PayMongo, then create the reservation.
+publicRouter.get('/public/book/status/:token', ah(async (req, res) => {
+  const c = await one('SELECT checkout_ref FROM direct_checkouts WHERE public_token = $1', [String(req.params.token).slice(0, 60)]);
+  if (!c) throw notFound('Booking not found.');
+  const status = await refreshCheckout(c.checkout_ref).catch(() => null);
+  const row = await one(
+    `SELECT c.status, c.check_in, c.check_out, c.num_guests, c.guest_name, c.pay_type, c.total_amount, c.amount_due_now,
+            u.unit_name, u.balance_due_days, p.property_name, o.name AS host_name, b.confirmation_code, b.checkin_token
+       FROM direct_checkouts c JOIN units u USING (unit_id) JOIN properties p ON p.property_id = u.property_id
+       JOIN organizations o ON o.organization_id = c.organization_id LEFT JOIN bookings b ON b.booking_id = c.booking_id
+      WHERE c.checkout_ref = $1`, [c.checkout_ref]);
+  res.json({
+    status: status || row.status,
+    stay: {
+      host: row.host_name, listing: row.unit_name, property: row.property_name, check_in: row.check_in, check_out: row.check_out,
+      guests: row.num_guests, guest_name: row.guest_name, pay_type: row.pay_type, total: row.total_amount, paid: row.amount_due_now,
+      balance: (Number(row.total_amount) - Number(row.amount_due_now)).toFixed(2), balance_due_days: row.balance_due_days,
+      code: row.confirmation_code, checkin_link: row.checkin_token ? `${config.appUrl}/#/checkin/${row.checkin_token}` : null,
+    },
+  });
+}));
+
+// Photos of listings shown on a booking page.
+publicRouter.get('/public/listing-photos/:id', ah(async (req, res) => {
+  const id = uuidParam(req.params.id);
+  const f = await one(
+    `SELECT f.* FROM files f JOIN units u ON u.unit_id = f.related_record_id JOIN properties p ON p.property_id = u.property_id
+       JOIN organizations o ON o.organization_id = p.organization_id
+      WHERE f.file_id = $1 AND f.related_record_type = 'listing' AND u.bookable_online AND (o.booking_enabled OR o.is_demo)`, [id]);
+  if (!f) throw notFound();
+  const path = require('path');
+  const full = path.resolve(config.storageDir, f.storage_key);
+  if (!full.startsWith(path.resolve(config.storageDir) + path.sep)) throw notFound();
+  res.set('Content-Type', f.mime_type);
+  res.set('Cache-Control', 'public, max-age=86400');
+  require('fs').createReadStream(full).on('error', () => res.status(404).end()).pipe(res);
+}));
+
+// ---------------------------------------------------------------- confirming payments
+async function refreshCheckout(ref) {
+  const c = await one(
+    `SELECT c.*, o.paymongo_key_enc FROM direct_checkouts c JOIN organizations o USING (organization_id) WHERE c.checkout_ref = $1`, [ref]);
+  if (!c || !['pending', 'expired'].includes(c.status) || !c.provider_checkout_id) return c?.status || null;
+  const key = secretbox.decrypt(c.paymongo_key_enc);
+  if (!key) return c.status;
+  await query('UPDATE direct_checkouts SET last_checked_at = now() WHERE checkout_ref = $1', [ref]);
+  const s = await paymongo.checkoutStatus(key, c.provider_checkout_id);
+  const expected = Math.round(Number(c.amount_due_now) * 100);
+  const amountOk = s.paidAmount >= expected || (s.paidAmount === 0 && s.listed === expected);
+  if (s.paid && amountOk) return finalize(ref, s.method);
+  if (s.expired) {
+    await query(`UPDATE direct_checkouts SET status = 'expired' WHERE checkout_ref = $1 AND status = 'pending'`, [ref]);
+    return 'expired';
+  }
+  return c.status;
+}
+
+const METHOD_MAP = { gcash: 'gcash', paymaya: 'maya', maya: 'maya', card: 'card', grab_pay: 'other', qrph: 'other' };
+
+// Turn a paid checkout into a confirmed reservation with its payment (once).
+async function finalize(ref, method) {
+  const result = await tx(async (db) => {
+    const { rows: [c] } = await db.query('SELECT * FROM direct_checkouts WHERE checkout_ref = $1 FOR UPDATE', [ref]);
+    if (!c || c.status === 'confirmed' || c.status === 'conflict') return { status: c?.status };
+    const { rows: [owner] } = await db.query(
+      `SELECT user_id FROM users WHERE organization_id = $1 AND role = 'owner' AND account_status = 'active' ORDER BY created_at LIMIT 1`, [c.organization_id]);
+    await db.query('SAVEPOINT book');
+    try {
+      const { rows: [g] } = await db.query(
+        `INSERT INTO guests (organization_id, full_name, email, phone, notes) VALUES ($1,$2,$3,$4,$5) RETURNING guest_id`,
+        [c.organization_id, c.guest_name, c.guest_email, c.guest_phone, 'Booked online']);
+      const code = `BH-${crypto.randomBytes(5).toString('base64url').replace(/[^A-Za-z0-9]/g, 'X').slice(0, 7).toUpperCase()}`;
+      const { rows: [b] } = await db.query(
+        `INSERT INTO bookings (organization_id, unit_id, kind, guest_id, channel, check_in, check_out, num_guests, accommodation_total, cleaning_fee,
+                               confirmation_code, notes)
+         VALUES ($1,$2,'reservation',$3,'direct',$4,$5,$6,$7,$8,$9,$10) RETURNING booking_id`,
+        [c.organization_id, c.unit_id, g.guest_id, c.check_in, c.check_out, c.num_guests, c.accommodation_total, c.cleaning_fee, code,
+          [`Booked online (${c.pay_type === 'deposit' ? '50% deposit paid' : 'paid in full'}).`, c.notes ? `Guest's message: ${c.notes}` : null].filter(Boolean).join('\n')]);
+      const receipts = require('../lib/receipts');
+      const receiptNo = await receipts.nextReceiptNumber(db, c.organization_id);
+      await db.query(
+        `INSERT INTO booking_payments (organization_id, booking_id, amount, payment_date, payment_method, reference_number, notes, recorded_by, receipt_number)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [c.organization_id, b.booking_id, c.amount_due_now, manilaToday(), METHOD_MAP[method] || 'other', c.provider_checkout_id,
+          'Paid online through PayMongo', owner.user_id, receiptNo]);
+      await db.query(`UPDATE direct_checkouts SET status = 'confirmed', booking_id = $2, payment_method = $3, confirmed_at = now() WHERE checkout_ref = $1`,
+        [ref, b.booking_id, method]);
+      await db.query(
+        `INSERT INTO audit_logs (organization_id, action, record_type, record_id, details) VALUES ($1,'reservation.booked_online','booking',$2,$3)`,
+        [c.organization_id, b.booking_id, JSON.stringify({ amount: c.amount_due_now, pay_type: c.pay_type })]);
+      return { status: 'confirmed', bookingId: b.booking_id, ownerId: owner.user_id, c };
+    } catch (err) {
+      if (err.constraint !== 'bookings_no_overlap') throw err;
+      // Paid, but the dates were taken meanwhile (e.g. an Airbnb booking synced in).
+      await db.query('ROLLBACK TO SAVEPOINT book');
+      await db.query(`UPDATE direct_checkouts SET status = 'conflict', payment_method = $2, confirmed_at = now() WHERE checkout_ref = $1`, [ref, method]);
+      return { status: 'conflict', c, ownerId: owner.user_id };
+    }
+  });
+  if (result.status === 'confirmed') await afterBooking(result).catch((err) => console.error('[direct] after-booking steps failed:', err.message));
+  if (result.status === 'conflict') await alertConflict(result.c).catch(() => {});
+  return result.status;
+}
+
+async function afterBooking({ bookingId, ownerId, c }) {
+  const receipts = require('../lib/receipts');
+  const messaging = require('../lib/messaging');
+  const owner = await one('SELECT * FROM users WHERE user_id = $1', [ownerId]);
+  // Same automatic steps as a manual reservation: confirmation (with check-in link) and receipt.
+  await receipts.sendConfirmation(bookingId, owner);
+  const pay = await one('SELECT payment_id FROM booking_payments WHERE booking_id = $1', [bookingId]);
+  if (pay) await receipts.sendReceipt(pay.payment_id, owner);
+  const conv = await messaging.getOrCreateConversation(bookingId);
+  await query(
+    `INSERT INTO messages (conversation_id, organization_id, direction, from_name, body, status) VALUES ($1,$2,'note','BalayHub',$3,'note')`,
+    [conv.conversation_id, conv.organization_id,
+      `New direct booking: ${c.guest_name}, ${c.check_in} to ${c.check_out}, ${c.num_guests} guest(s). Paid ₱${Number(c.amount_due_now).toLocaleString('en-PH')} online${c.pay_type === 'deposit' ? ` (50% deposit; balance ₱${(Number(c.total_amount) - Number(c.amount_due_now)).toLocaleString('en-PH')} due before check-in)` : ' (in full)'}.`]);
+  await query(`UPDATE conversations SET unread = true, status = 'open', last_message_at = now() WHERE conversation_id = $1`, [conv.conversation_id]);
+}
+
+async function alertConflict(c) {
+  const { sendMail } = require('../lib/mailer');
+  const { rows } = await query(`SELECT email, full_name FROM users WHERE organization_id = $1 AND role = 'owner' AND account_status = 'active'`, [c.organization_id]);
+  for (const u of rows) {
+    await sendMail({
+      to: u.email,
+      subject: `Action needed: online payment received but the dates are no longer free`,
+      text: `Hi ${u.full_name},\n\n${c.guest_name} (${c.guest_email}, ${c.guest_phone}) paid ₱${Number(c.amount_due_now).toLocaleString('en-PH')} online for ${c.check_in} to ${c.check_out}, but those dates were booked elsewhere before the payment finished (for example a channel booking that synced in).\n\nPlease contact the guest to offer other dates or refund them from your PayMongo dashboard (payment reference: ${c.provider_checkout_id}).\n\n— BalayHub`,
+    });
+  }
+}
+
+// Scheduler: confirm paid checkouts whose guest never came back to the return page.
+async function reconcileDirect() {
+  const { rows } = await query(
+    `SELECT checkout_ref FROM direct_checkouts
+      WHERE status = 'pending' AND provider_checkout_id IS NOT NULL AND created_at >= now() - interval '2 days'
+      ORDER BY last_checked_at NULLS FIRST LIMIT 30`);
+  let confirmed = 0;
+  for (const r of rows) {
+    try { if (await refreshCheckout(r.checkout_ref) === 'confirmed') confirmed += 1; } catch { /* next time */ }
+  }
+  // Give up on old checkouts, after one last check each.
+  const { rows: old } = await query(`SELECT checkout_ref FROM direct_checkouts WHERE status = 'pending' AND created_at < now() - interval '2 days' LIMIT 20`);
+  for (const r of old) {
+    let st = 'pending';
+    try { st = await refreshCheckout(r.checkout_ref); } catch { continue; }
+    if (st === 'confirmed') confirmed += 1;
+    else if (st === 'pending') await query(`UPDATE direct_checkouts SET status = 'expired' WHERE checkout_ref = $1 AND status = 'pending'`, [r.checkout_ref]);
+  }
+  return confirmed;
+}
+
+module.exports = { router, publicRouter, reconcileDirect, refreshCheckout, finalize, slugify };

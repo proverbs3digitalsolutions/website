@@ -43,6 +43,8 @@ function startScheduler() {
   every(6 * 60 * 60 * 1000, 'guest-ids', require('../routes/checkin').purgeOldIds, 70 * 1000);
   // Online plan payments whose webhook never arrived.
   every(10 * 60 * 1000, 'billing', require('./billing').reconcile, 80 * 1000);
+  // Guests' online bookings whose payment went through but who didn't return to the page.
+  every(2 * 60 * 1000, 'direct-booking', require('../routes/directbooking').reconcileDirect, 25 * 1000);
   // Workspaces whose owner asked for deletion, after the grace period.
   every(60 * 60 * 1000, 'account', require('./account').purgeDue, 90 * 1000);
   // Keep the public demo's dates current.

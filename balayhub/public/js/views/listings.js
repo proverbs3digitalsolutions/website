@@ -1,6 +1,6 @@
 // Listings (units rented per night), cleaning status and channel connections.
 
-import { get, post, patch, qs } from '../api.js';
+import { get, post, patch, qs, api } from '../api.js';
 import {
   h, icon, peso, fmtDate, fmtDateTime, badge, field, formModal, openModal, confirmDialog, emptyState, toast, options, searchBox,
 } from '../ui.js';
@@ -32,6 +32,18 @@ function listingFields(u = {}) {
     field({ name: 'checkin_instructions', label: 'Check-in instructions', type: 'textarea', value: u.checkin_instructions, maxlength: 3000,
       placeholder: 'e.g. Show your ID at the lobby, get the key from the guard, unit is on the 12th floor…' }),
     field({ name: 'house_rules', label: 'House rules', type: 'textarea', value: u.house_rules, maxlength: 3000, placeholder: 'e.g. No smoking. No parties. Quiet hours 10 PM – 7 AM.' }),
+    h('hr', { class: 'divider' }),
+    h('h3', { class: 'subhead' }, 'Direct booking page'),
+    field({ name: 'bookable_online', label: 'Show this listing on my booking page', type: 'checkbox', value: Boolean(u.bookable_online) }),
+    field({ name: 'description', label: 'Description for guests', type: 'textarea', value: u.description, maxlength: 3000,
+      placeholder: 'e.g. Bright studio with a balcony and city view, fast Wi-Fi, smart TV, kitchenette, pool and gym access. 5 minutes from the mall.' }),
+    h('div', { class: 'form-row form-row--2' },
+      field({ name: 'payment_option', label: 'Online payment', type: 'select', value: u.payment_option || 'either', placeholderOption: false, options: [
+        ['either', 'Guest chooses: full or 50% deposit'], ['full', 'Full payment only'], ['deposit', '50% deposit, rest before check-in'],
+      ] }),
+      field({ name: 'min_nights', label: 'Minimum nights', type: 'number', min: 1, max: 60, value: u.min_nights || 1, inputmode: 'numeric' })),
+    field({ name: 'balance_due_days', label: 'Balance due (days before check-in)', type: 'number', min: 0, max: 60, value: u.balance_due_days ?? 3, inputmode: 'numeric',
+      hint: 'For 50% deposits. Use your payment reminder message to ask for the rest.' }),
   ];
 }
 
@@ -65,6 +77,54 @@ async function addListingModal(onSaved) {
       onSaved();
     },
   });
+}
+
+// Listing photos for the booking page: upload (shrunk first), choose the cover, delete.
+async function shrink(file) {
+  try {
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.85));
+    if (blob) return blob;
+  } catch { /* use the original */ }
+  return file;
+}
+
+async function photosModal(listing) {
+  const box = h('div', { class: 'stack' });
+  const m = openModal({ title: `Photos · ${listing.unit_name}`, body: box, wide: true });
+  async function draw() {
+    const { photos } = await get(`/units/${listing.unit_id}/photos`);
+    const input = h('input', { type: 'file', accept: 'image/*', multiple: true, class: 'input' });
+    const status = h('span', { class: 'muted small', 'aria-live': 'polite' });
+    box.replaceChildren(
+      h('p', { class: 'muted small' }, 'Shown on your booking page. The first photo is the cover. Up to 12 photos; large photos are resized automatically.'),
+      photos.length ? h('div', { class: 'ph-grid' }, photos.map((p, i) => h('figure', { class: 'ph-item' },
+        h('img', { src: `/api/files/${p.file_id}`, alt: '', loading: 'lazy' }),
+        h('figcaption', null,
+          i === 0 ? h('span', { class: 'badge badge--paid' }, 'Cover') : h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: async () => { await post(`/listing-photos/${p.file_id}/cover`); draw(); } }, 'Make cover'),
+          h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: async () => { await post(`/listing-photos/${p.file_id}/remove`); draw(); } }, 'Delete')))))
+        : h('p', { class: 'muted' }, 'No photos yet.'),
+      h('div', { class: 'form' }, input,
+        h('div', { class: 'chips' }, h('button', { class: 'btn btn--primary btn--sm', type: 'button', onclick: async (e) => {
+          const files = [...input.files];
+          if (!files.length) { toast('Choose photos first.', 'error'); return; }
+          e.target.disabled = true;
+          try {
+            for (const [i, f] of files.entries()) {
+              status.textContent = `Uploading ${i + 1} of ${files.length}…`;
+              const blob = await shrink(f);
+              await api('POST', `/units/${listing.unit_id}/photos`, undefined, { rawBody: blob, headers: { 'Content-Type': blob.type || 'image/jpeg' } });
+            }
+            toast('Photos uploaded.');
+          } catch (err) { toast(err.message, 'error'); }
+          draw();
+        } }, 'Upload'), status)));
+  }
+  try { await draw(); } catch (err) { m.close(); toast(err.message, 'error'); }
 }
 
 async function channelsModal(listing, onChange) {
@@ -158,6 +218,7 @@ export async function listingsView(el, { query }) {
           toast(l.cleaning_status === 'dirty' ? 'Marked clean.' : 'Marked as needing cleaning.'); load();
         } }, l.cleaning_status === 'dirty' ? 'Mark clean' : 'Mark dirty'),
         canManage && h('button', { class: 'btn btn--secondary btn--sm', onclick: () => channelsModal(l, load) }, 'Channels'),
+        canManage && h('button', { class: 'btn btn--secondary btn--sm', onclick: () => photosModal(l) }, 'Photos'),
         canManage && h('button', { class: 'btn btn--ghost btn--sm', onclick: async () => {
           const { units } = await get(`/properties/${l.property_id}`).then((r) => ({ units: r.units }));
           const unit = units.find((u) => u.unit_id === l.unit_id);

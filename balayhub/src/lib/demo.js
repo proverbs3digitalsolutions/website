@@ -102,6 +102,14 @@ async function createStaysWorkspace({ email, passwordHash, isDemo = false }) {
       }
     }
     await db.query('INSERT INTO receipt_counters (organization_id, last_number) VALUES ($1, $2)', [orgId, n + 1]);
+    // A sample direct-booking page (view only: the demo can't take payments).
+    await db.query(`UPDATE units SET bookable_online = true, min_nights = 1,
+                      description = 'Bright, fully furnished unit with fast Wi-Fi, a smart TV, a kitchenette and access to the pool and gym. Walking distance to malls and restaurants.'
+                     WHERE unit_id = ANY($1)`, [units.map((u) => u.unit_id)]);
+    if (isDemo) {
+      await db.query(`UPDATE organizations SET booking_slug = 'demo', booking_intro = $2 WHERE organization_id = $1`,
+        [orgId, 'Welcome to Reyes Staycations! Book directly with us for the best rate. Pay securely with GCash, Maya or card.']);
+    }
     await db.query(`UPDATE units SET cleaning_status = 'dirty' WHERE unit_id = ANY($1)`, [[units[1].unit_id, units[3].unit_id]]);
     await db.query(`INSERT INTO nightly_rates (unit_id, rate_date, price) SELECT $1, d::date, 5200 FROM generate_series($2::date, $3::date, interval '1 day') d
                     ON CONFLICT DO NOTHING`, [units[4].unit_id, dayOffset(31), dayOffset(40)]);

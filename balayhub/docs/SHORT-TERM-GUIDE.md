@@ -40,6 +40,30 @@ Many condo buildings require the names and IDs of everyone staying. Each reserva
 - ID photos are visible to owners and managers only (never staff), and are **deleted automatically 30 days after check-out** (`GUEST_ID_RETENTION_DAYS`). Names stay on the record.
 - **New link** replaces the link if it was sent to the wrong person.
 
+## Direct booking page (no channel fees)
+Each host can have a public booking page, such as `https://balayhub.proverbs3digitalsolutions.com/#/book/reyes-staycations`, to share on Facebook, Instagram, Messenger or a QR code at the unit.
+
+**Host setup (Settings → Direct booking page):**
+1. **Connect PayMongo.** Guests pay **you directly** through your own PayMongo account (GCash, Maya, cards, GrabPay). Create an account at dashboard.paymongo.com, then copy **Developers → API keys → Secret key**. Try it with the test key (`sk_test_…`) first, then switch to the live key. The key is stored encrypted and never shown again.
+2. **Choose which listings appear:** Listings → Edit → *Show this listing on my booking page*. Add a description, and set:
+   - **Online payment:** full payment only, a 50% deposit (the rest due before check-in), or let the guest choose.
+   - **Minimum nights** and **balance due** (days before check-in).
+3. **Add photos:** Listings → Photos (up to 12; the first one is the cover).
+4. **Turn on** the page and **Copy link**.
+
+**What the guest sees:** your listings with photos and prices, then an availability calendar with nightly prices. Taken nights from Airbnb, Booking.com and Agoda are blocked. They pick dates, see the total (and deposit), fill in their details and pay on PayMongo's secure page.
+
+**What happens automatically after payment:**
+- BalayHub confirms the payment with PayMongo using your key, then creates the reservation (channel *Direct*) and records the payment with a receipt number.
+- The guest is emailed the booking confirmation (with the check-in form link) and a receipt.
+- You get a note in the Inbox.
+- Your calendar link updates Airbnb and Booking.com on their next sync, so the dates get blocked there too.
+- While a guest is paying, their dates are held for 30 minutes so no one else can book them on your page.
+- In the rare case a channel booking lands on the same dates before the payment finishes, no double booking is made. You get an email to refund the guest or offer other dates from your PayMongo dashboard.
+- For 50% deposits, the reservation shows the remaining balance. Use the *Payment reminder* template, or an automatic message, to ask for it before check-in.
+
+The booking page is paused automatically if your plan ends.
+
 ## Getting started checklist
 New workspace owners see a **Get started** checklist on Home: add a listing, add Wi-Fi and check-in instructions, connect a calendar, add a reservation, turn on automatic messages, and invite a co-host or cleaner. It ticks itself off as you go and can be hidden.
 

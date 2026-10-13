@@ -43,6 +43,7 @@ services:
       PAYMONGO_SECRET_KEY: ${PAYMONGO_SECRET_KEY:-}
       PAYMONGO_WEBHOOK_SECRET: ${PAYMONGO_WEBHOOK_SECRET:-}
       GUEST_ID_RETENTION_DAYS: ${GUEST_ID_RETENTION_DAYS:-30}
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:-}
       STORAGE_DIR: /data/storage
     volumes:
       - uploads:/data/storage

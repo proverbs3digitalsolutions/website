@@ -56,6 +56,7 @@ export async function settingsView(el, { rerender, query = {} }) {
       } }, 'Save')))));
 
   if (u.role === 'owner' && u.plan && !u.plan.is_demo) sections.push(await planCard(u));
+  if (u.role === 'owner' && u.plan && !u.plan.is_demo && u.business_type !== 'long_term') sections.push(await bookingCard(rerender));
   if (u.role === 'owner' && u.plan && !u.plan.is_demo) sections.push(dataCard(u, rerender));
 
   if (u.role === 'owner') {
@@ -273,4 +274,53 @@ function dataCard(u, rerender) {
     h('div', { class: 'chips', style: { marginTop: '10px' } },
       h('a', { class: 'btn btn--secondary btn--sm', href: '/api/workspace/export', download: '' }, 'Download all data'),
       !u.plan?.deletion_scheduled_at && h('button', { class: 'btn btn--danger btn--sm', type: 'button', onclick: del }, 'Delete workspace')));
+}
+
+// ---------------------------------------------------------------- direct booking page
+async function bookingCard(rerender) {
+  let b;
+  try { b = await get('/direct-booking'); } catch { return null; }
+  const listed = b.listings.filter((l) => l.bookable_online);
+  const save = async (payload, msg) => {
+    try { await patch('/direct-booking', payload); toast(msg); rerender(); } catch (err) { toast(err.message, 'error'); }
+  };
+  const connect = () => formModal({
+    title: 'Connect your PayMongo account',
+    submitText: 'Save key',
+    fields: [
+      h('p', { class: 'small' }, 'Guests pay you directly through your own PayMongo account (GCash, Maya, cards). In your PayMongo dashboard go to ',
+        h('strong', null, 'Developers → API keys'), ' and copy the ', h('strong', null, 'Secret key'), '. Start with the test key (sk_test_…) to try it, then switch to the live key.'),
+      field({ name: 'paymongo_secret_key', label: 'PayMongo secret key', type: 'password', required: true, autocomplete: 'off', placeholder: 'sk_live_…' }),
+      h('p', { class: 'muted small' }, 'Stored encrypted and never shown again. Only used to create checkouts and check payments for your bookings.'),
+    ],
+    onSubmit: async (d) => { await patch('/direct-booking', { paymongo_secret_key: d.paymongo_secret_key }); toast('PayMongo connected.'); rerender(); },
+  });
+  const edit = () => formModal({
+    title: 'Booking page settings',
+    submitText: 'Save',
+    fields: [
+      field({ name: 'slug', label: 'Page address', value: b.slug, required: true, maxlength: 40, hint: `Your page: ${location.origin}/#/book/<this>. Letters, numbers and dashes.` }),
+      field({ name: 'intro', label: 'Welcome text', type: 'textarea', value: b.intro, maxlength: 1500, placeholder: 'e.g. Book directly with us for the best rate!' }),
+    ],
+    onSubmit: async (d) => { await patch('/direct-booking', d); toast('Saved.'); rerender(); },
+  });
+  const copy = async () => { try { await navigator.clipboard.writeText(b.url); toast('Link copied. Share it on Facebook, Instagram or Messenger.'); } catch { window.prompt('Copy your booking link:', b.url); } };
+  return h('div', { class: 'card' },
+    h('div', { class: 'card__head' }, h('h2', null, 'Direct booking page'),
+      b.enabled ? h('span', { class: 'badge badge--paid' }, 'Live') : h('span', { class: 'badge badge--archived' }, 'Off')),
+    h('p', { class: 'small' }, 'Let guests book and pay you directly, with no channel fees. Guests choose dates on your page and pay through your PayMongo account; the booking, confirmation, receipt and check-in form are created automatically, and your Airbnb and Booking.com calendars are updated through calendar sync.'),
+    h('dl', { class: 'dl', style: { marginTop: '12px' } },
+      h('dt', null, 'PayMongo'), h('dd', null, b.paymongo_connected ? `Connected (${b.paymongo_key_hint})` : 'Not connected'),
+      h('dt', null, 'Listings on the page'), h('dd', null, listed.length ? `${listed.length} of ${b.listings.length}` : 'None yet: edit a listing and tick "Show this listing on my booking page"'),
+      b.url && [h('dt', null, 'Your link'), h('dd', null, h('a', { href: b.url.slice(b.url.indexOf('#')), target: '_blank' }, b.url))]),
+    listed.some((l) => !l.photo_count) && h('p', { class: 'muted small' }, 'Tip: add photos to every listing (Listings → Photos). Pages with photos get far more bookings.'),
+    h('div', { class: 'chips', style: { marginTop: '12px' } },
+      b.paymongo_connected
+        ? (b.enabled
+          ? h('button', { class: 'btn btn--secondary btn--sm', onclick: () => save({ enabled: false }, 'Booking page turned off.') }, 'Turn off')
+          : h('button', { class: 'btn btn--primary btn--sm', onclick: () => save({ enabled: true }, 'Your booking page is live!') }, 'Turn on'))
+        : h('button', { class: 'btn btn--primary btn--sm', onclick: connect }, 'Connect PayMongo'),
+      b.enabled && b.url && h('button', { class: 'btn btn--secondary btn--sm', onclick: copy }, 'Copy link'),
+      h('button', { class: 'btn btn--ghost btn--sm', onclick: edit }, 'Page settings'),
+      b.paymongo_connected && h('button', { class: 'btn btn--ghost btn--sm', onclick: connect }, 'Change key')));
 }

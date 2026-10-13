@@ -21,6 +21,7 @@ import { landingView } from './views/landing.js';
 import { adminView } from './views/admin.js';
 import { guestCheckinView } from './views/checkin.js';
 import { termsView } from './views/terms.js';
+import { bookHostView, bookListingView, bookDoneView } from './views/book.js';
 
 export const state = { user: null, requireEmailVerification: true };
 
@@ -38,6 +39,9 @@ const routes = [
   ['/verify', authViews.verifyView, OPEN],
   ['/privacy', privacyView, OPEN],
   ['/terms', termsView, OPEN],
+  ['/book/:slug', bookHostView, OPEN],
+  ['/book/:slug/done/:token', bookDoneView, OPEN],
+  ['/book/:slug/:unitId', bookListingView, OPEN],
   ['/checkin/:token', guestCheckinView, OPEN],
   ['/verify-pending', authViews.verifyPendingView, SIGNED_IN],
   ['/setup', authViews.setupView, SIGNED_IN],
