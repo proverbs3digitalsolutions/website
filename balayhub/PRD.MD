@@ -595,11 +595,16 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 |---|---|---|
 | **SMS reminders to guests** | **Next (planned)** | Listed in README "Not built yet". Today all guest messages are email. |
 | **Facebook Messenger inbox** | **Later** | Listed in README "Not built yet". Today the Inbox is email only. |
+| **Phase 1: Money done right** (itemised stay bill with extras, payment proof uploads and bank transfer, cancellation policies and refund log, payment schedules, host net per booking, BIR-ready invoices and monthly tax summary after a tax check) | **Next (from research)** | See docs/research/00-SUMMARY.md §4. |
+| **Phase 2: Owners and co-hosts** (owner portal login, owner date blocks, fee models, statement approval, payout record, reserve, per-unit P&L, monthly emailed report) | Next | Replaces the "Owner portal" idea below. |
+| **Phase 3: Operations** (cleaner-only access, cleaner calendar, status board with inspected, inspections and scores, damage reports linked to deposits, cleaner pay, supplies par levels, lost and found, maintenance for stays) | Next | |
+| **Phase 4: Guest experience and direct booking** (guidebook in English and Taglish, house rules acceptance, paid add-ons, quote-and-pay links for Facebook inquiries, private feedback, returning-guest codes, unpaid-booking follow-up, search-friendly listing pages) | Planned | Covers the "Booking page upgrades" idea below. |
+| **Phase 5: Pricing rules and team** (gap nights, last-minute and far-out rules, events, bulk changes, booking activity log, conversation assignment, notification rules, unit tags, group bookings, room types, sync-health alerts) | Planned | Covers the "Smarter reports" idea below. |
 | Booking page upgrades | Idea | Not specified in the repo docs yet. Scope to be defined. |
 | Smarter reports | Idea | Not specified in the repo docs yet. Scope to be defined. |
 | Recurring expenses | Idea | Not built. Expenses are entered one at a time today. |
 | Owner portal | Idea | Not built. Owners get emailed or printed statements only (F16). |
-| Official two-way channel APIs | Later phase | Guest names, prices and messages from Airbnb, Booking.com, Agoda. Mentioned in SHORT-TERM-GUIDE. |
+| Official two-way channel APIs | Excluded for now (founder, 2026-10-13: no integrations) | Guest names, prices and messages from Airbnb, Booking.com, Agoda. Mentioned in SHORT-TERM-GUIDE. |
 | Long-term: tenant portal, online rent payments, utility billing, e-signatures | Planned | Listed in README "Not built yet". |
 | Prorated first-month rent | Known limitation | ARCHITECTURE "next steps". |
 | Several workspaces per account | Known limitation | ARCHITECTURE "next steps". |

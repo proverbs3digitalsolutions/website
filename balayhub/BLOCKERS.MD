@@ -47,6 +47,19 @@ Last updated: 2026-10-13
 
 - [ ] **Gate pass: include guest IDs by default?** The "Include guest ID photos" setting is off by default. Since 2026-10-13 it also hides IDs on the gate pass link, so a building admin sees no IDs unless the host turns it on for that building. If most of your condos require IDs, we could make it on by default.
 
+## Decisions from the competitor research (2026-10-13)
+
+- [ ] **What to build next.** Phase 1 (money done right: itemised bills, payment proofs, cancellation policies, host net) or SMS reminders first? SMS needs an outside SMS provider. Recommendation: Phase 1 first.
+- [ ] **Tax practitioner check before BIR features.** Confirm for Filipino STR hosts:
+  - the percentage tax rate vs VAT and the 8% option
+  - the invoice wording and numbering under the EOPT Act
+  - the monthly and quarterly filing rules
+
+  Until confirmed, BalayHub won't generate "BIR-compliant" invoices.
+- [ ] **Owner fees.** Which fee rule do most of your owners use: % of gross, % of net after channel fees, or a flat monthly fee? Do owners need a login, or is an emailed PDF enough?
+- [ ] **Free plan.** Offer a permanent free plan for 1 unit, as Hospitable and Zeevou do, to win the largest group of hosts? Today there's a 14-day trial.
+- [ ] **Smarter pricing scope.** Simple rules (gap nights, last-minute, events) are planned. Should BalayHub also adjust prices automatically from your own occupancy? This is not AI, but it is more complex.
+
 ## Process decisions
 
 - [ ] **Branches.** Keep deploying from `claude/trusting-hopper-lyg8vu`, or merge it into `main` and have the server pull `main`?

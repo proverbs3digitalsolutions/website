@@ -55,6 +55,20 @@ Before starting, run `/proverbs3-dfss` analysis on this feature so the requireme
   - Tighten the file path check.
   - Pass ANTHROPIC_BASE_URL through compose only if ever needed.
 
+### Roadmap from the competitor research (2026-10-13)
+
+Full reasoning is in `docs/research/00-SUMMARY.md`. Everything here is built inside BalayHub, with no integrations and no AI. Each phase still needs to be broken into atoms (and checked with `/proverbs3-dfss`) before it is built.
+
+| Phase | What | Priority |
+|---|---|---|
+| 1. Money done right | Itemised stay bill with extra charges and pay links; payment proof upload and bank transfer; cancellation policy presets and refund log; payment schedules and reminders; host net per booking; BIR-ready invoices and monthly tax summary (after a tax check) | Must |
+| 2. Owners and co-hosts | Owner portal login (statements, bookings, payouts, operations feed, own date blocks); fee models (gross %, net %, flat); expenses with receipts; review-then-send statements with PDF; payout record; repairs reserve; per-unit P&L; monthly emailed report | Must |
+| 3. Operations | Cleaner-only access (no money); cleaner calendar; status board with clean, dirty and inspected; inspections with scores; damage reports linked to deposits; cleaner pay and paid marker; supplies par levels; lost and found; work orders and recurring tasks for stays | Must / Should |
+| 4. Guest experience and direct booking | Guidebook (English and Taglish) and a timed Wi-Fi and door-code template; house rules acceptance; paid add-ons; quote-and-pay links and share links with source tags; private feedback; returning-guest codes; unpaid-booking follow-up; search-friendly listing pages | Should |
+| 5. Pricing rules and team | Gap nights, last-minute and far-out rules, events, PH holiday auto-fill, bulk rate and block changes, price preview; booking activity log, conversation assignment, @mentions, notification rules, unit tags; group bookings, room types, drag to another unit, daily close; sync-health alerts | Should / Could |
+
+The order of SMS reminders (Sprint A, which needs an SMS provider) against Phase 1 is a founder decision (see BLOCKERS). The recommendation is Phase 1 first.
+
 ### Later
 
 - **Sprint B: Facebook Messenger inbox.** Page messages appear in the Inbox next to email, with replies sent from BalayHub. Needs a Meta app and app review (BLOCKERS).
@@ -76,6 +90,8 @@ Before starting, run `/proverbs3-dfss` analysis on this feature so the requireme
 | 2026-10-13 | Onboarding Launchpad and guest check-in form. PayMongo plan payments. Launch readiness (terms, password change, export, deletion, health check). Direct booking page and pay-the-balance links. New brand. Installable app and push notifications. Pricing helpers. Owner statements. Reviews, repeat guests and discount codes. Condo gate pass. Security deposits. Short-term reports and tax summary. Taglish for guests. Four-agent QA sweep with fixes. New landing page with a 3-step Get started and EN/TL. Light and dark mode. Help center and support tickets. BalayHub assistant (off until a key is added). Filters on every list page. My account page and the hidden Log out fix. 169 automated tests pass. |
 
 ## Session notes
+
+- **2026-10-13** · Competitor research done: 15 reports plus 2 follow-ups in `docs/research/`, summed up in `00-SUMMARY.md`. Integrations and AI features are excluded by founder request. The roadmap is Phases 1–5 above.
 
 - **2026-10-13** · Founder parked the AI chatbot: it stays off until ANTHROPIC_API_KEY is set (D-15).
 - **2026-10-13** · Adopted the Proverbs3 toolkit. The eight canon docs and the project CLAUDE.md were written from the existing code. Next feature: SMS reminders (Sprint A), pending founder choices in BLOCKERS.MD.
