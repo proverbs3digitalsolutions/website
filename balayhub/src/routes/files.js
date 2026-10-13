@@ -56,6 +56,11 @@ async function checkRecord(user, type, id) {
       if (!row) throw notFound();
       return row;
     }
+    case 'support': {
+      // Ticket attachments: whoever can see the ticket.
+      const { loadTicket } = require('./support');
+      return loadTicket(user, id);
+    }
     case 'registration': {
       // Guest IDs: owners and managers only.
       if (user.role === 'staff') throw forbidden('Guest IDs are limited to owners and property managers.');

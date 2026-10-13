@@ -26,7 +26,7 @@ async function exportOrganization(orgId) {
   };
   for (const t of ['properties', 'guests', 'bookings', 'booking_payments', 'guest_registrations', 'conversations', 'messages',
     'message_templates', 'automations', 'cleaning_tasks', 'ical_feeds', 'tenants', 'leases', 'payments', 'expenses',
-    'maintenance_requests', 'files', 'billing_payments', 'invitations', 'audit_logs', 'direct_checkouts', 'balance_checkouts', 'seasons', 'unit_owners', 'guest_reviews', 'discount_codes', 'gate_passes', 'stay_deposits']) {
+    'maintenance_requests', 'files', 'billing_payments', 'invitations', 'audit_logs', 'direct_checkouts', 'balance_checkouts', 'seasons', 'unit_owners', 'guest_reviews', 'discount_codes', 'gate_passes', 'stay_deposits', 'support_tickets']) {
     out[t] = await byOrg(t);
   }
   return out;
@@ -35,7 +35,7 @@ async function exportOrganization(orgId) {
 // Tables purgeOrganization() clears. test/account.test.js fails if a new table
 // is added to the schema without being listed here.
 const PURGED_TABLES = [
-  'push_subscriptions', 'seasons', 'gate_passes', 'stay_deposits', 'guest_reviews', 'balance_checkouts', 'direct_checkouts', 'discount_codes', 'automation_runs', 'messages', 'conversations', 'guest_registrations', 'files', 'cleaning_tasks', 'booking_payments',
+  'support_events', 'support_messages', 'support_tickets', 'push_subscriptions', 'seasons', 'gate_passes', 'stay_deposits', 'guest_reviews', 'balance_checkouts', 'direct_checkouts', 'discount_codes', 'automation_runs', 'messages', 'conversations', 'guest_registrations', 'files', 'cleaning_tasks', 'booking_payments',
   'billing_payments', 'receipt_counters', 'bookings', 'ical_feeds', 'guests', 'nightly_rates', 'payments', 'rent_charges',
   'leases', 'tenants', 'expenses', 'maintenance_requests', 'automations', 'message_templates', 'property_assignments',
   'units', 'unit_owners', 'properties', 'invitations', 'audit_logs', 'sessions', 'auth_tokens', 'consent_records', 'users', 'organizations',
@@ -48,6 +48,7 @@ async function purgeOrganization(orgId) {
     const run = (sql) => db.query(sql, [orgId]);
     const units = 'SELECT u.unit_id FROM units u JOIN properties p USING (property_id) WHERE p.organization_id = $1';
     const users = 'SELECT user_id FROM users WHERE organization_id = $1';
+    await run('DELETE FROM support_tickets WHERE organization_id = $1'); // messages and events cascade
     await run('DELETE FROM push_subscriptions WHERE organization_id = $1');
     await run('DELETE FROM seasons WHERE organization_id = $1');
     await run('DELETE FROM balance_checkouts WHERE organization_id = $1');

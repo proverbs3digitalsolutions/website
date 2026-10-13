@@ -30,6 +30,7 @@ import { guestReviewView } from './views/review.js';
 import { gatepassSettingsView, gatepassPublicView } from './views/gatepass.js';
 import { stayReportsView } from './views/stayreports.js';
 import { reviewsView, discountCodesView } from './views/guestcare.js';
+import { helpView, helpNewView, helpTicketView, adminSupportView, adminSupportTicketView } from './views/help.js';
 import { registerServiceWorker, forgetThisDevice } from './notifications.js';
 import { themeSwitch } from './themeswitch.js';
 
@@ -87,6 +88,11 @@ const routes = [
   ['/guests/:id', guestDetailView, APP],
   ['/receipts/:id', receiptView, APP],
   ['/admin', adminView, APP],
+  ['/admin/support', adminSupportView, APP],
+  ['/admin/support/:id', adminSupportTicketView, APP],
+  ['/help', helpView, APP],
+  ['/help/new', helpNewView, APP],
+  ['/help/tickets/:id', helpTicketView, APP],
   ['/inbox', inboxView, APP],
   ['/inbox/:id', inboxView, APP],
   ['/inbox-settings', inboxSettingsView, APP],
@@ -139,6 +145,7 @@ const NAV_BOTH = [
 // Staff don't see guest conversations; the platform admin gets an Admin link.
 const navFor = () => [...({ short_term: NAV_SHORT, both: NAV_BOTH }[state.user?.business_type] || NAV_LONG)
   .filter(([p]) => (p !== '/inbox' || state.user?.role !== 'staff') && (!['/launchpad', '/owners'].includes(p) || state.user?.role === 'owner') && (p !== '/stay-reports' || state.user?.role !== 'staff')),
+['/help', 'Help & support', 'help'],
 ...(state.user?.is_platform_admin ? [['/admin', 'Admin', 'shield']] : [])];
 
 // Trial / read-only / demo notice at the top of every app page.
@@ -295,6 +302,8 @@ export async function render() {
   const ctx = { params: route.params, query, state, navigate, rerender: render };
 
   if (route.access === APP) {
+    // The screen someone was on before Help, attached to a support ticket.
+    if (!path.startsWith('/help')) state.lastPage = location.hash;
     shell = buildShell(path);
     app.replaceChildren(shell.el);
     const mount = shell.content;

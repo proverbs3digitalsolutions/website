@@ -28,6 +28,8 @@ Multi-calendar with Airbnb, Booking.com and Agoda iCal sync, reservations, a gue
 - [docs/SELLING.md](docs/SELLING.md): plans, free trial, live demo, platform admin, PayMongo
 - [docs/LAUNCH-CHECKLIST.md](docs/LAUNCH-CHECKLIST.md): backups, uptime monitor, error alerts, legal pages
 
+**Help & support.** Every member gets *Help & support* in the menu: searchable guides (`src/lib/helpcenter.js`) and support tickets with a progress tracker (Received → In progress → Waiting for you → Resolved), a two-way conversation, screenshots, reopening within 14 days and a 1–5 rating. Tickets email the addresses in `PLATFORM_ADMIN_EMAILS`, who answer from *Admin → Support queue* (internal notes, assign, status). Resolved tickets close automatically after 7 days.
+
 Browser journeys (need a running, seeded server and Playwright): `test/e2e-stays-browser.js`, `test/e2e-inbox-browser.js` (start the server with `SMTP_URL=test://`) and `test/e2e-selling-browser.js` (with `PLATFORM_ADMIN_EMAILS=stays@balayhub.test`).
 
 ## What's in the MVP (long-term)

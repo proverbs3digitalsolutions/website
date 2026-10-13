@@ -64,7 +64,8 @@ export async function adminView(el, { rerender }) {
 
   el.replaceChildren(
     h('div', { class: 'page-head' }, h('div', { class: 'page-head__title' }, h('h1', null, 'Platform admin'),
-      h('p', null, 'All BalayHub workspaces. Click one to set its plan after the customer pays.'))),
+      h('p', null, 'All BalayHub workspaces. Click one to set its plan after the customer pays.')),
+      h('div', { class: 'page-head__actions' }, h('a', { class: 'btn btn--primary', href: '#/admin/support' }, 'Support queue'))),
     h('div', { class: 'stats' },
       h('div', { class: 'stat' }, h('div', { class: 'stat__label' }, 'On trial'), h('div', { class: 'stat__value' }, String(counts.trial))),
       h('div', { class: 'stat stat--good' }, h('div', { class: 'stat__label' }, 'Paying'), h('div', { class: 'stat__value' }, String(counts.paying))),

@@ -50,6 +50,8 @@ function startScheduler() {
   // Balance payments whose guest didn't return to the page.
   every(3 * 60 * 1000, 'balance-pay', require('../routes/balancepay').reconcileBalance, 35 * 1000);
   // Workspaces whose owner asked for deletion, after the grace period.
+  every(60 * 60 * 1000, 'support', require('../routes/support').autoClose, 95 * 1000);
+
   every(60 * 60 * 1000, 'account', require('./account').purgeDue, 90 * 1000);
   // Keep the public demo's dates current.
   every(60 * 60 * 1000, 'demo', require('./demo').refreshDemo, 50 * 1000);
