@@ -78,15 +78,15 @@ export function icon(name) {
   return svg;
 }
 
+// BalayHub mark: a house outline with a door, and a warm sun (Forest Green + Sand).
 export function logo() {
   const svg = document.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('viewBox', '0 0 64 64');
   svg.setAttribute('aria-hidden', 'true');
   const parts = [
-    ['rect', { width: 64, height: 64, rx: 14, fill: '#16324f' }],
-    ['path', { d: 'M14 31 32 16l18 15', fill: 'none', stroke: '#fff', 'stroke-width': 5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }],
-    ['path', { d: 'M20 29v18h24V29', fill: 'none', stroke: '#5fd3b8', 'stroke-width': 5, 'stroke-linejoin': 'round' }],
-    ['rect', { x: 28, y: 36, width: 8, height: 11, rx: 1.5, fill: '#5fd3b8' }],
+    ['circle', { cx: 51, cy: 11, r: 7.5, fill: '#d6a85c' }],
+    ['path', { d: 'M5 31 32 8l27 23', fill: 'none', stroke: '#0f5132', 'stroke-width': 5.5, 'stroke-linecap': 'square', 'stroke-linejoin': 'miter' }],
+    ['path', { d: 'M13 27v28h12V40h14v15h12V27', fill: 'none', stroke: '#0f5132', 'stroke-width': 5.5, 'stroke-linecap': 'square', 'stroke-linejoin': 'miter' }],
   ];
   for (const [tag, attrs] of parts) {
     const n = document.createElementNS(SVG_NS, tag);
@@ -96,7 +96,7 @@ export function logo() {
   return svg;
 }
 
-export const brand = (href = '#/') => h('a', { class: 'brand', href }, logo(), h('span', null, 'Balay', h('b', null, 'Hub')));
+export const brand = (href = '#/') => h('a', { class: 'brand', href, 'aria-label': 'BalayHub' }, logo(), h('span', null, 'Balay', h('b', null, 'Hub')));
 
 // ---------------------------------------------------------------- formatting
 const pesoFmt = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 2 });

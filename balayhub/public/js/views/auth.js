@@ -23,10 +23,10 @@ function splitPage(...children) {
       h('header', { class: 'public__top' }, brand('#/')),
       h('main', { class: 'auth-split__main', id: 'main' }, children)),
     h('aside', { class: 'auth-split__art', 'aria-hidden': 'true' },
-      h('img', { src: '/img/auth-living-room.svg', alt: '' }),
+      h('img', { src: '/img/auth-bahay-kubo.webp', srcset: '/img/auth-bahay-kubo-800.webp 800w, /img/auth-bahay-kubo.webp 1400w', sizes: '(min-width: 880px) 52vw, 100vw', alt: '' }),
       h('div', { class: 'auth-split__caption' },
-        h('strong', null, 'Every stay, tenant and peso — in one place.'),
-        h('span', null, 'Calendar, reservations, rent, cleaning and reports for Filipino hosts and landlords.'))));
+        h('strong', null, 'Properties. People. A more connected home.'),
+        h('span', null, 'Calendar, guests, cleaning, payments and reports for Filipino hosts and property managers.'))));
 }
 
 let googleEnabled = null;
