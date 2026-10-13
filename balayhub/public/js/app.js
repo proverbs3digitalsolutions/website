@@ -31,6 +31,7 @@ import { gatepassSettingsView, gatepassPublicView } from './views/gatepass.js';
 import { stayReportsView } from './views/stayreports.js';
 import { reviewsView, discountCodesView } from './views/guestcare.js';
 import { registerServiceWorker, forgetThisDevice } from './notifications.js';
+import { themeSwitch } from './themeswitch.js';
 
 export const state = { user: null, requireEmailVerification: true };
 
@@ -241,6 +242,7 @@ function openMore(current) {
   const sheet = h('div', { class: 'morenav', onclick: (e) => { if (e.target === sheet) close(); } },
     h('div', { class: 'morenav__sheet', role: 'menu' },
       moreNav().map(([p, t, ic]) => h('a', { href: `#${p}`, onclick: close, 'aria-current': isCurrent(p, current) ? 'page' : null }, icon(ic), t)),
+      h('div', { class: 'morenav__theme' }, themeSwitch()),
       h('button', { onclick: () => { close(); logout(); } }, icon('logout'), 'Log out')));
   document.body.append(sheet);
 }
@@ -257,6 +259,7 @@ function buildShell(path) {
       h('div', { class: 'sidebar__foot' },
         h('strong', null, u.full_name),
         h('span', null, `${u.organization_name} · ${({ owner: 'Owner', manager: 'Manager', staff: 'Staff' })[u.role]}`),
+        themeSwitch({ compact: true }),
         h('button', { class: 'btn btn--secondary btn--sm btn--block', onclick: logout }, 'Log out'))),
     h('header', { class: 'topbar' }, brand(homeRoute()), h('span', { class: 'topbar__org' }, u.organization_name)),
     h('div', { class: 'shell__main' }, planBanner(), content),

@@ -4,6 +4,7 @@ import { get, post, patch } from '../api.js';
 import { h, icon, label, field, formModal, confirmDialog, emptyState, pageHead, toast, fmtDateTime, openModal } from '../ui.js';
 import { state, refreshUser } from '../app.js';
 import { notificationsCard } from '../notifications.js';
+import { themeSwitch } from '../themeswitch.js';
 
 function propertyChecks(properties, selected = []) {
   return h('fieldset', { class: 'field', dataset: { field: 'property_ids' }, style: { border: 0, padding: 0, margin: 0 } },
@@ -67,6 +68,10 @@ export async function settingsView(el, { rerender, query = {} }) {
       } }, 'Save')))));
 
   if (u.role === 'owner' && u.business_type !== 'long_term') sections.push(guestLanguageCard(u, rerender));
+  sections.push(h('div', { class: 'card' },
+    h('div', { class: 'card__head' }, h('h2', null, 'Appearance')),
+    h('p', { class: 'muted small' }, 'Light, dark, or match your phone or computer. Saved on this device.'),
+    themeSwitch()));
   if (!u.plan?.is_demo) sections.push(await notificationsCard(rerender).catch(() => null));
   if (u.role === 'owner' && u.plan && !u.plan.is_demo) sections.push(await planCard(u));
   if (u.role === 'owner' && u.plan && !u.plan.is_demo && u.business_type !== 'long_term') sections.push(await bookingCard(rerender));

@@ -86,8 +86,8 @@ export function logo() {
   svg.setAttribute('aria-hidden', 'true');
   const parts = [
     ['circle', { cx: 51, cy: 11, r: 7.5, fill: '#d6a85c' }],
-    ['path', { d: 'M5 31 32 8l27 23', fill: 'none', stroke: '#0f5132', 'stroke-width': 5.5, 'stroke-linecap': 'square', 'stroke-linejoin': 'miter' }],
-    ['path', { d: 'M13 27v28h12V40h14v15h12V27', fill: 'none', stroke: '#0f5132', 'stroke-width': 5.5, 'stroke-linecap': 'square', 'stroke-linejoin': 'miter' }],
+    ['path', { d: 'M5 31 32 8l27 23', fill: 'none', stroke: 'currentColor', 'stroke-width': 5.5, 'stroke-linecap': 'square', 'stroke-linejoin': 'miter' }],
+    ['path', { d: 'M13 27v28h12V40h14v15h12V27', fill: 'none', stroke: 'currentColor', 'stroke-width': 5.5, 'stroke-linecap': 'square', 'stroke-linejoin': 'miter' }],
   ];
   for (const [tag, attrs] of parts) {
     const n = document.createElementNS(SVG_NS, tag);

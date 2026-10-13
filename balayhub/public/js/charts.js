@@ -55,14 +55,14 @@ function frame({ labels, series, fmt, height = 220, draw, ariaLabel, integer = f
     const root = svg('svg', { viewBox: `0 0 ${width} ${height}`, width: '100%', height, role: 'img', 'aria-label': ariaLabel });
     for (let i = 0; i <= 4; i += 1) {
       const v = (max / 4) * i;
-      root.append(svg('line', { x1: m.l, x2: width - m.r, y1: y(v), y2: y(v), stroke: '#e2e7ee', 'stroke-width': 1 }),
-        svg('text', { x: m.l - 8, y: y(v) + 4, 'text-anchor': 'end', 'font-size': 11, fill: '#5b6878' }, fmt(v, true)));
+      root.append(svg('line', { x1: m.l, x2: width - m.r, y1: y(v), y2: y(v), stroke: '#e2e7ee', 'stroke-width': 1, class: 'chart-grid' }),
+        svg('text', { x: m.l - 8, y: y(v) + 4, 'text-anchor': 'end', 'font-size': 11, fill: '#5b6878', class: 'chart-axis' }, fmt(v, true)));
     }
     const step = w / labels.length;
     const every = Math.ceil(labels.length / Math.max(1, Math.floor(w / 64)));
     labels.forEach((l, i) => {
       if (i % every) return;
-      root.append(svg('text', { x: m.l + step * i + step / 2, y: height - 12, 'text-anchor': 'middle', 'font-size': 11, fill: '#5b6878' }, l));
+      root.append(svg('text', { x: m.l + step * i + step / 2, y: height - 12, 'text-anchor': 'middle', 'font-size': 11, fill: '#5b6878', class: 'chart-axis' }, l));
     });
     draw({ root, m, w, hgt, y, step, width, height });
     // Hover bands: one per category, wider than the marks.

@@ -5,6 +5,7 @@ import { get, post, ApiError } from '../api.js';
 import { h, brand, icon, toast, openModal } from '../ui.js';
 import { refreshUser, navigate, homeRoute, state, afterLogin } from '../app.js';
 import { t, initGuestLang, setGuestLang, guestLang, extendTranslations } from '../i18n.js';
+import { themeSwitch } from '../themeswitch.js';
 
 extendTranslations({
   // nav
@@ -451,5 +452,6 @@ export async function landingView(el) {
         h('span', null, `© ${new Date().getFullYear()} BalayHub`),
         h('a', { href: '#/terms' }, t('Terms of service')),
         h('a', { href: '#/privacy' }, t('Privacy notice')),
-        pricing.contact_email && h('a', { href: `mailto:${pricing.contact_email}` }, pricing.contact_email)))));
+        pricing.contact_email && h('a', { href: `mailto:${pricing.contact_email}` }, pricing.contact_email),
+        themeSwitch({ compact: true })))));
 }
