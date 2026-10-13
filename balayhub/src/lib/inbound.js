@@ -62,6 +62,13 @@ async function storeInbound(parsed) {
     [conv.conversation_id, conv.organization_id, clean(from.name).slice(0, 120), clean(from.address).slice(0, 254),
       clean(parsed.subject).slice(0, 200), body, parsed.date || new Date(), clean(parsed.messageId) || null]);
   if (rowCount) {
+    const { notify, propertyOfBooking } = require('./push');
+    notify(conv.organization_id, 'guest_message', {
+      title: `New message from ${(from.name || from.address || 'a guest').slice(0, 60)}`,
+      body: body.slice(0, 140),
+      url: `/#/inbox/${conv.conversation_id}`,
+      propertyId: await propertyOfBooking(conv.booking_id),
+    }).catch(() => {});
     await query(
       `UPDATE conversations SET unread = true, status = 'open', snoozed_until = NULL, last_message_at = now() WHERE conversation_id = $1`,
       [conv.conversation_id]);

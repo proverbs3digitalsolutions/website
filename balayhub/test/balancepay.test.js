@@ -94,21 +94,67 @@ test('guest pays the balance: amount from the server, recorded once with a recei
   assert.equal((await owner.get(`/api/reservations/${res.booking_id}/payment-link`)).data.available, false);
 });
 
-test('wrong amount is not accepted; reconcile confirms without the guest; reminders skip paid stays', async () => {
+test('an underpaid session is flagged to the host; reconcile confirms without the guest', async () => {
   const r2 = (await owner.post('/api/reservations', { unit_id: res.unit_id, check_in: d(20), check_out: d(21), guest_name: 'Ben', guest_email: 'ben@example.com' })).data.reservation;
   const t2 = (await owner.get(`/api/reservations/${r2.booking_id}/payment-link`)).data.link.split('/#/pay/')[1];
   await client(srv.base).post(`/api/public/pay/${t2}/checkout`);
-  const s = last();
-  pay(s, 100);
+  outbox.length = 0;
+  pay(last(), 100);
   assert.equal((await client(srv.base).post(`/api/public/pay/${t2}/refresh`)).data.paid, false);
-  pay(s, 250000);
+  const [row] = await sql(`SELECT status FROM balance_checkouts WHERE booking_id = $1`, [r2.booking_id]);
+  assert.equal(row.status, 'failed');
+  assert.ok(outbox.some((m) => m.to === 'host@example.com' && /check a balance payment/.test(m.subject)), 'host is told');
+
+  // A fresh checkout, paid while the guest never comes back.
+  await client(srv.base).post(`/api/public/pay/${t2}/checkout`);
+  pay(last(), 250000);
   assert.ok(await balance.reconcileBalance() >= 1);
   assert.equal((await client(srv.base).get(`/api/public/pay/${t2}`)).data.balance, '0.00');
 
-  // A balance reminder is sent only to guests who still owe.
   const auto = (await owner.get('/api/automations')).data.automations.find((a) => a.trigger_event === 'before_check_in' && /balance/.test(a.name));
   assert.ok(auto, 'default balance reminder exists');
   assert.equal(auto.enabled, false);
+});
+
+test('recording a payment by hand closes the open checkout; a late payment on it is still recorded', async () => {
+  const r = (await owner.post('/api/reservations', { unit_id: res.unit_id, check_in: d(40), check_out: d(41), guest_name: 'Dani', guest_email: 'dani@example.com' })).data.reservation;
+  const t = (await owner.get(`/api/reservations/${r.booking_id}/payment-link`)).data.link.split('/#/pay/')[1];
+  await client(srv.base).post(`/api/public/pay/${t}/checkout`);
+  const s = last();
+  await owner.post(`/api/reservations/${r.booking_id}/payments`, { amount: '1000', payment_date: manilaToday(), payment_method: 'cash' });
+  assert.equal(s.attributes.status, 'expired', 'closed at PayMongo');
+  assert.equal((await sql(`SELECT status FROM balance_checkouts WHERE provider_checkout_id = $1`, [s.id]))[0].status, 'expired');
+  // It was paid just as it closed: the recheck of recently expired checkouts records it.
+  pay(s, 250000);
+  await sql(`UPDATE balance_checkouts SET last_checked_at = now() - interval '2 hours' WHERE provider_checkout_id = $1`, [s.id]);
+  await balance.reconcileBalance();
+  assert.equal((await sql(`SELECT status FROM balance_checkouts WHERE provider_checkout_id = $1`, [s.id]))[0].status, 'paid');
+});
+
+test('a checkout is never marked expired unless PayMongo says so', async () => {
+  const r = (await owner.post('/api/reservations', { unit_id: res.unit_id, check_in: d(50), check_out: d(51), guest_name: 'Eli', guest_email: 'eli@example.com' })).data.reservation;
+  const t = (await owner.get(`/api/reservations/${r.booking_id}/payment-link`)).data.link.split('/#/pay/')[1];
+  // A checkout another request is still starting (no PayMongo id yet) is left alone.
+  await sql(`INSERT INTO balance_checkouts (organization_id, booking_id, amount, key_enc, test_mode)
+             SELECT organization_id, booking_id, 2500, 'x', true FROM bookings WHERE booking_id = $1`, [r.booking_id]);
+  await balance.closeOpenCheckouts(r.booking_id);
+  assert.equal((await sql(`SELECT status FROM balance_checkouts WHERE booking_id = $1`, [r.booking_id]))[0].status, 'pending');
+  await sql(`DELETE FROM balance_checkouts WHERE booking_id = $1`, [r.booking_id]);
+
+  // PayMongo is down while closing: it stays pending to be checked again.
+  await client(srv.base).post(`/api/public/pay/${t}/checkout`);
+  const s = last();
+  const saved = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => (String(url).startsWith('https://api.paymongo.com/') ? new Response('{}', { status: 503 }) : saved(url, opts));
+  try { await balance.closeOpenCheckouts(r.booking_id); } finally { globalThis.fetch = saved; }
+  assert.equal(s.attributes.status, 'active');
+  assert.equal((await sql(`SELECT status FROM balance_checkouts WHERE provider_checkout_id = $1`, [s.id]))[0].status, 'pending');
+  // Two checkout requests at once end up with one session.
+  await balance.closeOpenCheckouts(r.booking_id);
+  const g = client(srv.base);
+  const [a, b] = await Promise.all([g.post(`/api/public/pay/${t}/checkout`), g.post(`/api/public/pay/${t}/checkout`)]);
+  assert.equal(a.data.checkout_url, b.data.checkout_url);
+  assert.equal((await sql(`SELECT COUNT(*)::int AS n FROM balance_checkouts WHERE booking_id = $1 AND status = 'pending'`, [r.booking_id]))[0].n, 1);
 });
 
 test('cancelled bookings and ended plans cannot take payments', async () => {
@@ -122,5 +168,9 @@ test('cancelled bookings and ended plans cannot take payments', async () => {
   const pg = (await client(srv.base).get(`/api/public/pay/${t3}`)).data;
   assert.equal(pg.cancelled, true);
   assert.equal(pg.accepting, false);
+  // The reminder no longer offers a link that can't take payment.
+  const tpl = (await owner.get('/api/message-templates')).data.templates.find((t) => t.system_key === 'payment_reminder');
+  const rr = await owner.get(`/api/message-templates/${tpl.template_id}/render?booking_id=${r3.booking_id}`);
+  assert.doesNotMatch(rr.data.body, /\/#\/pay\//);
   assert.ok(messaging);
 });

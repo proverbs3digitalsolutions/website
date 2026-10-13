@@ -464,6 +464,12 @@ async function finalize(ref, method) {
 }
 
 async function afterBooking({ bookingId, ownerId, c }) {
+  const { notify, propertyOfBooking } = require('../lib/push');
+  notify(c.organization_id, 'new_booking', {
+    title: `New direct booking · ₱${Number(c.amount_due_now).toLocaleString('en-PH')} paid`,
+    body: `${c.guest_name}, ${c.check_in} – ${c.check_out}`,
+    url: `/#/reservations/${bookingId}`, propertyId: await propertyOfBooking(bookingId),
+  }).catch(() => {});
   const receipts = require('../lib/receipts');
   const messaging = require('../lib/messaging');
   const owner = ownerId ? await one('SELECT * FROM users WHERE user_id = $1', [ownerId]) : null;
@@ -499,9 +505,12 @@ async function releaseCheckout(ref) {
   if (key && c.provider_checkout_id) {
     await paymongo.request(key, 'POST', `/checkout_sessions/${encodeURIComponent(c.provider_checkout_id)}/expire`).catch(() => {});
   }
-  // If it got paid in the meantime, keep it (the check confirms it).
+  // Marked expired only once PayMongo says so (the check does that); if it got
+  // paid meanwhile, the check confirms it. On an error it stays pending and the
+  // next reconcile tries again. The hold on the dates ends either way.
   const st = await refreshCheckout(ref).catch(() => 'pending');
-  if (st === 'pending') await query(`UPDATE direct_checkouts SET status = 'expired', hold_until = LEAST(hold_until, now()) WHERE checkout_ref = $1 AND status = 'pending'`, [ref]);
+  if (st === 'pending') await query(`UPDATE direct_checkouts SET hold_until = LEAST(hold_until, now()) WHERE checkout_ref = $1 AND status = 'pending'`, [ref]);
+  return st;
 }
 
 // Scheduler: confirm paid checkouts whose guest never came back, and close
@@ -516,7 +525,9 @@ async function reconcileDirect() {
     try {
       const st = await refreshCheckout(r.checkout_ref);
       if (st === 'confirmed') { confirmed += 1; continue; }
-      if (st === 'pending' && r.lapsed) await releaseCheckout(r.checkout_ref);
+      if (st === 'pending' && r.lapsed && await releaseCheckout(r.checkout_ref) === 'pending' && r.old) {
+        throw new Error('PayMongo has not closed this checkout.');
+      }
     } catch (err) {
       // The payment can't be checked (e.g. the key can't be read). Never assume it wasn't
       // paid: after 2 days, stop trying and ask the host to check PayMongo.

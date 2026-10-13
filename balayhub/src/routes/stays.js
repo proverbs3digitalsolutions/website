@@ -13,6 +13,8 @@ const { propertyScope, loadUnit } = require('../lib/access');
 const ical = require('../lib/ical');
 const { ensureTaskForBooking, syncOpenTasks } = require('../lib/housekeeping');
 const receipts = require('../lib/receipts');
+// The amount owed changed: close the guest's open online-payment checkouts (lazy require: circular-safe).
+const closeOpenCheckouts = (bookingId) => require('./balancepay').closeOpenCheckouts(bookingId);
 
 const router = express.Router();
 const managers = requireRole('owner', 'manager');
@@ -348,6 +350,7 @@ router.patch('/reservations/:id', managers, ah(async (req, res) => {
     if (err.constraint === 'bookings_no_overlap') throw await overlapError(merged.unit_id, merged.check_in, merged.check_out, booking.booking_id);
     throw err;
   }
+  await closeOpenCheckouts(booking.booking_id);
   res.json({ reservation: redactGuest(req.user, await loadBooking(req.user, booking.booking_id)) });
 }));
 
@@ -362,6 +365,7 @@ router.post('/reservations/:id/cancel', managers, ah(async (req, res) => {
   await query(`UPDATE bookings SET status = 'cancelled', cancelled_at = now(), cancel_reason = $2, updated_at = now() WHERE booking_id = $1`,
     [booking.booking_id, reason]);
   await audit(null, req.user, 'reservation.cancelled', 'booking', booking.booking_id, { reason });
+  await closeOpenCheckouts(booking.booking_id);
   res.json({ ok: true });
 }));
 
@@ -424,6 +428,7 @@ router.post('/reservations/:id/payments', ah(async (req, res) => {
     if (err.constraint !== 'booking_payments_idem_uq') throw err;
     return res.json({ duplicate: true, reservation: await loadBooking(req.user, booking.booking_id) });
   }
+  await closeOpenCheckouts(booking.booking_id);
   const receipt = body.send_receipt ? await receipts.sendReceipt(paymentId, req.user) : null;
   res.status(201).json({ reservation: await loadBooking(req.user, booking.booking_id), payment_id: paymentId, receipt });
 }));
@@ -437,6 +442,7 @@ router.post('/booking-payments/:id/void', managers, ah(async (req, res) => {
   const { reason } = validate(req.body, { reason: { type: 'string', required: true, max: 300, label: 'Reason' } });
   await query('UPDATE booking_payments SET voided_at = now(), voided_by = $2, void_reason = $3 WHERE payment_id = $1', [id, req.user.user_id, reason]);
   await audit(null, req.user, 'reservation.payment_voided', 'booking_payment', id, { amount: p.amount, reason });
+  await closeOpenCheckouts(p.booking_id);
   res.json({ ok: true });
 }));
 

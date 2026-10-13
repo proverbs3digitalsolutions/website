@@ -24,6 +24,7 @@ const manilaToday = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().s
 const METHOD_MAP = { gcash: 'gcash', paymaya: 'maya', maya: 'maya', card: 'card', grab_pay: 'other', qrph: 'other' };
 const payLink = (token) => `${config.appUrl}/#/pay/${token}`;
 
+const REUSE_MS = 30 * 60 * 1000;
 const BALANCE = `(b.total_amount - COALESCE((SELECT SUM(x.amount) FROM booking_payments x WHERE x.booking_id = b.booking_id AND x.voided_at IS NULL), 0))::numeric(12,2)`;
 
 async function ensurePayToken(bookingId) {
@@ -47,8 +48,16 @@ router.get('/reservations/:id/payment-link', managers, ah(async (req, res) => {
 }));
 
 // ---------------------------------------------------------------- guest side
+// Per IP for loading pages and starting checkouts; the return page's status
+// polling has its own per-link limit so a returning guest isn't locked out.
 const payLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 60, key: (req) => `pay|${req.ip}` });
-publicRouter.use('/public/pay', payLimiter);
+publicRouter.use('/public/pay', (req, res, next) => (req.method === 'POST' && req.path.endsWith('/refresh') ? next() : payLimiter(req, res, next)));
+const refreshLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 120, key: (req) => `payrefresh|${req.params.token}` });
+
+// Whether this booking can be paid online right now (also gates the {{payment_link}} message variable).
+function acceptsOnline(b) {
+  return Boolean(b.paymongo_key_hint) && !planStatus(b).read_only && !b.is_demo && b.status === 'confirmed' && String(b.check_out) >= manilaToday();
+}
 
 async function loadByToken(token) {
   if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{20,40}$/.test(token)) throw notFound('This payment link is not valid. Please ask your host for a new one.');
@@ -60,7 +69,7 @@ async function loadByToken(token) {
        JOIN organizations o ON o.organization_id = b.organization_id LEFT JOIN guests g ON g.guest_id = b.guest_id
       WHERE b.pay_token = $1 AND b.kind = 'reservation'`, [token]);
   if (!b) throw notFound('This payment link is not valid. Please ask your host for a new one.');
-  b.accepting = Boolean(b.paymongo_key_enc) && !planStatus(b).read_only && !b.is_demo && b.status === 'confirmed' && b.check_out >= manilaToday();
+  b.accepting = acceptsOnline(b) && Boolean(b.paymongo_key_enc);
   b.test_mode = Boolean(b.paymongo_key_hint && b.paymongo_key_hint.startsWith('sk_test_'));
   return b;
 }
@@ -83,31 +92,40 @@ publicRouter.post('/public/pay/:token/checkout', checkoutLimiter, ah(async (req,
   const amount = Number(b.balance);
   if (!(amount > 0)) throw new HttpError(409, 'This booking is already fully paid. Thank you!', { code: 'PAID' });
   if (amount < 100) throw new HttpError(409, 'The balance is too small to pay online. Please pay your host directly.', { code: 'TOO_SMALL' });
-  // Reuse a recent unpaid checkout for the same amount; close older ones.
-  const { rows: open } = await query(
-    `SELECT * FROM balance_checkouts WHERE booking_id = $1 AND status = 'pending' ORDER BY created_at DESC`, [b.booking_id]);
-  const reusable = open.find((c) => Number(c.amount) === amount && c.checkout_url && Date.now() - new Date(c.created_at) < 30 * 60 * 1000);
-  if (reusable) return res.json({ checkout_url: reusable.checkout_url });
-  for (const c of open) await closeCheckout(c.checkout_ref).catch(() => {});
-
   const key = secretbox.decrypt(b.paymongo_key_enc);
   if (!key) throw new HttpError(502, 'Online payment is not available right now. Please contact your host.', { code: 'PAYMENT_FAILED' });
-  const c = await one(
-    `INSERT INTO balance_checkouts (organization_id, booking_id, amount, key_enc, test_mode) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-    [b.organization_id, b.booking_id, amount.toFixed(2), b.paymongo_key_enc, b.test_mode]);
+  // One checkout at a time per booking: the booking row lock makes a second
+  // tab wait until the first has its PayMongo session, then reuse it.
+  const result = await tx(async (db) => {
+    // NO KEY UPDATE: still lets markPaid (another connection) insert a payment for this booking.
+    await db.query('SELECT booking_id FROM bookings WHERE booking_id = $1 FOR NO KEY UPDATE', [b.booking_id]);
+    const { rows: open } = await db.query(
+      `SELECT * FROM balance_checkouts WHERE booking_id = $1 AND status = 'pending' ORDER BY created_at DESC`, [b.booking_id]);
+    const reusable = open.find((c) => Number(c.amount) === amount && c.checkout_url && Date.now() - new Date(c.created_at) < REUSE_MS);
+    if (reusable) return { url: reusable.checkout_url };
+    for (const c of open) await closeCheckout(c.checkout_ref).catch(() => {});
+    const { rows: [c] } = await db.query(
+      `INSERT INTO balance_checkouts (organization_id, booking_id, amount, key_enc, test_mode) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [b.organization_id, b.booking_id, amount.toFixed(2), b.paymongo_key_enc, b.test_mode]);
+    return { url: await startSession(key, b, c, req.params.token, db) };
+  });
+  res.json({ checkout_url: result.url });
+}));
+
+async function startSession(key, b, c, token, db) {
   try {
     const data = await paymongo.request(key, 'POST', '/checkout_sessions', {
       data: {
         attributes: {
-          line_items: [{ currency: 'PHP', amount: Math.round(amount * 100), name: `Balance for ${b.unit_name} (${b.check_in} to ${b.check_out}) · ${b.confirmation_code}`, quantity: 1 }],
+          line_items: [{ currency: 'PHP', amount: Math.round(Number(c.amount) * 100), name: `Balance for ${b.unit_name} (${b.check_in} to ${b.check_out}) · ${b.confirmation_code}`, quantity: 1 }],
           payment_method_types: config.paymongoMethods,
           description: `Balance payment to ${b.host_name}`,
           reference_number: c.checkout_ref,
           send_email_receipt: true,
           show_description: true,
           show_line_items: true,
-          success_url: `${config.appUrl}/#/pay/${req.params.token}?done=1`,
-          cancel_url: `${config.appUrl}/#/pay/${req.params.token}`,
+          success_url: `${config.appUrl}/#/pay/${token}?done=1`,
+          cancel_url: `${config.appUrl}/#/pay/${token}`,
           metadata: { balance_checkout_ref: c.checkout_ref },
         },
       },
@@ -115,16 +133,16 @@ publicRouter.post('/public/pay/:token/checkout', checkoutLimiter, ah(async (req,
     const id = data?.data?.id;
     const url = data?.data?.attributes?.checkout_url;
     if (!id || !url) throw new Error('unexpected response');
-    await query('UPDATE balance_checkouts SET provider_checkout_id = $2, checkout_url = $3 WHERE checkout_ref = $1', [c.checkout_ref, id, url]);
-    res.json({ checkout_url: url });
+    await db.query('UPDATE balance_checkouts SET provider_checkout_id = $2, checkout_url = $3 WHERE checkout_ref = $1', [c.checkout_ref, id, url]);
+    return url;
   } catch (err) {
-    await query(`UPDATE balance_checkouts SET status = 'failed' WHERE checkout_ref = $1`, [c.checkout_ref]);
+    // The transaction rolls back, removing the unstarted checkout row.
     throw new HttpError(502, err.status === 502 ? err.message : 'Online payment is not available right now. Please contact your host.', { code: 'PAYMENT_FAILED' });
   }
-}));
+}
 
 // The guest's return: confirm any pending checkout for this booking with PayMongo.
-publicRouter.post('/public/pay/:token/refresh', ah(async (req, res) => {
+publicRouter.post('/public/pay/:token/refresh', refreshLimiter, ah(async (req, res) => {
   const b = await loadByToken(req.params.token);
   const { rows } = await query(`SELECT checkout_ref FROM balance_checkouts WHERE booking_id = $1 AND status = 'pending' AND provider_checkout_id IS NOT NULL`, [b.booking_id]);
   let paid = false;
@@ -143,6 +161,12 @@ async function refresh(ref) {
   const s = await paymongo.checkoutStatus(key, c.provider_checkout_id);
   const expected = Math.round(Number(c.amount) * 100);
   if (s.paid && (s.paidAmount >= expected || (s.paidAmount === 0 && s.listed === expected))) return markPaid(ref, s.method);
+  if (s.paid) {
+    // Money arrived but not the amount asked for: never drop it silently.
+    const { rows: [f] } = await query(`UPDATE balance_checkouts SET status = 'failed' WHERE checkout_ref = $1 AND status IN ('pending','expired') RETURNING *`, [ref]);
+    if (f) await alertHost(f, `PayMongo shows ₱${(s.paidAmount / 100).toLocaleString('en-PH')} paid instead of ₱${Number(c.amount).toLocaleString('en-PH')}.`).catch(() => {});
+    return 'failed';
+  }
   if (s.expired) {
     await query(`UPDATE balance_checkouts SET status = 'expired' WHERE checkout_ref = $1 AND status = 'pending'`, [ref]);
     return 'expired';
@@ -154,6 +178,8 @@ async function markPaid(ref, method) {
   const done = await tx(async (db) => {
     const { rows: [c] } = await db.query('SELECT * FROM balance_checkouts WHERE checkout_ref = $1 FOR UPDATE', [ref]);
     if (!c || c.status === 'paid') return null;
+    const { rows: [bk] } = await db.query('SELECT status FROM bookings WHERE booking_id = $1', [c.booking_id]);
+    c.booking_status = bk?.status;
     const receipts = require('../lib/receipts');
     const receiptNo = await receipts.nextReceiptNumber(db, c.organization_id);
     const { rows: [p] } = await db.query(
@@ -171,6 +197,11 @@ async function markPaid(ref, method) {
 }
 
 async function afterPaid({ c, paymentId }) {
+  const { notify, propertyOfBooking } = require('../lib/push');
+  notify(c.organization_id, 'payment', {
+    title: `Balance paid online · ₱${Number(c.amount).toLocaleString('en-PH')}`, body: 'Tap to open the reservation.',
+    url: `/#/reservations/${c.booking_id}`, propertyId: await propertyOfBooking(c.booking_id),
+  }).catch(() => {});
   const receipts = require('../lib/receipts');
   const messaging = require('../lib/messaging');
   await receipts.sendReceipt(paymentId, null);
@@ -178,32 +209,48 @@ async function afterPaid({ c, paymentId }) {
   const conv = await messaging.getOrCreateConversation(c.booking_id);
   await query(`INSERT INTO messages (conversation_id, organization_id, direction, from_name, body, status) VALUES ($1,$2,'note','BalayHub',$3,'note')`,
     [conv.conversation_id, conv.organization_id,
-      `The guest paid ₱${Number(c.amount).toLocaleString('en-PH')} online.${Number(bal.balance) > 0 ? ` Remaining balance: ₱${Number(bal.balance).toLocaleString('en-PH')}.` : ' The booking is now fully paid.'}${Number(bal.balance) < 0 ? ' Note: this is more than the balance (another payment was recorded meanwhile); please refund the difference.' : ''}`]);
+      `The guest paid ₱${Number(c.amount).toLocaleString('en-PH')} online.${Number(bal.balance) > 0 ? ` Remaining balance: ₱${Number(bal.balance).toLocaleString('en-PH')}.` : ' The booking is now fully paid.'}${Number(bal.balance) < 0 ? ' Note: this is more than the balance (another payment was recorded meanwhile); please refund the difference.' : ''}${c.booking_status !== 'confirmed' ? ' ⚠ This reservation is cancelled. Please refund the guest from your PayMongo dashboard or rebook them.' : ''}`]);
   await query(`UPDATE conversations SET unread = true, status = 'open', last_message_at = now() WHERE conversation_id = $1`, [conv.conversation_id]);
 }
 
-// Close a checkout at PayMongo so it can't be paid later (unless already paid).
+// Close a checkout at PayMongo so it can't be paid later. It is marked expired
+// only once PayMongo itself says so; if it got paid meanwhile, it's recorded.
+// Returns the checkout's status afterwards.
 async function closeCheckout(ref) {
   const c = await one('SELECT * FROM balance_checkouts WHERE checkout_ref = $1', [ref]);
-  if (!c || c.status !== 'pending') return;
+  if (!c || c.status !== 'pending') return c?.status || null;
+  if (!c.provider_checkout_id) return 'pending'; // still being started by another request
   const key = secretbox.decrypt(c.key_enc);
-  if (key && c.provider_checkout_id) await paymongo.request(key, 'POST', `/checkout_sessions/${encodeURIComponent(c.provider_checkout_id)}/expire`).catch(() => {});
-  const st = c.provider_checkout_id ? await refresh(ref).catch(() => 'pending') : 'pending';
-  if (st === 'pending') await query(`UPDATE balance_checkouts SET status = 'expired' WHERE checkout_ref = $1 AND status = 'pending'`, [ref]);
+  if (key) await paymongo.request(key, 'POST', `/checkout_sessions/${encodeURIComponent(c.provider_checkout_id)}/expire`).catch(() => {});
+  return refresh(ref).catch(() => 'pending');
 }
 
-// Scheduler: confirm payments whose guest didn't come back; close checkouts older than a day.
+// Close the guest's open checkouts after the amount owed changes (a payment
+// recorded or voided, the booking edited or cancelled), so a stale session
+// can't be paid. Never throws.
+async function closeOpenCheckouts(bookingId) {
+  const { rows } = await query(`SELECT checkout_ref FROM balance_checkouts WHERE booking_id = $1 AND status = 'pending'`, [bookingId]).catch(() => ({ rows: [] }));
+  for (const r of rows) await closeCheckout(r.checkout_ref).catch(() => {});
+}
+
+// Scheduler: confirm payments whose guest didn't come back; close checkouts
+// once they're past the reuse window; recheck recently expired ones in case a
+// payment landed as they closed.
 async function reconcileBalance() {
   const { rows } = await query(
-    `SELECT checkout_ref, created_at < now() - interval '1 day' AS old, created_at < now() - interval '3 days' AS very_old
-       FROM balance_checkouts WHERE status = 'pending' AND provider_checkout_id IS NOT NULL
-      ORDER BY last_checked_at NULLS FIRST, created_at DESC LIMIT 40`);
+    `SELECT checkout_ref, status, created_at < now() - interval '1 hour' AS old, created_at < now() - interval '3 days' AS very_old
+       FROM balance_checkouts
+      WHERE provider_checkout_id IS NOT NULL
+        AND (status = 'pending' OR (status = 'expired' AND created_at > now() - interval '7 days'
+                                    AND (last_checked_at IS NULL OR last_checked_at < now() - interval '1 hour')))
+      ORDER BY (status = 'pending') DESC, last_checked_at NULLS FIRST, created_at DESC LIMIT 40`);
   let paid = 0;
   for (const r of rows) {
     try {
-      const st = await refresh(r.checkout_ref);
+      let st = await refresh(r.checkout_ref);
+      if (st === 'pending' && r.old) st = await closeCheckout(r.checkout_ref);
       if (st === 'paid') paid += 1;
-      else if (st === 'pending' && r.old) await closeCheckout(r.checkout_ref);
+      else if (st === 'pending' && r.very_old) throw new Error('PayMongo has not closed this checkout.');
     } catch (err) {
       if (r.very_old) {
         // Can't check it: never assume it wasn't paid. Ask the host to look in PayMongo.
@@ -227,4 +274,4 @@ async function alertHost(c, reason) {
   }
 }
 
-module.exports = { router, publicRouter, ensurePayToken, payLink, reconcileBalance, refresh };
+module.exports = { router, publicRouter, ensurePayToken, payLink, reconcileBalance, refresh, closeOpenCheckouts, acceptsOnline };

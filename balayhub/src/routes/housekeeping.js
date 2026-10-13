@@ -119,6 +119,11 @@ router.patch('/cleaning-tasks/:id', managers, ah(async (req, res) => {
   else if (body.assignee_name) body.assigned_to = null;
   if ('due_date' in body && !body.due_date) delete body.due_date;
   const keys = Object.keys(body);
+  if (body.assigned_to && body.assigned_to !== task.assigned_to) {
+    require('../lib/push').notify(req.user.organization_id, 'cleaning', {
+      title: `Cleaning assigned to you: ${task.unit_name}`, body: `Due ${task.due_date}`, url: `/#/housekeeping/${task.task_id}`, userId: body.assigned_to,
+    }).catch(() => {});
+  }
   if (keys.length) {
     await query(`UPDATE cleaning_tasks SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')} WHERE task_id = $1`,
       [task.task_id, ...keys.map((k) => body[k])]);
@@ -162,6 +167,12 @@ router.post('/cleaning-tasks/:id/status', ah(async (req, res) => {
     }
     await audit(db, req.user, `cleaning.task_${status}`, 'cleaning_task', task.task_id);
   });
+  if (status === 'done') {
+    require('../lib/push').notify(req.user.organization_id, 'cleaning', {
+      title: `Cleaning done: ${task.unit_name}`, body: `${req.user.full_name} finished the cleaning.`,
+      url: `/#/housekeeping/${task.task_id}`, propertyId: task.property_id, roles: ['owner', 'manager'],
+    }).catch(() => {});
+  }
   res.json({ task: await loadTask(req.user, task.task_id) });
 }));
 

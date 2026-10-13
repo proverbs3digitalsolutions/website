@@ -1,0 +1,15 @@
+{
+  "name": "BalayHub",
+  "short_name": "BalayHub",
+  "description": "Rental and staycation management for Filipino hosts.",
+  "start_url": "/#/home",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8f9f6",
+  "theme_color": "#0f5132",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

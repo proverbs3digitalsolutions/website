@@ -65,6 +65,7 @@ function createApp() {
   api.use(require('./routes/account').workspaceRouter);
   api.use(require('./routes/directbooking').router);
   api.use(require('./routes/balancepay').router);
+  api.use(require('./routes/push'));
   api.use((req, res, next) => next(new HttpError(404, 'Not found.', { code: 'NOT_FOUND' })));
   // PayMongo webhook: raw body (for its signature), no session or CSRF header.
   app.post('/api/public/paymongo/webhook', express.raw({ type: '*/*', limit: '200kb' }),
@@ -78,7 +79,8 @@ function createApp() {
   app.use(express.static(path.join(__dirname, '..', 'public'), {
     index: 'index.html',
     setHeaders(res, filePath) {
-      res.set('Cache-Control', /\.(html|js|css)$/.test(filePath) ? 'no-cache' : 'public, max-age=86400');
+      res.set('Cache-Control', /\.(html|js|css|webmanifest)$/.test(filePath) ? 'no-cache' : 'public, max-age=86400');
+      if (filePath.endsWith('.webmanifest')) res.type('application/manifest+json');
     },
   }));
 

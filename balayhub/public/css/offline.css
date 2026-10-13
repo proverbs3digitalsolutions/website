@@ -1,0 +1,4 @@
+body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f8f9f6; color: #1f2937; font-family: system-ui, sans-serif; text-align: center; }
+main { padding: 24px; max-width: 360px; }
+h1 { color: #0f5132; font-size: 1.4rem; }
+a { display: inline-block; margin-top: 12px; background: #0f5132; color: #fff; padding: 12px 20px; border-radius: 12px; text-decoration: none; font-weight: 700; }

@@ -194,6 +194,7 @@ async function syncFeed(feedId, { fetcher = fetchText } = {}) {
   const horizon = addDays(today, -60);
   events = events.filter((e) => e.end >= horizon);
   const counts = { added: 0, updated: 0, removed: 0, conflicts: [] };
+  const newStays = []; // for a notification (not on a feed's first import)
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -226,6 +227,7 @@ async function syncFeed(feedId, { fetcher = fetchText } = {}) {
               ev.start, ev.end, airbnbCode(ev) || randomCode(feed.channel.slice(0, 2).toUpperCase()),
               kind === 'block' ? `Blocked on ${label}` : null, ev.description || null, feedId, ev.uid]);
           counts.added += 1;
+          if (kind === 'reservation' && feed.last_synced_at && ev.end >= today) newStays.push(ev);
         }
         await client.query('RELEASE SAVEPOINT ev');
       } catch (err) {
@@ -255,6 +257,7 @@ async function syncFeed(feedId, { fetcher = fetchText } = {}) {
       `UPDATE ical_feeds SET last_synced_at = now(), last_status = $2, last_message = $3 WHERE feed_id = $1`,
       [feedId, counts.conflicts.length ? 'error' : 'ok', message]);
     await client.query('COMMIT');
+    if (newStays.length) notifyNewStays(feed, label, newStays).catch(() => {});
     return { ok: true, message, ...counts };
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
@@ -265,6 +268,18 @@ async function syncFeed(feedId, { fetcher = fetchText } = {}) {
   } finally {
     client.release();
   }
+}
+
+async function notifyNewStays(feed, label, stays) {
+  const { notify } = require('./push');
+  const { rows: [u] } = await pool.query('SELECT unit_name, property_id FROM units WHERE unit_id = $1', [feed.unit_id]);
+  const fmt = (dd) => new Date(`${dd}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  await notify(feed.organization_id, 'new_booking', {
+    title: stays.length === 1 ? `New ${label} booking` : `${stays.length} new ${label} bookings`,
+    body: stays.length === 1 ? `${u.unit_name}: ${fmt(stays[0].start)} – ${fmt(stays[0].end)}` : `${u.unit_name}: ${stays.map((x) => fmt(x.start)).join(', ')}`,
+    url: '/#/reservations?view=recent',
+    propertyId: u.property_id,
+  });
 }
 
 async function syncAllFeeds() {

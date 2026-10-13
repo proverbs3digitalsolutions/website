@@ -66,6 +66,24 @@ Each host can have a public booking page, such as `https://balayhub.proverbs3dig
 
 The booking page is paused automatically if your plan ends.
 
+## Guests paying the balance online
+
+When PayMongo is connected (Settings → Direct booking page), every reservation has a private
+payment link. Open the reservation and click **Copy payment link**, or turn on the
+"balance reminder" automation: it emails the link 3 days before check-in to guests who still owe.
+The guest pays with GCash, Maya or card; BalayHub confirms it with PayMongo, records the payment,
+emails a receipt and tells you in the Inbox. Recording a payment by hand, editing or cancelling
+the reservation closes any payment page the guest still has open, so they can't pay twice.
+
+## BalayHub on your phone (app + notifications)
+
+- **Android (Chrome):** open BalayHub, then Settings → App & notifications → *Install BalayHub*
+  (or menu ⋮ → Install app). Tap *Turn on notifications*.
+- **iPhone/iPad (iOS 16.4+):** in Safari tap Share → *Add to Home Screen*, open BalayHub from the
+  new icon, then Settings → App & notifications → *Turn on notifications*.
+- Choose what to be notified about: new bookings, guest messages, check-in forms, online payments
+  and cleaning. Staff only get cleaning notifications. Logging out turns them off on that device.
+
 ## Getting started checklist
 New workspace owners see a **Get started** checklist on Home: add a listing, add Wi-Fi and check-in instructions, connect a calendar, add a reservation, turn on automatic messages, and invite a co-host or cleaner. It ticks itself off as you go and can be hidden.
 
@@ -106,4 +124,4 @@ cd /opt/balayhub-src/balayhub
 This backs up your data, downloads the new version and restarts BalayHub. The database is upgraded automatically. Your existing workspace keeps its current type; to switch to short-term, go to **Settings → Modules for this workspace → Short-term stays → Save**.
 
 ## Coming next
-Owner statements for hosts who manage units for other owners, online payments (PayMongo/Xendit for GCash, Maya and cards), and a guest-facing booking page for direct bookings.
+Pricing helpers (weekend and holiday rates, minimum nights, weekly/monthly discounts), owner statements for hosts who manage units for other owners, and guest reviews with repeat-guest discounts.

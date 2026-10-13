@@ -3,6 +3,7 @@
 import { get, post, patch } from '../api.js';
 import { h, icon, label, field, formModal, confirmDialog, emptyState, pageHead, toast, fmtDateTime, openModal } from '../ui.js';
 import { state, refreshUser } from '../app.js';
+import { notificationsCard } from '../notifications.js';
 
 function propertyChecks(properties, selected = []) {
   return h('fieldset', { class: 'field', dataset: { field: 'property_ids' }, style: { border: 0, padding: 0, margin: 0 } },
@@ -55,6 +56,7 @@ export async function settingsView(el, { rerender, query = {} }) {
         rerender();
       } }, 'Save')))));
 
+  if (!u.plan?.is_demo) sections.push(await notificationsCard(rerender).catch(() => null));
   if (u.role === 'owner' && u.plan && !u.plan.is_demo) sections.push(await planCard(u));
   if (u.role === 'owner' && u.plan && !u.plan.is_demo && u.business_type !== 'long_term') sections.push(await bookingCard(rerender));
   if (u.role === 'owner' && u.plan && !u.plan.is_demo) sections.push(dataCard(u, rerender));

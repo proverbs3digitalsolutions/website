@@ -130,6 +130,13 @@ publicRouter.post('/public/checkin/:token', express.json({ limit: '50kb' }), ah(
      RETURNING registration_id`,
     [b.organization_id, b.booking_id, body.lead_name, body.phone, body.email, JSON.stringify(guests), body.arrival_time, plate, body.notes]);
   // Let the host know in the guest's inbox thread.
+  if (!existed) {
+    const { notify, propertyOfBooking } = require('../lib/push');
+    notify(b.organization_id, 'checkin_form', {
+      title: 'Guest check-in form received', body: `${body.lead_name} · ${b.unit_name}, ${b.check_in}`,
+      url: `/#/reservations/${b.booking_id}`, propertyId: await propertyOfBooking(b.booking_id),
+    }).catch(() => {});
+  }
   await noteToHost(b.booking_id, existed ? 'The guest updated their check-in form.' : `The guest completed the check-in form (${guests.length + 1} guest${guests.length ? 's' : ''}${plate ? `, car ${plate}` : ''}${body.arrival_time ? `, arriving ${body.arrival_time}` : ''}).`);
   res.json({ ok: true, registration_id: r.registration_id });
 }));

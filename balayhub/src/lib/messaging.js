@@ -135,7 +135,7 @@ async function bookingContext(bookingId) {
     `SELECT b.*, u.unit_name, u.checkin_time, u.checkout_time, u.wifi_name, u.wifi_password, u.checkin_instructions, u.house_rules,
             p.property_name, p.address, p.city, p.province, p.organization_id AS org_id,
             g.full_name AS guest_name, g.email AS guest_email,
-            o.name AS workspace_name, o.paymongo_key_hint,
+            o.name AS workspace_name, o.paymongo_key_hint, o.plan, o.trial_ends_at, o.paid_until, o.is_demo, o.deletion_scheduled_at,
             (SELECT full_name FROM users WHERE organization_id = b.organization_id AND role = 'owner' ORDER BY created_at LIMIT 1) AS owner_name,
             (b.total_amount - COALESCE((SELECT SUM(amount) FROM booking_payments bp WHERE bp.booking_id = b.booking_id AND bp.voided_at IS NULL), 0))::numeric(12,2) AS balance
        FROM bookings b
@@ -169,7 +169,7 @@ function variables(ctx, sender) {
     house_rules: ctx.house_rules || '',
     checkin_link: ctx.checkin_token ? `${config.appUrl}/#/checkin/${ctx.checkin_token}` : '',
     // A full sentence (or nothing) so templates read well either way.
-    payment_link: ctx.pay_token && ctx.paymongo_key_hint && Number(ctx.balance) > 0
+    payment_link: ctx.pay_token && Number(ctx.balance) > 0 && require('../routes/balancepay').acceptsOnline(ctx)
       ? `Pay securely online (GCash, Maya or card): ${config.appUrl}/#/pay/${ctx.pay_token}` : '',
     workspace_name: ctx.workspace_name,
     host_name: sender || ctx.owner_name || ctx.workspace_name,

@@ -24,6 +24,7 @@ import { termsView } from './views/terms.js';
 import { bookHostView, bookListingView, bookDoneView } from './views/book.js';
 import { launchpadView } from './views/launchpad.js';
 import { payBalanceView } from './views/pay.js';
+import { registerServiceWorker, forgetThisDevice } from './notifications.js';
 
 export const state = { user: null, requireEmailVerification: true };
 
@@ -209,6 +210,7 @@ function navLink([path, text, ic], current) {
 }
 
 async function logout() {
+  await forgetThisDevice();
   try { await post('/auth/logout'); } catch { /* ignore */ }
   state.user = null;
   try { sessionStorage.clear(); } catch { /* ignore */ }
@@ -332,6 +334,7 @@ window.addEventListener('hashchange', render);
 
 (async function boot() {
   updateOnline();
+  registerServiceWorker();
   try {
     await refreshUser();
   } catch {
