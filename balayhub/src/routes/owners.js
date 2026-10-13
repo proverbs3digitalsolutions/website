@@ -1,14 +1,18 @@
 'use strict';
 
 // Unit owners (people whose units this workspace manages) and their monthly statements.
+// A statement is a live draft until it is published. Publishing freezes the full ownerStatement()
+// result in owner_statements.snapshot (the published copy): the owner portal and the emailed
+// statement show that copy, never the live numbers.
 
 const express = require('express');
+const config = require('../config');
 const { query, one, tx } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
 const { validate, uuidParam } = require('../lib/validate');
 const { audit } = require('../lib/audit');
 const { requireRole } = require('../lib/auth');
-const { ownerStatement, statementText } = require('../lib/statements');
+const { ownerStatement, statementText, monthHasEnded, reserveBalance } = require('../lib/statements');
 
 const router = express.Router();
 const ownersOnly = requireRole('owner');
@@ -24,7 +28,13 @@ const ownerSpec = {
   cleaning_to_manager: { type: 'bool', label: 'Cleaning fees' },
   notes: { type: 'text', max: 1000, label: 'Notes' },
   unit_ids: { type: 'uuids', label: 'Units' },
+  fee_model: { type: 'enum', values: ['net_pct', 'gross_pct', 'flat'], label: 'Fee type' },
+  flat_monthly_fee: { type: 'money', label: 'Flat monthly fee' },
+  reserve_target: { type: 'money', label: 'Repairs reserve target' },
+  reserve_monthly: { type: 'money', label: 'Repairs reserve monthly top-up' },
 };
+
+const normEmail = (e) => (e ? e.toLowerCase() : null);
 
 function checkFee(body) {
   if (body.management_fee_pct !== null && body.management_fee_pct !== undefined && Number(body.management_fee_pct) > 100) {
@@ -83,10 +93,14 @@ router.post('/unit-owners', ownersOnly, ah(async (req, res) => {
   if (n >= 100) throw new HttpError(409, 'You can have up to 100 unit owners.', { code: 'LIMIT' });
   const id = await tx(async (db) => {
     const { rows: [o] } = await db.query(
-      `INSERT INTO unit_owners (organization_id, full_name, email, phone, management_fee_pct, cleaning_to_manager, notes)
-       VALUES ($1,$2,$3,$4,COALESCE($5::numeric, 20),COALESCE($6::boolean, true),$7) RETURNING owner_id`,
+      `INSERT INTO unit_owners (organization_id, full_name, email, phone, management_fee_pct, cleaning_to_manager, notes,
+                                fee_model, flat_monthly_fee, reserve_target, reserve_monthly)
+       VALUES ($1,$2,$3,$4,COALESCE($5::numeric, 20),COALESCE($6::boolean, true),$7,
+               COALESCE($8::text, 'net_pct'),COALESCE($9::numeric, 0),COALESCE($10::numeric, 0),COALESCE($11::numeric, 0))
+       RETURNING owner_id`,
       [req.user.organization_id, body.full_name, body.email, body.phone, body.management_fee_pct,
-        req.body.cleaning_to_manager === undefined ? null : body.cleaning_to_manager, body.notes]);
+        req.body.cleaning_to_manager === undefined ? null : body.cleaning_to_manager, body.notes,
+        body.fee_model, body.flat_monthly_fee, body.reserve_target, body.reserve_monthly]);
     await assignUnits(db, req.user.organization_id, o.owner_id, body.unit_ids);
     await audit(db, req.user, 'unit_owner.created', 'unit_owner', o.owner_id, { name: body.full_name });
     return o.owner_id;
@@ -98,14 +112,26 @@ router.patch('/unit-owners/:id', ownersOnly, ah(async (req, res) => {
   const o = await loadOwner(req.user, uuidParam(req.params.id));
   const body = validate(req.body, ownerSpec, { partial: true });
   checkFee(body);
-  const cols = ['full_name', 'email', 'phone', 'management_fee_pct', 'cleaning_to_manager', 'notes']
+  const cols = ['full_name', 'email', 'phone', 'management_fee_pct', 'cleaning_to_manager', 'notes',
+    'fee_model', 'flat_monthly_fee', 'reserve_target', 'reserve_monthly']
     .filter((k) => k in body && (body[k] !== null || ['email', 'phone', 'notes'].includes(k)));
   await tx(async (db) => {
+    // Locked first, so the old email compared below is the one this update replaces.
+    const { rows: [before] } = await db.query('SELECT email FROM unit_owners WHERE owner_id = $1 FOR UPDATE', [o.owner_id]);
+    const emailChanged = cols.includes('email') && normEmail(before.email) !== normEmail(body.email);
     if (cols.length) {
       await db.query(`UPDATE unit_owners SET ${cols.map((k, i) => `${k} = $${i + 2}`).join(', ')} WHERE owner_id = $1`, [o.owner_id, ...cols.map((k) => body[k])]);
     }
     await assignUnits(db, req.user.organization_id, o.owner_id, body.unit_ids);
-    await audit(db, req.user, 'unit_owner.updated', 'unit_owner', o.owner_id, { fields: [...cols, ...(body.unit_ids ? ['unit_ids'] : [])] });
+    // A new or cleared email ends portal access: sign out every session and any unused sign-in link.
+    // Clearing the email also turns the portal off.
+    if (emailChanged) {
+      await db.query('DELETE FROM owner_sessions WHERE owner_id = $1', [o.owner_id]);
+      await db.query('DELETE FROM owner_login_tokens WHERE owner_id = $1 AND used_at IS NULL', [o.owner_id]);
+      if (body.email === null) await db.query('UPDATE unit_owners SET portal_enabled = false WHERE owner_id = $1', [o.owner_id]);
+    }
+    await audit(db, req.user, 'unit_owner.updated', 'unit_owner', o.owner_id,
+      { fields: [...cols, ...(body.unit_ids ? ['unit_ids'] : [])], ...(emailChanged ? { portal_signed_out: true } : {}) });
   });
   res.json({ ok: true });
 }));
@@ -125,26 +151,128 @@ function monthParam(v) {
   return v;
 }
 
+// The saved row for one owner's statement in one month, or null before a draft exists.
+async function loadRecord(ownerId, month, db = { query }) {
+  const { rows: [r] } = await db.query(
+    'SELECT statement_id, status, snapshot, published_at, sent_at, sent_to FROM owner_statements WHERE owner_id = $1 AND month = $2',
+    [ownerId, month]);
+  return r || null;
+}
+const recordOf = (r) => (r ? { status: r.status, published_at: r.published_at, sent_at: r.sent_at, sent_to: r.sent_to } : null);
+const publishedOf = (r, month) => (r?.status === 'published' ? { ...r.snapshot, month_label: monthLabel(month) } : null);
+
 router.get('/unit-owners/:id/statement', ownersOnly, ah(async (req, res) => {
   const o = await loadOwner(req.user, uuidParam(req.params.id));
-  const s = await ownerStatement(req.user.organization_id, o.owner_id, monthParam(req.query.month));
-  res.json({ statement: { ...s, month_label: monthLabel(s.month) } });
+  const month = monthParam(req.query.month);
+  const s = await ownerStatement(req.user.organization_id, o.owner_id, month);
+  const saved = await loadRecord(o.owner_id, month);
+  res.json({ statement: { ...s, month_label: monthLabel(month) }, record: recordOf(saved), published: publishedOf(saved, month) });
+}));
+
+router.post('/unit-owners/:id/statement/publish', ownersOnly, ah(async (req, res) => {
+  const o = await loadOwner(req.user, uuidParam(req.params.id));
+  const month = monthParam(req.body?.month);
+  if (!monthHasEnded(month)) throw new HttpError(409, 'A statement can be published once its month has ended.', { code: 'MONTH_NOT_ENDED' });
+  const saved = await tx(async (db) => {
+    // Locking the owner row serialises publish, unpublish and reserve withdrawals for this owner.
+    await db.query('SELECT owner_id FROM unit_owners WHERE owner_id = $1 FOR UPDATE', [o.owner_id]);
+    const existing = await loadRecord(o.owner_id, month, db);
+    if (existing?.status === 'published') throw new HttpError(409, 'This statement is already published. Unpublish it to make corrections.', { code: 'ALREADY_PUBLISHED' });
+    const s = await ownerStatement(req.user.organization_id, o.owner_id, month, db);
+    const { rows: [row] } = await db.query(
+      `INSERT INTO owner_statements (organization_id, owner_id, month, status, snapshot, published_at, published_by, updated_at)
+       VALUES ($1,$2,$3,'published',$4,now(),$5,now())
+       ON CONFLICT (owner_id, month) DO UPDATE SET status = 'published', snapshot = EXCLUDED.snapshot,
+         published_at = now(), published_by = EXCLUDED.published_by, updated_at = now()
+       RETURNING statement_id, status, snapshot, published_at, sent_at, sent_to`,
+      [req.user.organization_id, o.owner_id, month, JSON.stringify(s), req.user.user_id]);
+    if (Number(s.reserve.topup) > 0) {
+      await db.query(
+        `INSERT INTO owner_reserve_entries (organization_id, owner_id, kind, amount, entry_date, note, statement_id, recorded_by)
+         VALUES ($1,$2,'deposit',$3,(now() AT TIME ZONE 'Asia/Manila')::date,$4,$5,$6)`,
+        [req.user.organization_id, o.owner_id, s.reserve.topup, `Repairs reserve top-up for ${monthLabel(month)}`, row.statement_id, req.user.user_id]);
+    }
+    await audit(db, req.user, 'unit_owner.statement_published', 'unit_owner', o.owner_id,
+      { month, payout: s.totals.payout, reserve_topup: s.reserve.topup });
+    return row;
+  });
+  res.json({ record: recordOf(saved), published: publishedOf(saved, month) });
+}));
+
+router.post('/unit-owners/:id/statement/unpublish', ownersOnly, ah(async (req, res) => {
+  const o = await loadOwner(req.user, uuidParam(req.params.id));
+  const month = monthParam(req.body?.month);
+  const saved = await tx(async (db) => {
+    await db.query('SELECT owner_id FROM unit_owners WHERE owner_id = $1 FOR UPDATE', [o.owner_id]);
+    const existing = await loadRecord(o.owner_id, month, db);
+    if (existing?.status !== 'published') throw new HttpError(409, 'Only a published statement can be unpublished.', { code: 'NOT_PUBLISHED' });
+    // Its repairs reserve deposit goes with it, so the reserve must still hold zero or more without that deposit.
+    if ((await reserveBalance(db, o.owner_id, month)) < 0) {
+      throw new HttpError(409, 'The repairs reserve has already paid out money this statement added. Void that withdrawal first.', { code: 'RESERVE_IN_USE' });
+    }
+    await db.query(
+      `UPDATE owner_reserve_entries SET voided_at = now(), voided_by = $2, void_reason = 'Statement unpublished to correct it'
+        WHERE statement_id = $1 AND kind = 'deposit' AND voided_at IS NULL`, [existing.statement_id, req.user.user_id]);
+    const { rows: [row] } = await db.query(
+      `UPDATE owner_statements SET status = 'draft', snapshot = NULL, published_at = NULL, published_by = NULL,
+              sent_at = NULL, sent_to = NULL, updated_at = now()
+        WHERE statement_id = $1 RETURNING statement_id, status, snapshot, published_at, sent_at, sent_to`, [existing.statement_id]);
+    await audit(db, req.user, 'unit_owner.statement_unpublished', 'unit_owner', o.owner_id,
+      { month, sent_to: existing.sent_to, sent_at: existing.sent_at });
+    return row;
+  });
+  res.json({ record: recordOf(saved), published: null });
 }));
 
 router.post('/unit-owners/:id/statement/send', ownersOnly, ah(async (req, res) => {
   const o = await loadOwner(req.user, uuidParam(req.params.id));
   if (!o.email) throw new HttpError(409, 'Add the owner\'s email first.', { code: 'NO_EMAIL' });
   const month = monthParam(req.body?.month);
-  const s = await ownerStatement(req.user.organization_id, o.owner_id, month);
+  const saved = await loadRecord(o.owner_id, month);
+  if (saved?.status !== 'published') throw new HttpError(409, 'Publish this statement before sending it.', { code: 'NOT_PUBLISHED' });
+  const s = saved.snapshot;
+  const label = monthLabel(month);
+  const portal = o.portal_enabled ? `\n\nYou can also see this statement in your owner portal: ${config.appUrl}/#/owner` : '';
   const { sendMail } = require('../lib/mailer');
   const r = await sendMail({
     to: o.email, replyTo: req.user.email,
-    subject: `Owner statement for ${monthLabel(month)} · ${s.workspace}`,
-    text: `Hi ${o.full_name.split(' ')[0]},\n\nHere is your statement for ${monthLabel(month)}.\n\n${statementText(s, monthLabel(month))}\n\nReply to this email if you have questions.\n\n— ${req.user.full_name}, ${s.workspace}`,
+    subject: `Owner statement for ${label} · ${s.workspace}`,
+    text: `Hi ${o.full_name.split(' ')[0]},\n\nHere is your statement for ${label}.\n\n${statementText(s, label)}${portal}\n\nReply to this email if you have questions.\n\n— ${req.user.full_name}, ${s.workspace}`,
   });
   if (r.notConfigured || r.error) throw new HttpError(502, r.reason || 'Email is not set up on this server yet.', { code: 'NOT_SENT' });
+  await query('UPDATE owner_statements SET sent_at = now(), sent_to = $2, updated_at = now() WHERE statement_id = $1', [saved.statement_id, o.email]);
   await audit(null, req.user, 'unit_owner.statement_sent', 'unit_owner', o.owner_id, { month, payout: s.totals.payout });
   res.json({ sent: true, to: o.email });
+}));
+
+// Review list: every active owner's statement for one month. Owners with no saved row yet show as draft.
+router.get('/owner-statements', ownersOnly, ah(async (req, res) => {
+  const org = req.user.organization_id;
+  const month = monthParam(req.query.month);
+  const { rows: owners } = await query(
+    'SELECT owner_id, full_name FROM unit_owners WHERE organization_id = $1 AND archived_at IS NULL ORDER BY full_name', [org]);
+  const { rows: records } = await query(
+    'SELECT owner_id, status, snapshot, published_at, sent_at FROM owner_statements WHERE organization_id = $1 AND month = $2', [org, month]);
+  const { rows: paid } = await query(
+    `SELECT owner_id, SUM(amount) AS paid FROM owner_payouts WHERE organization_id = $1 AND month = $2 AND voided_at IS NULL GROUP BY owner_id`, [org, month]);
+  const { rows: unitCounts } = await query(
+    `SELECT u.owner_id, COUNT(*)::int AS n FROM units u JOIN properties p USING (property_id)
+      WHERE p.organization_id = $1 AND u.status = 'active' AND u.owner_id IS NOT NULL GROUP BY u.owner_id`, [org]);
+  const recordBy = new Map(records.map((r) => [r.owner_id, r]));
+  const paidBy = new Map(paid.map((r) => [r.owner_id, r.paid]));
+  const unitsBy = new Map(unitCounts.map((r) => [r.owner_id, r.n]));
+  const rows = [];
+  for (const o of owners) {
+    const rec = recordBy.get(o.owner_id);
+    const published = rec?.status === 'published';
+    const s = published ? rec.snapshot : await ownerStatement(org, o.owner_id, month);
+    rows.push({
+      owner_id: o.owner_id, full_name: o.full_name, unit_count: unitsBy.get(o.owner_id) || 0,
+      status: rec?.status || 'draft', payout: s.totals.payout, paid: paidBy.get(o.owner_id) || '0.00',
+      published_at: rec?.published_at || null, sent_at: rec?.sent_at || null,
+    });
+  }
+  res.json({ month, month_label: monthLabel(month), owners: rows });
 }));
 
 module.exports = router;

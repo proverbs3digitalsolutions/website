@@ -96,6 +96,8 @@ Jobs run inside the app process. A job never overlaps itself. After 3 failures i
 | `support` | 60 min | 95 s | Closes support tickets 7 days after they were resolved |
 | `account` | 60 min | 90 s | Permanently deletes workspaces whose 14-day deletion grace period has passed |
 | `demo` | 60 min | 50 s | Moves the public demo workspace's sample dates forward |
+| `auth-cleanup` | 60 min | 100 s | Deletes expired or idle team sessions and old one-time tokens, and the same for owner portal sessions and sign-in links |
+| `owner-statements-reminder` | 60 min | 105 s | From the 3rd of the month (Manila time): drafts last month's owner statements (drafts only) and emails each workspace owner that n are ready to review. Once per workspace per month (an `audit_logs` row, `owner_statements.reminder_sent`, so no new table). Skipped when email is off. Demo and read-only workspaces are skipped |
 
 Note: in `scheduler.js` the comment "Workspaces whose owner asked for deletion" sits above the `support` job instead of the `account` job.
 
@@ -123,7 +125,7 @@ For every variable, see the full list in section 4. Hosts' own PayMongo keys are
 | Aspect | As built |
 |---|---|
 | Providers | Gmail / Google Workspace or Hostinger email (examples in `.env.production.example`, `docs/EMAIL-SETUP.md`, `docs/INBOX-SETUP.md`) |
-| Outbound | `nodemailer` with one `SMTP_URL`. Used for verification, password reset, invitations, guest messages and receipts, deposit statements, gate passes, owner statements, support notifications and alerts. A malformed `SMTP_URL` disables email with a log message instead of crashing. If `SMTP_URL` is missing in production, sends are skipped and the app warns at startup |
+| Outbound | `nodemailer` with one `SMTP_URL`. Used for verification, password reset, invitations, guest messages and receipts, deposit statements, gate passes, owner statements, owner portal sign-in links, owner date-block alerts, the monthly owner statement reminder, support notifications and alerts. A malformed `SMTP_URL` disables email with a log message instead of crashing. If `SMTP_URL` is missing in production, sends are skipped and the app warns at startup |
 | Test mode | `SMTP_URL=test://` stores messages in memory (outside production only) |
 | Inbound | Guest replies go to `INBOUND_ADDRESS` with a `+bh-<token>` plus-address tag. `imapflow` polls the mailbox every 2 min. Only messages carrying a BalayHub tag are imported; other mail is left untouched. Progress is kept in `mail_sync_state` |
 | Env vars | `SMTP_URL`, `MAIL_FROM`, `IMAP_URL`, `INBOUND_ADDRESS`, `REQUIRE_EMAIL_VERIFICATION`, `EXPOSE_DEV_LINKS` |
@@ -213,7 +215,7 @@ Note: `ANTHROPIC_BASE_URL` is only used by the assistant (the drafts code ignore
 
 ## 4. Environment variables (names and purpose only)
 
-Production values live in `deploy/.env` on the server. No values are listed here.
+Production values live in `deploy/.env` on the server. No values are listed here. Phase 2 (owners, 2026-10-13) added no new variables: it uses `APP_URL` for portal links and the existing mail settings.
 
 | Variable | Used by | Purpose |
 |---|---|---|
@@ -268,6 +270,7 @@ Fixed in code (not configurable): privacy policy version, terms version, time zo
 | CSRF | Every non-GET/HEAD/OPTIONS `/api` request must carry `X-Requested-With: BalayHub`, else 403 `CSRF`. CORS is not enabled. Cookies are `SameSite=Lax`. The PayMongo webhook is exempt (it is signature-checked) |
 | Passwords | scrypt (N=16384, r=8, p=1, 16-byte salt). Timing-equal compare. Unknown-email logins run a dummy hash check so timing doesn't reveal accounts |
 | Sessions | 256-bit random token in cookie `bh_session` (HttpOnly, SameSite=Lax, Secure in production). Only its SHA-256 is stored. Absolute lifetime `SESSION_TTL_HOURS` (default 7 days), idle timeout `SESSION_IDLE_HOURS` (default 12 h). `last_seen_at` is refreshed at most every 5 min. Revoked users are rejected. Changing the password signs out other devices; a password reset signs out all devices. Users can sign out individual devices. The user agent is stored per session |
+| Owner portal sessions | Cookie `bh_owner` with the same flags as `bh_session`. Only the SHA-256 of the token is stored (`owner_sessions`). 30 days absolute, 7 days idle. Sign-in links: one use, 30 minutes, hashed (`owner_login_tokens`). Owners have no `users` row. `/api/owner-portal/*` skips the plan guard and checks this cookie instead of the team session |
 | One-time tokens | Email verification 48 h, password reset 1 h, invitations 7 days. All are stored hashed |
 | Rate limits | In-memory, fixed window, per process (table below) |
 | Plan / read-only guard | `planGuard` blocks writes (402) for an ended trial, overdue payment or scheduled deletion, and (403) for the demo. Account, billing, support, push, assistant and auth paths are exempt so a lapsed workspace can still pay, get help and export |
@@ -292,6 +295,8 @@ Fixed in code (not configurable): privacy policy version, terms version, time zo
 | Demo sign-in | 30 per hour | IP |
 | Change password | 10 per 15 min | user |
 | Google sign-in | 40 per 15 min | IP |
+| Owner portal sign-in request | 40 per 15 min; 5 per 15 min per email | IP; email (case-insensitive) |
+| Owner portal link exchange | 60 per 15 min | IP |
 | Workspace export | 10 per hour | workspace |
 | Plan checkout | 15 per hour | workspace |
 | Support tickets | 10 new tickets per hour | user |

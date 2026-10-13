@@ -41,7 +41,8 @@ export async function api(method, url, body, { idempotencyKey, rawBody, headers 
   }
   if (!res.ok) {
     const err = new ApiError(data.error || `Request failed (${res.status}).`, { status: res.status, code: data.code, fields: data.fields, data });
-    if (res.status === 401 && !url.startsWith('/auth/')) listeners.forEach((fn) => fn(err));
+    // Owner-portal 401s (OWNER_SIGNED_OUT) are handled by the portal screens, not the team login.
+    if (res.status === 401 && !url.startsWith('/auth/') && !url.startsWith('/owner-portal/')) listeners.forEach((fn) => fn(err));
     if (res.status === 403 && ['EMAIL_UNVERIFIED', 'NO_WORKSPACE'].includes(data.code)) listeners.forEach((fn) => fn(err));
     throw err;
   }

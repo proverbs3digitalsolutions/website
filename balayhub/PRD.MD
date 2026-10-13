@@ -30,7 +30,8 @@ Last updated: 2026-10-13
 
 | Role | Who | Scope |
 |---|---|---|
-| Owner | The person who created the workspace | Everything in the workspace. Only role for team, billing, data export and deletion, unit owners, automations, Launchpad. |
+| Owner | The person who created the workspace | Everything in the workspace. Only role for team, billing, data export and deletion, unit owners and their statements and payouts, automations, Launchpad. |
+| Unit owner | A person whose units the workspace manages | Their own units only, through the owner portal (emailed sign-in link). Not a team member: no workspace access. |
 | Property manager | Co-host or manager | Only the properties assigned to them. Can run day-to-day work. Cannot create properties, manage the team or billing. |
 | Staff | Cleaner, front desk, accountant | Only assigned properties. No guest or tenant contact details, no Inbox, no stay reports, no pricing changes, no workspace settings. Can check guests in and out, record payments and deposits, and do cleaning tasks. |
 | Platform admin | BalayHub operator (emails in `PLATFORM_ADMIN_EMAILS`, verified) | Admin page for all workspaces and the support queue. Hidden (404) from everyone else. |
@@ -356,11 +357,12 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - **Unit owners** page: add owners with email, phone, management fee %, whether cleaning fees go to the manager, notes, and their units (up to 100 owners).
 - Statement for a month: each stay that checked out, its total, channel fee, cleaning fee, net rental income, management fee, unit expenses and **payout to the owner**.
 - Print / save as PDF, or **Email to owner**.
+- Phase 2 (built 2026-10-13, see F30–F32): fee types, review then publish, unpublish to correct, payout records, repairs reserve, and a monthly reminder to review. Expense receipts are on the statement.
 
 **Done looks like:**
 - A warning shows when stays have no amounts (imported channel stays).
 
-**Out of scope:** An owner login or portal (see Future). Paying owners through BalayHub.
+**Out of scope:** Server-made PDF files (the printable page covers it). Paying owners through BalayHub. Automatic sending without review. BIR documents.
 
 ### F17. Discount codes
 **Status:** MVP (built)
@@ -579,6 +581,53 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 
 ---
 
+### F30. Owner portal (unit owners)
+**Status:** Built 2026-10-13 (Phase 2)
+
+**For:** Unit owners whose units the workspace manages. Not team members.
+
+**What it does:**
+- The host turns it on for an owner with **Invite to owner portal** (the owner needs an email). The owner gets a sign-in link by email. The link works once and expires after 30 minutes. They can ask for a new one by entering their email on the sign-in page. Replies never say whether an email has an account.
+- The host can **turn off** portal access. That signs the owner out everywhere.
+- Owners see, for their own active units: their published statements (never drafts), payouts, repairs reserve, bookings and blocks (guests by first name only), an activity list (check-ins, check-outs, completed cleanings, maintenance, expenses, statements, payouts), profit and loss, and receipts for expenses on a published statement.
+- Owners can **block dates** on their units (up to 60 nights, not in the past) and cancel their own blocks before they start. The host is emailed about each block.
+
+**Done looks like:**
+- An owner never sees another owner, guest phone or email, payment proofs, or other workspace data.
+- A team member's sign-in never opens portal data, and an owner's portal sign-in never opens workspace pages.
+- Disabling the owner ends their sessions at once.
+
+**Out of scope:** Paying owners through BalayHub. Owners changing their own settings or fee.
+
+### F31. Owner fee types, statements and payouts
+**Status:** Built 2026-10-13 (Phase 2)
+
+**For:** Workspace owners who manage units for others.
+
+**What it does:**
+- Fee types per owner: % of net (the default), % of gross after refunds, or a flat monthly fee (charged in any month with an active unit, even with no stays).
+- Statements: a draft is worked out live; **Publish** freezes it. **Unpublish to correct** goes back to draft (refused if the repairs reserve has paid out money from that statement). **Send to owner** emails the published copy with a portal link when access is on. **Print** opens the browser print window.
+- Statements show receipts for expenses. The review list shows each owner's status, payout, paid amount and sent date.
+- Payouts: record and void (with a reason). Methods: GCash, Maya, bank transfer, cash, other.
+- Repairs reserve: target and monthly top-up per owner. Top-ups come out of the payout on publish. Withdrawals are recorded by hand with a note.
+- Reminder: on the 3rd of each month (Manila time), each workspace owner is emailed "n statements ready to review". Once per workspace per month. Nothing is published or sent by the reminder.
+
+**Done looks like:**
+- Publishing doesn't change when an expense is added later (the published copy stays the same).
+- Money is exact to the centavo. A payout can't be deleted. A withdrawal can't take the reserve below zero.
+
+### F32. Profit and loss per unit
+**Status:** Built 2026-10-13 (Phase 2)
+
+**For:** Owners and managers (managers see assigned properties). Owners see their own units in the portal too. Not staff.
+
+**What it does:**
+- A month, and optionally one property. Each unit: stays, nights, gross, channel fees, refunds, expenses, net. Expenses with no unit are in one row.
+- Download CSV for the same table.
+
+**Done looks like:**
+- Guest cleaning fees count as unit income here. The owner statement is different (see D-45).
+
 ## Cross-cutting requirements (built)
 
 - **Security:** workspace scoping on every query, 404 for out-of-scope records, CSRF header on writes, strict Content-Security-Policy, text-only rendering, rate limits, scrypt passwords, HttpOnly cookies (7-day absolute, 12-hour idle).
@@ -597,14 +646,14 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 | **Facebook Messenger inbox** | **Later** | Listed in README "Not built yet". Today the Inbox is email only. |
 | **Phase 1: Money done right** (itemised stay bill with extras, payment proof uploads and bank transfer, cancellation policies and refund log, deposit % per listing, host net per booking) | **Built 2026-10-13** | Spec: docs/specs/PHASE-1-MONEY.md. Decisions D-31 to D-36. |
 | BIR-ready invoices and monthly tax summary | **Waiting on a tax practitioner** | See BLOCKERS.MD. |
-| **Phase 2: Owners and co-hosts** (owner portal login, owner date blocks, fee models, statement approval, payout record, reserve, per-unit P&L, monthly emailed report) | Next | Replaces the "Owner portal" idea below. |
+| **Phase 2: Owners and co-hosts** (owner portal login, owner date blocks, fee models, statement approval, payout record, reserve, per-unit P&L, monthly emailed report) | **Built 2026-10-13** | Spec: docs/specs/PHASE-2-OWNERS.md. Decisions D-39 to D-45. Features F16 and F30–F32. |
 | **Phase 3: Operations** (cleaner-only access, cleaner calendar, status board with inspected, inspections and scores, damage reports linked to deposits, cleaner pay, supplies par levels, lost and found, maintenance for stays) | Next | |
 | **Phase 4: Guest experience and direct booking** (guidebook in English and Taglish, house rules acceptance, paid add-ons, quote-and-pay links for Facebook inquiries, private feedback, returning-guest codes, unpaid-booking follow-up, search-friendly listing pages) | Planned | Covers the "Booking page upgrades" idea below. |
 | **Phase 5: Pricing rules and team** (gap nights, last-minute and far-out rules, events, bulk changes, booking activity log, conversation assignment, notification rules, unit tags, group bookings, room types, sync-health alerts) | Planned | Covers the "Smarter reports" idea below. |
 | Booking page upgrades | Idea | Not specified in the repo docs yet. Scope to be defined. |
 | Smarter reports | Idea | Not specified in the repo docs yet. Scope to be defined. |
 | Recurring expenses | Idea | Not built. Expenses are entered one at a time today. |
-| Owner portal | Idea | Not built. Owners get emailed or printed statements only (F16). |
+| Owner portal | **Built 2026-10-13** | See F30. Owners can't yet pay themselves through BalayHub. |
 | Official two-way channel APIs | Excluded for now (founder, 2026-10-13: no integrations) | Guest names, prices and messages from Airbnb, Booking.com, Agoda. Mentioned in SHORT-TERM-GUIDE. |
 | Long-term: tenant portal, online rent payments, utility billing, e-signatures | Planned | Listed in README "Not built yet". |
 | Prorated first-month rent | Known limitation | ARCHITECTURE "next steps". |

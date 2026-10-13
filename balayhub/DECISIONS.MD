@@ -118,3 +118,76 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 
 
 **D-37 confirmed · 2026-10-13 · Founder kept the D-37 owner-statement choices and the manual-payment cutoff at check-out** ("keep your choices"). Phase 2 starts on that basis.
+
+**D-39 · 2026-10-13 · Owner portal is a separate sign-in, not a team member.**
+- Unit owners never get a `users` row and never sign in to the workspace. They sign in with a one-time link emailed to them (no password). The link is valid for 30 minutes and works once.
+- A sign-in creates a separate session: cookie `bh_owner` (HttpOnly, SameSite=Lax, Secure in production), stored in `owner_sessions` as a hash. A session lasts 30 days, or 7 days if idle.
+- Portal routes live under `/api/owner-portal/*`, mounted before the workspace sign-in. They check the owner cookie, and the plan guard doesn't apply to them.
+- Owners see only their own units. They never see guest phone numbers or emails (guests appear by first name), payment proofs, other owners, or the workspace's other data.
+- The host turns access on with "Invite to owner portal" (needs the owner's email) and off with "Turn off portal access". Turning access off signs that owner out everywhere.
+
+*Why:* an owner is not staff. They need their own numbers and nothing else, and a link is easier for a business owner than a password they might lose.
+
+**D-40 · 2026-10-13 · Fee types per owner.**
+- Each owner has one fee type: `net_pct` (the default, and the rule BalayHub already used), `gross_pct`, or `flat`.
+- `net_pct`: the fee is a percentage of net rental income, after channel fees, cleaning fees the manager keeps, and refunds.
+- `gross_pct`: the fee is a percentage of gross bookings after refunds only.
+- `flat`: a fixed monthly fee, charged in any month the owner has at least one active unit, even with no stays checked out.
+- The fee is never negative. Existing owners stay on `net_pct`, so their statements don't change.
+
+*Why:* some owners pay a fixed fee, and some hosts charge on gross. The default keeps every existing statement the same.
+
+**D-41 · 2026-10-13 · Review, then publish and send.**
+- Statements are still worked out live while they are drafts. "Publish" stores a frozen copy (`owner_statements.snapshot`, the full statement result). The owner portal and the emailed statement show that copy, never the live numbers.
+- There is one statement per owner per month. A month can be published only after it has ended (Manila time).
+- Sending needs a published statement. The email has the plain-text statement and, if portal access is on, a link to the portal.
+- Print is a print stylesheet on the statement page (browser "Save as PDF"). No PDF file is generated on the server.
+- On the 3rd of each month (Manila time), an hourly job drafts last month's statements for every owner with an active unit and emails the workspace owner "n statements ready to review". It runs once per workspace per month, and it never publishes or sends anything to an owner.
+
+*Why:* the owner must see the same numbers that were checked, and nothing reaches an owner without a person's review.
+
+**D-42 · 2026-10-13 · Payouts are records.**
+- A payout is a record of money already paid to an owner: amount above zero, date paid (not in the future), method (`gcash`, `maya`, `bank_transfer`, `cash` or `other`), reference number, note, and an optional month it pays for.
+- Payouts are voided with a reason, never deleted.
+- The statement shows "Paid ₱X of ₱Y" for its month. Saving a payout accepts an `Idempotency-Key`, so a retry doesn't record the payout twice.
+
+*Why:* BalayHub records payments; it does not move money. Voiding keeps the trail that an owner or the tax record may need.
+
+**D-43 · 2026-10-13 · Repairs reserve.**
+- Each owner has a reserve target and a monthly top-up (both default 0, which switches the reserve off).
+- On a statement, the top-up is the smallest of: the monthly amount, what is left to reach the target, and the payout before the top-up. It is never below zero and is taken from the payout.
+- Publishing adds a deposit to the reserve. Unpublishing voids that deposit.
+- The host records withdrawals by hand, with a date and a required note, when the reserve pays for a repair. The balance can't go below zero.
+
+*Why:* owners keep money aside for repairs, and the host should not pay out money that is needed for them.
+
+**D-44 · 2026-10-13 · Profit and loss per unit.**
+- For each unit, for one month: stays (checked out in the month), nights, gross bookings, channel fees, refunds (same overpayment rule as the statements), expenses (not voided, by expense date), and net (gross − channel fees − refunds − expenses).
+- Expenses with no unit appear as one "Not linked to a unit" row. This row is left out of the owner portal.
+- Owners and managers see it (managers only for their properties). Staff get 403. The CSV has the same table.
+- Owners see their own units only in the portal.
+
+*Why:* hosts want to know which unit makes money, and expenses that are not linked to a unit must not disappear.
+
+**D-45 · 2026-10-13 · Agreed changes to the Phase 2 spec, as built.**
+- Publishing a month that is already published returns 409 (`ALREADY_PUBLISHED`). To correct it, unpublish first, then publish again.
+- Unpublishing clears the sent record (date and address). It is refused (409) if the repairs reserve has already paid out money that this statement added. Void that withdrawal first.
+- A flat-fee owner with no stays still owes the fee. The statement and the owner screens say the owner owes the host, and there is nothing to pay out.
+- The P&L counts guest cleaning fees as unit income. The owner statement does not count cleaning fees the manager keeps. P&L is the whole unit's result; the statement is the owner's share.
+- The owner portal's block-overlap message doesn't name the guest or the booking.
+- Owner statements keep each booking's confirmation code, so owners can match them with their Airbnb or Booking.com payouts. As built, the code is kept in the published statement data, but no screen or email shows it yet. This is open; see BACKEND-SCHEMA section 7.
+- Payout notes are visible to the owner. Hosts write them for the owner.
+
+*Why:* these came up while building Phase 2, and the founder agreed each one.
+
+**D-46 · 2026-10-13 · Owner portal history follows the unit; security review additions to D-39 and D-45.**
+- Portal history belongs to the unit. If a unit moves to a new owner, the new owner sees that unit's past bookings and activity in the portal. A host who doesn't want that uses a new listing.
+- Changing or clearing an owner's email signs out that owner's portal sessions and cancels their unused sign-in links. Clearing the email also turns portal access off.
+- Owners can't block or unblock dates while the workspace is view-only (trial ended, payment overdue, or demo).
+- Creating or cancelling an owner block is limited to 20 per hour per owner.
+- The sign-in link is removed from the address bar once it has been used.
+- Status: all four are in the code and covered by tests (2026-10-13).
+
+*Why:* the security review found that an owner's access must end when the owner changes, and that blocks must follow the same read-only rules as the rest of the workspace.
+
+**D-47 · 2026-10-13 · Confirmation codes on owner statements are stored, not printed.** This updates D-45. The published statement keeps each stay's confirmation code in its stored copy, but screens and emails don't show it, because the stays table is already wide on phones. Owners match stays with channel payouts by dates, unit and guest first name. Host file downloads with emoji or non-Latin names now work (same fix as the owner receipt download).

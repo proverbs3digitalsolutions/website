@@ -122,6 +122,8 @@ function planGuard(req, res, next) {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) || !req.user?.organization_id) return next();
   // Guest-facing pages (opened by a private link) don't depend on who is signed in.
   if (req.path.startsWith('/public/')) return next();
+  // Owner portal: signed in with its own cookie (bh_owner), so the workspace's plan doesn't apply.
+  if (req.path.startsWith('/owner-portal/')) return next();
   const { planStatus, READ_ONLY_MSG } = require('./plans');
   const s = planStatus(req.user);
   if (!s.read_only) return next();
@@ -137,8 +139,11 @@ function planGuard(req, res, next) {
 
 // Scheduler: delete sessions that are expired or idle (the same rules loadSession
 // uses to reject them), and one-time tokens that are expired or were used over
-// 7 days ago. Returns how many rows were deleted.
+// 7 days ago. Owner portal sessions and sign-in links follow the same rules.
+// Returns how many rows were deleted.
 async function purgeExpiredAuth() {
+  // Required here: ownerauth.js requires this module, so a top-level require would be circular.
+  const { IDLE_DAYS } = require('./ownerauth');
   const s = await query(
     `DELETE FROM sessions WHERE expires_at <= now() OR last_seen_at <= now() - make_interval(hours => $1)`,
     [config.sessionIdleHours],
@@ -146,7 +151,14 @@ async function purgeExpiredAuth() {
   const t = await query(
     `DELETE FROM auth_tokens WHERE expires_at <= now() OR (used_at IS NOT NULL AND used_at < now() - interval '7 days')`,
   );
-  return s.rowCount + t.rowCount;
+  const os = await query(
+    `DELETE FROM owner_sessions WHERE expires_at <= now() OR last_seen_at <= now() - make_interval(days => $1)`,
+    [IDLE_DAYS],
+  );
+  const ot = await query(
+    `DELETE FROM owner_login_tokens WHERE expires_at <= now() OR (used_at IS NOT NULL AND used_at < now() - interval '7 days')`,
+  );
+  return s.rowCount + t.rowCount + os.rowCount + ot.rowCount;
 }
 
 const requireRole = (...roles) => (req, res, next) =>

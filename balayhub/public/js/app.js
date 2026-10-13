@@ -25,7 +25,9 @@ import { bookHostView, bookListingView, bookDoneView } from './views/book.js';
 import { launchpadView } from './views/launchpad.js';
 import { payBalanceView } from './views/pay.js';
 import { pricingView } from './views/pricing.js';
-import { ownersView, ownerStatementView } from './views/owners.js';
+import { ownersView, ownerStatementView, ownerStatementsView } from './views/owners.js';
+import { pnlView } from './views/pnl.js';
+import * as portal from './views/ownerportal.js';
 import { guestReviewView } from './views/review.js';
 import { gatepassSettingsView, gatepassPublicView } from './views/gatepass.js';
 import { stayReportsView } from './views/stayreports.js';
@@ -59,6 +61,15 @@ const routes = [
   ['/book/:slug/done/:token', bookDoneView, OPEN],
   ['/book/:slug/:unitId', bookListingView, OPEN],
   ['/checkin/:token', guestCheckinView, OPEN],
+  // Owner portal: its own sign-in (D-39), rendered bare (no team sidebar).
+  ['/owner', portal.ownerSignInView, OPEN],
+  ['/owner/signin', portal.ownerLinkView, OPEN],
+  ['/owner/home', portal.ownerHomeView, OPEN],
+  ['/owner/statements', portal.ownerStatementsListView, OPEN],
+  ['/owner/statements/:month', portal.ownerStatementView, OPEN],
+  ['/owner/bookings', portal.ownerBookingsView, OPEN],
+  ['/owner/money', portal.ownerMoneyView, OPEN],
+  ['/owner/pnl', portal.ownerPnlView, OPEN],
   ['/verify-pending', authViews.verifyPendingView, SIGNED_IN],
   ['/setup', authViews.setupView, SIGNED_IN],
   ['/dashboard', dashboardView, APP],
@@ -82,7 +93,9 @@ const routes = [
   ['/discount-codes', discountCodesView, APP],
   ['/gatepass-settings', gatepassSettingsView, APP],
   ['/stay-reports', stayReportsView, APP],
+  ['/owners/statements', ownerStatementsView, APP],
   ['/owners/:id/statement', ownerStatementView, APP],
+  ['/pnl', pnlView, APP],
   ['/reservations', reservationsView, APP],
   ['/reservations/:id', reservationDetailView, APP],
   ['/listings', listingsView, APP],
@@ -114,6 +127,7 @@ const NAV_SHORT = [
   ['/guests', 'Guests', 'users'],
   ['/owners', 'Unit owners', 'file'],
   ['/stay-reports', 'Reports', 'chart'],
+  ['/pnl', 'Profit and loss', 'chart'],
   ['/rent?tab=expenses', 'Expenses', 'wallet'],
   ['/maintenance', 'Maintenance', 'wrench'],
   ['/settings', 'Settings', 'settings'],
@@ -140,6 +154,7 @@ const NAV_BOTH = [
   ['/rent', 'Rent & Expenses', 'wallet'],
   ['/reports', 'Rental reports', 'chart'],
   ['/stay-reports', 'Stay reports', 'chart'],
+  ['/pnl', 'Profit and loss', 'chart'],
   ['/guests', 'Guests', 'users'],
   ['/owners', 'Unit owners', 'file'],
   ['/maintenance', 'Maintenance', 'wrench'],
@@ -147,7 +162,7 @@ const NAV_BOTH = [
 ];
 // Staff don't see guest conversations; the platform admin gets an Admin link.
 const navFor = () => [...({ short_term: NAV_SHORT, both: NAV_BOTH }[state.user?.business_type] || NAV_LONG)
-  .filter(([p]) => (p !== '/inbox' || state.user?.role !== 'staff') && (!['/launchpad', '/owners'].includes(p) || state.user?.role === 'owner') && (p !== '/stay-reports' || state.user?.role !== 'staff')),
+  .filter(([p]) => (p !== '/inbox' || state.user?.role !== 'staff') && (!['/launchpad', '/owners'].includes(p) || state.user?.role === 'owner') && (!['/stay-reports', '/pnl'].includes(p) || state.user?.role !== 'staff')),
 ['/help', 'Help & support', 'help'],
 ...(state.user?.is_platform_admin ? [['/admin', 'Admin', 'shield']] : [])];
 

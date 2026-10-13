@@ -137,7 +137,11 @@ router.get('/files/:id', ah(async (req, res) => {
   if (['lease', 'registration', 'payment_proof', 'booking_payment'].includes(file.related_record_type)) await audit(null, req.user, 'file.downloaded', file.related_record_type, file.related_record_id, { file_id: id });
   res.set('Content-Type', file.mime_type);
   res.set('Cache-Control', 'private, no-store');
-  res.set('Content-Disposition', `${req.query.download ? 'attachment' : 'inline'}; filename="${file.file_name.replace(/"/g, '')}"`);
+  // filename is an ASCII fallback (headers can't carry other characters). filename* is the real name, UTF-8
+  // encoded (RFC 6266). encodeURIComponent leaves ' ( ) * alone, and RFC 5987 doesn't allow those, so escape them too.
+  const ascii = file.file_name.replace(/[^\x20-\x7e]|["\\]/g, '_');
+  const utf8 = encodeURIComponent(file.file_name).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  res.set('Content-Disposition', `${req.query.download ? 'attachment' : 'inline'}; filename="${ascii}"; filename*=UTF-8''${utf8}`);
   fs.createReadStream(full).on('error', () => res.status(404).end()).pipe(res);
 }));
 

@@ -191,6 +191,8 @@ Last updated: 2026-10-13
 | checkin_token, pay_token, review_token | text | Private guest-link tokens, each unique when set. Stored in plain text |
 | created_by | uuid → users | |
 
+**Owner-made blocks** (migration 029): `owner_block_by` (uuid → `unit_owners`, ON DELETE SET NULL) is set on blocks an owner makes in the owner portal. Those blocks are `kind = 'block'`, have `created_by` NULL, and can be cancelled by that owner until they start. Owners see guests by first name only, and blocks as "Blocked" unless they made them.
+
 Key constraint: **`bookings_no_overlap`** is an `EXCLUDE USING gist (unit_id WITH =, daterange(check_in, check_out) WITH &&) WHERE (status = 'confirmed')` constraint (needs `btree_gist`). It applies to stays and blocks alike.
 
 **ical_feeds**: channel calendars imported per listing.
@@ -450,9 +452,30 @@ Payment status (paid, partial, unpaid, overdue) is computed with FIFO allocation
 | email, phone, notes | text | |
 | management_fee_pct | numeric(5,2) | 0–100, default 20 |
 | cleaning_to_manager | boolean | Cleaning fees go to the manager, not the owner |
+| fee_model | text | `net_pct` (default), `gross_pct` or `flat` (migration 029) |
+| flat_monthly_fee | numeric(12,2) | ≥ 0. Used when `fee_model = 'flat'` |
+| reserve_target, reserve_monthly | numeric(12,2) | ≥ 0, default 0 (0 = repairs reserve off) |
+| portal_enabled | boolean | Owner portal access (default false). Set by the host's invite and turn-off actions |
+| portal_invited_at, portal_last_seen_at | timestamptz | |
 | archived_at, created_at | timestamptz | |
 
-Units link to owners through `units.owner_id` (**ON DELETE SET NULL**). Statements are computed, not stored.
+Units link to owners through `units.owner_id` (**ON DELETE SET NULL**). Live statements are computed from the records. A published statement is stored as a frozen copy (section 2.11a).
+
+### 2.11a Owner portal, statements, payouts and repairs reserve (migration 029)
+
+Unit owners have no `users` row. Their portal sessions and sign-in links are separate tables, and only hashes are stored.
+
+| Table | Key columns | Notes |
+|---|---|---|
+| owner_sessions | token_hash (PK), owner_id → unit_owners (CASCADE), organization_id, created_at, last_seen_at, expires_at, user_agent | Cookie `bh_owner`. 30 days absolute, 7 days idle. Deleted when access is turned off, by the hourly `auth-cleanup` job, and with the owner |
+| owner_login_tokens | token_hash (PK), owner_id (CASCADE), expires_at (30 min), used_at, created_at | Single use. Used tokens are kept 7 days, then cleaned up hourly |
+| owner_statements | statement_id (PK), organization_id, owner_id, month (`YYYY-MM`), status (`draft` / `published`), snapshot (jsonb, NULL while draft), published_at, published_by, sent_at, sent_to, created_at, updated_at | UNIQUE (owner_id, month). `snapshot` is the full statement result at publish time. Drafts are created by the monthly reminder (`draftMonth`). Opening a statement does not create a row; publishing does |
+| owner_payouts | payout_id (PK), organization_id, owner_id, month (nullable), amount (> 0), paid_on (date), method (`gcash`, `maya`, `bank_transfer`, `cash`, `other`), reference_number (≤ 100), note (≤ 500), idempotency_key, recorded_by, created_at, voided_at, voided_by, void_reason | Voided, never deleted. Unique (organization_id, idempotency_key) where the key is set |
+| owner_reserve_entries | entry_id (PK), organization_id, owner_id, kind (`deposit` / `withdrawal`), amount (> 0), entry_date, note (≤ 300), statement_id (nullable), recorded_by, created_at, voided_at, voided_by, void_reason | Balance = non-voided deposits − non-voided withdrawals. Deposits come from publishing a statement (voided when it is unpublished). Withdrawals are recorded by hand (voided with a reason) |
+
+Money is `NUMERIC(12,2)` and is worked in centavos in the application. There is one statement per owner per month.
+
+**Idempotency for payouts (open item).** Migration 029 adds `owner_payouts.idempotency_key` with a unique index. The save route in `src/routes/ownerledger.js` still looks for the key in the `audit_logs` row written in the same transaction. It must switch to the column (section 7, item 11).
 
 ### 2.12 Support tickets
 
@@ -483,6 +506,8 @@ A sequence `support_ticket_no_seq` starts at 1001 and numbers tickets `T-1001`, 
 ### 2.14 Audit
 
 **audit_logs**: audit_id (bigserial), organization_id, actor_user_id, action, record_type, record_id (text), details (jsonb), created_at. Indexed on `(organization_id, created_at DESC)`. Platform admin plan changes are written into the target workspace's log with the admin as the actor.
+
+Phase 2 actions: `owner_portal.invited`, `owner_portal.disabled`, `owner_portal.block_created`, `owner_portal.block_cancelled` (portal actions have no team user; the owner is in `details.owner_id`), `unit_owner.statement_published`, `unit_owner.statement_unpublished`, `unit_owner.statement_sent`, `owner_payout.recorded`, `owner_payout.voided`, `owner_reserve.withdrawal_recorded`, `owner_reserve.withdrawal_voided`, and `owner_statements.reminder_sent` (the monthly reminder's once-per-month record, with `details.month`).
 
 ### 2.15 Billing (BalayHub plans)
 
@@ -587,7 +612,7 @@ organizations ─┬─ users ─┬─ sessions / auth_tokens / consent_records
 
 ### 4.2 Workspace purge coverage
 
-`PURGED_TABLES` in `src/lib/account.js` lists 43 tables, which is every table in migrations 001–026 except `mail_sync_state` (global) and `schema_migrations`. `test/account.test.js` fails if a new table is missing. No table is missing at the time of writing.
+`PURGED_TABLES` in `src/lib/account.js` lists every table in migrations 001–029 except `mail_sync_state` (global) and `schema_migrations`. The five owner tables from migration 029 are included, and are deleted before `unit_owners`. `test/account.test.js` fails if a new table is missing. No table is missing at the time of writing.
 
 The workspace export (`exportOrganization`) is not complete. It leaves out `support_messages`, `support_events`, `consent_records`, `automation_runs`, `receipt_counters`, `push_subscriptions` (by design), sessions and auth tokens. It also includes file metadata only, not the file contents.
 
@@ -662,7 +687,11 @@ The workspace export (`exportOrganization`) is not complete. It leaves out `supp
 | Maintenance requests | View, create, edit, add a cost | Same (assigned) | View, create, add a cost (assigned); no edit or status change | None | None |
 | Dashboard, financial report and CSV, stays revenue | View (all) | View (assigned) | View (assigned) | None | None |
 | Stay reports (including tax) | View (all) | View (assigned) | None | None | None |
-| Unit owners and owner statements | View, create, edit, archive; email statements | None | None | None | None |
+| Unit owners (form, fee type, reserve target) | View, create, edit, archive; invite to owner portal and turn it off | None | None | None | None |
+| Owner statements (draft, publish, unpublish, send, print) | View, publish, unpublish, send | None | None | None | None |
+| Owner payouts and repairs reserve | View, record, void payouts; record and void reserve withdrawals | None | None | None | None |
+| Profit and loss (`/reports/pnl`, CSV) | View all units | View assigned properties | None (403) | None | None |
+| Owner portal (unit owner, `bh_owner` cookie, not a workspace role) | None (invites and turns access off only) | None | None | None | Unit owner, own units only: published statements (never drafts), payouts, own reserve balance, bookings and activity for own units (guests by first name), own blocks (create, cancel before start), P&L for own units, receipts on published statements. Sees history of units now assigned to them (D-46). Never guest contact details, payment proofs, other owners or other workspace data. Blocks: not while the workspace is view-only; 20 per hour (D-46) |
 | Support tickets | All of the workspace's tickets: view, create, reply, resolve, rate, attach files | Own tickets only | Own tickets only | All tickets: view, reply, internal notes, change status, assign, view attachments | None |
 | Plan and billing payments | View; start and confirm checkout | Plan status only (via session) | Plan status only | Set plan and dates by hand | None |
 | Audit log | View all entries (latest 200) | View own actions only | None | No viewer (plan changes are written into the workspace's log) | None |
@@ -682,6 +711,10 @@ The workspace export (`exportOrganization`) is not complete. It leaves out `supp
 | 5 | Managers limited to some properties can still create and edit workspace-wide discount codes and message templates, and switch the built-in template language | `src/routes/guestcare.js`, `src/routes/inbox.js` |
 | 6 | A cleaning task can be assigned to any active member, even one not assigned to that property, who then can't see it | `src/routes/housekeeping.js` (`checkAssignee`) |
 | 7 | Guest-link tokens (`checkin_token`, `pay_token`, `review_token`, `gate_passes.token`, `units.ical_token`, `direct_checkouts.public_token`) are stored in plain text, unlike session and auth tokens | migrations 002, 007, 010, 014, 018, 019 |
-| 8 | No cleanup of expired `sessions` or `auth_tokens` | `src/lib/scheduler.js` |
+| 8 | ~~No cleanup of expired `sessions` or `auth_tokens`~~ Fixed 2026-10-13: the hourly `auth-cleanup` job deletes expired or idle sessions and old one-time tokens, and the owner portal's sessions and sign-in links too | `src/lib/auth.js` (`purgeExpiredAuth`) |
 | 9 | The workspace export leaves out support messages and events, consent records and file contents | `src/lib/account.js` |
 | 10 | `GET /api/files/:id` checks the storage path with `startsWith(storageDir)` without the trailing separator (the other file routes include it). Low risk, since storage keys are generated by the server | `src/routes/files.js` |
+| 11 | ~~Payout retries not on the new column~~ Fixed 2026-10-13: `POST /unit-owners/:id/payouts` uses `owner_payouts.idempotency_key` (unique per workspace), like refunds | `src/routes/ownerledger.js`, `db/migrations/029_phase2_owners.sql` |
+| 12 | Decided 2026-10-13: published statements keep each stay's confirmation code in the stored copy, but screens and emails don't print it (the table is already wide on phones). Owners match stays by dates, unit and guest first name | `src/lib/statements.js`, `public/js/views/ownerportal.js`, `public/js/views/owners.js`, `statementText()` |
+| 13 | ~~Rollback note missing `idempotency_key`~~ Not needed: the rollback drops the whole `owner_payouts` table | `db/migrations/029_phase2_owners.sql` |
+| 14 | ~~D-46 security items~~ Fixed 2026-10-13: an email change or clear ends the owner's portal sessions and cancels unused links (clearing also turns access off); owner blocks are refused while the workspace is view-only (402) or the demo (403); block create and cancel are limited to 20 per hour per owner; the sign-in link is removed from the address bar after use. Covered by tests | `src/routes/ownerportal.js`, `src/routes/owners.js`, `src/lib/auth.js` (`planGuard`) |

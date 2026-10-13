@@ -137,6 +137,7 @@ test('owner statement: refunds come off the payout on their own line, to the cen
   assert.equal((await host.get(`/api/reservations/${s1.booking_id}`)).data.reservation.balance, '0.00', 'the guest has paid the whole bill, extras included');
 
   outbox.length = 0;
+  await host.post(`/api/unit-owners/${ownerId}/statement/publish`, { month: '2026-07' });
   assert.equal((await host.post(`/api/unit-owners/${ownerId}/statement/send`, { month: '2026-07' })).status, 200);
   const mail = outbox.find((x) => x.to === 'maria-p1@example.com');
   assert.match(mail.text, /Less refunds: +₱250\.50/);

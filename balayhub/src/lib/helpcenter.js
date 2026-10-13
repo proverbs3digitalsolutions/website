@@ -217,10 +217,58 @@ const ARTICLES = [
   },
   {
     slug: 'owner-statements', category: 'business', roles: OWNER, title: 'Owner statements (managing units for owners)',
-    keywords: 'owner statement management fee payout unit owner managed',
+    keywords: 'owner statement management fee payout unit owner managed review publish unpublish send email print pdf',
     body: [
-      'Unit owners → Add owner: email, management fee %, cleaning fees kept or not, and their units.',
-      'Statement for a month: stays that checked out, channel and cleaning fees, your fee, expenses and the payout. Print/save as PDF or email it.',
+      'Unit owners → Add owner: email, fee type, cleaning fees kept or not, repairs reserve, and their units.',
+      'A statement covers one month: stays that checked out, channel and cleaning fees, your fee, expenses and the payout. Open it from Unit owners → Statements, or wait for the reminder email on the 3rd of the month.',
+      'Review the numbers, then press Publish. Publishing freezes them: later expenses or edits change the live figures, but not the published statement the owner sees.',
+      'Send to owner emails the published statement. Print (or save as PDF) opens your browser\'s print window.',
+      'To correct a published statement, press Unpublish to correct, fix the cause, then publish again. Publishing the same month twice is refused.',
+      'Anything you write on a payout is visible to the owner, so keep it clear and polite.',
+    ],
+  },
+  {
+    slug: 'owner-portal', category: 'business', roles: OWNER, title: 'Give unit owners their own portal',
+    keywords: 'owner portal login sign in link invite turn off access unit owner bookings block dates statements payouts',
+    body: [
+      'Unit owners → open the owner → Invite to owner portal. The owner needs an email address first. They get an email with a sign-in link.',
+      'The link works once and expires after 30 minutes. If it has expired, the owner opens the owner sign-in page, enters their email, and gets a new one. No password is needed.',
+      'In the portal an owner sees their own units only: published statements, payouts, bookings (guests by first name), an activity list, and their repairs reserve. They can also block dates on their units, and cancel their own blocks before they start.',
+      'Owners never see guest phone numbers or emails, other owners, or your other data. Your team does not get a login through this link.',
+      'Turn off portal access to sign the owner out everywhere. Invite them again to turn it back on.',
+    ],
+  },
+  {
+    slug: 'owner-fee-types', category: 'business', roles: OWNER, title: 'Fee types: percent of net, percent of gross, or flat monthly',
+    keywords: 'fee type management fee net gross flat monthly percent owner statement loss owes',
+    body: [
+      'Each owner has one fee type, set on the owner form. The default is % of net, which is how BalayHub worked before.',
+      '% of net: the fee is a percentage of the net rental income, which is after channel fees, cleaning fees you keep, and refunds.',
+      '% of gross: the fee is a percentage of gross bookings, after refunds only.',
+      'Flat monthly: a fixed amount for every month the owner has at least one unit, even if no stays checked out. If the fee and expenses are more than the month\'s income, the owner owes you that amount. The statement says so, and there is nothing to pay out.',
+      'The fee is never negative.',
+    ],
+  },
+  {
+    slug: 'owner-payouts-reserve', category: 'business', roles: OWNER, title: 'Record payouts and the repairs reserve',
+    keywords: 'payout paid gcash maya bank cash reference record void repairs reserve withdrawal top-up owner money',
+    body: [
+      'Open the owner\'s statement and press Record payout: the amount, the date paid, the method (GCash, Maya, bank transfer, cash or other), and a reference number if you have one. The statement shows "Paid ₱X of ₱Y" for that month.',
+      'Payout notes are visible to the owner, so write them for them. Say what the money covers.',
+      'A payout that was recorded by mistake is voided with a reason, not deleted. The record stays.',
+      'Repairs reserve: set a target and a monthly top-up on the owner form. When you publish a statement, the top-up is taken from the payout, up to the target. A top-up never makes the payout negative.',
+      'When the reserve pays for a repair, record a withdrawal with a date and a note. The balance can\'t go below zero.',
+      'To undo a withdrawal, void it. Deposits from a statement are reversed by unpublishing that statement, and unpublishing is refused if the reserve has already paid out money that statement added. Void that withdrawal first.',
+    ],
+  },
+  {
+    slug: 'profit-loss', category: 'business', roles: MANAGERS, title: 'Profit and loss per unit',
+    keywords: 'profit loss pnl per unit income expenses net gross report month property csv download',
+    body: [
+      'Open Profit and loss from the menu (owners and managers). Pick a month and, if you want, one property.',
+      'Each unit shows its stays, nights, gross bookings, channel fees, refunds, expenses and net. Expenses with no unit are shown in one "Not linked to a unit" row.',
+      'Guest cleaning fees count as the unit\'s income here, because this is the whole unit\'s result. An owner statement is different: it leaves out cleaning fees you keep, because that is the owner\'s share.',
+      'Managers see only their assigned properties. Staff don\'t see this page. Download CSV gives the same table for a spreadsheet.',
     ],
   },
   {

@@ -57,6 +57,8 @@ function startScheduler() {
   every(60 * 60 * 1000, 'auth-cleanup', require('./auth').purgeExpiredAuth, 100 * 1000);
   // Keep the public demo's dates current.
   every(60 * 60 * 1000, 'demo', require('./demo').refreshDemo, 50 * 1000);
+  // From the 3rd of the month: draft last month's owner statements and email the workspace owner to review them.
+  every(60 * 60 * 1000, 'owner-statements-reminder', require('./ownerreminder').sendStatementReminders, 105 * 1000);
 }
 
 module.exports = { startScheduler, every };

@@ -78,6 +78,7 @@ Every member also gets **Help & support**. Platform admins also get **Admin**.
 | Unit owners | Yes | Hidden | Hidden |
 | Inbox | Yes | Yes | Hidden |
 | Stay reports | Yes | Yes | Hidden |
+| Profit and loss | Yes | Yes | Hidden |
 | Everything else | Yes | Yes | Yes (with limits below) |
 
 Typing a hidden URL does not bypass this: the server returns 403 (Inbox, Unit owners, stay reports) and the page shows the error card. The Launchpad shows a note for non-owners.
@@ -102,7 +103,9 @@ Managers and staff only see records in properties assigned to them (`propertySco
 | Housekeeping | All, plus Edit checklist | Add, assign, cancel, copy for cleaner | View, tick checklist, start, mark done, reopen, add photos |
 | Listings | Add, edit, photos, channels, gate pass | Same, but can't create a new building | View, mark clean/dirty |
 | Guests | Edit, VIP, Do not rebook; Reviews; Discount codes | Same | Names and stay counts only; no Reviews or Discount codes buttons |
-| Unit owners and statements | Yes | No (403) | No (403) |
+| Unit owners, statements, payouts and repairs reserve | Yes | No (403) | No (403) |
+| Profit and loss (`#/pnl`) | Yes, all units | Yes, assigned properties | No (403) |
+| Owner portal (unit owners, separate sign-in) | Invites and turns off access | No access | No access |
 | Stay reports and tax summary | Yes | Yes | No (403) |
 | Long-term Dashboard and Reports | All properties | Assigned | Assigned (not hidden for staff) |
 | Properties | Create, archive, restore | Edit, add/archive units | View |
@@ -338,8 +341,13 @@ Average and count, filter bar, list linking to reservations. Empty: "No reviews 
 **+ New code** (code, note, percent or amount, dates, minimum nights, max uses, returning only) → "Code created." **Turn off / Turn on**. Over 50 active → error. Empty: "No codes yet".
 
 ### 7.16 Unit owners `#/owners` (owner only)
-- **+ Add owner** (name, email, phone, fee %, cleaning to manager, notes, units). **Edit**, **Remove** (confirm).
-- **Statement for last month** / **This month so far** → `#/owners/<id>/statement?month=…`: **Email to owner** (confirm), **Print / save as PDF**. Warning when stays lack amounts.
+- **+ Add owner** (name, email, phone, fee type, fee % or flat monthly fee, cleaning to manager, repairs reserve target and monthly top-up, notes, units). **Edit**, **Remove** (confirm).
+- Each row shows the portal status: **Off**, **Invited**, or **Active** (with last seen). Actions: **Invite to owner portal** (needs an email) and **Turn off portal access** (confirm; signs the owner out everywhere).
+- **Statements** (`#/owners/statements?month=…`): a month picker and one row per owner with status (Draft, Published, Sent), payout and sent date. Each row opens the statement.
+- Statement page (`#/owners/<id>/statement?month=…`): status bar (Draft / Published on … / Sent to … on …). Buttons: **Publish** (refused for a month that has not ended), **Unpublish to correct** (confirm), **Send to owner** (only when published; confirm), **Print**. Shows the fee line (for example "Management fee (20% of net)" or "(flat)"), the repairs reserve top-up line, and expense rows with a **Receipt** link when one is attached. A warning appears when stays lack amounts.
+- Flat fee with no stays: the statement shows "Owner owes you" and nothing to pay out.
+- **Payouts** card: list (voided ones are marked), **Record payout** (amount prefilled with what is still unpaid), void with a reason. The card shows "Paid ₱X of ₱Y" or "Owner owes you".
+- **Repairs reserve** card: balance, target, entries, **Record withdrawal** (amount, date, required note).
 - Empty: "No unit owners yet" + **Add owner**.
 
 ### 7.17 Stay reports `#/stay-reports`
@@ -383,6 +391,11 @@ Cards top to bottom (owner):
 - Ticket `#/help/tickets/<id>`: progress, conversation, **Send reply** / **Reply and reopen** (within 14 days), **Mark as solved** (confirm), rating after resolution, or **Open a follow-up ticket** when closed.
 
 ---
+
+### 7.23 Profit and loss `#/pnl` (owner and manager)
+- Month picker and property filter (shared filter bar). A table per unit with a totals row; a negative net is shown in the danger colour. "Not linked to a unit" appears as its own row when there are unlinked expenses.
+- **Download CSV**. Empty state when there are no units in scope. On a phone the table becomes stacked cards.
+- Staff don't see the menu item and get the server's 403 if they open the page directly.
 
 ## 8. Property manager differences
 
@@ -447,3 +460,23 @@ No assigned properties → lists are empty with "assigned to you" wording.
 | 2–3 min | Direct booking and balance payment checks | Bookings and payments appear even if the guest closed the page |
 | 10 min | Plan payment check | Plan activates even if the webhook was missed |
 | 1 h | Support auto-close; workspace purge; demo date refresh | Tickets close; deleted workspaces purged after 14 days |
+
+## 12. Unit owner portal (separate sign-in)
+
+Unit owners never see the workspace app. They use the owner portal at `#/owner`, with its own simple top bar (workspace name, owner name, Sign out) and tabs Home, Statements, Bookings, Money and Profit and loss. It is phone first and has no app menu.
+
+| Step | Page | What happens |
+|---|---|---|
+| 1 | `#/owner` | Enter the email address. The page always says "Check your email", whether or not an account exists. |
+| 2 | Email | One link per workspace, each valid for 30 minutes and used once. |
+| 3 | `#/owner/signin?token=…` | Exchanges the link for a session, then goes to Home. An expired or used link shows "This sign-in link is invalid or has expired. Ask for a new link." with the option to request another. |
+| 4 | `#/owner/home` | This month at a glance (upcoming stays, nights booked in the next 30 days), the latest published statement and its payout, and the activity list. |
+| 5 | `#/owner/statements` and `#/owner/statements/<month>` | Published statements only, newest first. A statement is a read-only copy with receipt links and the month's payouts. **Print or save as PDF** opens the browser print window. |
+| 6 | `#/owner/bookings` | Stays and blocks on the owner's units, with a simple month strip per unit. **Block dates** (unit, from, to, reason) and cancel own future blocks. |
+| 7 | `#/owner/money` | Payouts and the repairs reserve balance. |
+| 8 | `#/owner/pnl` | Profit and loss for the owner's units, by month. |
+
+- Any portal call that returns "signed out" sends the owner back to `#/owner`.
+- A block that overlaps another stay shows "These dates overlap a stay or block on this unit." It doesn't name the guest.
+- The login page has a small "Are you a unit owner? Sign in here" link to `#/owner`.
+- Host side: the invite and turn-off buttons are on the owner row in `#/owners` (section 7.16).

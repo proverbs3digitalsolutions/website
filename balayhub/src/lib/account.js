@@ -26,7 +26,8 @@ async function exportOrganization(orgId) {
   };
   for (const t of ['properties', 'guests', 'bookings', 'booking_payments', 'guest_registrations', 'conversations', 'messages',
     'message_templates', 'automations', 'cleaning_tasks', 'ical_feeds', 'tenants', 'leases', 'payments', 'expenses',
-    'maintenance_requests', 'files', 'billing_payments', 'invitations', 'audit_logs', 'direct_checkouts', 'balance_checkouts', 'seasons', 'unit_owners', 'guest_reviews', 'discount_codes', 'gate_passes', 'stay_deposits', 'support_tickets', 'booking_charges', 'booking_refunds', 'payment_proofs']) {
+    'maintenance_requests', 'files', 'billing_payments', 'invitations', 'audit_logs', 'direct_checkouts', 'balance_checkouts', 'seasons', 'unit_owners', 'guest_reviews', 'discount_codes', 'gate_passes', 'stay_deposits', 'support_tickets', 'booking_charges', 'booking_refunds', 'payment_proofs',
+    'owner_statements', 'owner_payouts', 'owner_reserve_entries']) {
     out[t] = await byOrg(t);
   }
   // Support conversation as the customer sees it: internal staff notes are left
@@ -44,6 +45,7 @@ async function exportOrganization(orgId) {
 // Tables purgeOrganization() clears. test/account.test.js fails if a new table
 // is added to the schema without being listed here.
 const PURGED_TABLES = [
+  'owner_sessions', 'owner_login_tokens', 'owner_reserve_entries', 'owner_payouts', 'owner_statements',
   'support_events', 'support_messages', 'support_tickets', 'push_subscriptions', 'seasons', 'gate_passes', 'stay_deposits', 'payment_proofs', 'booking_refunds', 'booking_charges', 'guest_reviews', 'balance_checkouts', 'direct_checkouts', 'discount_codes', 'automation_runs', 'messages', 'conversations', 'guest_registrations', 'files', 'cleaning_tasks', 'booking_payments',
   'billing_payments', 'receipt_counters', 'bookings', 'ical_feeds', 'guests', 'nightly_rates', 'payments', 'rent_charges',
   'leases', 'tenants', 'expenses', 'maintenance_requests', 'automations', 'message_templates', 'property_assignments',
@@ -89,6 +91,12 @@ async function purgeOrganization(orgId) {
     await run('DELETE FROM message_templates WHERE organization_id = $1');
     await run('DELETE FROM property_assignments WHERE property_id IN (SELECT property_id FROM properties WHERE organization_id = $1)');
     await run('DELETE FROM units WHERE property_id IN (SELECT property_id FROM properties WHERE organization_id = $1)');
+    // Owner portal and ledger rows point at unit_owners (and statements), so they go first.
+    await run('DELETE FROM owner_sessions WHERE organization_id = $1');
+    await run('DELETE FROM owner_login_tokens WHERE owner_id IN (SELECT owner_id FROM unit_owners WHERE organization_id = $1)');
+    await run('DELETE FROM owner_reserve_entries WHERE organization_id = $1');
+    await run('DELETE FROM owner_payouts WHERE organization_id = $1');
+    await run('DELETE FROM owner_statements WHERE organization_id = $1');
     await run('DELETE FROM unit_owners WHERE organization_id = $1');
     await run('DELETE FROM properties WHERE organization_id = $1');
     await run('DELETE FROM invitations WHERE organization_id = $1');

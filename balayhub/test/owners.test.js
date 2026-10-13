@@ -68,6 +68,7 @@ test('monthly statement: stays by check-out month, channel and cleaning fees, ma
 
 test('email the statement; managers and staff cannot see owner finances', async () => {
   outbox.length = 0;
+  await host.post(`/api/unit-owners/${ownerId}/statement/publish`, { month: '2026-09' });
   const r = await host.post(`/api/unit-owners/${ownerId}/statement/send`, { month: '2026-09' });
   assert.equal(r.status, 200, JSON.stringify(r.data));
   const m = outbox.find((x) => x.to === 'maria@example.com');

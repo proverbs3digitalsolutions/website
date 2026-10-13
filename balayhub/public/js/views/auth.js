@@ -111,6 +111,7 @@ export async function loginView(el, { query }) {
     h('div', { class: 'auth-card__foot' },
       h('p', null, h('a', { href: '#/forgot' }, 'Forgot password?')),
       h('p', null, 'New to BalayHub? ', h('a', { href: '#/signup' }, 'Create an account')),
+      h('p', null, 'Are you a unit owner? ', h('a', { href: '#/owner' }, 'Sign in here')),
       h('p', null, 'Just looking? ', h('button', { class: 'linkbtn', type: 'button', onclick: tryDemo }, 'Try the live demo'))))));
 }
 
