@@ -6,7 +6,7 @@ Last updated: 2026-10-13
 
 ## Security — do first
 
-- [ ] **Rotate the Gmail app password.** The current one has appeared in screenshots more than once.
+- [x] **Rotate the Gmail app password.** Done by the founder 2026-10-13. The current one has appeared in screenshots more than once.
   1. Go to myaccount.google.com/apppasswords (admin@proverbs3digitalsolutions.com).
   2. Delete the old password and create a new one.
   3. Paste the new one into both `SMTP_URL` and `IMAP_URL` in `deploy/.env`.
@@ -18,7 +18,7 @@ Last updated: 2026-10-13
 
 - [ ] **Backups.** Confirm the daily backup runs (`deploy/backup.sh`) and turn on Hostinger VPS snapshots.
 - [ ] **Uptime monitor.** Point UptimeRobot (free) at `https://balayhub.proverbs3digitalsolutions.com/api/health`.
-- [ ] **PayMongo.**
+- [x] **PayMongo.** BalayHub's own keys (plan payments) added by the founder 2026-10-13. Still to do: a host-side test booking (Settings → Direct booking page), then live keys.
   - Add BalayHub's own PayMongo keys (for plan payments) to `deploy/.env`.
   - Do one test booking with test keys, then switch to live keys.
 - [ ] **Confirm plan prices** (₱499 / ₱999 / ₱1,799) and the 14-day trial before launch (D-03).

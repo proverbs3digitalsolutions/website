@@ -59,6 +59,45 @@ extendTranslations({
   'Every guest gets the right message at the right time, in the language they prefer.': 'Tamang mensahe sa tamang oras para sa bawat guest, sa wikang gusto nila.',
   'Cleanings, condo paperwork and deposits handled without the group chat chaos.': 'Cleaning, papeles sa condo at deposit, ayos na nang walang gulo sa group chat.',
   'Know which unit is really earning, and keep owners and your bookkeeper happy.': 'Alamin kung aling unit ang talagang kumikita, at panatilihing masaya ang owners at bookkeeper mo.',
+  // new in BalayHub + refreshed feature lists
+  'Team & daily work': 'Team at daily work',
+  'Warnings when a channel calendar stops syncing': 'Babala kapag tumigil ang sync ng calendar ng channel',
+  'Last-minute, far-out, gap-night, event and 14+ night prices, with a preview and a lowest-price floor': 'Presyo para sa last-minute, malayo pa, gap nights, events at 14+ gabi, may preview at pinakamababang presyo',
+  'Bulk price and block changes across units': 'Sabay-sabay na pagbabago ng presyo at block sa maraming unit',
+  'Itemised bills with extra charges, and numbered receipts': 'Itemised na bill na may extra charges, at numbered receipts',
+  'Guests send GCash, Maya or bank proof; you confirm or reject it': 'Nagpapadala ang guests ng patunay ng GCash, Maya o bank transfer; ikaw ang magko-confirm o magre-reject',
+  'Cancellation policies with suggested refunds and a refund log': 'Cancellation policy na may suggested refund at refund log',
+  'Quotes with a pay link for Facebook and Messenger inquiries': 'Quote na may pay link para sa inquiries sa Facebook at Messenger',
+  'Share links by source, so you see where bookings come from': 'Share links kada source, para makita kung saan galing ang bookings',
+  'Guidebook with Wi-Fi and door code shown only around the stay': 'Guidebook na may Wi-Fi at door code na lalabas lang sa paligid ng stay',
+  'House rules accepted by the guest before they book': 'House rules na tinatanggap ng guest bago mag-book',
+  'Paid add-ons like late check-out or extra bed': 'Bayad na add-ons tulad ng late check-out o extra bed',
+  'Review links for happy guests, and codes for returning guests': 'Review links para sa masasayang guests, at codes para sa bumabalik',
+  'Cleaners see only their own jobs and pay, in Taglish': 'Nakikita lang ng cleaners ang sarili nilang trabaho at sahod, sa Taglish',
+  'Status board (dirty, clean, inspected) and inspections with scores': 'Status board (madumi, malinis, na-inspect) at inspections na may score',
+  'Damage reports that become a charge, a deposit deduction or a waiver': 'Damage reports na nagiging charge, bawas sa deposit o waived',
+  'Cleaner pay, supplies with low-stock alerts, and lost and found': 'Sahod ng cleaner, supplies na may low-stock alert, at lost and found',
+  'Work orders and recurring maintenance': 'Work orders at paulit-ulit na maintenance',
+  'Owner portal: owners sign in with an emailed link, no password': 'Owner portal: nagla-log in ang owners gamit ang link sa email, walang password',
+  'Fee types, statements you review then publish, and payout records': 'Fee types, statements na ire-review mo bago i-publish, at payout records',
+  'Repairs reserve and profit and loss for each unit': 'Repairs reserve at kita at gastos kada unit',
+  'Daily close: see the day\'s check-ins, payments and tasks, then wrap up': 'Daily close: tingnan ang check-ins, bayad at gawain ng araw, saka isara',
+  'Group bookings and moving a booking by drag and drop': 'Group bookings at paglipat ng booking sa pamamagitan ng drag and drop',
+  'Activity history on every booking': 'Activity history sa bawat booking',
+  'Assign conversations and @mention teammates': 'Mag-assign ng conversations at mag-@mention ng kakampi',
+  'Notification settings for each person': 'Notification settings kada tao',
+  'Know who did what, who is on duty and what is left for today.': 'Alamin kung sino ang gumawa ng ano, sino ang naka-duty at ano ang natitira ngayong araw.',
+  'New in BalayHub': 'Bago sa BalayHub',
+  'Built from what hosts told us they needed.': 'Binuo ayon sa sinabi ng mga host na kailangan nila.',
+  'Money done right': 'Maayos na pera', 'Itemised bills, GCash, Maya and bank proofs, deposits per listing, refunds that follow your cancellation policy.': 'Itemised na bill, patunay ng GCash, Maya at bank, deposit kada listing, refund ayon sa cancellation policy mo.',
+  'Owner portal': 'Owner portal', 'Owners sign in with an emailed link to see their statements, payouts and unit profit.': 'Nagla-log in ang owners gamit ang link sa email para makita ang statements, payouts at kita ng unit nila.',
+  'Cleaner app': 'App para sa cleaners', 'Cleaners see only their jobs and pay, with photos and checklists, in Taglish.': 'Nakikita lang ng cleaners ang trabaho at sahod nila, may litrato at checklist, sa Taglish.',
+  'Smarter prices': 'Mas matalinong presyo', 'Last-minute, far-out and gap-night rules with a preview before you save.': 'Rules para sa last-minute, malayo pa at gap nights, may preview bago i-save.',
+  'Guidebook and add-ons': 'Guidebook at add-ons', 'Wi-Fi and door code appear only around the stay. Sell late check-out and extras.': 'Lalabas lang ang Wi-Fi at door code sa paligid ng stay. Magbenta ng late check-out at extras.',
+  'Quotes for Messenger': 'Quote para sa Messenger', 'Send a price with a pay link to guests who ask on Facebook or Messenger.': 'Magpadala ng presyo na may pay link sa guests na nagtatanong sa Facebook o Messenger.',
+  'Do owners get their own login?': 'May sariling login ba ang owners?',
+  'Yes. You invite an owner and they sign in with a one-time link sent to their email. They see only their own units: published statements, payouts, repairs reserve and profit and loss. They never see your other units.': 'Oo. Mag-iimbita ka ng owner at magla-log in sila gamit ang one-time link sa email. Ang units lang nila ang nakikita: published statements, payouts, repairs reserve at kita at gastos. Hindi nila nakikita ang ibang unit mo.',
+  'Yes. Invite a manager, staff member or cleaner and choose which properties they can see. Cleaners see only their own cleaning jobs and pay, in English or Taglish. Staff never see guests\' phone numbers or email addresses.': 'Oo. Mag-invite ng manager, staff o cleaner at piliin kung aling properties ang makikita nila. Nakikita lang ng cleaners ang sarili nilang cleaning jobs at sahod, sa English o Taglish. Hindi kailanman nakikita ng staff ang phone number o email ng guests.',
   // why
   'Made for hosts in the Philippines': 'Gawa para sa mga host sa Pilipinas',
   'Foreign tools are built for other markets. BalayHub is built around how hosting works here.': 'Gawa ang foreign tools para sa ibang market. Ang BalayHub ay ginawa ayon sa takbo ng hosting dito.',
@@ -107,7 +146,6 @@ extendTranslations({
   'Online with GCash, Maya, card or GrabPay, for 1, 3 or 12 months (12 months gets 2 months free). Your plan activates right away.': 'Online gamit GCash, Maya, card o GrabPay, para sa 1, 3 o 12 buwan (libre ang 2 buwan sa 12 buwan). Agad na mag-a-activate ang plan mo.',
   'Monthly, by GCash, Maya or bank transfer. Message us when you\'re ready and we\'ll activate your plan.': 'Buwanan, sa GCash, Maya o bank transfer. Mag-message lang kapag handa ka na at ia-activate namin ang plan mo.',
   'Can my co-host or cleaner use it?': 'Puwede bang gamitin ng co-host o cleaner ko?',
-  'Yes. Invite a manager or staff member and choose which properties they can see. Staff never see guests\' phone numbers or email addresses.': 'Oo. Mag-invite ng manager o staff at piliin kung aling properties ang makikita nila. Hindi kailanman nakikita ng staff ang phone number o email ng guests.',
   'Do I need to install anything?': 'May kailangan bang i-install?',
   'No. BalayHub runs in your phone or computer browser. On a phone you can add it to your home screen like an app and get notifications.': 'Wala. Gumagana ang BalayHub sa browser ng phone o computer mo. Sa phone, puwede mo itong idagdag sa home screen na parang app at makatanggap ng notifications.',
   // final + footer
@@ -172,19 +210,28 @@ function heroCalendar() {
 const GROUPS = [
   ['calendar', 'Channels & pricing', 'Your Airbnb, Booking.com and Agoda calendars stay in sync, and prices follow weekends and Philippine holidays.', [
     'Multi-calendar for all your units and channels', 'Calendar sync with Airbnb, Booking.com, Agoda, Vrbo, Expedia and Trip.com',
-    'Weekend and PH holiday rates (Holy Week, Christmas, long weekends) applied automatically', 'Seasons, minimum nights, weekly and monthly discounts']],
+    'Weekend and PH holiday rates (Holy Week, Christmas, long weekends) applied automatically', 'Seasons, minimum nights, weekly and monthly discounts',
+    'Last-minute, far-out, gap-night, event and 14+ night prices, with a preview and a lowest-price floor', 'Bulk price and block changes across units']],
   ['cash', 'Direct bookings & payments', 'Take bookings without channel fees, and get paid straight to your own account.', [
     'Your own booking page with photos and a live availability calendar', 'Guests pay with GCash, Maya or card through your own PayMongo account',
-    'Full payment or a deposit (set per listing, default 50%), with a payment link for the balance', 'Discount codes for returning guests and quiet weeks']],
+    'Full payment or a deposit (set per listing, default 50%), with a payment link for the balance', 'Itemised bills with extra charges, and numbered receipts',
+    'Guests send GCash, Maya or bank proof; you confirm or reject it', 'Cancellation policies with suggested refunds and a refund log']],
   ['inbox', 'Guest experience', 'Every guest gets the right message at the right time, in the language they prefer.', [
-    'Guest inbox with templates and automatic messages', 'AI reply drafts in English, Tagalog or Taglish',
-    'Online check-in form: guest names and IDs before arrival', 'Private reviews after each stay, and repeat-guest and VIP flags']],
+    'Guest inbox with templates and automatic messages', 'Online check-in form: guest names and IDs before arrival',
+    'Guidebook with Wi-Fi and door code shown only around the stay', 'House rules accepted by the guest before they book',
+    'Paid add-ons like late check-out or extra bed', 'Review links for happy guests, and codes for returning guests']],
   ['sparkle', 'Operations', 'Cleanings, condo paperwork and deposits handled without the group chat chaos.', [
-    'Cleaning tasks with checklists and photos for every check-out', 'Gate pass emailed to your condo admin before each arrival',
-    'Security deposits: record, return or deduct with photos', 'Team logins for co-hosts and cleaners, phone app and notifications']],
+    'Cleaning tasks with checklists and photos for every check-out', 'Cleaners see only their own jobs and pay, in Taglish',
+    'Status board (dirty, clean, inspected) and inspections with scores', 'Damage reports that become a charge, a deposit deduction or a waiver',
+    'Cleaner pay, supplies with low-stock alerts, and lost and found', 'Work orders and recurring maintenance']],
   ['chart', 'Owners & reports', 'Know which unit is really earning, and keep owners and your bookkeeper happy.', [
     'Revenue, occupancy, average nightly rate and channel reports', 'Income summary per month and quarter for your bookkeeper',
-    'Monthly owner statements with your management fee', 'Numbered receipts and booking confirmations by email']],
+    'Owner portal: owners sign in with an emailed link, no password', 'Fee types, statements you review then publish, and payout records',
+    'Repairs reserve and profit and loss for each unit', 'Gate pass emailed to your condo admin before each arrival']],
+  ['users', 'Team & daily work', 'Know who did what, who is on duty and what is left for today.', [
+    'Team logins for co-hosts and cleaners, phone app and notifications', 'Daily close: see the day\'s check-ins, payments and tasks, then wrap up',
+    'Group bookings and moving a booking by drag and drop', 'Activity history on every booking',
+    'Assign conversations and @mention teammates', 'Notification settings for each person']],
 ];
 
 const WHY = [
@@ -194,6 +241,15 @@ const WHY = [
   ['users', 'Taglish for guests', 'Booking page, check-in form and messages in English or Taglish.'],
   ['shield', 'Data Privacy Act ready', 'Consent on every form, guest IDs deleted after the stay, export or delete your data anytime.'],
   ['cash', 'Priced in pesos', 'Simple monthly plans in pesos, paid by GCash, Maya or card. No dollar bills.'],
+];
+
+const NEWS = [
+  ['wallet', 'Money done right', 'Itemised bills, GCash, Maya and bank proofs, deposits per listing, refunds that follow your cancellation policy.'],
+  ['building', 'Owner portal', 'Owners sign in with an emailed link to see their statements, payouts and unit profit.'],
+  ['sparkle', 'Cleaner app', 'Cleaners see only their jobs and pay, with photos and checklists, in Taglish.'],
+  ['chart', 'Smarter prices', 'Last-minute, far-out and gap-night rules with a preview before you save.'],
+  ['file', 'Guidebook and add-ons', 'Wi-Fi and door code appear only around the stay. Sell late check-out and extras.'],
+  ['chat', 'Quotes for Messenger', 'Send a price with a pay link to guests who ask on Facebook or Messenger.'],
 ];
 
 const UNIT_BANDS = [['1-3', '1–3 units'], ['4-10', '4–10 units'], ['10+', 'More than 10']];
@@ -386,7 +442,13 @@ export async function landingView(el) {
           h('h2', { class: 'lp-h2' }, t('Everything a host juggles, in one place')),
           h('p', { class: 'lp-sub' }, t('Stop switching between three host apps, a spreadsheet, a notebook and a dozen chat threads.')),
           groupTabs, groupPanel)),
-      h('section', { class: 'lp-section lp-section--alt', id: 'why' },
+      h('section', { class: 'lp-section lp-section--alt', id: 'new' },
+        h('div', { class: 'lp-wrap' },
+          h('p', { class: 'lp-eyebrow lp-center' }, t('New in BalayHub')),
+          h('h2', { class: 'lp-h2' }, t('Built from what hosts told us they needed.')),
+          h('div', { class: 'lp-features' }, NEWS.map(([ic, title, text]) => h('div', { class: 'lp-feature lp-feature--card' },
+            h('span', { class: 'lp-feature__icon' }, icon(ic)), h('h3', null, t(title)), h('p', null, t(text))))))),
+      h('section', { class: 'lp-section lp-section', id: 'why' },
         h('div', { class: 'lp-wrap' },
           h('h2', { class: 'lp-h2' }, t('Made for hosts in the Philippines')),
           h('p', { class: 'lp-sub' }, t('Foreign tools are built for other markets. BalayHub is built around how hosting works here.')),
@@ -438,7 +500,8 @@ export async function landingView(el) {
             ['How do I pay for BalayHub?', pricing.online_payments
               ? 'Online with GCash, Maya, card or GrabPay, for 1, 3 or 12 months (12 months gets 2 months free). Your plan activates right away.'
               : 'Monthly, by GCash, Maya or bank transfer. Message us when you\'re ready and we\'ll activate your plan.'],
-            ['Can my co-host or cleaner use it?', 'Yes. Invite a manager or staff member and choose which properties they can see. Staff never see guests\' phone numbers or email addresses.'],
+            ['Can my co-host or cleaner use it?', 'Yes. Invite a manager, staff member or cleaner and choose which properties they can see. Cleaners see only their own cleaning jobs and pay, in English or Taglish. Staff never see guests\' phone numbers or email addresses.'],
+            ['Do owners get their own login?', 'Yes. You invite an owner and they sign in with a one-time link sent to their email. They see only their own units: published statements, payouts, repairs reserve and profit and loss. They never see your other units.'],
             ['Do I need to install anything?', 'No. BalayHub runs in your phone or computer browser. On a phone you can add it to your home screen like an app and get notifications.'],
           ].map(([q, a]) => h('details', null, h('summary', null, t(q)), h('p', null, t(a)))))),
       h('section', { class: 'lp-section lp-final' },
