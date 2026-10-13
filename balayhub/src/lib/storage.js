@@ -23,17 +23,22 @@ function checkUpload(mime, body, { imagesOnly = false } = {}) {
   return spec;
 }
 
-async function saveFile({ organizationId, recordType, recordId, body, mime, fileName, uploadedBy }) {
+async function saveFile({ organizationId, recordType, recordId, body, mime, fileName, uploadedBy, db }) {
   const spec = ALLOWED[mime];
   const name = String(fileName || '').replace(/[^\w.\- ()]/g, '_').slice(0, 150) || `upload.${spec.ext}`;
   const key = path.join(organizationId, `${crypto.randomUUID()}.${spec.ext}`);
   const full = path.resolve(config.storageDir, key);
   await fs.promises.mkdir(path.dirname(full), { recursive: true });
   await fs.promises.writeFile(full, body, { mode: 0o600 });
-  return one(
-    `INSERT INTO files (organization_id, related_record_type, related_record_id, storage_key, file_name, mime_type, size_bytes, uploaded_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING file_id, file_name, mime_type, size_bytes, uploaded_at`,
-    [organizationId, recordType, recordId, key, name, mime, body.length, uploadedBy || null]);
+  try {
+    const sql = `INSERT INTO files (organization_id, related_record_type, related_record_id, storage_key, file_name, mime_type, size_bytes, uploaded_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING file_id, file_name, mime_type, size_bytes, uploaded_at`;
+    const params = [organizationId, recordType, recordId, key, name, mime, body.length, uploadedBy || null];
+    return db ? (await db.query(sql, params)).rows[0] : await one(sql, params);
+  } catch (err) {
+    await fs.promises.unlink(full).catch(() => {}); // don't leave an orphan file
+    throw err;
+  }
 }
 
 // Permanently delete a stored file and its record.

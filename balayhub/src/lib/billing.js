@@ -92,6 +92,15 @@ const addMonths = (dateStr, n) => {
   target.setUTCDate(Math.min(d, last));
   return target.toISOString().slice(0, 10);
 };
+const lastDayOfMonth = (s) => { const [y, m] = s.split('-').map(Number); return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10); };
+// Last day of an n-month period starting on `start` (e.g. Oct 13 → Nov 12; Jan 31 → Feb 28; Mar 1 → Mar 31).
+function periodEnd(start, n) {
+  const prev = dayBefore(start);
+  const end = addMonths(prev, n);
+  return prev === lastDayOfMonth(prev) ? lastDayOfMonth(end) : end;
+}
+const addDays = (s, n) => { const x = new Date(`${s}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+const daysBetween = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000);
 const dayBefore = (s) => { const x = new Date(`${s}T00:00:00Z`); x.setUTCDate(x.getUTCDate() - 1); return x.toISOString().slice(0, 10); };
 const dayAfter = (s) => { const x = new Date(`${s}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + 1); return x.toISOString().slice(0, 10); };
 
@@ -100,12 +109,25 @@ async function markPaid(billingId, { method } = {}) {
   return tx(async (db) => {
     const { rows: [b] } = await db.query('SELECT * FROM billing_payments WHERE billing_id = $1 FOR UPDATE', [billingId]);
     if (!b || b.status === 'paid') return false;
-    const { rows: [org] } = await db.query('SELECT plan, paid_until FROM organizations WHERE organization_id = $1 FOR UPDATE', [b.organization_id]);
+    const { rows: [org] } = await db.query('SELECT plan, paid_until, trial_ends_at FROM organizations WHERE organization_id = $1 FOR UPDATE', [b.organization_id]);
     const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
     const paidUntil = org.paid_until ? String(org.paid_until).slice(0, 10) : null;
-    // Renewing early adds on to the current period; otherwise it starts today.
-    const start = paidUntil && paidUntil >= today && org.plan !== 'trial' ? dayAfter(paidUntil) : today;
-    const end = dayBefore(addMonths(start, b.months));
+    let start = today;
+    let bonusDays = 0;
+    if (org.plan === 'trial' && org.trial_ends_at && new Date(org.trial_ends_at) > new Date()) {
+      // Paying during the trial keeps the remaining trial days.
+      start = new Date(new Date(org.trial_ends_at).getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    } else if (paidUntil && paidUntil >= today && PLANS[org.plan]?.price) {
+      if (org.plan === b.plan) {
+        start = dayAfter(paidUntil); // renewing early adds on to the current period
+      } else {
+        // Changing plan: the new plan starts today, and the unused days of the old
+        // plan are converted at the two plans' prices.
+        const remaining = daysBetween(today, paidUntil) + 1;
+        bonusDays = Math.floor((remaining * PLANS[org.plan].price) / PLANS[b.plan].price);
+      }
+    }
+    const end = addDays(periodEnd(start, b.months), bonusDays);
     await db.query(
       `UPDATE billing_payments SET status = 'paid', paid_at = now(), period_start = $2, period_end = $3, payment_method = $4 WHERE billing_id = $1`,
       [b.billing_id, start, end, method || null]);
@@ -119,7 +141,9 @@ async function markPaid(billingId, { method } = {}) {
 // Ask PayMongo for the checkout's real status and apply it.
 async function refresh(billingId) {
   const b = await one('SELECT * FROM billing_payments WHERE billing_id = $1', [billingId]);
-  if (!b || b.status !== 'pending' || !b.checkout_id || !enabled()) return b?.status || null;
+  // Expired rows are checked too: a payment can complete just before expiry.
+  if (!b || !['pending', 'expired'].includes(b.status) || !b.checkout_id || !enabled()) return b?.status || null;
+  await query('UPDATE billing_payments SET last_checked_at = now() WHERE billing_id = $1', [b.billing_id]);
   const data = await paymongo('GET', `/checkout_sessions/${encodeURIComponent(b.checkout_id)}`);
   const a = data?.data?.attributes || {};
   const paidPayments = (a.payments || []).filter((p) => p?.attributes?.status === 'paid');
@@ -135,7 +159,7 @@ async function refresh(billingId) {
     return 'paid';
   }
   if (paid && !amountOk) console.error(`[billing] amount mismatch on ${b.billing_id}: expected ${expected}, got ${paidAmount || listed}`);
-  if (a.status === 'expired') {
+  if (a.status === 'expired' || b.status === 'expired') {
     await query(`UPDATE billing_payments SET status = 'expired' WHERE billing_id = $1 AND status = 'pending'`, [b.billing_id]);
     return 'expired';
   }
@@ -145,10 +169,13 @@ async function refresh(billingId) {
 // PayMongo-Signature: "t=<timestamp>,te=<test sig>,li=<live sig>", where each
 // signature is HMAC-SHA256(secret, "<t>.<raw body>") in hex.
 function verifySignature(header, rawBody, livemode) {
-  if (!config.paymongoWebhookSecret) return true; // optional; we re-check with PayMongo anyway
+  // Without the signing secret, webhooks are ignored; the 10-minute check still applies payments.
+  if (!config.paymongoWebhookSecret) return false;
   const parts = Object.fromEntries(String(header || '').split(',').map((p) => p.split('=').map((x) => x.trim())));
   const sig = livemode ? parts.li : parts.te;
   if (!parts.t || !sig) return false;
+  // Reject very old signatures (PayMongo retries within about a day).
+  if (Math.abs(Date.now() / 1000 - Number(parts.t)) > 3 * 86400) return false;
   const expected = crypto.createHmac('sha256', config.paymongoWebhookSecret).update(`${parts.t}.${rawBody}`).digest('hex');
   return sig.length === expected.length && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
 }
@@ -156,13 +183,24 @@ function verifySignature(header, rawBody, livemode) {
 // Scheduler: catch up on payments whose webhook never arrived.
 async function reconcile() {
   if (!enabled()) return 0;
-  await query(`UPDATE billing_payments SET status = 'expired' WHERE status = 'pending' AND created_at < now() - interval '2 days'`);
-  const { rows } = await query(`SELECT billing_id FROM billing_payments WHERE status = 'pending' AND checkout_id IS NOT NULL ORDER BY created_at LIMIT 20`);
+  // Least recently checked first, so abandoned checkouts can't starve new ones.
+  const { rows } = await query(
+    `SELECT billing_id FROM billing_payments WHERE status = 'pending' AND checkout_id IS NOT NULL
+      ORDER BY last_checked_at NULLS FIRST, created_at DESC LIMIT 20`);
   let paid = 0;
   for (const r of rows) {
     try { if (await refresh(r.billing_id) === 'paid') paid += 1; } catch { /* try again next time */ }
   }
+  // Give up on checkouts older than 2 days, after one last check each.
+  const { rows: old } = await query(
+    `SELECT billing_id FROM billing_payments WHERE status = 'pending' AND created_at < now() - interval '2 days' LIMIT 20`);
+  for (const r of old) {
+    let st = 'pending';
+    try { st = await refresh(r.billing_id); } catch { continue; }
+    if (st === 'paid') paid += 1;
+    else await query(`UPDATE billing_payments SET status = 'expired' WHERE billing_id = $1 AND status = 'pending'`, [r.billing_id]);
+  }
   return paid;
 }
 
-module.exports = { enabled, price, MONTH_OPTIONS, createCheckout, refresh, markPaid, verifySignature, reconcile, addMonths };
+module.exports = { periodEnd, enabled, price, MONTH_OPTIONS, createCheckout, refresh, markPaid, verifySignature, reconcile, addMonths };

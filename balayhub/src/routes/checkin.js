@@ -8,7 +8,7 @@
 const crypto = require('crypto');
 const express = require('express');
 const config = require('../config');
-const { query, one } = require('../db');
+const { query, one, tx } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
 const { validate, uuidParam } = require('../lib/validate');
 const { audit } = require('../lib/audit');
@@ -63,6 +63,8 @@ router.post('/reservations/:id/checkin/new-link', managers, ah(async (req, res) 
 // ---------------------------------------------------------------- guest side (public, by private link)
 const guestLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 60, key: (req) => `checkin|${req.ip}` });
 publicRouter.use('/public/checkin', guestLimiter);
+// Per link: at most 30 photo uploads an hour, whatever the IP.
+const uploadLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 30, key: (req) => `checkin-upload|${req.params.token}` });
 
 async function loadByToken(token) {
   if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{20,40}$/.test(token)) throw notFound('This check-in link is not valid. Please ask your host for a new one.');
@@ -132,21 +134,26 @@ publicRouter.post('/public/checkin/:token', express.json({ limit: '50kb' }), ah(
   res.json({ ok: true, registration_id: r.registration_id });
 }));
 
-publicRouter.post('/public/checkin/:token/id', express.raw({ type: ['image/jpeg', 'image/png', 'image/webp'], limit: config.maxUploadBytes }), ah(async (req, res) => {
+publicRouter.post('/public/checkin/:token/id', uploadLimiter, express.raw({ type: ['image/jpeg', 'image/png', 'image/webp'], limit: config.maxUploadBytes }), ah(async (req, res) => {
   const b = await loadByToken(req.params.token);
   if (b.closed) throw new HttpError(409, 'This stay has ended or was cancelled, so the form is closed.', { code: 'CLOSED' });
   if (b.is_demo) throw new HttpError(403, 'This is a demo.', { code: 'DEMO_READ_ONLY' });
-  const r = await one('SELECT registration_id FROM guest_registrations WHERE booking_id = $1', [b.booking_id]);
-  if (!r) throw new HttpError(409, 'Please save the form first, then add the ID photos.', { code: 'NO_FORM' });
   const mime = String(req.get('Content-Type') || '').split(';')[0].trim();
   if (!storage.checkUpload(mime, req.body, { imagesOnly: true })) throw new HttpError(415, 'Upload a photo (JPG, PNG or WEBP) up to 10 MB.', { code: 'UNSUPPORTED_FILE' });
-  const { n } = await one(`SELECT COUNT(*)::int AS n FROM files WHERE related_record_type = 'registration' AND related_record_id = $1`, [r.registration_id]);
-  if (n >= MAX_IDS) throw new HttpError(409, `You can upload up to ${MAX_IDS} ID photos.`, { code: 'TOO_MANY' });
-  const file = await storage.saveFile({
-    organizationId: b.organization_id, recordType: 'registration', recordId: r.registration_id, body: req.body, mime,
-    fileName: `guest-id-${n + 1}.${storage.ALLOWED[mime].ext}`,
+  // Count and insert under a lock on the registration so the cap can't be raced.
+  const out = await tx(async (db) => {
+    const { rows: [r] } = await db.query('SELECT registration_id FROM guest_registrations WHERE booking_id = $1 FOR UPDATE', [b.booking_id]);
+    if (!r) throw new HttpError(409, 'Please save the form first, then add the ID photos.', { code: 'NO_FORM' });
+    const { rows: [{ n }] } = await db.query(`SELECT COUNT(*)::int AS n FROM files WHERE related_record_type = 'registration' AND related_record_id = $1`, [r.registration_id]);
+    if (n >= MAX_IDS) throw new HttpError(409, `You can upload up to ${MAX_IDS} ID photos.`, { code: 'TOO_MANY' });
+    const file = await storage.saveFile({
+      organizationId: b.organization_id, recordType: 'registration', recordId: r.registration_id, body: req.body, mime,
+      fileName: `guest-id-${n + 1}.${storage.ALLOWED[mime].ext}`, db,
+    });
+    await db.query('UPDATE guest_registrations SET ids_purged_at = NULL WHERE registration_id = $1', [r.registration_id]);
+    return { id_count: n + 1, file_id: file.file_id };
   });
-  res.status(201).json({ ok: true, id_count: n + 1, file_id: file.file_id });
+  res.status(201).json({ ok: true, ...out });
 }));
 
 async function noteToHost(bookingId, text) {
@@ -160,12 +167,16 @@ async function noteToHost(bookingId, text) {
   } catch (err) { console.error('[checkin] note failed:', err.message); }
 }
 
-// Scheduler: delete guest ID photos some days after check-out (privacy).
+// Scheduler: delete guest ID photos some days after check-out (privacy). Works
+// from the files themselves, so photos added later are deleted too. A stay
+// cancelled by channel sync can come back, so cancellations wait 3 days.
 async function purgeOldIds() {
   const days = config.guestIdRetentionDays;
   const { rows } = await query(
-    `SELECT r.registration_id FROM guest_registrations r JOIN bookings b USING (booking_id)
-      WHERE r.ids_purged_at IS NULL AND (b.check_out < ${TODAY} - $1::int OR b.status = 'cancelled')`, [days]);
+    `SELECT DISTINCT r.registration_id FROM guest_registrations r JOIN bookings b USING (booking_id)
+       JOIN files f ON f.related_record_type = 'registration' AND f.related_record_id = r.registration_id
+      WHERE b.check_out < ${TODAY} - $1::int
+         OR (b.status = 'cancelled' AND b.cancelled_at < now() - interval '3 days')`, [days]);
   for (const r of rows) {
     const { rows: files } = await query(`SELECT * FROM files WHERE related_record_type = 'registration' AND related_record_id = $1`, [r.registration_id]);
     for (const f of files) await storage.deleteFile(f);

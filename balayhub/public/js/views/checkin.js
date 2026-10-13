@@ -69,7 +69,9 @@ export async function guestCheckinView(el, { params }) {
   const initial = r?.guests?.length ? r.guests : Array.from({ length: Math.max(0, (s.num_guests || 1) - 1) }, () => '');
   initial.forEach((g) => addGuest(g));
 
-  const photos = h('input', { type: 'file', accept: 'image/*', multiple: true, class: 'input', capture: 'environment', 'aria-label': 'ID photos' });
+  // No `capture`: guests must be able to pick existing photos from their gallery.
+  const photos = h('input', { type: 'file', accept: 'image/*', multiple: true, class: 'input', 'aria-label': 'ID photos' });
+  const uploaded = new Set(); // files already sent, so a retry doesn't upload them twice
   const progress = h('div', { class: 'muted small', 'aria-live': 'polite' });
   const formError = h('div');
   const submit = h('button', { class: 'btn btn--primary btn--block', type: 'submit' }, r ? 'Save changes' : 'Submit registration');
@@ -120,11 +122,12 @@ export async function guestCheckinView(el, { params }) {
     try {
       submit.textContent = 'Saving…';
       await post(`/public/checkin/${encodeURIComponent(token)}`, payload);
-      const files = [...photos.files];
+      const files = [...photos.files].filter((f) => !uploaded.has(f));
       for (const [i, f] of files.entries()) {
         progress.textContent = `Uploading ID photo ${i + 1} of ${files.length}…`;
         const blob = await shrinkImage(f);
         await api('POST', `/public/checkin/${encodeURIComponent(token)}/id`, undefined, { rawBody: blob, headers: { 'Content-Type': blob.type || 'image/jpeg' } });
+        uploaded.add(f);
       }
       progress.textContent = '';
       el.replaceChildren(page(header, h('div', { class: 'card gc__done' },
@@ -184,7 +187,7 @@ export async function checkinCard(bookingId, rerender) {
       h('dt', null, 'Plate number'), h('dd', null, r.vehicle_plate || '—'),
       r.notes && [h('dt', null, 'Notes'), h('dd', { style: { whiteSpace: 'pre-wrap' } }, r.notes)],
       h('dt', null, 'Submitted'), h('dd', null, fmtDateTime(r.updated_at || r.submitted_at))),
-    r && (r.ids_purged_at
+    r && (r.ids_purged_at && !d.files.length
       ? h('p', { class: 'muted small' }, `ID photos were deleted ${fmtDateTime(r.ids_purged_at)} (after the stay).`)
       : d.files.length
         ? h('div', { class: 'gc__ids' }, d.files.map((f) => h('a', { href: `/api/files/${f.file_id}`, target: '_blank', rel: 'noopener' },

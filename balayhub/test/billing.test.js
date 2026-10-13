@@ -125,3 +125,46 @@ test('reconcile catches payments without a webhook; staff/others cannot touch bi
   await demo.post('/api/auth/demo');
   assert.equal((await demo.post('/api/billing/checkout', { plan: 'pro', months: '1' })).status, 403);
 });
+
+test('review fixes: plan switch converts unused days; trial days kept; no month-end drift; comped can\'t pay', async () => {
+  assert.equal(billing.periodEnd('2027-01-31', 1), '2027-02-28');
+  assert.equal(billing.periodEnd('2027-03-01', 1), '2027-03-31');
+  assert.equal(billing.periodEnd('2027-04-01', 1), '2027-04-30');
+  assert.equal(billing.periodEnd('2026-10-13', 1), '2026-11-12');
+  assert.equal(billing.periodEnd('2026-10-13', 12), '2027-10-12');
+
+  const c = await ownerAccount(srv.base, 'switch@example.com', 'Switch Co');
+  const orgSql = `SELECT plan, paid_until::text, trial_ends_at FROM organizations WHERE name = 'Switch Co'`;
+  // Paying during the trial starts the paid period when the trial ends.
+  const trialEnd = (await sql(orgSql))[0].trial_ends_at;
+  const r1 = await c.post('/api/billing/checkout', { plan: 'starter', months: '12' });
+  pay(await checkoutIdOf(r1.data.billing_id), 499000);
+  await c.post(`/api/billing/${r1.data.billing_id}/refresh`);
+  const p1 = (await sql(`SELECT period_start::text, period_end::text FROM billing_payments WHERE billing_id = $1`, [r1.data.billing_id]))[0];
+  assert.equal(p1.period_start, new Date(new Date(trialEnd).getTime() + 8 * 3600e3).toISOString().slice(0, 10));
+  // Switching Starter (12 months left) → Pro 1 month: the unused Starter days become far fewer Pro days.
+  const r2 = await c.post('/api/billing/checkout', { plan: 'pro', months: '1' });
+  pay(await checkoutIdOf(r2.data.billing_id), 179900);
+  await c.post(`/api/billing/${r2.data.billing_id}/refresh`);
+  const org = (await sql(orgSql))[0];
+  assert.equal(org.plan, 'pro');
+  const daysLeft = Math.round((Date.parse(org.paid_until) - Date.now()) / 86400000);
+  // ~1 month of Pro plus ~390 Starter days × 499/1799 ≈ 108 days, nowhere near 13 months.
+  assert.ok(daysLeft > 120 && daysLeft < 160, `paid days ${daysLeft}`);
+
+  await sql(`UPDATE organizations SET plan = 'comped' WHERE name = 'Switch Co'`);
+  assert.equal((await c.post('/api/billing/checkout', { plan: 'pro', months: '1' })).status, 409);
+});
+
+test('review fixes: a payment completed just before expiry is still applied', async () => {
+  const r = await owner.post('/api/billing/checkout', { plan: 'growth', months: '1' });
+  await sql(`UPDATE billing_payments SET created_at = now() - interval '3 days' WHERE billing_id = $1`, [r.data.billing_id]);
+  pay(await checkoutIdOf(r.data.billing_id), 99900);
+  await billing.reconcile();
+  assert.equal((await sql('SELECT status FROM billing_payments WHERE billing_id = $1', [r.data.billing_id]))[0].status, 'paid');
+  // And one marked expired earlier is picked up on refresh.
+  const r2 = await owner.post('/api/billing/checkout', { plan: 'growth', months: '1' });
+  await sql(`UPDATE billing_payments SET status = 'expired' WHERE billing_id = $1`, [r2.data.billing_id]);
+  pay(await checkoutIdOf(r2.data.billing_id), 99900);
+  assert.equal((await owner.post(`/api/billing/${r2.data.billing_id}/refresh`)).data.status, 'paid');
+});

@@ -7,7 +7,7 @@ const express = require('express');
 const { query } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
 const { validate, uuidParam } = require('../lib/validate');
-const { requireRole } = require('../lib/auth');
+const { requireRole, rateLimit } = require('../lib/auth');
 const { PLANS, PUBLIC_PLANS } = require('../lib/plans');
 const billing = require('../lib/billing');
 
@@ -29,7 +29,10 @@ router.get('/billing', owners, ah(async (req, res) => {
   });
 }));
 
-router.post('/billing/checkout', owners, ah(async (req, res) => {
+const checkoutLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 15, key: (req) => `checkout|${req.user.organization_id}` });
+
+router.post('/billing/checkout', owners, checkoutLimiter, ah(async (req, res) => {
+  if (req.user.plan === 'comped') throw new HttpError(409, 'Your workspace is on a complimentary plan, so there is nothing to pay.', { code: 'COMPED' });
   if (!billing.enabled()) throw new HttpError(409, 'Online payment is not set up yet. Please pay by GCash or bank transfer and contact us.', { code: 'BILLING_OFF' });
   const body = validate(req.body, {
     plan: { type: 'enum', values: PUBLIC_PLANS, required: true, label: 'Plan' },

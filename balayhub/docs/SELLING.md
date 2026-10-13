@@ -21,7 +21,11 @@ To change prices or limits, edit `src/lib/plans.js` and deploy. Existing custome
 ## Getting paid
 
 ### Online, automatic (PayMongo): recommended
-Customers open **Settings → Plan & billing**, pick a plan and 1, 3 or 12 months (12 months = 2 months free), and pay on PayMongo's secure page with **GCash, Maya, card or GrabPay**. The plan switches on and **Paid until** moves forward automatically. Paying early adds time on top of the current period. Payments are listed in the customer's Settings, and your Admin page shows the new plan and Paid-until date.
+Customers open **Settings → Plan & billing**, pick a plan and 1, 3 or 12 months (12 months = 2 months free), and pay on PayMongo's secure page with **GCash, Maya, card or GrabPay**. The plan switches on and **Paid until** moves forward automatically:
+- **Renewing the same plan early** adds the time on top of the current period.
+- **Switching plans** starts the new plan today, and unused days of the old plan are converted at the two plans' prices (for example, 30 unused Pro days become about 108 Starter days).
+- **Paying during the free trial** keeps the remaining trial days; the paid period starts when the trial ends.
+- Complimentary workspaces don't pay. Payments are listed in the customer's Settings, and your Admin page shows the new plan and Paid-until date.
 
 One-time setup:
 1. Sign up at **https://dashboard.paymongo.com/** with your business details and complete verification (you need a DTI or SEC registration, a valid ID and a bank account for payouts). You can test right away in **test mode**.
@@ -40,7 +44,7 @@ One-time setup:
 
 > 🔒 Both keys are passwords. Never paste them in chats or screenshots; they go only in `deploy/.env`.
 
-How it stays safe: BalayHub never trusts a payment just because a browser or webhook says so. It always asks PayMongo directly (with your secret key) whether the checkout was paid, and checks the amount. A background check every 10 minutes also catches any payment whose webhook was missed.
+How it stays safe: BalayHub never trusts a payment just because a browser or webhook says so. It always asks PayMongo directly (with your secret key) whether the checkout was paid, and checks the amount. A background check every 10 minutes also catches any payment whose webhook was missed. Webhooks are only acted on when `PAYMONGO_WEBHOOK_SECRET` is set and the signature matches; without it, payments still go through on the customer's return to BalayHub or within 10 minutes.
 
 PayMongo deducts a fee from each payment; check their current rates on their pricing page.
 

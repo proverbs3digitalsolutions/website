@@ -129,3 +129,23 @@ test('replacing the link kills the old one; form closes after the stay; IDs are 
 test('checkin_link variable is listed for templates', () => {
   assert.ok(messaging.VARIABLE_NAMES.includes('checkin_link'));
 });
+
+test('review fixes: ID photo cap holds under parallel uploads; purge waits for cancellations and catches later photos', async () => {
+  const r2 = (await owner.post('/api/reservations', { unit_id: unit.unit_id, check_in: d(20), check_out: d(22), guest_name: 'Racer', guest_email: 'r@example.com' })).data.reservation;
+  const link2 = (await owner.get(`/api/reservations/${r2.booking_id}/checkin`)).data.link;
+  const t2 = link2.split('/checkin/')[1];
+  const g = client(srv.base);
+  await g.post(`/api/public/checkin/${t2}`, { lead_name: 'Racer', phone: '09171112222', consent: true });
+  const results = await Promise.all(Array.from({ length: 25 }, () => g.post(`/api/public/checkin/${t2}/id`, PNG, { 'Content-Type': 'image/png' })));
+  const stored = await sql(`SELECT COUNT(*)::int AS n FROM files f JOIN guest_registrations r ON r.registration_id = f.related_record_id WHERE r.booking_id = $1`, [r2.booking_id]);
+  assert.equal(stored[0].n, 12);
+  assert.ok(results.some((x) => x.status === 409));
+
+  // A fresh cancellation (e.g. a channel sync blip) does not delete IDs yet.
+  await sql(`UPDATE bookings SET status = 'cancelled', cancelled_at = now() WHERE booking_id = $1`, [r2.booking_id]);
+  await purgeOldIds();
+  assert.equal((await sql(`SELECT COUNT(*)::int AS n FROM files WHERE related_record_type = 'registration'`))[0].n, 12);
+  await sql(`UPDATE bookings SET cancelled_at = now() - interval '4 days' WHERE booking_id = $1`, [r2.booking_id]);
+  await purgeOldIds();
+  assert.equal((await sql(`SELECT COUNT(*)::int AS n FROM files WHERE related_record_type = 'registration'`))[0].n, 0);
+});
