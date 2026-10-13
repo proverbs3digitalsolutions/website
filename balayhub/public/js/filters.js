@@ -1,0 +1,138 @@
+// Filter bar used by every list page: a search box, quick filters, a
+// "More filters" panel, chips for what's active, Clear all, and memory of each
+// person's last filters per page (this browser only).
+//
+//   const f = initFilters('reservations', query, { view: 'upcoming', q: '', channel: '' });
+//   const bar = filterBar({ key: 'reservations', values: f, defaults, search: {...}, fields: [...], more: [...], onChange: load });
+//
+// Field: { name, label, type: 'select' | 'date' | 'daterange' | 'number' | 'check', options: [[value, text]], all: 'All …' }
+// A daterange field uses `${name}_from` / `${name}_to` (or from/to keys given as `keys`).
+
+import { h, fmtDate } from './ui.js';
+import { state } from './app.js';
+
+const storeKey = (key) => `bh-filters:${state.user?.user_id || 'anon'}:${key}`;
+
+// URL query wins (shared links), then this person's last filters, then defaults.
+export function initFilters(key, query, defaults) {
+  const urlHas = Object.keys(defaults).some((k) => query[k] !== undefined && query[k] !== '');
+  let saved = {};
+  if (!urlHas) { try { saved = JSON.parse(localStorage.getItem(storeKey(key))) || {}; } catch { saved = {}; } }
+  const out = { ...defaults };
+  for (const k of Object.keys(defaults)) {
+    const v = urlHas ? query[k] : saved[k];
+    if (v !== undefined && v !== null) out[k] = String(v);
+  }
+  return out;
+}
+
+export function rememberFilters(key, values) {
+  try { localStorage.setItem(storeKey(key), JSON.stringify(values)); } catch { /* ignore */ }
+}
+
+// Only the values that differ from the defaults (for URLs and "is anything set?").
+export function changed(values, defaults) {
+  return Object.fromEntries(Object.entries(values).filter(([k, v]) => String(v ?? '') !== String(defaults[k] ?? '')));
+}
+
+function rangeKeys(f) { return f.keys || [`${f.name}_from`, `${f.name}_to`]; }
+
+function control(f, values, emit) {
+  const id = `flt-${f.name}-${Math.random().toString(36).slice(2, 6)}`;
+  if (f.type === 'daterange') {
+    const [a, b] = rangeKeys(f);
+    const from = h('input', { class: 'input', type: 'date', id, value: values[a] || '', 'aria-label': `${f.label} from` });
+    const to = h('input', { class: 'input', type: 'date', value: values[b] || '', 'aria-label': `${f.label} to` });
+    from.addEventListener('change', () => { values[a] = from.value; emit(); });
+    to.addEventListener('change', () => { values[b] = to.value; emit(); });
+    return { el: h('div', { class: 'flt__field flt__field--range' }, h('label', { for: id }, f.label), h('div', { class: 'flt__range' }, from, h('span', { 'aria-hidden': 'true' }, '–'), to)), sync: () => { from.value = values[a] || ''; to.value = values[b] || ''; } };
+  }
+  if (f.type === 'check') {
+    const box = h('input', { type: 'checkbox', id, checked: values[f.name] === '1' });
+    box.addEventListener('change', () => { values[f.name] = box.checked ? '1' : ''; emit(); });
+    return { el: h('label', { class: 'check flt__check', for: id }, box, h('span', null, f.label)), sync: () => { box.checked = values[f.name] === '1'; } };
+  }
+  if (f.type === 'number' || f.type === 'date') {
+    const input = h('input', { class: 'input', id, type: f.type, value: values[f.name] || '', min: f.min, step: f.step, placeholder: f.placeholder, inputmode: f.type === 'number' ? 'decimal' : null });
+    input.addEventListener('change', () => { values[f.name] = input.value; emit(); });
+    return { el: h('div', { class: 'flt__field' }, h('label', { for: id }, f.label), input), sync: () => { input.value = values[f.name] || ''; } };
+  }
+  const sel = h('select', { class: 'input', id, 'aria-label': f.label },
+    f.all !== false && h('option', { value: '' }, f.all || `All`),
+    (f.options || []).map(([v, t]) => h('option', { value: v, selected: String(values[f.name] ?? '') === String(v) }, t)));
+  sel.addEventListener('change', () => { values[f.name] = sel.value; emit(); });
+  return { el: f.inline ? sel : h('div', { class: 'flt__field' }, h('label', { for: id }, f.label), sel), sync: () => { sel.value = values[f.name] ?? ''; } };
+}
+
+function chipText(f, values) {
+  if (f.type === 'daterange') {
+    const [a, b] = rangeKeys(f);
+    if (!values[a] && !values[b]) return null;
+    return `${f.label}: ${values[a] ? fmtDate(values[a]) : '…'} – ${values[b] ? fmtDate(values[b]) : '…'}`;
+  }
+  const v = values[f.name];
+  if (!v) return null;
+  if (f.type === 'check') return f.label;
+  if (!f.type || f.type === 'select') return `${f.label}: ${(f.options || []).find(([k]) => String(k) === String(v))?.[1] || v}`;
+  return `${f.label}: ${f.type === 'date' ? fmtDate(v) : v}`;
+}
+
+function clearField(f, values, defaults) {
+  if (f.type === 'daterange') rangeKeys(f).forEach((k) => { values[k] = defaults[k] ?? ''; });
+  else values[f.name] = defaults[f.name] ?? '';
+}
+
+/**
+ * Returns the bar element. `quick` fields sit in the toolbar; `more` fields
+ * open under "More filters". Calls onChange() after any change (debounced
+ * for search), and remembers the values under `key`.
+ */
+export function filterBar({ key, values, defaults, search, quick = [], more = [], onChange, extra }) {
+  const all = [...quick, ...more];
+  const chips = h('div', { class: 'flt__chips', 'aria-live': 'polite' });
+  const moreBtn = more.length ? h('button', { type: 'button', class: 'btn btn--secondary flt__more', 'aria-expanded': 'false' }) : null;
+  const panel = more.length ? h('div', { class: 'flt__panel card card--soft', hidden: true }) : null;
+  const controls = [];
+  let searchInput;
+
+  const activeMore = () => more.filter((f) => chipText(f, values)).length;
+  function paint() {
+    if (moreBtn) moreBtn.replaceChildren('More filters', activeMore() ? h('span', { class: 'flt__count' }, String(activeMore())) : '');
+    const active = all.map((f) => [f, chipText(f, values)]).filter(([f, t]) => t && !(f.type !== 'daterange' && String(values[f.name] ?? '') === String(defaults[f.name] ?? '')));
+    const q = search && values[search.name || 'q'];
+    chips.replaceChildren(
+      ...(q ? [h('button', { type: 'button', class: 'flt__chip', 'aria-label': `Remove search ${q}`, onclick: () => { values[search.name || 'q'] = ''; searchInput.value = ''; emit(); } }, `“${q}”`, h('span', { 'aria-hidden': 'true' }, ' ×'))] : []),
+      ...active.map(([f, t]) => h('button', { type: 'button', class: 'flt__chip', 'aria-label': `Remove filter ${t}`, onclick: () => { clearField(f, values, defaults); controls.forEach((c) => c.sync()); emit(); } }, t, h('span', { 'aria-hidden': 'true' }, ' ×'))),
+      (q || active.length > 1) ? h('button', { type: 'button', class: 'flt__clear', onclick: () => clearAll() }, 'Clear all') : '');
+  }
+  function emit() { rememberFilters(key, values); paint(); onChange(); }
+  function clearAll() {
+    for (const k of Object.keys(defaults)) values[k] = defaults[k];
+    if (searchInput) searchInput.value = values[search.name || 'q'] || '';
+    controls.forEach((c) => c.sync());
+    emit();
+  }
+
+  let searchEl = null;
+  if (search) {
+    let t;
+    searchInput = h('input', { class: 'input', type: 'search', value: values[search.name || 'q'] || '', placeholder: search.placeholder || 'Search…', 'aria-label': search.placeholder || 'Search' });
+    searchInput.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { values[search.name || 'q'] = searchInput.value.trim(); emit(); }, 300); });
+    searchEl = h('div', { class: 'search' }, searchInput);
+  }
+  const quickEls = quick.map((f) => { const c = control({ ...f, inline: f.type === 'select' || !f.type }, values, emit); controls.push(c); return c.el; });
+  if (panel) {
+    panel.append(h('div', { class: 'flt__grid' }, more.map((f) => { const c = control({ type: 'select', ...f }, values, emit); controls.push(c); return c.el; })),
+      h('div', { class: 'flt__actions' }, h('button', { type: 'button', class: 'btn btn--secondary btn--sm', onclick: () => clearAll() }, 'Reset filters'),
+        h('button', { type: 'button', class: 'btn btn--primary btn--sm', onclick: () => toggle(false) }, 'Done')));
+    if (activeMore()) panel.hidden = false;
+  }
+  function toggle(open) {
+    panel.hidden = !open;
+    moreBtn.setAttribute('aria-expanded', String(open));
+  }
+  moreBtn?.addEventListener('click', () => toggle(panel.hidden));
+  if (panel && !panel.hidden) moreBtn.setAttribute('aria-expanded', 'true');
+  paint();
+  return h('div', { class: 'flt' }, h('div', { class: 'toolbar flt__bar' }, extra, searchEl, quickEls, moreBtn), panel, chips);
+}

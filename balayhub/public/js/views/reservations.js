@@ -5,6 +5,7 @@ import {
   h, icon, peso, fmtDate, fmtDateTime, badge, options, field, formModal, confirmDialog, emptyState, searchBox, toast, todayManila, openModal,
 } from '../ui.js';
 import { state, navigate } from '../app.js';
+import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 import { messageGuest } from './inbox.js';
 import { checkinCard } from './checkin.js';
 import { stars } from './guestcare.js';
@@ -129,32 +130,36 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
 // ---------------------------------------------------------------- list
 export async function reservationsView(el, { query }) {
   const canManage = state.user.role !== 'staff';
-  const filters = { view: VIEWS.some(([v]) => v === query.view) ? query.view : 'upcoming', q: query.q || '', channel: query.channel || '' };
+  const defaults = { view: 'upcoming', q: '', channel: '', property_id: '', unit_id: '', payment: '', guest: '', from: '', to: '', out_from: '', out_to: '', min_nights: '', min_guests: '', checkin_form: '', sort: '' };
+  const filters = initFilters('reservations', query, defaults);
+  if (!VIEWS.some(([v]) => v === filters.view)) filters.view = 'upcoming';
+  const [{ properties }, { units }] = await Promise.all([get('/properties'), get('/units')]);
   const listBox = h('div', { class: 'card' });
   const viewSelect = h('select', { class: 'input', 'aria-label': 'Saved view' }, VIEWS.map(([v, t]) => h('option', { value: v, selected: v === filters.view }, t)));
-  const channelSelect = h('select', { class: 'input', 'aria-label': 'Channel' }, h('option', { value: '' }, 'All channels'),
-    Object.entries(CHANNEL_LABEL).map(([v, t]) => h('option', { value: v, selected: v === filters.channel }, t)));
   const exportLink = h('a', { class: 'btn btn--secondary', download: '' }, 'Export CSV');
   const side = h('nav', { class: 'saved-views', 'aria-label': 'Saved views' });
+  const stUnits = units.filter((u) => u.nightly_rate !== null && u.nightly_rate !== undefined);
 
   async function load() {
-    history.replaceState(null, '', `#/reservations${qs({ view: filters.view === 'upcoming' ? '' : filters.view, q: filters.q, channel: filters.channel })}`);
-    exportLink.href = `/api/reservations/export${qs(filters)}`;
+    history.replaceState(null, '', `#/reservations${qs(changed(filters, { ...defaults, view: '' }))}`);
+    exportLink.href = `/api/reservations/export${qs(changed(filters, defaults))}&view=${filters.view}`;
     viewSelect.value = filters.view;
-    side.replaceChildren(...VIEWS.map(([v, t]) => h('button', { type: 'button', 'aria-current': v === filters.view ? 'true' : null, onclick: () => { filters.view = v; load(); } }, t)));
-    const { reservations } = await get(`/reservations${qs(filters)}`);
+    side.replaceChildren(...VIEWS.map(([v, t]) => h('button', { type: 'button', 'aria-current': v === filters.view ? 'true' : null, onclick: () => { filters.view = v; rememberFilters('reservations', filters); load(); } }, t)));
+    const { reservations } = await get(`/reservations${qs(changed(filters, { ...defaults, view: '' }))}`);
+    const filtered = Object.keys(changed(filters, defaults)).some((k) => k !== 'view' && k !== 'sort');
     if (!reservations.length) {
       listBox.replaceChildren(emptyState({
         iconName: 'inbox',
-        title: filters.q || filters.channel ? 'No results found' : 'Nothing here yet',
-        text: filters.q || filters.channel ? 'Try clearing the search or channel filter.' : 'Reservations you add, or import from Airbnb/Booking.com, appear here.',
-        action: (filters.q || filters.channel) ? h('button', { class: 'btn btn--secondary', onclick: () => { filters.q = ''; filters.channel = ''; channelSelect.value = ''; search.querySelector('input').value = ''; load(); } }, 'Clear filters')
-          : canManage && h('button', { class: 'btn btn--primary', onclick: () => newReservationModal({ onSaved: load }) }, icon('plus'), 'New reservation'),
+        title: filtered ? 'No results found' : 'Nothing here yet',
+        text: filtered ? 'Try removing a filter or choosing another view.' : 'Reservations you add, or import from Airbnb/Booking.com, appear here.',
+        action: !filtered && canManage && h('button', { class: 'btn btn--primary', onclick: () => newReservationModal({ onSaved: load }) }, icon('plus'), 'New reservation'),
       }));
       return;
     }
+    const total = reservations.filter((r) => r.status === 'confirmed').reduce((s, r) => s + Number(r.total_amount), 0);
+    const due = reservations.filter((r) => r.status === 'confirmed').reduce((s, r) => s + Math.max(0, Number(r.balance)), 0);
     listBox.replaceChildren(
-      h('p', { class: 'muted small' }, `Showing ${reservations.length} reservation${reservations.length === 1 ? '' : 's'}`),
+      h('p', { class: 'muted small' }, `Showing ${reservations.length} reservation${reservations.length === 1 ? '' : 's'}${canManage ? ` · ${peso(total)} booked · ${peso(due)} still to collect` : ''}`),
       h('div', { class: 'table-wrap res-table' }, h('table', { class: 'table' },
         h('thead', null, h('tr', null, ['Check-in', 'Check-out', 'Guest', 'Listing', 'Channel', 'Code'].map((t) => h('th', null, t)), h('th', { class: 'num' }, 'Total'), h('th', { class: 'num' }, 'Balance'))),
         h('tbody', null, reservations.map((r) => h('tr', { class: 'row-link', tabindex: 0, onclick: () => navigate(`#/reservations/${r.booking_id}`), onkeydown: (e) => { if (e.key === 'Enter') navigate(`#/reservations/${r.booking_id}`); } },
@@ -167,9 +172,27 @@ export async function reservationsView(el, { query }) {
           h('td', { class: 'num' }, peso(r.total_amount)),
           h('td', { class: `num${Number(r.balance) > 0 && r.status === 'confirmed' ? ' amount--neg' : ''}` }, r.status === 'confirmed' ? peso(r.balance) : '—')))))));
   }
-  viewSelect.addEventListener('change', () => { filters.view = viewSelect.value; load(); });
-  channelSelect.addEventListener('change', () => { filters.channel = channelSelect.value; load(); });
-  const search = searchBox({ value: filters.q, placeholder: 'Search guest, code or listing', onSearch: (q) => { filters.q = q; load(); } });
+  viewSelect.addEventListener('change', () => { filters.view = viewSelect.value; rememberFilters('reservations', filters); load(); });
+  const bar = filterBar({
+    key: 'reservations', values: filters, defaults, onChange: load,
+    extra: h('div', { class: 'res-view-select' }, viewSelect),
+    search: { placeholder: 'Search guest, code or listing' },
+    quick: [
+      { name: 'channel', label: 'Channel', all: 'All channels', options: Object.entries(CHANNEL_LABEL) },
+      properties.length > 1 && { name: 'property_id', label: 'Property', all: 'All properties', options: properties.map((p) => [p.property_id, p.property_name]) },
+    ].filter(Boolean),
+    more: [
+      { name: 'unit_id', label: 'Listing', all: 'All listings', options: stUnits.map((u) => [u.unit_id, `${u.unit_name}${properties.length > 1 ? ` · ${u.property_name || ''}` : ''}`]) },
+      { name: 'from', keys: ['from', 'to'], label: 'Check-in between', type: 'daterange' },
+      { name: 'out', keys: ['out_from', 'out_to'], label: 'Check-out between', type: 'daterange' },
+      canManage && { name: 'payment', label: 'Payment', all: 'Any', options: [['unpaid', 'Not paid yet'], ['partial', 'Partly paid'], ['paid', 'Fully paid']] },
+      { name: 'guest', label: 'Guest', all: 'Any guest', options: [['first', 'First-time guests'], ['repeat', 'Repeat guests'], ['vip', 'VIP guests']] },
+      canManage && { name: 'checkin_form', label: 'Check-in form', all: 'Any', options: [['missing', 'Not filled in yet'], ['done', 'Filled in']] },
+      { name: 'min_nights', label: 'Nights (at least)', type: 'number', min: 1 },
+      { name: 'min_guests', label: 'Guests (at least)', type: 'number', min: 1 },
+      { name: 'sort', label: 'Sort by', all: 'Default for this view', options: [['checkin', 'Check-in (soonest first)'], ['checkin_desc', 'Check-in (latest first)'], ['checkout', 'Check-out'], ['created', 'Newest bookings'], ['total', 'Highest total'], ['balance', 'Biggest balance']] },
+    ].filter(Boolean),
+  });
   await load();
   el.replaceChildren(
     h('div', { class: 'page-head' },
@@ -179,9 +202,7 @@ export async function reservationsView(el, { query }) {
         exportLink)),
     h('div', { class: 'res-layout' },
       h('aside', { class: 'card res-side' }, h('h3', { class: 'subhead' }, 'Saved views'), side),
-      h('div', null,
-        h('div', { class: 'toolbar' }, h('div', { class: 'res-view-select' }, viewSelect), search, channelSelect),
-        listBox)));
+      h('div', null, bar, listBox)));
   if (query.new && canManage) newReservationModal({ onSaved: load });
 }
 

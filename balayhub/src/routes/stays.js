@@ -202,7 +202,7 @@ const VIEWS = {
   arrivals_tomorrow: { where: `b.status = 'confirmed' AND b.check_in = ${TODAY} + 1`, order: 'u.unit_name' },
   departures_today: { where: `b.status = 'confirmed' AND b.check_out = ${TODAY}`, order: 'u.unit_name' },
   departures_tomorrow: { where: `b.status = 'confirmed' AND b.check_out = ${TODAY} + 1`, order: 'u.unit_name' },
-  unpaid: { where: `b.status = 'confirmed' AND b.check_out >= ${TODAY} AND b.total_amount > COALESCE((SELECT SUM(bp.amount) FROM booking_payments bp WHERE bp.booking_id = b.booking_id AND bp.voided_at IS NULL), 0)`, order: 'b.check_in' },
+  unpaid: { where: `b.status = 'confirmed' AND b.check_out >= ${TODAY} AND b.total_amount - b.channel_fee > COALESCE((SELECT SUM(bp.amount) FROM booking_payments bp WHERE bp.booking_id = b.booking_id AND bp.voided_at IS NULL), 0)`, order: 'b.check_in' },
   past: { where: `b.status = 'confirmed' AND b.check_out < ${TODAY}`, order: 'b.check_out DESC' },
   cancelled: { where: `b.status = 'cancelled'`, order: 'b.cancelled_at DESC NULLS LAST' },
   recent: { where: 'true', order: 'b.created_at DESC' },
@@ -222,7 +222,23 @@ function reservationQuery(req) {
   if (CHANNELS.includes(req.query.channel)) { params.push(req.query.channel); where.push(`b.channel = $${params.length}`); }
   if (isValidDate(req.query.from)) { params.push(req.query.from); where.push(`b.check_in >= $${params.length}`); }
   if (isValidDate(req.query.to)) { params.push(req.query.to); where.push(`b.check_in <= $${params.length}`); }
-  return { view, sql: `${BOOKING_SELECT} WHERE ${where.join(' AND ')} ORDER BY ${VIEWS[view].order} LIMIT 1000`, params };
+  if (isValidDate(req.query.out_from)) { params.push(req.query.out_from); where.push(`b.check_out >= $${params.length}`); }
+  if (isValidDate(req.query.out_to)) { params.push(req.query.out_to); where.push(`b.check_out <= $${params.length}`); }
+  if (req.query.property_id) { params.push(uuidParam(req.query.property_id)); where.push(`p.property_id = $${params.length}`); }
+  const paid = `COALESCE((SELECT SUM(bp.amount) FROM booking_payments bp WHERE bp.booking_id = b.booking_id AND bp.voided_at IS NULL), 0)`;
+  if (req.query.payment === 'paid') where.push(`b.total_amount - b.channel_fee <= ${paid}`);
+  if (req.query.payment === 'unpaid') where.push(`${paid} = 0 AND b.total_amount - b.channel_fee > 0`);
+  if (req.query.payment === 'partial') where.push(`${paid} > 0 AND b.total_amount - b.channel_fee > ${paid}`);
+  if (req.query.guest === 'vip') where.push('g.vip');
+  if (req.query.guest === 'repeat') where.push(`EXISTS (SELECT 1 FROM bookings pb WHERE pb.guest_id = b.guest_id AND pb.booking_id <> b.booking_id AND pb.status = 'confirmed' AND pb.kind = 'reservation' AND pb.check_in < b.check_in)`);
+  if (req.query.guest === 'first') where.push(`NOT EXISTS (SELECT 1 FROM bookings pb WHERE pb.guest_id = b.guest_id AND pb.booking_id <> b.booking_id AND pb.status = 'confirmed' AND pb.kind = 'reservation' AND pb.check_in < b.check_in)`);
+  if (/^\d{1,2}$/.test(String(req.query.min_nights || ''))) { params.push(Number(req.query.min_nights)); where.push(`b.check_out - b.check_in >= $${params.length}`); }
+  if (/^\d{1,2}$/.test(String(req.query.min_guests || ''))) { params.push(Number(req.query.min_guests)); where.push(`b.num_guests >= $${params.length}`); }
+  if (req.query.checkin_form === 'missing') where.push(`NOT EXISTS (SELECT 1 FROM guest_registrations r WHERE r.booking_id = b.booking_id AND r.submitted_at IS NOT NULL)`);
+  if (req.query.checkin_form === 'done') where.push(`EXISTS (SELECT 1 FROM guest_registrations r WHERE r.booking_id = b.booking_id AND r.submitted_at IS NOT NULL)`);
+  const SORTS = { checkin: 'b.check_in, b.created_at', checkin_desc: 'b.check_in DESC, b.created_at DESC', checkout: 'b.check_out', created: 'b.created_at DESC', total: 'b.total_amount DESC', balance: `(b.total_amount - b.channel_fee - ${paid}) DESC` };
+  const order = SORTS[req.query.sort] || VIEWS[view].order;
+  return { view, sql: `${BOOKING_SELECT} WHERE ${where.join(' AND ')} ORDER BY ${order} LIMIT 1000`, params };
 }
 
 router.get('/reservations', ah(async (req, res) => {

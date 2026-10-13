@@ -172,7 +172,7 @@ router.get('/units', ah(async (req, res) => {
   if (req.query.vacant === '1') where.push(`l.lease_id IS NULL AND u.availability = 'available'`);
   if (req.query.property_id) { params.push(uuidParam(req.query.property_id)); where.push(`u.property_id = $${params.length}`); }
   const { rows } = await query(
-    `SELECT p.property_name, u.unit_id, u.property_id, u.unit_name, u.unit_type, u.monthly_rent,
+    `SELECT p.property_name, u.unit_id, u.property_id, u.unit_name, u.unit_type, u.monthly_rent, u.nightly_rate,
             u.security_deposit_amount, u.availability,
             CASE WHEN l.lease_id IS NOT NULL THEN 'occupied'
                  WHEN u.availability = 'unavailable' THEN 'unavailable' ELSE 'vacant' END AS occupancy_status

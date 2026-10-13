@@ -1083,3 +1083,24 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .assist__form textarea { flex: 1; resize: none; min-height: 44px; }
 .assist__form .btn { align-self: flex-end; }
 .assist__foot { margin: 0; padding: 0 12px 10px; font-size: .74rem; color: var(--muted); background: var(--surface); }
+
+/* ---------------------------------------------------------------- filter bar */
+.flt { margin-bottom: 14px; display: grid; gap: 10px; }
+.flt__bar { margin-bottom: 0; }
+.flt__more { display: inline-flex; align-items: center; gap: 6px; }
+.flt__count { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--forest); color: #fff; font-size: .75rem; display: inline-grid; place-items: center; }
+.flt__panel { display: grid; gap: 12px; padding: 14px; }
+.flt__grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); align-items: end; }
+.flt__field { display: grid; gap: 4px; min-width: 0; }
+.flt__field label { font-size: .8rem; font-weight: 700; color: var(--muted); }
+.flt__field--range { grid-column: span 2; }
+@media (max-width: 559px) { .flt__field--range { grid-column: auto; } }
+.flt__range { display: flex; align-items: center; gap: 6px; }
+.flt__range .input { min-width: 0; }
+.flt__check { align-self: center; }
+.flt__actions { display: flex; justify-content: flex-end; gap: 8px; }
+.flt__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.flt__chips:empty { display: none; }
+.flt__chip { border: 1px solid var(--line-2); background: var(--green-soft); color: var(--text); border-radius: 999px; padding: 4px 10px; font-size: .8rem; font-weight: 600; cursor: pointer; }
+.flt__chip:hover { border-color: var(--forest); }
+.flt__clear { border: 0; background: none; color: var(--accent); font-weight: 700; font-size: .8rem; cursor: pointer; text-decoration: underline; padding: 4px 6px; }
