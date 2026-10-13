@@ -48,6 +48,7 @@ function createApp() {
   api.use(require('./routes/checkin').publicRouter);
   api.use(require('./routes/directbooking').publicRouter);
   api.use(require('./routes/balancepay').publicRouter);
+  api.use(require('./routes/guestcare').publicRouter);
   api.use(requireWorkspace);
   api.use(require('./routes/team'));
   api.use(require('./routes/properties'));
@@ -68,6 +69,7 @@ function createApp() {
   api.use(require('./routes/push'));
   api.use(require('./routes/pricing'));
   api.use(require('./routes/owners'));
+  api.use(require('./routes/guestcare').router);
   api.use((req, res, next) => next(new HttpError(404, 'Not found.', { code: 'NOT_FOUND' })));
   // PayMongo webhook: raw body (for its signature), no session or CSRF header.
   app.post('/api/public/paymongo/webhook', express.raw({ type: '*/*', limit: '200kb' }),

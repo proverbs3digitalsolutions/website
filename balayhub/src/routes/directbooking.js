@@ -15,6 +15,7 @@ const { requireRole, rateLimit } = require('../lib/auth');
 const { loadUnit } = require('../lib/access');
 const { planStatus } = require('../lib/plans');
 const { quote, nightlyPrices } = require('../lib/pricing');
+const { applyCode } = require('../lib/discounts');
 const { addDays } = require('../lib/holidays');
 const secretbox = require('../lib/secretbox');
 const paymongo = require('../lib/paymongo');
@@ -212,7 +213,8 @@ publicRouter.get('/public/book/:slug/units/:unitId/availability', ah(async (req,
   res.json({ from, to, days: rows.map((r) => ({ ...r, price: prices.get(r.date)?.price ?? null, holiday: prices.get(r.date)?.kind === 'holiday' ? prices.get(r.date).label : null })) });
 }));
 
-async function priceStay(u, checkIn, checkOut) {
+// `promo`: { orgId, code, email, strict } — strict (at checkout) rejects a bad code; otherwise it's reported.
+async function priceStay(u, checkIn, checkOut, promo = {}) {
   if (!isValidDate(checkIn) || !isValidDate(checkOut) || checkOut <= checkIn) throw validationError({ check_out: 'Choose a check-out date after check-in.' });
   if (checkIn < manilaToday()) throw validationError({ check_in: 'Choose a date from today onwards.' });
   if (checkIn > new Date(Date.now() + 8 * 3600e3 + MAX_DAYS_AHEAD * 86400000).toISOString().slice(0, 10)) {
@@ -224,7 +226,14 @@ async function priceStay(u, checkIn, checkOut) {
   if (nights < q.min_nights) {
     throw validationError({ check_out: `${q.min_nights_reason ? `During ${q.min_nights_reason}, this` : 'This'} place has a minimum stay of ${q.min_nights} nights.` });
   }
-  const accommodation = Number(q.accommodation_total);
+  let accommodation = Number(q.accommodation_total);
+  let applied = null; let codeError = null;
+  if (promo.code) {
+    const r = await applyCode(promo.orgId, promo.code, { nights, accommodation, email: promo.email });
+    if (r.error && promo.strict) throw validationError({ code: r.error });
+    if (r.error) codeError = r.error;
+    else if (r.code) { applied = r; accommodation = Math.round((accommodation - r.discount) * 100) / 100; }
+  }
   const cleaning = Number(u.cleaning_fee || 0);
   const total = Math.round((accommodation + cleaning) * 100) / 100;
   const deposit = Math.round(total * 50) / 100;
@@ -233,6 +242,8 @@ async function priceStay(u, checkIn, checkOut) {
   const depositAllowed = u.payment_option !== 'full' && due > manilaToday();
   return {
     nights, subtotal: q.subtotal, discount_label: q.discount_label, discount_amount: q.discount_amount,
+    promo_code: applied?.code || null, promo_code_id: applied?.code_id || null, promo_label: applied?.label || null,
+    promo_discount: applied ? applied.discount.toFixed(2) : '0.00', code_error: codeError,
     accommodation_total: accommodation.toFixed(2), cleaning_fee: cleaning.toFixed(2), total: total.toFixed(2), deposit: deposit.toFixed(2),
     balance_due_date: due, deposit_allowed: depositAllowed, full_allowed: u.payment_option !== 'deposit' || !depositAllowed,
   };
@@ -251,7 +262,8 @@ async function isFree(unitId, checkIn, checkOut, exceptRef, db) {
 publicRouter.get('/public/book/:slug/units/:unitId/quote', ah(async (req, res) => {
   const host = await loadHost(req.params.slug);
   const u = await loadPublicUnit(host, req.params.unitId);
-  const p = await priceStay(u, req.query.check_in, req.query.check_out);
+  const { promo_code_id: _id, ...p } = await priceStay(u, req.query.check_in, req.query.check_out,
+    { orgId: host.organization_id, code: req.query.code ? String(req.query.code).slice(0, 40) : null, email: req.query.email ? String(req.query.email).slice(0, 200) : null });
   res.json({ ...p, available: await isFree(u.unit_id, req.query.check_in, req.query.check_out), payment_option: u.payment_option });
 }));
 
@@ -269,11 +281,12 @@ publicRouter.post('/public/book/:slug/units/:unitId/checkout', checkoutLimiter, 
     phone: { type: 'phone', required: true, label: 'Mobile number' },
     notes: { type: 'text', max: 1000, label: 'Message to the host' },
     pay: { type: 'enum', values: ['full', 'deposit'], required: true, label: 'Payment' },
+    code: { type: 'string', max: 40, label: 'Discount code' },
     consent: { type: 'bool', label: 'Consent' },
   });
   if (!body.consent) throw validationError({ consent: 'Please agree to continue.' });
   if (u.max_guests && body.num_guests > u.max_guests) throw validationError({ num_guests: `This place allows up to ${u.max_guests} guests.` });
-  const price = await priceStay(u, body.check_in, body.check_out);
+  const price = await priceStay(u, body.check_in, body.check_out, { orgId: host.organization_id, code: body.code, email: body.email, strict: true });
   if ((body.pay === 'deposit' && !price.deposit_allowed) || (body.pay === 'full' && !price.full_allowed)) {
     throw validationError({ pay: body.pay === 'deposit' && u.payment_option !== 'full'
       ? 'Your stay is too soon for a deposit. Please pay in full.' : 'That payment option is not available for this place.' });
@@ -295,14 +308,19 @@ publicRouter.post('/public/book/:slug/units/:unitId/checkout', checkoutLimiter, 
     if (!await isFree(u.unit_id, body.check_in, body.check_out, null, db)) {
       throw new HttpError(409, 'Sorry, those dates were just booked. Please choose other dates.', { code: 'DATES_TAKEN' });
     }
+    // Hold the code too, so its last use can't be taken twice.
+    if (price.promo_code_id) {
+      const again = await applyCode(host.organization_id, body.code, { nights: price.nights, accommodation: Number(price.accommodation_total) + Number(price.promo_discount), email: body.email }, { db, lock: true });
+      if (again.error || again.code_id !== price.promo_code_id) throw validationError({ code: again.error || 'This code is not valid.' });
+    }
     const { rows: [c] } = await db.query(
       `INSERT INTO direct_checkouts (public_token, organization_id, unit_id, check_in, check_out, num_guests, guest_name, guest_email, guest_phone, notes,
                                      pay_type, accommodation_total, cleaning_fee, total_amount, amount_due_now, hold_until, consent_at,
-                                     key_enc, client_hash, test_mode)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15, now() + make_interval(mins => $16), now(), $17, $18, $19) RETURNING *`,
+                                     key_enc, client_hash, test_mode, discount_code_id, discount_amount)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15, now() + make_interval(mins => $16), now(), $17, $18, $19, $20, $21) RETURNING *`,
       [token, host.organization_id, u.unit_id, body.check_in, body.check_out, body.num_guests, body.name, body.email, body.phone, body.notes,
         body.pay, price.accommodation_total, price.cleaning_fee, price.total, dueNow, HOLD_MINUTES,
-        host.paymongo_key_enc, clientHash, host.test_mode]);
+        host.paymongo_key_enc, clientHash, host.test_mode, price.promo_code_id, price.promo_discount]);
     return c;
   });
 
@@ -430,9 +448,17 @@ async function finalize(ref, method) {
     const recorder = owner?.user_id || null;
     await db.query('SAVEPOINT book');
     try {
-      const { rows: [g] } = await db.query(
-        `INSERT INTO guests (organization_id, full_name, email, phone, notes) VALUES ($1,$2,$3,$4,$5) RETURNING guest_id`,
-        [c.organization_id, c.guest_name, c.guest_email, c.guest_phone, 'Booked online']);
+      // A returning guest (same email) keeps one guest record, so repeat stays add up.
+      let { rows: [g] } = await db.query(
+        `SELECT guest_id, do_not_rebook, vip FROM guests WHERE organization_id = $1 AND lower(email) = lower($2) ORDER BY created_at LIMIT 1`,
+        [c.organization_id, c.guest_email]);
+      if (g) await db.query('UPDATE guests SET phone = COALESCE(phone, $2) WHERE guest_id = $1', [g.guest_id, c.guest_phone]);
+      else {
+        ({ rows: [g] } = await db.query(
+          `INSERT INTO guests (organization_id, full_name, email, phone, notes) VALUES ($1,$2,$3,$4,$5) RETURNING guest_id, do_not_rebook, vip`,
+          [c.organization_id, c.guest_name, c.guest_email, c.guest_phone, 'Booked online']));
+      }
+      const { rows: [promo] } = c.discount_code_id ? await db.query('SELECT code FROM discount_codes WHERE code_id = $1', [c.discount_code_id]) : { rows: [] };
       const code = `BH-${crypto.randomBytes(5).toString('base64url').replace(/[^A-Za-z0-9]/g, 'X').slice(0, 7).toUpperCase()}`;
       const { rows: [b] } = await db.query(
         `INSERT INTO bookings (organization_id, unit_id, kind, guest_id, channel, check_in, check_out, num_guests, accommodation_total, cleaning_fee,
@@ -440,7 +466,10 @@ async function finalize(ref, method) {
          VALUES ($1,$2,'reservation',$3,'direct',$4,$5,$6,$7,$8,$9,$10) RETURNING booking_id`,
         [c.organization_id, c.unit_id, g.guest_id, c.check_in, c.check_out, c.num_guests, c.accommodation_total, c.cleaning_fee, code,
           [c.test_mode ? 'TEST MODE booking (PayMongo test key, no real payment).' : null,
-            `Booked online (${c.pay_type === 'deposit' ? '50% deposit paid' : 'paid in full'}).`, c.notes ? `Guest's message: ${c.notes}` : null].filter(Boolean).join('\n')]);
+            `Booked online (${c.pay_type === 'deposit' ? '50% deposit paid' : 'paid in full'}).`,
+            promo ? `Discount code ${promo.code}: −₱${Number(c.discount_amount).toLocaleString('en-PH')} (already taken off the accommodation).` : null,
+            g.do_not_rebook ? '⚠ This guest is marked "Do not rebook" in Guests.' : null,
+            c.notes ? `Guest's message: ${c.notes}` : null].filter(Boolean).join('\n')]);
       const receipts = require('../lib/receipts');
       const receiptNo = await receipts.nextReceiptNumber(db, c.organization_id);
       await db.query(
@@ -453,7 +482,7 @@ async function finalize(ref, method) {
       await db.query(
         `INSERT INTO audit_logs (organization_id, action, record_type, record_id, details) VALUES ($1,'reservation.booked_online','booking',$2,$3)`,
         [c.organization_id, b.booking_id, JSON.stringify({ amount: c.amount_due_now, pay_type: c.pay_type })]);
-      return { status: 'confirmed', bookingId: b.booking_id, ownerId: recorder, c };
+      return { status: 'confirmed', bookingId: b.booking_id, ownerId: recorder, c, flagged: g.do_not_rebook };
     } catch (err) {
       if (err.constraint !== 'bookings_no_overlap') throw err;
       // Paid, but the dates were taken meanwhile (e.g. an Airbnb booking synced in).
@@ -467,7 +496,7 @@ async function finalize(ref, method) {
   return result.status;
 }
 
-async function afterBooking({ bookingId, ownerId, c }) {
+async function afterBooking({ bookingId, ownerId, c, flagged }) {
   const { notify, propertyOfBooking } = require('../lib/push');
   notify(c.organization_id, 'new_booking', {
     title: `New direct booking · ₱${Number(c.amount_due_now).toLocaleString('en-PH')} paid`,
@@ -485,7 +514,7 @@ async function afterBooking({ bookingId, ownerId, c }) {
   await query(
     `INSERT INTO messages (conversation_id, organization_id, direction, from_name, body, status) VALUES ($1,$2,'note','BalayHub',$3,'note')`,
     [conv.conversation_id, conv.organization_id,
-      `New direct booking: ${c.guest_name}, ${c.check_in} to ${c.check_out}, ${c.num_guests} guest(s). Paid ₱${Number(c.amount_due_now).toLocaleString('en-PH')} online${c.pay_type === 'deposit' ? ` (50% deposit; balance ₱${(Number(c.total_amount) - Number(c.amount_due_now)).toLocaleString('en-PH')} due before check-in)` : ' (in full)'}.`]);
+      `New direct booking: ${c.guest_name}, ${c.check_in} to ${c.check_out}, ${c.num_guests} guest(s). Paid ₱${Number(c.amount_due_now).toLocaleString('en-PH')} online${c.pay_type === 'deposit' ? ` (50% deposit; balance ₱${(Number(c.total_amount) - Number(c.amount_due_now)).toLocaleString('en-PH')} due before check-in)` : ' (in full)'}.${flagged ? ' ⚠ This guest is marked "Do not rebook" in Guests.' : ''}`]);
   await query(`UPDATE conversations SET unread = true, status = 'open', last_message_at = now() WHERE conversation_id = $1`, [conv.conversation_id]);
 }
 

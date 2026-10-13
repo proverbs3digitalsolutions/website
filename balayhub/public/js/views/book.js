@@ -142,6 +142,16 @@ export async function bookListingView(el, { params, query }) {
     (opt === 'deposit' || opt === 'either') && h('label', { class: 'check' }, h('input', { type: 'radio', name: 'pay', value: 'deposit', checked: opt === 'deposit' }), h('span', { class: 'pay-dep' }, 'Pay a 50% deposit now, the rest before check-in')),
     h('div', { class: 'error', role: 'alert' }));
   const formError = h('div');
+  // Discount code
+  let promoCode = '';
+  const codeMsg = h('div', { class: 'muted small', role: 'status' });
+  const codeInput = h('input', { class: 'input', name: 'code', maxlength: 40, autocomplete: 'off', placeholder: 'e.g. BALIK10', 'aria-label': 'Discount code' });
+  const applyCode = () => { promoCode = codeInput.value.trim(); updateQuote(); };
+  codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); applyCode(); } });
+  const codeBox = h('details', { class: 'field bk-code', dataset: { field: 'code' } },
+    h('summary', null, 'Have a discount code?'),
+    h('div', { class: 'chips' }, codeInput, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: applyCode }, 'Apply')),
+    codeMsg);
   const submit = h('button', { class: 'btn btn--primary btn--block', type: 'submit', disabled: true }, 'Continue to payment');
   let current = null;
   async function updateQuote() {
@@ -152,7 +162,10 @@ export async function bookListingView(el, { params, query }) {
       return;
     }
     try {
-      const q = await get(`/public/book/${encodeURIComponent(slug)}/units/${l.unit_id}/quote?check_in=${checkIn}&check_out=${checkOut}`);
+      const promo = promoCode ? `&code=${encodeURIComponent(promoCode)}&email=${encodeURIComponent(form.elements.email.value || '')}` : '';
+      const q = await get(`/public/book/${encodeURIComponent(slug)}/units/${l.unit_id}/quote?check_in=${checkIn}&check_out=${checkOut}${promo}`);
+      codeMsg.textContent = q.code_error || (q.promo_code ? `Code ${q.promo_code} applied: ${q.promo_label}.` : '');
+      codeMsg.className = q.code_error ? 'error' : 'muted small';
       current = q;
       // Show only the payment choices allowed for these dates.
       const full = payChoice.querySelector('input[value=full]');
@@ -166,6 +179,7 @@ export async function bookListingView(el, { params, query }) {
         h('dt', null, 'Dates'), h('dd', null, `${fmtDate(checkIn)} – ${fmtDate(checkOut)}`),
         h('dt', null, `${q.nights} night${q.nights > 1 ? 's' : ''}`), h('dd', null, peso(q.discount_label ? q.subtotal : q.accommodation_total)),
         q.discount_label && [h('dt', null, q.discount_label.replace(/^./, (c) => c.toUpperCase())), h('dd', null, `− ${peso(q.discount_amount)}`)],
+        q.promo_code && [h('dt', null, `Code ${q.promo_code}`), h('dd', null, `− ${peso(q.promo_discount)}`)],
         Number(q.cleaning_fee) > 0 && [h('dt', null, 'Cleaning fee'), h('dd', null, peso(q.cleaning_fee))],
         h('dt', null, 'Total'), h('dd', null, h('strong', null, peso(q.total))),
         q.deposit_allowed && [h('dt', null, '50% deposit'), h('dd', null, `${peso(q.deposit)} now, ${peso(Number(q.total) - Number(q.deposit))} due by ${fmtDate(q.balance_due_date)}`)]),
@@ -185,6 +199,7 @@ export async function bookListingView(el, { params, query }) {
       field({ name: 'email', label: 'Email', type: 'email', required: true, autocomplete: 'email', hint: 'We send your confirmation here.' }),
       field({ name: 'phone', label: 'Mobile number', type: 'tel', required: true, inputmode: 'tel', autocomplete: 'tel', placeholder: '0917 123 4567' })),
     field({ name: 'notes', label: 'Message to the host (optional)', type: 'textarea', maxlength: 1000, placeholder: 'Arrival time, special requests…' }),
+    codeBox,
     payChoice,
     h('div', { class: 'field', dataset: { field: 'consent' } },
       h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'consent' }),
@@ -192,6 +207,9 @@ export async function bookListingView(el, { params, query }) {
       h('div', { class: 'error', role: 'alert' })),
     submit,
     !host.accepting && h('p', { class: 'muted small' }, host.demo ? 'This is a demo, so booking is turned off.' : 'Online booking is paused. Please contact the host.'));
+
+  // Codes for returning guests depend on the email.
+  form.elements.email.addEventListener('change', () => { if (promoCode) updateQuote(); });
 
   let busy = false;
   form.addEventListener('submit', async (e) => {
@@ -208,6 +226,7 @@ export async function bookListingView(el, { params, query }) {
         check_in: checkIn, check_out: checkOut, num_guests: Number(d.num_guests), name: d.name, email: d.email, phone: d.phone, notes: d.notes,
         pay: current.deposit_allowed ? (form.querySelector('input[name=pay]:checked')?.value || 'full') : 'full',
         consent: form.elements.consent.checked,
+        code: promoCode || undefined,
       });
       location.href = r.checkout_url;
     } catch (err) {

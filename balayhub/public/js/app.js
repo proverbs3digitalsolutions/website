@@ -26,6 +26,8 @@ import { launchpadView } from './views/launchpad.js';
 import { payBalanceView } from './views/pay.js';
 import { pricingView } from './views/pricing.js';
 import { ownersView, ownerStatementView } from './views/owners.js';
+import { guestReviewView } from './views/review.js';
+import { reviewsView, discountCodesView } from './views/guestcare.js';
 import { registerServiceWorker, forgetThisDevice } from './notifications.js';
 
 export const state = { user: null, requireEmailVerification: true };
@@ -45,6 +47,7 @@ const routes = [
   ['/privacy', privacyView, OPEN],
   ['/terms', termsView, OPEN],
   ['/pay/:token', payBalanceView, OPEN],
+  ['/review/:token', guestReviewView, OPEN],
   ['/book/:slug', bookHostView, OPEN],
   ['/book/:slug/done/:token', bookDoneView, OPEN],
   ['/book/:slug/:unitId', bookListingView, OPEN],
@@ -68,6 +71,8 @@ const routes = [
   ['/calendar', calendarView, APP],
   ['/pricing', pricingView, APP],
   ['/owners', ownersView, APP],
+  ['/reviews', reviewsView, APP],
+  ['/discount-codes', discountCodesView, APP],
   ['/owners/:id/statement', ownerStatementView, APP],
   ['/reservations', reservationsView, APP],
   ['/reservations/:id', reservationDetailView, APP],

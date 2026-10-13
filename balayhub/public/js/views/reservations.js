@@ -7,6 +7,17 @@ import {
 import { state, navigate } from '../app.js';
 import { messageGuest } from './inbox.js';
 import { checkinCard } from './checkin.js';
+import { stars } from './guestcare.js';
+
+const ordinal = (n) => { const s = ['th', 'st', 'nd', 'rd']; const v = n % 100; return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`; };
+// "VIP", "Returning guest · 3rd stay", "Do not rebook"
+export function guestBadges(r) {
+  return [
+    r.guest_vip && badge('paid', 'VIP'),
+    r.previous_stays > 0 && badge('active', `Returning · ${ordinal(r.previous_stays + 1)} stay`),
+    r.guest_do_not_rebook && badge('overdue', 'Do not rebook'),
+  ].filter(Boolean);
+}
 
 // " · 2 holiday nights, 1 weekend night" for a quote.
 function nightsNote(q) {
@@ -145,7 +156,7 @@ export async function reservationsView(el, { query }) {
         h('tbody', null, reservations.map((r) => h('tr', { class: 'row-link', tabindex: 0, onclick: () => navigate(`#/reservations/${r.booking_id}`), onkeydown: (e) => { if (e.key === 'Enter') navigate(`#/reservations/${r.booking_id}`); } },
           h('td', null, fmtDate(r.check_in), h('div', { class: 'muted small' }, `${r.nights} night${r.nights > 1 ? 's' : ''}`)),
           h('td', null, fmtDate(r.check_out)),
-          h('td', null, h('strong', null, r.guest_name || r.guest_label || 'Guest'), r.num_guests ? h('div', { class: 'muted small' }, `${r.num_guests} guest${r.num_guests > 1 ? 's' : ''}`) : null),
+          h('td', null, h('strong', null, r.guest_name || r.guest_label || 'Guest'), r.guest_vip ? ' ⭐' : null, r.num_guests ? h('div', { class: 'muted small' }, `${r.num_guests} guest${r.num_guests > 1 ? 's' : ''}`) : null),
           h('td', null, r.unit_name, h('div', { class: 'muted small' }, r.property_name)),
           h('td', null, channelBadge(r.channel), r.status === 'cancelled' ? [' ', badge('voided', 'Cancelled')] : null),
           h('td', { class: 'small' }, r.confirmation_code),
@@ -284,12 +295,17 @@ export async function reservationDetailView(el, { params, rerender }) {
             r.notes && [h('dt', null, 'Notes'), h('dd', { style: { whiteSpace: 'pre-wrap' } }, r.notes)])),
         h('div', { class: 'card' },
           h('div', { class: 'card__head' }, h('h2', null, 'Guest'), r.guest_id && h('a', { href: `#/guests/${r.guest_id}` }, 'Guest profile')),
+          guestBadges(r).length > 0 && h('div', { class: 'chips', style: { marginBottom: '10px' } }, guestBadges(r)),
           h('dl', { class: 'dl' },
             h('dt', null, 'Name'), h('dd', null, guestName),
             !r.limited && [h('dt', null, 'Mobile'), h('dd', null, r.guest_phone ? h('a', { href: `tel:${r.guest_phone.replace(/[^\d+]/g, '')}` }, r.guest_phone) : '—'),
               h('dt', null, 'Email'), h('dd', null, r.guest_email ? h('a', { href: `mailto:${r.guest_email}` }, r.guest_email) : '—')]),
           canManage && confirmed && r.guest_email && h('button', { class: 'btn btn--secondary btn--sm', style: { marginTop: '12px' }, onclick: emailConfirmation }, 'Email booking confirmation'),
           r.ical_feed_id && h('p', { class: 'muted small', style: { marginTop: '10px' } }, `Imported from ${CHANNEL_LABEL[r.channel]}. Guest details stay on ${CHANNEL_LABEL[r.channel]}.`)),
+        r.review && h('div', { class: 'card' },
+          h('div', { class: 'card__head' }, h('h2', null, 'Guest review'), h('span', { class: 'muted small' }, 'Private')),
+          h('p', null, stars(r.review.rating), ` ${r.review.rating}/5`, r.review.cleanliness ? h('span', { class: 'muted small' }, ` · cleanliness ${r.review.cleanliness}/5`) : null),
+          r.review.comment && h('p', { style: { whiteSpace: 'pre-wrap' } }, `“${r.review.comment}”`)),
         checkin),
       h('div', { class: 'stack' },
         h('div', { class: 'card' },

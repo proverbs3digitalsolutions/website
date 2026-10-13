@@ -804,3 +804,14 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .statement__payout strong { font-size: 1.2rem; }
 .table--compact td, .table--compact th { padding: 8px 10px; }
 .table td.num { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* ================================================================ discount codes, reviews */
+.bk-code summary { cursor: pointer; color: var(--forest, #0f5132); font-weight: 600; }
+.bk-code .chips { margin-top: 8px; flex-wrap: nowrap; }
+.bk-code .input { max-width: 220px; text-transform: uppercase; }
+.stars { display: flex; gap: 6px; }
+.stars button { font-size: 2rem; line-height: 1; background: none; border: 0; cursor: pointer; color: var(--line-2); padding: 4px; border-radius: 8px; }
+.stars button.is-on { color: #e0a526; }
+.stars button:focus-visible { outline: 2px solid var(--forest, #0f5132); }
+.stars--sm button { font-size: 1.4rem; }
+.rating { color: #b7791f; letter-spacing: 1px; white-space: nowrap; }

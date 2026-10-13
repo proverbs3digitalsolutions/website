@@ -256,27 +256,36 @@ export async function guestsView(el, { query }) {
     const { guests } = await get(`/guests${qs({ q })}`);
     box.replaceChildren(guests.length ? h('ul', { class: 'list' }, guests.map((g) => h('li', null, h('a', { class: 'row', href: `#/guests/${g.guest_id}` },
       h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, g.full_name), !g.limited && h('span', { class: 'row__sub' }, [g.phone, g.email].filter(Boolean).join(' · ') || 'No contact details')),
-      h('div', { class: 'row__end' }, h('span', { class: 'small' }, `${g.stays} stay${Number(g.stays) === 1 ? '' : 's'}`), g.last_stay && h('span', { class: 'muted small' }, `Last: ${fmtDate(g.last_stay)}`))))))
+      h('div', { class: 'row__end' },
+        h('div', { class: 'chips' }, g.vip && badge('paid', 'VIP'), Number(g.stays) > 1 && badge('active', 'Repeat'), g.do_not_rebook && badge('overdue', 'Do not rebook'),
+          g.avg_rating && h('span', { class: 'rating small' }, `★ ${g.avg_rating}`)),
+        h('span', { class: 'small' }, `${g.stays} stay${Number(g.stays) === 1 ? '' : 's'}`), g.last_stay && h('span', { class: 'muted small' }, `Last: ${fmtDate(g.last_stay)}`))))))
       : emptyState({ iconName: 'users', title: q ? 'No results found' : 'No guests yet', text: q ? 'Try another name.' : 'Guests are added when you create a reservation.' }));
   }
   await load();
   el.replaceChildren(
-    h('div', { class: 'page-head' }, h('div', { class: 'page-head__title' }, h('h1', null, 'Guests'), h('p', null, 'Everyone who has stayed or booked'))),
+    h('div', { class: 'page-head' }, h('div', { class: 'page-head__title' }, h('h1', null, 'Guests'), h('p', null, 'Everyone who has stayed or booked')),
+      state.user.role !== 'staff' && h('div', { class: 'page-head__actions' },
+        h('a', { class: 'btn btn--secondary', href: '#/reviews' }, '★ Reviews'),
+        h('a', { class: 'btn btn--secondary', href: '#/discount-codes' }, '% Discount codes'))),
     h('div', { class: 'toolbar' }, searchBox({ value: q, placeholder: 'Search guests', onSearch: (v) => { q = v; load(); } })),
     box);
 }
 
 export async function guestDetailView(el, { params, rerender }) {
-  const { guest: g, stays } = await get(`/guests/${params.id}`);
+  const { guest: g, stays, reviews } = await get(`/guests/${params.id}`);
   const canManage = state.user.role !== 'staff';
   el.replaceChildren(
     h('a', { class: 'back', href: '#/guests' }, '‹ Guests'),
     h('div', { class: 'page-head' },
-      h('div', { class: 'page-head__title' }, h('h1', null, g.full_name), h('p', null, `${stays.filter((s) => s.status === 'confirmed').length} stay(s)`)),
+      h('div', { class: 'page-head__title' }, h('h1', null, g.full_name), h('p', null, `${stays.filter((s) => s.status === 'confirmed').length} stay(s)`),
+        h('div', { class: 'chips' }, g.vip && badge('paid', 'VIP'), g.do_not_rebook && badge('overdue', 'Do not rebook'))),
       canManage && h('div', { class: 'page-head__actions' }, h('button', { class: 'btn btn--secondary', onclick: () => formModal({
         title: 'Edit guest', submitText: 'Save',
         fields: [field({ name: 'full_name', label: 'Name', required: true, value: g.full_name }), field({ name: 'phone', label: 'Mobile', type: 'tel', value: g.phone }),
-          field({ name: 'email', label: 'Email', type: 'email', value: g.email }), field({ name: 'notes', label: 'Notes', type: 'textarea', value: g.notes, hint: 'Only what you need to host them well.' })],
+          field({ name: 'email', label: 'Email', type: 'email', value: g.email }), field({ name: 'notes', label: 'Notes', type: 'textarea', value: g.notes, hint: 'Only what you need to host them well.' }),
+          field({ name: 'vip', label: 'VIP guest (shown on their reservations)', type: 'checkbox', value: Boolean(g.vip) }),
+          field({ name: 'do_not_rebook', label: 'Do not rebook (you\'re warned if they book again)', type: 'checkbox', value: Boolean(g.do_not_rebook) })],
         onSubmit: async (d) => { await patch(`/guests/${g.guest_id}`, d); toast('Guest updated.'); rerender(); },
       }) }, 'Edit'))),
     h('div', { class: 'grid grid--2' },
@@ -289,5 +298,9 @@ export async function guestDetailView(el, { params, rerender }) {
         stays.length ? h('ul', { class: 'list' }, stays.map((s) => h('li', null, h('a', { class: 'row', href: `#/reservations/${s.booking_id}` },
           h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, `${fmtDate(s.check_in)} – ${fmtDate(s.check_out)}`), h('span', { class: 'row__sub' }, `${s.unit_name} · ${CHANNEL_LABEL[s.channel]}`)),
           h('div', { class: 'row__end' }, h('span', { class: 'amount' }, peso(s.total_amount)), s.status === 'cancelled' && badge('voided', 'Cancelled'))))))
-          : h('p', { class: 'muted' }, 'No stays.'))));
+          : h('p', { class: 'muted' }, 'No stays.'))),
+    reviews.length > 0 && h('div', { class: 'card', style: { marginTop: '16px' } }, h('h2', null, 'Their reviews (private)'),
+      h('ul', { class: 'list' }, reviews.map((r) => h('li', null, h('a', { class: 'row', href: `#/reservations/${r.booking_id}` },
+        h('div', { class: 'row__main' }, h('span', { class: 'row__title rating' }, '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating)), r.comment && h('span', { class: 'row__sub' }, `“${r.comment}”`)),
+        h('div', { class: 'row__end' }, h('span', { class: 'muted small' }, fmtDate(r.created_at.slice(0, 10))))))))));
 }

@@ -96,6 +96,20 @@ For it to be complete:
   channel calendar have no amounts — enter what the guest paid; the statement warns you about these.
 - Record unit expenses (repairs, supplies, dues) against the unit in Expenses.
 
+## Guest reviews, repeat guests and discount codes
+
+- **Private reviews:** the "thank-you the day after check-out" message includes a private link
+  (`{{review_link}}`) where the guest rates the stay (overall + cleanliness) and leaves a comment.
+  Only your team sees it: on the reservation, the guest's profile, Guests → Reviews, and as a note in
+  the Inbox. Ratings of 3 or less also send a phone notification. Turn the automation on in Inbox
+  settings.
+- **Repeat guests:** a reservation with the same email as a past guest joins that guest's profile,
+  so reservations show "Returning · 3rd stay". Mark guests as **VIP** or **Do not rebook** (Guests →
+  Edit); you're warned in the Inbox if a "Do not rebook" guest books online.
+- **Discount codes** (Guests → Discount codes): percent or peso off the accommodation on your
+  booking page, with optional dates, minimum nights, a usage limit, or *returning guests only*
+  (the guest must use the email from a past stay). Codes stack after weekly/monthly discounts.
+
 ## Guests paying the balance online
 
 When PayMongo is connected (Settings → Direct booking page), every reservation has a private
@@ -154,4 +168,4 @@ cd /opt/balayhub-src/balayhub
 This backs up your data, downloads the new version and restarts BalayHub. The database is upgraded automatically. Your existing workspace keeps its current type; to switch to short-term, go to **Settings → Modules for this workspace → Short-term stays → Save**.
 
 ## Coming next
-Guest reviews with repeat-guest flags and direct-booking discount codes.
+Tell us what would help your hosting next.

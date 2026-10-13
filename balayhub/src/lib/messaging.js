@@ -62,6 +62,8 @@ Thank you for staying at {{listing_name}}! We hope you had a great time.
 
 If you enjoyed your stay, we'd love a review — and we'd be happy to host you again. Book directly with us next time for the best rate.
 
+{{review_link}}
+
 Salamat po!
 {{host_name}}`,
   },
@@ -126,6 +128,9 @@ async function bookingContext(bookingId) {
   // Every reservation gets a private check-in form link the first time it's needed.
   await query(`UPDATE bookings SET checkin_token = $2 WHERE booking_id = $1 AND checkin_token IS NULL AND kind = 'reservation'`,
     [bookingId, crypto.randomBytes(18).toString('base64url')]);
+  // A private review link (the guest rates their stay; only the host sees it).
+  await query(`UPDATE bookings SET review_token = $2 WHERE booking_id = $1 AND review_token IS NULL AND kind = 'reservation'`,
+    [bookingId, crypto.randomBytes(18).toString('base64url')]);
   // A balance payment link, when the host takes payments online.
   await query(`UPDATE bookings b SET pay_token = $2 FROM organizations o
                 WHERE b.booking_id = $1 AND b.pay_token IS NULL AND b.kind = 'reservation'
@@ -137,6 +142,7 @@ async function bookingContext(bookingId) {
             g.full_name AS guest_name, g.email AS guest_email,
             o.name AS workspace_name, o.paymongo_key_hint, o.plan, o.trial_ends_at, o.paid_until, o.is_demo, o.deletion_scheduled_at,
             (SELECT full_name FROM users WHERE organization_id = b.organization_id AND role = 'owner' ORDER BY created_at LIMIT 1) AS owner_name,
+            EXISTS (SELECT 1 FROM guest_reviews r WHERE r.booking_id = b.booking_id) AS reviewed,
             (b.total_amount - COALESCE((SELECT SUM(amount) FROM booking_payments bp WHERE bp.booking_id = b.booking_id AND bp.voided_at IS NULL), 0))::numeric(12,2) AS balance
        FROM bookings b
        JOIN units u ON u.unit_id = b.unit_id
@@ -171,6 +177,8 @@ function variables(ctx, sender) {
     // A full sentence (or nothing) so templates read well either way.
     payment_link: ctx.pay_token && Number(ctx.balance) > 0 && require('../routes/balancepay').acceptsOnline(ctx)
       ? `Pay securely online (GCash, Maya or card): ${config.appUrl}/#/pay/${ctx.pay_token}` : '',
+    review_link: ctx.review_token && !ctx.reviewed && ctx.status === 'confirmed'
+      ? `How was your stay? Tell us privately (1 minute): ${config.appUrl}/#/review/${ctx.review_token}` : '',
     workspace_name: ctx.workspace_name,
     host_name: sender || ctx.owner_name || ctx.workspace_name,
   };

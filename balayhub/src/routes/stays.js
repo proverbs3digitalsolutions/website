@@ -51,7 +51,9 @@ function guestScope(user, params, alias = 'g') {
 
 const BOOKING_SELECT = `
   SELECT b.*, u.unit_name, u.max_guests, p.property_id, p.property_name,
-         g.full_name AS guest_name, g.email AS guest_email, g.phone AS guest_phone,
+         g.full_name AS guest_name, g.email AS guest_email, g.phone AS guest_phone, g.vip AS guest_vip, g.do_not_rebook AS guest_do_not_rebook,
+         (SELECT COUNT(*)::int FROM bookings pb WHERE pb.guest_id = b.guest_id AND pb.status = 'confirmed' AND pb.kind = 'reservation' AND pb.check_in < b.check_in) AS previous_stays,
+         (SELECT row_to_json(r) FROM (SELECT rating, cleanliness, comment, created_at FROM guest_reviews WHERE booking_id = b.booking_id) r) AS review,
          (b.check_out - b.check_in) AS nights,
          COALESCE((SELECT SUM(bp.amount) FROM booking_payments bp WHERE bp.booking_id = b.booking_id AND bp.voided_at IS NULL), 0)::numeric(12,2) AS amount_paid,
          (b.total_amount - COALESCE((SELECT SUM(bp.amount) FROM booking_payments bp WHERE bp.booking_id = b.booking_id AND bp.voided_at IS NULL), 0))::numeric(12,2) AS balance
@@ -127,6 +129,8 @@ const guestSpec = {
   email: { type: 'email', label: 'Email' },
   phone: { type: 'phone', label: 'Mobile number' },
   notes: { type: 'text', max: 1000, label: 'Notes' },
+  vip: { type: 'bool', label: 'VIP' },
+  do_not_rebook: { type: 'bool', label: 'Do not rebook' },
 };
 
 router.get('/guests', ah(async (req, res) => {
@@ -139,7 +143,8 @@ router.get('/guests', ah(async (req, res) => {
   }
   const { rows } = await query(
     `SELECT g.*, (SELECT COUNT(*) FROM bookings b WHERE b.guest_id = g.guest_id AND b.status = 'confirmed') AS stays,
-            (SELECT MAX(b.check_in) FROM bookings b WHERE b.guest_id = g.guest_id AND b.status = 'confirmed') AS last_stay
+            (SELECT MAX(b.check_in) FROM bookings b WHERE b.guest_id = g.guest_id AND b.status = 'confirmed') AS last_stay,
+            (SELECT ROUND(AVG(r.rating), 1) FROM guest_reviews r WHERE r.guest_id = g.guest_id) AS avg_rating
        FROM guests g WHERE ${where.join(' AND ')} ORDER BY g.full_name LIMIT 500`, params);
   res.json({ guests: rows.map((g) => redactGuest(req.user, g)) });
 }));
@@ -156,14 +161,16 @@ router.get('/guests/:id', ah(async (req, res) => {
   const params = [guest.guest_id];
   const { rows: stays } = await query(
     `${BOOKING_SELECT} WHERE b.guest_id = $1 AND ${propertyScope(req.user, params)} ORDER BY b.check_in DESC`, params);
-  res.json({ guest: redactGuest(req.user, guest), stays: stays.map((s) => redactGuest(req.user, s)) });
+  const { rows: reviews } = await query(
+    `SELECT r.booking_id, r.rating, r.cleanliness, r.comment, r.created_at FROM guest_reviews r WHERE r.guest_id = $1 ORDER BY r.created_at DESC`, [guest.guest_id]);
+  res.json({ guest: redactGuest(req.user, guest), stays: stays.map((s) => redactGuest(req.user, s)), reviews });
 }));
 
 router.post('/guests', managers, ah(async (req, res) => {
   const body = validate(req.body, guestSpec);
   const { rows: [g] } = await query(
-    `INSERT INTO guests (organization_id, full_name, email, phone, notes, created_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-    [req.user.organization_id, body.full_name, body.email, body.phone, body.notes, req.user.user_id]);
+    `INSERT INTO guests (organization_id, full_name, email, phone, notes, vip, do_not_rebook, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+    [req.user.organization_id, body.full_name, body.email, body.phone, body.notes, Boolean(body.vip), Boolean(body.do_not_rebook), req.user.user_id]);
   await audit(null, req.user, 'guest.created', 'guest', g.guest_id);
   res.status(201).json({ guest: g });
 }));
@@ -294,6 +301,12 @@ router.post('/reservations', managers, ah(async (req, res) => {
   try {
     const id = await tx(async (db) => {
       let guestId = body.guest_id;
+      // Same email as a guest you've hosted before: it's them again (repeat stays add up).
+      if (!guestId && body.guest_email) {
+        const { rows: [prev] } = await db.query(
+          'SELECT guest_id FROM guests WHERE organization_id = $1 AND lower(email) = lower($2) ORDER BY created_at LIMIT 1', [req.user.organization_id, body.guest_email]);
+        guestId = prev?.guest_id;
+      }
       if (!guestId) {
         const { rows: [g] } = await db.query(
           `INSERT INTO guests (organization_id, full_name, email, phone, created_by) VALUES ($1,$2,$3,$4,$5) RETURNING guest_id`,
