@@ -2,9 +2,10 @@
 
 import { get, post, patch, qs, uploadFile } from '../api.js';
 import {
-  h, icon, peso, fmtDate, fmtDateTime, badge, label, options, field, formModal, emptyState, searchBox, pageHead, toast,
+  h, icon, peso, fmtDate, fmtDateTime, badge, label, options, field, formModal, emptyState, pageHead, toast,
   todayManila, filesList, openModal, unitLabel } from '../ui.js';
 import { state, navigate } from '../app.js';
+import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 
 const PRIORITIES = ['low', 'medium', 'high', 'urgent'];
 const STATUSES = ['open', 'in_progress', 'resolved', 'cancelled'];
@@ -47,37 +48,71 @@ export async function newMaintenanceModal({ onSaved, propertyId, unitId } = {}) 
 }
 
 export async function maintenanceView(el, { query }) {
-  const filters = { status: query.status ?? 'active', q: query.q || '', property_id: query.property_id || '' };
+  const defaults = { status: 'active', q: '', priority: '', property_id: '', unit_id: '', assigned: '', from: '', to: '', cost: '', sort: '' };
+  const filters = initFilters('maintenance', query, defaults);
+  if (!['active', 'open', 'in_progress', 'resolved', 'cancelled', 'all'].includes(filters.status)) filters.status = 'active';
   const listCard = h('div', { class: 'card' });
   const tabs = h('div', { class: 'tabs', role: 'tablist' });
-  const { properties } = await get('/properties');
-  const propertySelect = h('select', { class: 'input', 'aria-label': 'Property', style: { maxWidth: '240px' } },
-    h('option', { value: '' }, 'All properties'),
-    properties.map((p) => h('option', { value: p.property_id, selected: p.property_id === filters.property_id }, p.property_name)));
-  propertySelect.addEventListener('change', () => { filters.property_id = propertySelect.value; load(); });
+  const barBox = h('div');
+  const [{ properties }, { units }] = await Promise.all([get('/properties'), get('/units')]);
+  let assignees = [];
 
+  // "all" isn't a status the server knows, so it lists every request.
+  const isFiltered = () => Object.keys(changed(filters, defaults)).some((k) => k !== 'status' && k !== 'sort');
   async function load() {
-    history.replaceState(null, '', `#/maintenance${qs(filters)}`);
-    tabs.replaceChildren(...[['active', 'Open & in progress'], ['open', 'Open'], ['in_progress', 'In progress'], ['resolved', 'Resolved'], ['', 'All']].map(([s, t]) =>
-      h('button', { role: 'tab', 'aria-selected': String(filters.status === s), onclick: () => { filters.status = s; load(); } }, t)));
-    const { requests } = await get(`/maintenance${qs(filters)}`);
+    history.replaceState(null, '', `#/maintenance${qs(changed(filters, defaults))}`);
+    tabs.replaceChildren(...[['active', 'Open & in progress'], ['open', 'Open'], ['in_progress', 'In progress'], ['resolved', 'Resolved'], ['cancelled', 'Cancelled'], ['all', 'All']].map(([s, t]) =>
+      h('button', { role: 'tab', 'aria-selected': String(filters.status === s), onclick: () => { filters.status = s; rememberFilters('maintenance', filters); load(); } }, t)));
+    const res = await get(`/maintenance${qs(changed(filters, defaults))}`);
+    const { requests } = res;
+    // Rebuild the bar the first time new "Assigned to" names appear.
+    if (res.assignees.join('|') !== assignees.join('|')) { assignees = res.assignees; renderBar(); }
+    const spent = requests.reduce((sum, m) => sum + Number(m.actual_cost), 0);
     listCard.replaceChildren(requests.length
-      ? h('ul', { class: 'list' }, requests.map((m) => h('li', null, h('a', { class: 'row', href: `#/maintenance/${m.request_id}` },
-        h('div', { class: 'row__main' },
-          h('span', { class: 'row__title' }, m.title),
-          h('span', { class: 'row__sub' }, `${m.property_name}${m.unit_name ? ` · Unit ${m.unit_name}` : ''} · reported ${fmtDate(m.created_at.slice(0, 10))}`),
-          (Number(m.actual_cost) > 0 || m.estimated_cost) && h('span', { class: 'row__sub' }, Number(m.actual_cost) > 0 ? `Cost ${peso(m.actual_cost)}` : `Est. ${peso(m.estimated_cost)}`)),
-        h('div', { class: 'row__end' }, badge(m.status), badge(m.priority))))))
-      : (filters.q || filters.property_id
-        ? emptyState({ title: 'No results found', text: 'Try clearing your search or filters.', action: h('button', { class: 'btn btn--secondary', onclick: () => { filters.q = ''; filters.property_id = ''; propertySelect.value = ''; search.querySelector('input').value = ''; load(); } }, 'Clear filters') })
+      ? [isFiltered() && h('p', { class: 'muted small' }, `Showing ${requests.length} request${requests.length === 1 ? '' : 's'}${spent > 0 ? ` · ${peso(spent)} spent` : ''}`),
+        h('ul', { class: 'list' }, requests.map((m) => h('li', null, h('a', { class: 'row', href: `#/maintenance/${m.request_id}` },
+          h('div', { class: 'row__main' },
+            h('span', { class: 'row__title' }, m.title),
+            h('span', { class: 'row__sub' }, `${m.property_name}${m.unit_name ? ` · Unit ${m.unit_name}` : ''} · reported ${fmtDate(m.created_at.slice(0, 10))}${m.assigned_to ? ` · ${m.assigned_to}` : ''}`),
+            (Number(m.actual_cost) > 0 || m.estimated_cost) && h('span', { class: 'row__sub' }, Number(m.actual_cost) > 0 ? `Cost ${peso(m.actual_cost)}` : `Est. ${peso(m.estimated_cost)}`)),
+          h('div', { class: 'row__end' }, badge(m.status), badge(m.priority))))))]
+      : (isFiltered()
+        ? emptyState({ title: 'No results found', text: 'Nothing matches these filters. Try removing a filter.', action: h('button', { class: 'btn btn--secondary', onclick: () => { Object.assign(filters, defaults, { status: filters.status }); rememberFilters('maintenance', filters); renderBar(); load(); } }, 'Clear filters') })
         : emptyState({ iconName: 'wrench', title: filters.status === 'active' ? 'No open repair requests' : 'No requests here', text: 'Log repairs as they’re reported so nothing gets lost in chat threads.', action: h('button', { class: 'btn btn--primary', onclick: () => newMaintenanceModal() }, icon('plus'), 'New request') })));
   }
-  const search = searchBox({ value: filters.q, placeholder: 'Search issue, property or unit', onSearch: (q) => { filters.q = q; load(); } });
+
+  function renderBar() {
+    let lastProperty = filters.property_id;
+    barBox.replaceChildren(filterBar({
+      key: 'maintenance', values: filters, defaults,
+      onChange: () => {
+        // A new property changes the unit choices; drop a unit from another property.
+        if (filters.property_id !== lastProperty) {
+          if (filters.unit_id && filters.unit_id !== 'none' && !units.some((u) => u.unit_id === filters.unit_id && (!filters.property_id || u.property_id === filters.property_id))) filters.unit_id = '';
+          rememberFilters('maintenance', filters);
+          renderBar();
+        }
+        load().catch((e) => toast(e.message, 'error'));
+      },
+      search: { placeholder: 'Search issue, unit, reported by or assigned to' },
+      quick: [
+        { name: 'priority', label: 'Priority', all: 'Any priority', options: [['high_up', 'High and urgent'], ...PRIORITIES.slice().reverse().map((p) => [p, label(p)])] },
+        properties.length > 1 && { name: 'property_id', label: 'Property', all: 'All properties', options: properties.map((p) => [p.property_id, p.property_name]) },
+      ].filter(Boolean),
+      more: [
+        { name: 'unit_id', label: 'Unit', all: 'All units', options: [['none', 'Common area / whole property'], ...units.filter((u) => !filters.property_id || u.property_id === filters.property_id).map((u) => [u.unit_id, `${unitLabel(u.unit_name)}${properties.length > 1 && !filters.property_id ? ` · ${u.property_name}` : ''}`])] },
+        { name: 'assigned', label: 'Assigned to', all: 'Anyone', options: [['none', 'Not assigned yet'], ...assignees.map((a) => [a, a])] },
+        { name: 'from', label: 'Reported between', type: 'daterange', keys: ['from', 'to'] },
+        { name: 'cost', label: 'Cost', all: 'Any', options: [['recorded', 'Has recorded cost'], ['none', 'No cost recorded'], ['estimate_only', 'Estimate only']] },
+        { name: 'sort', label: 'Sort by', all: 'Open first, most urgent', options: [['newest', 'Newest reported'], ['oldest', 'Oldest reported'], ['priority', 'Priority'], ['cost', 'Highest cost'], ['property', 'Property and unit']] },
+      ],
+    }));
+  }
+  renderBar();
   await load();
   el.replaceChildren(
     pageHead({ title: 'Maintenance', sub: 'Repair requests from report to resolution', actions: h('button', { class: 'btn btn--primary', onclick: () => newMaintenanceModal() }, icon('plus'), 'New request') }),
-    h('div', { class: 'toolbar' }, search, propertySelect),
-    tabs, listCard);
+    tabs, barBox, listCard);
 }
 
 export async function maintenanceDetailView(el, { params, rerender }) {

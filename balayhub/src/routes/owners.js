@@ -48,16 +48,32 @@ async function loadOwner(user, id) {
   return o;
 }
 
+// Filters: search (name, email, mobile), has units / no units yet, owns a
+// given listing, sort. `units` is always the full list (for the forms).
+const OWNER_SORTS = { name: 'o.full_name', fee: 'o.management_fee_pct DESC, o.full_name', units: 'COUNT(u.unit_id) DESC, o.full_name', newest: 'o.created_at DESC' };
 router.get('/unit-owners', ownersOnly, ah(async (req, res) => {
   const org = req.user.organization_id;
+  const q = req.query;
+  const params = [org];
+  const where = ['o.organization_id = $1', 'o.archived_at IS NULL'];
+  const having = [];
+  if (q.q) {
+    params.push(`%${String(q.q).slice(0, 100)}%`);
+    where.push(`(o.full_name ILIKE $${params.length} OR o.email ILIKE $${params.length} OR o.phone ILIKE $${params.length})`);
+  }
+  if (q.has_units === 'yes') having.push('COUNT(u.unit_id) > 0');
+  if (q.has_units === 'no') having.push('COUNT(u.unit_id) = 0');
+  if (q.unit_id) { params.push(uuidParam(q.unit_id)); where.push(`EXISTS (SELECT 1 FROM units x WHERE x.owner_id = o.owner_id AND x.unit_id = $${params.length})`); }
   const { rows: owners } = await query(
     `SELECT o.*, COALESCE(array_agg(u.unit_id) FILTER (WHERE u.unit_id IS NOT NULL), '{}') AS unit_ids
        FROM unit_owners o LEFT JOIN units u ON u.owner_id = o.owner_id AND u.status = 'active'
-      WHERE o.organization_id = $1 AND o.archived_at IS NULL GROUP BY o.owner_id ORDER BY o.full_name`, [org]);
+      WHERE ${where.join(' AND ')} GROUP BY o.owner_id ${having.length ? `HAVING ${having.join(' AND ')}` : ''}
+      ORDER BY ${OWNER_SORTS[q.sort] || OWNER_SORTS.name}`, params);
   const { rows: units } = await query(
     `SELECT u.unit_id, u.unit_name, p.property_name, u.owner_id FROM units u JOIN properties p USING (property_id)
       WHERE p.organization_id = $1 AND u.status = 'active' AND p.status = 'active' ORDER BY p.property_name, u.unit_name`, [org]);
-  res.json({ owners, units });
+  const { n: total } = await one('SELECT COUNT(*)::int AS n FROM unit_owners WHERE organization_id = $1 AND archived_at IS NULL', [org]);
+  res.json({ owners, units, total });
 }));
 
 router.post('/unit-owners', ownersOnly, ah(async (req, res) => {

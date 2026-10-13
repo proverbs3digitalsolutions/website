@@ -30,6 +30,20 @@ function dateRange(q) {
   return { from, to };
 }
 
+// Amount filters: plain non-negative numbers only ("1500" or "1500.50").
+const AMOUNT_RE = /^\d{1,10}(\.\d{1,2})?$/;
+function amountRange(q, column, params, where) {
+  if (AMOUNT_RE.test(String(q.min_amount || ''))) { params.push(q.min_amount); where.push(`${column} >= $${params.length}::numeric`); }
+  if (AMOUNT_RE.test(String(q.max_amount || ''))) { params.push(q.max_amount); where.push(`${column} <= $${params.length}::numeric`); }
+}
+
+// Receipt / proof attached (files uploaded against the record), for bookkeeping.
+function receiptFilter(value, type, idColumn, params, where) {
+  if (value !== 'yes' && value !== 'no') return;
+  params.push(type);
+  where.push(`${value === 'no' ? 'NOT ' : ''}EXISTS (SELECT 1 FROM files f WHERE f.related_record_type = $${params.length} AND f.related_record_id = ${idColumn})`);
+}
+
 async function todayManila() {
   return (await one(`SELECT ${TODAY} AS d`)).d;
 }
@@ -45,24 +59,44 @@ router.get('/rent', ah(async (req, res) => {
   if (status === 'outstanding') where.push(`c.status <> 'paid'`);
   else if (['paid', 'partial', 'unpaid', 'overdue'].includes(status)) { params.push(status); where.push(`c.status = $${params.length}`); }
   if (req.query.property_id) { params.push(uuidParam(req.query.property_id)); where.push(`p.property_id = $${params.length}`); }
+  if (req.query.unit_id) { params.push(uuidParam(req.query.unit_id)); where.push(`u.unit_id = $${params.length}`); }
   if (req.query.month && /^\d{4}-\d{2}$/.test(req.query.month) && isValidDate(`${req.query.month}-01`)) { params.push(`${req.query.month}-01`); where.push(`c.period = $${params.length}::date`); }
   if (req.query.q) {
     params.push(`%${String(req.query.q).slice(0, 100)}%`);
     where.push(`(t.full_name ILIKE $${params.length} OR u.unit_name ILIKE $${params.length} OR p.property_name ILIKE $${params.length})`);
   }
+  // Current tenants vs. people who have moved out but still owe.
+  if (req.query.lease === 'current') where.push(`l.lease_status = 'active'`);
+  if (req.query.lease === 'former') where.push(`l.lease_status <> 'active'`);
+  // "Late by more than N days" for collections follow-up.
+  if (['7', '30', '60', '90'].includes(req.query.late)) {
+    params.push(Number(req.query.late));
+    where.push(`c.status = 'overdue' AND c.due_date < ${TODAY} - $${params.length}::int`);
+  }
+  if (AMOUNT_RE.test(String(req.query.min_amount || ''))) { params.push(req.query.min_amount); where.push(`c.balance >= $${params.length}::numeric`); }
+  const SORTS = {
+    due: `(c.status = 'overdue') DESC, c.due_date DESC, t.full_name`,
+    due_asc: 'c.due_date, t.full_name',
+    amount: 'c.balance DESC, c.due_date',
+    rent: 'c.amount_due DESC, c.due_date DESC',
+    tenant: 't.full_name, c.due_date DESC',
+    unit: 'p.property_name, u.unit_name, c.due_date DESC',
+  };
   const { rows } = await query(
     `WITH ${CHARGE_STATUS_CTE}
-     SELECT c.*, l.tenant_id, t.full_name AS tenant_name, u.unit_name, p.property_id, p.property_name, l.lease_status
+     SELECT c.*, l.tenant_id, t.full_name AS tenant_name, u.unit_id, u.unit_name, p.property_id, p.property_name, l.lease_status
        FROM charges c
        JOIN leases l ON l.lease_id = c.lease_id
        JOIN tenants t ON t.tenant_id = l.tenant_id
        JOIN units u ON u.unit_id = l.unit_id
        JOIN properties p ON p.property_id = u.property_id
       WHERE ${where.join(' AND ')}
-      ORDER BY (c.status = 'overdue') DESC, c.due_date DESC, t.full_name
+      ORDER BY ${SORTS[req.query.sort] || SORTS.due}
       LIMIT 500`, params);
+  // Totals cover everything unpaid (all months), narrowed to the chosen property.
   const totalParams = [org];
-  const totalScope = propertyScope(req.user, totalParams);
+  let totalScope = propertyScope(req.user, totalParams);
+  if (req.query.property_id) { totalParams.push(uuidParam(req.query.property_id)); totalScope += ` AND p.property_id = $${totalParams.length}`; }
   const { rows: [totals] } = await query(
     `WITH ${CHARGE_STATUS_CTE}
      SELECT COALESCE(SUM(c.balance), 0)::numeric(12,2) AS outstanding,
@@ -106,13 +140,28 @@ router.get('/payments', ah(async (req, res) => {
   if (from) { params.push(from); where.push(`pm.payment_date >= $${params.length}`); }
   if (to) { params.push(to); where.push(`pm.payment_date <= $${params.length}`); }
   if (req.query.property_id) { params.push(uuidParam(req.query.property_id)); where.push(`p.property_id = $${params.length}`); }
-  if (req.query.include_voided !== '1') where.push('pm.voided_at IS NULL');
+  if (req.query.unit_id) { params.push(uuidParam(req.query.unit_id)); where.push(`u.unit_id = $${params.length}`); }
+  if (req.query.tenant_id) { params.push(uuidParam(req.query.tenant_id)); where.push(`t.tenant_id = $${params.length}`); }
+  if (PAYMENT_METHODS.includes(req.query.method)) { params.push(req.query.method); where.push(`pm.payment_method = $${params.length}`); }
+  // include_voided: '1' shows voided entries too, 'only' shows just the voided ones.
+  if (req.query.include_voided === 'only') where.push('pm.voided_at IS NOT NULL');
+  else if (req.query.include_voided !== '1') where.push('pm.voided_at IS NULL');
+  amountRange(req.query, 'pm.amount_paid', params, where);
+  receiptFilter(req.query.receipt, 'payment', 'pm.payment_id', params, where);
   if (req.query.q) {
     params.push(`%${String(req.query.q).slice(0, 100)}%`);
-    where.push(`(t.full_name ILIKE $${params.length} OR u.unit_name ILIKE $${params.length} OR pm.reference_number ILIKE $${params.length})`);
+    const n = params.length;
+    where.push(`(t.full_name ILIKE $${n} OR u.unit_name ILIKE $${n} OR p.property_name ILIKE $${n} OR pm.reference_number ILIKE $${n} OR pm.notes ILIKE $${n})`);
   }
+  const SORTS = {
+    date: 'pm.payment_date DESC, pm.created_at DESC',
+    date_asc: 'pm.payment_date, pm.created_at',
+    amount: 'pm.amount_paid DESC, pm.payment_date DESC',
+    amount_asc: 'pm.amount_paid, pm.payment_date DESC',
+    tenant: 't.full_name, pm.payment_date DESC',
+  };
   const { rows } = await query(
-    `SELECT pm.*, t.tenant_id, t.full_name AS tenant_name, u.unit_name, p.property_id, p.property_name,
+    `SELECT pm.*, t.tenant_id, t.full_name AS tenant_name, u.unit_id, u.unit_name, p.property_id, p.property_name,
             ru.full_name AS recorded_by_name
        FROM payments pm
        JOIN leases l ON l.lease_id = pm.lease_id
@@ -121,7 +170,7 @@ router.get('/payments', ah(async (req, res) => {
        JOIN properties p ON p.property_id = u.property_id
        JOIN users ru ON ru.user_id = pm.recorded_by
       WHERE ${where.join(' AND ')}
-      ORDER BY pm.payment_date DESC, pm.created_at DESC LIMIT 500`, params);
+      ORDER BY ${SORTS[req.query.sort] || SORTS.date} LIMIT 500`, params);
   res.json({ payments: rows });
 }));
 
@@ -279,12 +328,27 @@ router.get('/expenses', ah(async (req, res) => {
   if (from) { params.push(from); where.push(`e.expense_date >= $${params.length}`); }
   if (to) { params.push(to); where.push(`e.expense_date <= $${params.length}`); }
   if (req.query.property_id) { params.push(uuidParam(req.query.property_id)); where.push(`p.property_id = $${params.length}`); }
+  if (req.query.unit_id === 'none') where.push('e.unit_id IS NULL');
+  else if (req.query.unit_id) { params.push(uuidParam(req.query.unit_id)); where.push(`e.unit_id = $${params.length}`); }
   if (EXPENSE_CATEGORIES.includes(req.query.category)) { params.push(req.query.category); where.push(`e.category = $${params.length}`); }
-  if (req.query.include_voided !== '1') where.push('e.voided_at IS NULL');
+  if (req.query.include_voided === 'only') where.push('e.voided_at IS NOT NULL');
+  else if (req.query.include_voided !== '1') where.push('e.voided_at IS NULL');
+  if (req.query.vendor) { params.push(`%${String(req.query.vendor).slice(0, 120)}%`); where.push(`e.vendor_name ILIKE $${params.length}`); }
+  if (req.query.source === 'maintenance') where.push('e.maintenance_request_id IS NOT NULL');
+  if (req.query.source === 'direct') where.push('e.maintenance_request_id IS NULL');
+  amountRange(req.query, 'e.amount', params, where);
+  receiptFilter(req.query.receipt, 'expense', 'e.expense_id', params, where);
   if (req.query.q) {
     params.push(`%${String(req.query.q).slice(0, 100)}%`);
     where.push(`(e.description ILIKE $${params.length} OR e.vendor_name ILIKE $${params.length} OR p.property_name ILIKE $${params.length})`);
   }
+  const SORTS = {
+    date: 'e.expense_date DESC, e.created_at DESC',
+    date_asc: 'e.expense_date, e.created_at',
+    amount: 'e.amount DESC, e.expense_date DESC',
+    amount_asc: 'e.amount, e.expense_date DESC',
+    category: 'e.category, e.expense_date DESC',
+  };
   const { rows } = await query(
     `SELECT e.*, p.property_name, u.unit_name, ru.full_name AS recorded_by_name
        FROM expenses e
@@ -292,7 +356,7 @@ router.get('/expenses', ah(async (req, res) => {
        LEFT JOIN units u ON u.unit_id = e.unit_id
        JOIN users ru ON ru.user_id = e.recorded_by
       WHERE ${where.join(' AND ')}
-      ORDER BY e.expense_date DESC, e.created_at DESC LIMIT 500`, params);
+      ORDER BY ${SORTS[req.query.sort] || SORTS.date} LIMIT 500`, params);
   res.json({ expenses: rows });
 }));
 

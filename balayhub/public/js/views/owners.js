@@ -1,9 +1,10 @@
 // Unit owners (people whose units you manage) and their monthly statements.
 
-import { get, post, patch } from '../api.js';
+import { get, post, patch, qs } from '../api.js';
 import { h, peso, fmtDate, field, formModal, confirmDialog, emptyState, pageHead, toast, todayManila } from '../ui.js';
 import { navigate } from '../app.js';
 import { CHANNEL_LABEL } from './reservations.js';
+import { initFilters, filterBar, changed } from '../filters.js';
 
 const short = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 const num = (v) => h('td', { class: 'num' }, v);
@@ -37,8 +38,10 @@ function ownerForm(units, o = {}) {
   ];
 }
 
-export async function ownersView(el, { rerender }) {
-  const { owners, units } = await get('/unit-owners');
+export async function ownersView(el, { rerender, query = {} }) {
+  const defaults = { q: '', has_units: '', unit_id: '', sort: '' };
+  const filters = initFilters('owners', query, defaults);
+  let { owners, units, total } = await get(`/unit-owners${qs(changed(filters, defaults))}`);
   const unitName = (id) => units.find((u) => u.unit_id === id)?.unit_name;
   const add = () => formModal({
     title: 'Add a unit owner', submitText: 'Save owner', fields: ownerForm(units),
@@ -53,28 +56,59 @@ export async function ownersView(el, { rerender }) {
     try { await post(`/unit-owners/${o.owner_id}/archive`); toast('Owner removed.'); rerender(); } catch (err) { toast(err.message, 'error'); }
   };
 
+  const listBox = h('div');
+  function draw() {
+    const filtered = Object.keys(changed(filters, defaults)).some((k) => k !== 'sort');
+    if (!owners.length) {
+      listBox.replaceChildren(h('div', { class: 'card' }, filtered
+        ? emptyState({ iconName: 'file', title: 'No results found', text: 'No owner matches these filters. Try removing a filter.' })
+        : emptyState({
+          iconName: 'file', title: 'No unit owners yet',
+          text: 'If you manage units for other owners, add them here and assign their units. BalayHub then prepares a monthly statement: bookings, channel fees, your management fee, expenses and their payout.',
+          action: h('button', { class: 'btn btn--primary', type: 'button', onclick: add }, '+ Add owner'),
+        })));
+      return;
+    }
+    listBox.replaceChildren(
+      filtered ? h('p', { class: 'muted small' }, `Showing ${owners.length} of ${total} owner${total === 1 ? '' : 's'}`) : '',
+      h('div', { class: 'grid grid--2' }, owners.map((o) => h('div', { class: 'card' },
+        h('div', { class: 'card__head' }, h('h2', null, o.full_name),
+          h('div', { class: 'chips' },
+            h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => edit(o) }, 'Edit'),
+            h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => archive(o) }, 'Remove'))),
+        h('dl', { class: 'dl' },
+          h('dt', null, 'Units'), h('dd', null, o.unit_ids.map(unitName).filter(Boolean).join(', ') || 'None yet'),
+          h('dt', null, 'Management fee'), h('dd', null, `${Number(o.management_fee_pct)}%${o.cleaning_to_manager ? ' · cleaning fees kept for cleaning' : ''}`),
+          o.email && [h('dt', null, 'Email'), h('dd', null, o.email)],
+          o.phone && [h('dt', null, 'Mobile'), h('dd', null, o.phone)]),
+        h('div', { class: 'chips', style: { marginTop: '12px' } },
+          h('a', { class: 'btn btn--primary btn--sm', href: `#/owners/${o.owner_id}/statement?month=${lastMonth()}` }, 'Statement for last month'),
+          h('a', { class: 'btn btn--secondary btn--sm', href: `#/owners/${o.owner_id}/statement?month=${todayManila().slice(0, 7)}` }, 'This month so far'))))));
+  }
+  async function load() {
+    history.replaceState(null, '', `#/owners${qs(changed(filters, defaults))}`);
+    ({ owners, units, total } = await get(`/unit-owners${qs(changed(filters, defaults))}`));
+    draw();
+  }
+  draw();
+  // No filter bar for a single owner (unless a filter is still on from before).
+  const showBar = total > 1 || Object.keys(changed(filters, defaults)).length > 0;
+  const bar = showBar && filterBar({
+    key: 'owners', values: filters, defaults, onChange: load,
+    search: { placeholder: 'Search name, email or mobile' },
+    quick: [{ name: 'has_units', label: 'Units', all: 'Any', options: [['yes', 'Has units'], ['no', 'No units yet']] }],
+    more: [
+      units.length > 0 && { name: 'unit_id', label: 'Owns listing', all: 'Any listing', options: units.map((u) => [u.unit_id, `${u.unit_name} · ${u.property_name}`]) },
+      { name: 'sort', label: 'Sort by', all: 'Name (A–Z)', options: [['units', 'Most units'], ['fee', 'Highest management fee'], ['newest', 'Newest first']] },
+    ].filter(Boolean),
+  });
+
   el.replaceChildren(
     pageHead({
       title: 'Unit owners', sub: 'Monthly statements for owners whose units you manage',
       actions: h('button', { class: 'btn btn--primary', type: 'button', onclick: add }, '+ Add owner'),
     }),
-    owners.length ? h('div', { class: 'grid grid--2' }, owners.map((o) => h('div', { class: 'card' },
-      h('div', { class: 'card__head' }, h('h2', null, o.full_name),
-        h('div', { class: 'chips' },
-          h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => edit(o) }, 'Edit'),
-          h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => archive(o) }, 'Remove'))),
-      h('dl', { class: 'dl' },
-        h('dt', null, 'Units'), h('dd', null, o.unit_ids.map(unitName).filter(Boolean).join(', ') || 'None yet'),
-        h('dt', null, 'Management fee'), h('dd', null, `${Number(o.management_fee_pct)}%${o.cleaning_to_manager ? ' · cleaning fees kept for cleaning' : ''}`),
-        o.email && [h('dt', null, 'Email'), h('dd', null, o.email)]),
-      h('div', { class: 'chips', style: { marginTop: '12px' } },
-        h('a', { class: 'btn btn--primary btn--sm', href: `#/owners/${o.owner_id}/statement?month=${lastMonth()}` }, 'Statement for last month'),
-        h('a', { class: 'btn btn--secondary btn--sm', href: `#/owners/${o.owner_id}/statement?month=${todayManila().slice(0, 7)}` }, 'This month so far')))))
-      : h('div', { class: 'card' }, emptyState({
-        iconName: 'file', title: 'No unit owners yet',
-        text: 'If you manage units for other owners, add them here and assign their units. BalayHub then prepares a monthly statement: bookings, channel fees, your management fee, expenses and their payout.',
-        action: h('button', { class: 'btn btn--primary', type: 'button', onclick: add }, '+ Add owner'),
-      })));
+    bar || '', listBox);
 }
 
 export async function ownerStatementView(el, { params, query = {} }) {

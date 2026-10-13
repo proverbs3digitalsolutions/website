@@ -1,10 +1,11 @@
 // Housekeeping: cleaning tasks for departing stays, checklist, photos, assignment.
 
-import { get, post, patch, api, uploadFile } from '../api.js';
+import { get, post, patch, api, uploadFile, qs } from '../api.js';
 import {
   h, icon, fmtDate, fmtDateTime, badge, field, formModal, confirmDialog, emptyState, toast, todayManila, filesList, openModal,
 } from '../ui.js';
 import { state } from '../app.js';
+import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 import { addDays } from './reservations.js';
 
 const STATUS = { todo: ['unpaid', 'To do'], in_progress: ['partial', 'In progress'], done: ['paid', 'Done'], cancelled: ['voided', 'Cancelled'] };
@@ -98,38 +99,74 @@ async function checklistModal() {
 }
 
 // ---------------------------------------------------------------- list
-export async function housekeepingView(el, { query, navigate, rerender }) {
-  const view = ['today', 'upcoming', 'done'].includes(query.view) ? query.view : 'today';
-  const mine = query.mine === '1';
+const TABS = [['today', 'Today & overdue'], ['upcoming', 'Upcoming'], ['done', 'Done'], ['all', 'All']];
+
+export async function housekeepingView(el, { query }) {
   const isManager = state.user.role !== 'staff';
-  const { tasks, counts } = await get(`/cleaning-tasks?view=${view}${mine ? '&mine=1' : ''}`);
-  const link = (v, m = mine) => `#/housekeeping?view=${v}${m ? '&mine=1' : ''}`;
+  const defaults = { view: 'today', q: '', mine: '', status: '', property_id: '', unit_id: '', assignee: '', from: '', to: '', late: '', turnover: '', sort: '' };
+  const filters = initFilters('housekeeping', query, defaults);
+  if (!TABS.some(([v]) => v === filters.view)) filters.view = 'today';
+  const [{ properties }, { listings }, { assignees }] = await Promise.all([
+    get('/properties'), get('/listings'), isManager ? get('/cleaning-assignees') : { assignees: [] },
+  ]);
+  const tabs = h('div', { class: 'tabs tabs--compact', role: 'tablist' });
+  const box = h('div');
+
+  async function load() {
+    const active = changed(filters, { ...defaults, view: '' });
+    history.replaceState(null, '', `#/housekeeping${qs(active)}`);
+    const { tasks, counts } = await get(`/cleaning-tasks${qs(active)}`);
+    const count = { today: counts.today, upcoming: counts.upcoming };
+    tabs.replaceChildren(...TABS.map(([k, t]) => h('button', {
+      type: 'button', role: 'tab', 'aria-selected': String(k === filters.view),
+      onclick: () => { filters.view = k; rememberFilters('housekeeping', filters); load(); },
+    }, count[k] !== undefined ? `${t} (${count[k]})` : t)));
+    const filtered = Object.keys(changed(filters, defaults)).some((k) => k !== 'view' && k !== 'sort');
+    const view = filters.view;
+    box.replaceChildren(tasks.length
+      ? h('div', { class: 'hk-grid' }, tasks.map((t) => h('a', { class: `card hk-card${['todo', 'in_progress'].includes(t.status) && t.due_date < todayManila() ? ' hk-card--late' : ''}`, href: `#/housekeeping/${t.task_id}` },
+        h('div', { class: 'hk-card__top' },
+          h('div', null, h('strong', null, t.unit_name), h('div', { class: 'small muted' }, t.property_name)),
+          statusBadge(t.status)),
+        h('div', { class: 'hk-card__due' }, dueText(t)),
+        ['todo', 'in_progress'].includes(t.status) && h('div', { class: `small${t.next_check_in === t.due_date ? ' amount--neg' : ' muted'}` }, nextGuestText(t)),
+        h('div', { class: 'bar' }, h('span', { style: { width: `${t.item_count ? Math.round((100 * t.done_count) / t.item_count) : 0}%` } })),
+        h('div', { class: 'small muted' }, `${t.done_count} of ${t.item_count} done · ${assigneeText(t)}`))))
+      : h('div', { class: 'card' }, emptyState(filtered ? { title: 'No results found', text: 'Try removing a filter.', iconName: 'home' } : {
+        title: view === 'done' ? 'No finished cleanings yet' : 'Nothing to clean ✨',
+        text: view === 'today' ? 'Cleaning tasks appear automatically for today\'s and tomorrow\'s check-outs.' : null,
+        iconName: 'home',
+      })));
+  }
+
+  const bar = filterBar({
+    key: 'housekeeping', values: filters, defaults, onChange: load,
+    extra: tabs,
+    search: { placeholder: 'Search listing, cleaner or notes' },
+    quick: [
+      { name: 'mine', label: 'Only my tasks', type: 'check' },
+      properties.length > 1 && { name: 'property_id', label: 'Property', all: 'All properties', options: properties.map((p) => [p.property_id, p.property_name]) },
+    ].filter(Boolean),
+    more: [
+      { name: 'unit_id', label: 'Listing', all: 'All listings', options: listings.map((l) => [l.unit_id, `${l.unit_name}${properties.length > 1 ? ` · ${l.property_name}` : ''}`]) },
+      { name: 'status', label: 'Status', all: 'Any status', options: Object.entries(STATUS).map(([k, [, t]]) => [k, t]) },
+      isManager && { name: 'assignee', label: 'Assigned to', all: 'Anyone', options: [['unassigned', 'Not assigned yet'], ['outside', 'Cleaner without a login'], ...assignees.map((a) => [a.user_id, a.full_name])] },
+      { name: 'due', keys: ['from', 'to'], label: 'Due between', type: 'daterange' },
+      { name: 'turnover', label: 'Next guest', all: 'Any', options: [['same_day', 'Same-day turnover'], ['next_booked', 'Next guest booked'], ['no_next', 'No next guest yet']] },
+      { name: 'late', label: 'Overdue only', type: 'check' },
+      { name: 'sort', label: 'Sort by', all: 'Default for this tab', options: [['due', 'Due date (soonest first)'], ['due_desc', 'Due date (latest first)'], ['listing', 'Listing'], ['next_guest', 'Next guest arrival'], ['completed', 'Recently finished']] },
+    ].filter(Boolean),
+  });
+  await load();
 
   el.replaceChildren(
     h('div', { class: 'page-head' },
       h('div', { class: 'page-head__title' }, h('h1', null, 'Housekeeping'), h('p', null, 'Cleaning after each check-out')),
       isManager && h('div', { class: 'page-head__actions' },
         state.user.role === 'owner' && h('button', { class: 'btn btn--secondary', onclick: checklistModal }, 'Edit checklist'),
-        h('button', { class: 'btn btn--primary', onclick: () => newTaskModal(rerender) }, icon('plus'), 'Add task'))),
-    h('div', { class: 'toolbar' },
-      h('div', { class: 'tabs tabs--compact', role: 'tablist' },
-        [['today', `Today & overdue (${counts.today})`], ['upcoming', `Upcoming (${counts.upcoming})`], ['done', 'Done']].map(([k, t]) =>
-          h('a', { href: link(k), role: 'tab', 'aria-selected': String(k === view) }, t))),
-      h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: mine, onchange: (e) => navigate(link(view, e.target.checked)) }), h('span', null, 'Only my tasks'))),
-    tasks.length
-      ? h('div', { class: 'hk-grid' }, tasks.map((t) => h('a', { class: `card hk-card${t.status !== 'done' && t.due_date < todayManila() ? ' hk-card--late' : ''}`, href: `#/housekeeping/${t.task_id}` },
-        h('div', { class: 'hk-card__top' },
-          h('div', null, h('strong', null, t.unit_name), h('div', { class: 'small muted' }, t.property_name)),
-          statusBadge(t.status)),
-        h('div', { class: 'hk-card__due' }, dueText(t)),
-        t.status !== 'done' && h('div', { class: `small${t.next_check_in === t.due_date ? ' amount--neg' : ' muted'}` }, nextGuestText(t)),
-        h('div', { class: 'bar' }, h('span', { style: { width: `${t.item_count ? Math.round((100 * t.done_count) / t.item_count) : 0}%` } })),
-        h('div', { class: 'small muted' }, `${t.done_count} of ${t.item_count} done · ${assigneeText(t)}`))))
-      : h('div', { class: 'card' }, emptyState({
-        title: view === 'done' ? 'No finished cleanings yet' : 'Nothing to clean ✨',
-        text: view === 'today' ? 'Cleaning tasks appear automatically for today\'s and tomorrow\'s check-outs.' : null,
-        iconName: 'home',
-      })));
+        h('button', { class: 'btn btn--primary', onclick: () => newTaskModal(load) }, icon('plus'), 'Add task'))),
+    bar,
+    box);
 }
 
 // ---------------------------------------------------------------- detail

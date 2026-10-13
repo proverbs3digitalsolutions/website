@@ -3,7 +3,7 @@
 const express = require('express');
 const { query, one, tx } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
-const { validate, uuidParam } = require('../lib/validate');
+const { validate, uuidParam, isValidDate } = require('../lib/validate');
 const { audit } = require('../lib/audit');
 const { requireRole } = require('../lib/auth');
 const { propertyScope, loadProperty, loadUnit } = require('../lib/access');
@@ -37,18 +37,46 @@ router.get('/maintenance', ah(async (req, res) => {
   const status = req.query.status;
   if (status === 'active') where.push(`m.status IN ('open', 'in_progress')`);
   else if (STATUSES.includes(status)) { params.push(status); where.push(`m.status = $${params.length}`); }
-  if (PRIORITIES.includes(req.query.priority)) { params.push(req.query.priority); where.push(`m.priority = $${params.length}`); }
+  if (req.query.priority === 'high_up') where.push(`m.priority IN ('high', 'urgent')`);
+  else if (PRIORITIES.includes(req.query.priority)) { params.push(req.query.priority); where.push(`m.priority = $${params.length}`); }
   if (req.query.property_id) { params.push(uuidParam(req.query.property_id)); where.push(`m.property_id = $${params.length}`); }
+  // A unit, or "none" for common areas / the whole property.
+  if (req.query.unit_id === 'none') where.push('m.unit_id IS NULL');
+  else if (req.query.unit_id) { params.push(uuidParam(req.query.unit_id)); where.push(`m.unit_id = $${params.length}`); }
+  if (req.query.assigned === 'none') where.push(`COALESCE(trim(m.assigned_to), '') = ''`);
+  else if (req.query.assigned) { params.push(String(req.query.assigned).trim().slice(0, 120)); where.push(`lower(trim(m.assigned_to)) = lower($${params.length})`); }
+  // Reported date, in Manila time.
+  const reported = `(m.created_at AT TIME ZONE 'Asia/Manila')::date`;
+  if (isValidDate(req.query.from)) { params.push(req.query.from); where.push(`${reported} >= $${params.length}::date`); }
+  if (isValidDate(req.query.to)) { params.push(req.query.to); where.push(`${reported} <= $${params.length}::date`); }
+  const spent = `(SELECT COALESCE(SUM(e.amount), 0) FROM expenses e WHERE e.maintenance_request_id = m.request_id AND e.voided_at IS NULL)`;
+  if (req.query.cost === 'recorded') where.push(`${spent} > 0`);
+  if (req.query.cost === 'none') where.push(`${spent} = 0`);
+  if (req.query.cost === 'estimate_only') where.push(`${spent} = 0 AND m.estimated_cost IS NOT NULL`);
   if (req.query.q) {
     params.push(`%${String(req.query.q).slice(0, 100)}%`);
-    where.push(`(m.title ILIKE $${params.length} OR m.description ILIKE $${params.length} OR p.property_name ILIKE $${params.length} OR u.unit_name ILIKE $${params.length})`);
+    const n = params.length;
+    where.push(`(m.title ILIKE $${n} OR m.description ILIKE $${n} OR p.property_name ILIKE $${n} OR u.unit_name ILIKE $${n} OR m.reported_by ILIKE $${n} OR m.assigned_to ILIKE $${n})`);
   }
+  const SORTS = {
+    newest: 'm.created_at DESC',
+    oldest: 'm.created_at',
+    priority: `array_position(ARRAY['urgent','high','medium','low'], m.priority), m.created_at`,
+    cost: `${spent} DESC, m.estimated_cost DESC NULLS LAST, m.created_at DESC`,
+    property: 'p.property_name, u.unit_name NULLS FIRST, m.created_at DESC',
+  };
   const { rows } = await query(
     `${SELECT} WHERE ${where.join(' AND ')}
-     ORDER BY (m.status IN ('open','in_progress')) DESC,
-              array_position(ARRAY['urgent','high','medium','low'], m.priority), m.created_at DESC
+     ORDER BY ${SORTS[req.query.sort] || `(m.status IN ('open','in_progress')) DESC,
+              array_position(ARRAY['urgent','high','medium','low'], m.priority), m.created_at DESC`}
      LIMIT 500`, params);
-  res.json({ requests: rows });
+  // Names used in "Assigned to", for the filter list.
+  const aParams = [];
+  const { rows: assignees } = await query(
+    `SELECT MIN(trim(m.assigned_to)) AS name FROM maintenance_requests m JOIN properties p ON p.property_id = m.property_id
+      WHERE ${propertyScope(req.user, aParams)} AND COALESCE(trim(m.assigned_to), '') <> ''
+      GROUP BY lower(trim(m.assigned_to)) ORDER BY 1 LIMIT 100`, aParams);
+  res.json({ requests: rows, assignees: assignees.map((a) => a.name) });
 }));
 
 router.post('/maintenance', ah(async (req, res) => {

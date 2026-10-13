@@ -2,10 +2,11 @@
 
 import { get, post, patch, qs, api } from '../api.js';
 import {
-  h, icon, peso, fmtDate, fmtDateTime, badge, field, formModal, openModal, confirmDialog, emptyState, toast, options, searchBox,
+  h, icon, peso, fmtDate, fmtDateTime, badge, field, formModal, openModal, confirmDialog, emptyState, toast, options, todayManila,
 } from '../ui.js';
 import { state } from '../app.js';
-import { CHANNEL_LABEL } from './reservations.js';
+import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
+import { CHANNEL_LABEL, addDays } from './reservations.js';
 
 const UNIT_TYPES = ['studio', 'apartment', 'room', 'house', 'other'];
 const PROPERTY_TYPES = ['condominium', 'apartment', 'house', 'boarding_house', 'other'];
@@ -195,21 +196,63 @@ async function channelsModal(listing, onChange) {
   });
 }
 
+// Listings are few (1–10 for most hosts), so they're filtered here in the browser.
+const LISTING_SORTS = {
+  rate: (a, b) => Number(b.nightly_rate || 0) - Number(a.nightly_rate || 0),
+  rate_asc: (a, b) => Number(a.nightly_rate || 0) - Number(b.nightly_rate || 0),
+  next: (a, b) => (a.next_check_in || '9999').localeCompare(b.next_check_in || '9999'),
+  guests: (a, b) => Number(b.max_guests || 0) - Number(a.max_guests || 0),
+};
+
+function matchListing(l, f, bookable) {
+  const q = f.q.toLowerCase();
+  if (q && ![l.unit_name, l.property_name, l.city].some((x) => (x || '').toLowerCase().includes(q))) return false;
+  if (f.cleaning && l.cleaning_status !== f.cleaning) return false;
+  if (f.property_id && l.property_id !== f.property_id) return false;
+  if (f.unit_type && l.unit_type !== f.unit_type) return false;
+  if (f.occupancy === 'vacant' && l.current_booking_id) return false;
+  if (f.occupancy === 'occupied' && !l.current_booking_id) return false;
+  if (f.occupancy === 'arriving' && !(l.next_check_in && l.next_check_in <= addDays(todayManila(), 7))) return false;
+  if (f.occupancy === 'no_next' && l.next_check_in) return false;
+  if (f.channels === 'connected' && !Number(l.channel_count)) return false;
+  if (f.channels === 'none' && Number(l.channel_count)) return false;
+  if (f.direct === 'on' && !bookable.has(l.unit_id)) return false;
+  if (f.direct === 'off' && bookable.has(l.unit_id)) return false;
+  if (/^\d+$/.test(f.min_guests) && Number(l.max_guests || 0) < Number(f.min_guests)) return false;
+  return true;
+}
+
 export async function listingsView(el, { query }) {
   const canManage = state.user.role !== 'staff';
-  const filter = { cleaning: query.cleaning === 'dirty' ? 'dirty' : '' };
+  const defaults = { q: '', cleaning: '', property_id: '', unit_type: '', occupancy: '', channels: '', direct: '', min_guests: '', sort: '' };
+  const filters = initFilters('listings', query, defaults);
+  if (!['', 'dirty', 'clean'].includes(filters.cleaning)) filters.cleaning = '';
+  const { properties } = await get('/properties');
   const box = h('div');
   async function load() {
+    history.replaceState(null, '', `#/listings${qs(changed(filters, defaults))}`);
     const { listings } = await get('/listings');
-    const shown = filter.cleaning ? listings.filter((l) => l.cleaning_status === 'dirty') : listings;
-    const dirtyCount = listings.filter((l) => l.cleaning_status === 'dirty').length;
+    // Which listings show on the booking page (owners and managers only).
+    const bookable = new Set(canManage ? listings.filter((l) => l.bookable_online).map((l) => l.unit_id) : []);
+    const others = { ...filters, cleaning: '' };
+    const base = listings.filter((l) => matchListing(l, others, bookable));
+    let shown = base.filter((l) => !filters.cleaning || l.cleaning_status === filters.cleaning);
+    if (LISTING_SORTS[filters.sort]) shown = [...shown].sort(LISTING_SORTS[filters.sort]);
+    const dirtyCount = base.filter((l) => l.cleaning_status === 'dirty').length;
+    const setCleaning = (v) => { filters.cleaning = v; rememberFilters('listings', filters); load(); };
     const tabs = h('div', { class: 'tabs', role: 'tablist' },
-      h('button', { role: 'tab', 'aria-selected': String(!filter.cleaning), onclick: () => { filter.cleaning = ''; load(); } }, `All (${listings.length})`),
-      h('button', { role: 'tab', 'aria-selected': String(filter.cleaning === 'dirty'), onclick: () => { filter.cleaning = 'dirty'; load(); } }, `Needs cleaning (${dirtyCount})`));
+      h('button', { role: 'tab', 'aria-selected': String(!filters.cleaning), onclick: () => setCleaning('') }, `All (${base.length})`),
+      h('button', { role: 'tab', 'aria-selected': String(filters.cleaning === 'dirty'), onclick: () => setCleaning('dirty') }, `Needs cleaning (${dirtyCount})`),
+      h('button', { role: 'tab', 'aria-selected': String(filters.cleaning === 'clean'), onclick: () => setCleaning('clean') }, `Clean (${base.length - dirtyCount})`));
+    bar.hidden = !listings.length;
     if (!listings.length) {
       box.replaceChildren(h('div', { class: 'card' }, emptyState({ iconName: 'building', title: 'No listings yet', text: 'Add each unit you rent out per night, with its base nightly rate and cleaning fee.', action: canManage && h('button', { class: 'btn btn--primary', onclick: () => addListingModal(load) }, icon('plus'), 'Add listing') })));
       return;
     }
+    const otherFilters = Object.keys(changed(filters, defaults)).some((k) => k !== 'sort' && k !== 'cleaning');
+    const empty = filters.cleaning === 'dirty' && !otherFilters
+      ? emptyState({ title: 'All clean ✨', text: 'No listings need cleaning right now.' })
+      : emptyState({ title: 'No results found', text: 'Try removing a filter.' });
     box.replaceChildren(tabs, shown.length ? h('div', { class: 'listing-grid' }, shown.map((l) => h('article', { class: `card listing${query.focus === l.unit_id ? ' is-focus' : ''}` },
       h('div', { class: 'card__head' },
         h('div', null, h('h2', null, l.unit_name), h('p', { class: 'muted small' }, `${l.property_name}${l.city ? ` · ${l.city}` : ''}`)),
@@ -236,8 +279,23 @@ export async function listingsView(el, { query }) {
             onSubmit: async (d) => { await patch(`/units/${l.unit_id}`, d); toast('Listing updated.'); load(); } });
         } }, 'Edit'),
         h('a', { class: 'btn btn--ghost btn--sm', href: `#/reservations?q=${encodeURIComponent(l.unit_name)}&view=all` }, 'Bookings')))))
-      : h('div', { class: 'card' }, emptyState({ title: 'All clean ✨', text: 'No listings need cleaning right now.' })));
+      : h('div', { class: 'card' }, empty));
   }
+  const bar = filterBar({
+    key: 'listings', values: filters, defaults, onChange: load,
+    search: { placeholder: 'Search listing, building or city' },
+    quick: [
+      properties.length > 1 && { name: 'property_id', label: 'Property', all: 'All properties', options: properties.map((p) => [p.property_id, p.property_name]) },
+      { name: 'occupancy', label: 'Occupancy', all: 'Any occupancy', options: [['vacant', 'Vacant tonight'], ['occupied', 'Guest staying now'], ['arriving', 'Arrival in the next 7 days'], ['no_next', 'No upcoming booking']] },
+    ].filter(Boolean),
+    more: [
+      { name: 'unit_type', label: 'Type', all: 'Any type', options: UNIT_TYPES.map((t) => [t, t[0].toUpperCase() + t.slice(1)]) },
+      { name: 'channels', label: 'Channels', all: 'Any', options: [['connected', 'Calendar connected'], ['none', 'No channel connected']] },
+      canManage && { name: 'direct', label: 'Booking page', all: 'Any', options: [['on', 'Shown on my booking page'], ['off', 'Not on my booking page']] },
+      { name: 'min_guests', label: 'Fits guests (at least)', type: 'number', min: 1 },
+      { name: 'sort', label: 'Sort by', all: 'Property and name', options: [['rate', 'Highest nightly rate'], ['rate_asc', 'Lowest nightly rate'], ['next', 'Next arrival'], ['guests', 'Most guests']] },
+    ].filter(Boolean),
+  });
   await load();
   el.replaceChildren(
     h('div', { class: 'page-head' },
@@ -245,32 +303,57 @@ export async function listingsView(el, { query }) {
       canManage && h('div', { class: 'page-head__actions' },
         h('a', { class: 'btn btn--secondary', href: '#/gatepass-settings' }, 'Gate pass'),
         h('button', { class: 'btn btn--primary', onclick: () => addListingModal(load) }, icon('plus'), 'Add listing'))),
+    bar,
     box);
-  if (query.new && canManage) { history.replaceState(null, '', '#/listings'); addListingModal(load); }
+  if (query.new && canManage) addListingModal(load);
 }
 
 // ---------------------------------------------------------------- guests
 export async function guestsView(el, { query }) {
+  const canManage = state.user.role !== 'staff';
+  const defaults = { q: '', segment: '', stay: '', channel: '', property_id: '', last_from: '', last_to: '', min_stays: '', rating: '', sort: '' };
+  const filters = initFilters('guests', query, defaults);
+  const { properties } = await get('/properties');
   const box = h('div', { class: 'card' });
-  let q = query.q || '';
   async function load() {
-    history.replaceState(null, '', `#/guests${qs({ q })}`);
-    const { guests } = await get(`/guests${qs({ q })}`);
-    box.replaceChildren(guests.length ? h('ul', { class: 'list' }, guests.map((g) => h('li', null, h('a', { class: 'row', href: `#/guests/${g.guest_id}` },
-      h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, g.full_name), !g.limited && h('span', { class: 'row__sub' }, [g.phone, g.email].filter(Boolean).join(' · ') || 'No contact details')),
-      h('div', { class: 'row__end' },
-        h('div', { class: 'chips' }, g.vip && badge('paid', 'VIP'), Number(g.stays) > 1 && badge('active', 'Repeat'), g.do_not_rebook && badge('overdue', 'Do not rebook'),
-          g.avg_rating && h('span', { class: 'rating small' }, `★ ${g.avg_rating}`)),
-        h('span', { class: 'small' }, `${g.stays} stay${Number(g.stays) === 1 ? '' : 's'}`), g.last_stay && h('span', { class: 'muted small' }, `Last: ${fmtDate(g.last_stay)}`))))))
-      : emptyState({ iconName: 'users', title: q ? 'No results found' : 'No guests yet', text: q ? 'Try another name.' : 'Guests are added when you create a reservation.' }));
+    const active = changed(filters, defaults);
+    history.replaceState(null, '', `#/guests${qs(active)}`);
+    const { guests } = await get(`/guests${qs(active)}`);
+    const filtered = Object.keys(active).some((k) => k !== 'sort');
+    box.replaceChildren(...(guests.length ? [
+      filtered ? h('p', { class: 'muted small' }, `Showing ${guests.length} guest${guests.length === 1 ? '' : 's'}`) : '',
+      h('ul', { class: 'list' }, guests.map((g) => h('li', null, h('a', { class: 'row', href: `#/guests/${g.guest_id}` },
+        h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, g.full_name), !g.limited && h('span', { class: 'row__sub' }, [g.phone, g.email].filter(Boolean).join(' · ') || 'No contact details')),
+        h('div', { class: 'row__end' },
+          h('div', { class: 'chips' }, g.vip && badge('paid', 'VIP'), Number(g.stays) > 1 && badge('active', 'Repeat'), g.do_not_rebook && badge('overdue', 'Do not rebook'),
+            g.in_house && badge('active', 'In house'), g.avg_rating && h('span', { class: 'rating small' }, `★ ${g.avg_rating}`)),
+          h('span', { class: 'small' }, `${g.stays} stay${Number(g.stays) === 1 ? '' : 's'}${canManage && Number(g.total_spent) > 0 ? ` · ${peso(g.total_spent)}` : ''}`),
+          g.next_stay ? h('span', { class: 'muted small' }, `Next: ${fmtDate(g.next_stay)}`) : g.last_stay && h('span', { class: 'muted small' }, `Last: ${fmtDate(g.last_stay)}`))))))]
+      : [emptyState({ iconName: 'users', title: filtered ? 'No results found' : 'No guests yet', text: filtered ? 'Try removing a filter.' : 'Guests are added when you create a reservation.' })]));
   }
+  const bar = filterBar({
+    key: 'guests', values: filters, defaults, onChange: load,
+    search: { placeholder: canManage ? 'Search name, mobile or email' : 'Search guests' },
+    quick: [
+      { name: 'segment', label: 'Guest type', all: 'All guests', options: [['vip', 'VIP'], ['repeat', 'Repeat (2+ stays)'], ['first', 'One stay so far'], ['no_stays', 'No stays yet'], ['do_not_rebook', 'Do not rebook']] },
+      { name: 'stay', label: 'Stay', all: 'Any stay', options: [['upcoming', 'Has an upcoming stay'], ['in_house', 'Staying now'], ['none_upcoming', 'Nothing booked ahead']] },
+    ],
+    more: [
+      { name: 'channel', label: 'Booked through', all: 'Any channel', options: Object.entries(CHANNEL_LABEL) },
+      properties.length > 1 && { name: 'property_id', label: 'Stayed at', all: 'Any property', options: properties.map((p) => [p.property_id, p.property_name]) },
+      { name: 'last', keys: ['last_from', 'last_to'], label: 'Latest stay between', type: 'daterange' },
+      { name: 'min_stays', label: 'Stays (at least)', type: 'number', min: 1 },
+      { name: 'rating', label: 'Their review', all: 'Any', options: [['4', 'Rated 4★ and up'], ['low', 'Rated under 3★'], ['none', 'No review yet']] },
+      { name: 'sort', label: 'Sort by', all: 'Name (A–Z)', options: [['stays', 'Most stays'], ['recent', 'Most recent stay'], ['next', 'Next arrival'], canManage && ['spent', 'Total spent'], ['added', 'Newest guests']].filter(Boolean) },
+    ].filter(Boolean),
+  });
   await load();
   el.replaceChildren(
     h('div', { class: 'page-head' }, h('div', { class: 'page-head__title' }, h('h1', null, 'Guests'), h('p', null, 'Everyone who has stayed or booked')),
-      state.user.role !== 'staff' && h('div', { class: 'page-head__actions' },
+      canManage && h('div', { class: 'page-head__actions' },
         h('a', { class: 'btn btn--secondary', href: '#/reviews' }, '★ Reviews'),
         h('a', { class: 'btn btn--secondary', href: '#/discount-codes' }, '% Discount codes'))),
-    h('div', { class: 'toolbar' }, searchBox({ value: q, placeholder: 'Search guests', onSearch: (v) => { q = v; load(); } })),
+    bar,
     box);
 }
 

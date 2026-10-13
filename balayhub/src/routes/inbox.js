@@ -7,7 +7,7 @@
 const express = require('express');
 const { query, one } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
-const { validate, uuidParam } = require('../lib/validate');
+const { validate, uuidParam, isValidDate } = require('../lib/validate');
 const { audit } = require('../lib/audit');
 const { requireRole } = require('../lib/auth');
 const { propertyScope } = require('../lib/access');
@@ -81,6 +81,23 @@ function viewSql(view, params, user) {
   return sql;
 }
 
+// Extra list filters (on top of the view): q, unread, channel, property_id,
+// unit_id, stay, assigned (a user id or "unassigned"), msg_from/msg_to (date of
+// the last message, Manila time), attention and sort.
+const CHANNELS = ['direct', 'airbnb', 'booking', 'agoda', 'vrbo', 'expedia', 'tripcom', 'other'];
+const STAYS = {
+  upcoming: `b.status = 'confirmed' AND b.check_in > ${TODAY}`,
+  in_house: `b.status = 'confirmed' AND b.check_in <= ${TODAY} AND b.check_out > ${TODAY}`,
+  past: `b.status = 'confirmed' AND b.check_out <= ${TODAY}`,
+  cancelled: `b.status = 'cancelled'`,
+};
+const INBOX_SORTS = {
+  unread: 'c.unread DESC, c.last_message_at DESC',
+  recent: 'c.last_message_at DESC',
+  oldest: 'c.last_message_at',
+  check_in: 'b.check_in, c.last_message_at DESC',
+};
+
 // ---------------------------------------------------------------- conversations
 router.get('/inbox', ah(async (req, res) => {
   await defaults(req.user.organization_id);
@@ -93,6 +110,20 @@ router.get('/inbox', ah(async (req, res) => {
     const i = params.length;
     where.push(`(COALESCE(g.full_name, b.guest_label) ILIKE $${i} OR u.unit_name ILIKE $${i} OR b.confirmation_code ILIKE $${i} OR c.subject ILIKE $${i})`);
   }
+  const qp = req.query;
+  if (qp.unread === '1') where.push('c.unread');
+  if (CHANNELS.includes(qp.channel)) { params.push(qp.channel); where.push(`b.channel = $${params.length}`); }
+  if (qp.property_id) { params.push(uuidParam(qp.property_id)); where.push(`p.property_id = $${params.length}`); }
+  if (qp.unit_id) { params.push(uuidParam(qp.unit_id)); where.push(`u.unit_id = $${params.length}`); }
+  if (STAYS[qp.stay]) where.push(STAYS[qp.stay]);
+  if (qp.assigned === 'unassigned') where.push('c.assigned_to IS NULL');
+  else if (qp.assigned) { params.push(uuidParam(qp.assigned)); where.push(`c.assigned_to = $${params.length}`); }
+  if (isValidDate(qp.msg_from)) { params.push(qp.msg_from); where.push(`(c.last_message_at AT TIME ZONE 'Asia/Manila')::date >= $${params.length}`); }
+  if (isValidDate(qp.msg_to)) { params.push(qp.msg_to); where.push(`(c.last_message_at AT TIME ZONE 'Asia/Manila')::date <= $${params.length}`); }
+  if (qp.attention === 'awaiting_reply') where.push(`last.direction = 'in'`);
+  if (qp.attention === 'failed') where.push(`EXISTS (SELECT 1 FROM messages s WHERE s.conversation_id = c.conversation_id AND s.status = 'failed')`);
+  if (qp.attention === 'scheduled') where.push(`EXISTS (SELECT 1 FROM messages s WHERE s.conversation_id = c.conversation_id AND s.status = 'scheduled')`);
+  const order = INBOX_SORTS[qp.sort] || INBOX_SORTS.unread;
   const { rows } = await query(
     `SELECT ${CONV_COLS}, last.body AS last_body, last.direction AS last_direction, last.status AS last_status,
             (SELECT COUNT(*) FROM messages s WHERE s.conversation_id = c.conversation_id AND s.status = 'scheduled') AS scheduled_count,
@@ -101,7 +132,7 @@ router.get('/inbox', ah(async (req, res) => {
      LEFT JOIN LATERAL (SELECT m.body, m.direction, m.status FROM messages m WHERE m.conversation_id = c.conversation_id
                           AND m.status <> 'cancelled' ORDER BY m.created_at DESC LIMIT 1) last ON true
      WHERE ${where.join(' AND ')}
-     ORDER BY c.unread DESC, c.last_message_at DESC LIMIT 200`, params);
+     ORDER BY ${order} LIMIT 200`, params);
   for (const r of rows) r.last_body = r.last_body ? r.last_body.slice(0, 140) : '';
   res.json({ view, conversations: rows });
 }));

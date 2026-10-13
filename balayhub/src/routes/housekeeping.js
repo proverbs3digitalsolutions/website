@@ -7,7 +7,7 @@
 const express = require('express');
 const { query, one, tx } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
-const { validate, uuidParam } = require('../lib/validate');
+const { validate, uuidParam, isValidDate } = require('../lib/validate');
 const { audit } = require('../lib/audit');
 const { requireRole } = require('../lib/auth');
 const { propertyScope, loadUnit } = require('../lib/access');
@@ -50,12 +50,43 @@ const VIEWS = {
   all: 'true',
 };
 
+const STATUSES = ['todo', 'in_progress', 'done', 'cancelled'];
+const SORTS = {
+  due: 't.due_date, p.property_name, u.unit_name',
+  due_desc: 't.due_date DESC, p.property_name, u.unit_name',
+  listing: 'p.property_name, u.unit_name, t.due_date',
+  next_guest: 't.next_check_in NULLS LAST, t.due_date',
+  completed: 't.completed_at DESC NULLS LAST',
+};
+
+// Filters on top of the view: mine, q, status, property_id, unit_id, assignee
+// (a user id, "unassigned" or "outside" for a cleaner without a login),
+// from/to (due date), late (overdue only), turnover (same_day | next_booked |
+// no_next) and sort.
 router.get('/cleaning-tasks', ah(async (req, res) => {
-  const view = VIEWS[req.query.view] ? req.query.view : 'open';
+  const qp = req.query;
+  const view = VIEWS[qp.view] ? qp.view : 'open';
   const params = [];
   const where = [propertyScope(req.user, params), VIEWS[view]];
-  if (req.query.mine === '1') { params.push(req.user.user_id); where.push(`t.assigned_to = $${params.length}`); }
-  const order = view === 'done' ? 't.completed_at DESC' : 't.due_date, p.property_name, u.unit_name';
+  if (qp.mine === '1') { params.push(req.user.user_id); where.push(`t.assigned_to = $${params.length}`); }
+  if (typeof qp.q === 'string' && qp.q.trim()) {
+    params.push(`%${qp.q.trim().slice(0, 100).replace(/[%_\\]/g, '\\$&')}%`);
+    const i = params.length;
+    where.push(`(u.unit_name ILIKE $${i} OR p.property_name ILIKE $${i} OR t.assignee_name ILIKE $${i} OR au.full_name ILIKE $${i} OR t.notes ILIKE $${i} OR COALESCE(g.full_name, b.guest_label) ILIKE $${i})`);
+  }
+  if (STATUSES.includes(qp.status)) { params.push(qp.status); where.push(`t.status = $${params.length}`); }
+  if (qp.property_id) { params.push(uuidParam(qp.property_id)); where.push(`p.property_id = $${params.length}`); }
+  if (qp.unit_id) { params.push(uuidParam(qp.unit_id)); where.push(`t.unit_id = $${params.length}`); }
+  if (qp.assignee === 'unassigned') where.push('t.assigned_to IS NULL AND t.assignee_name IS NULL');
+  else if (qp.assignee === 'outside') where.push('t.assigned_to IS NULL AND t.assignee_name IS NOT NULL');
+  else if (qp.assignee) { params.push(uuidParam(qp.assignee)); where.push(`t.assigned_to = $${params.length}`); }
+  if (isValidDate(qp.from)) { params.push(qp.from); where.push(`t.due_date >= $${params.length}`); }
+  if (isValidDate(qp.to)) { params.push(qp.to); where.push(`t.due_date <= $${params.length}`); }
+  if (qp.late === '1') where.push(`t.status IN ('todo', 'in_progress') AND t.due_date < ${TODAY}`);
+  if (qp.turnover === 'same_day') where.push('t.next_check_in = t.due_date');
+  if (qp.turnover === 'next_booked') where.push('t.next_check_in IS NOT NULL');
+  if (qp.turnover === 'no_next') where.push('t.next_check_in IS NULL');
+  const order = SORTS[qp.sort] || (view === 'done' ? SORTS.completed : SORTS.due);
   const { rows } = await query(`${TASK_SELECT} WHERE ${where.join(' AND ')} ORDER BY ${order} LIMIT 300`, params);
   const cp = [];
   const counts = await one(

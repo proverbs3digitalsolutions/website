@@ -92,7 +92,7 @@ router.get('/listings', ah(async (req, res) => {
   const params = [];
   const scope = propertyScope(req.user, params);
   const { rows } = await query(
-    `SELECT u.unit_id, u.unit_name, u.unit_type, u.nightly_rate, u.cleaning_fee, u.max_guests, u.cleaning_status,
+    `SELECT u.unit_id, u.unit_name, u.unit_type, u.nightly_rate, u.cleaning_fee, u.max_guests, u.cleaning_status, u.bookable_online,
             to_char(u.checkin_time, 'HH24:MI') AS checkin_time, to_char(u.checkout_time, 'HH24:MI') AS checkout_time,
             p.property_id, p.property_name, p.city,
             (SELECT COUNT(*) FROM ical_feeds f WHERE f.unit_id = u.unit_id) AS channel_count,
@@ -136,21 +136,67 @@ const guestSpec = {
   do_not_rebook: { type: 'bool', label: 'Do not rebook' },
 };
 
+// Filters: q, segment (vip | repeat | first | do_not_rebook | no_stays), stay
+// (upcoming | in_house | none_upcoming), channel, property_id, last_from/last_to
+// (latest stay), min_stays, rating (their reviews: 4 = 4★ and up, low = under 3★, none) and
+// sort. Stay counts and amounts only cover the properties this person can see;
+// staff never get amounts or the "total spent" sort.
+const GUEST_SORTS = {
+  name: 'g.full_name',
+  stays: 's.stays DESC, g.full_name',
+  recent: 's.last_stay DESC NULLS LAST, g.full_name',
+  next: 's.next_stay NULLS LAST, g.full_name',
+  spent: 's.total_spent DESC NULLS LAST, g.full_name',
+  added: 'g.created_at DESC',
+};
 router.get('/guests', ah(async (req, res) => {
+  const qp = req.query;
+  const staff = req.user.role === 'staff';
   const params = [];
   const where = [guestScope(req.user, params)];
-  if (req.query.q) {
-    params.push(`%${String(req.query.q).slice(0, 100)}%`);
+  // Bookings counted for each guest: only in properties this person can see.
+  const seen = req.user.role === 'owner' ? 'true' : `ux.property_id IN (SELECT property_id FROM property_assignments WHERE user_id = $${params.push(req.user.user_id)})`;
+  if (qp.q) {
+    params.push(`%${String(qp.q).slice(0, 100)}%`);
     const n = params.length;
-    where.push(req.user.role === 'staff' ? `g.full_name ILIKE $${n}` : `(g.full_name ILIKE $${n} OR g.email ILIKE $${n} OR g.phone ILIKE $${n})`);
+    where.push(staff ? `g.full_name ILIKE $${n}` : `(g.full_name ILIKE $${n} OR g.email ILIKE $${n} OR g.phone ILIKE $${n})`);
   }
+  const SEGMENTS = { vip: 'g.vip', do_not_rebook: 'g.do_not_rebook', repeat: 's.stays >= 2', first: 's.stays = 1', no_stays: 's.stays = 0' };
+  if (SEGMENTS[qp.segment]) where.push(SEGMENTS[qp.segment]);
+  if (qp.stay === 'upcoming') where.push('s.next_stay IS NOT NULL');
+  if (qp.stay === 'in_house') where.push('s.in_house');
+  if (qp.stay === 'none_upcoming') where.push('s.next_stay IS NULL AND NOT s.in_house');
+  // A stay matching channel / property, in what this person can see.
+  const stayWhere = [];
+  if (CHANNELS.includes(qp.channel)) { params.push(qp.channel); stayWhere.push(`b.channel = $${params.length}`); }
+  if (qp.property_id) { params.push(uuidParam(qp.property_id)); stayWhere.push(`ux.property_id = $${params.length}`); }
+  if (stayWhere.length) {
+    where.push(`EXISTS (SELECT 1 FROM bookings b JOIN units ux ON ux.unit_id = b.unit_id
+                         WHERE b.guest_id = g.guest_id AND b.kind = 'reservation' AND b.status = 'confirmed' AND ${seen} AND ${stayWhere.join(' AND ')})`);
+  }
+  if (isValidDate(qp.last_from)) { params.push(qp.last_from); where.push(`s.last_stay >= $${params.length}`); }
+  if (isValidDate(qp.last_to)) { params.push(qp.last_to); where.push(`s.last_stay <= $${params.length}`); }
+  if (/^\d{1,3}$/.test(String(qp.min_stays || ''))) { params.push(Number(qp.min_stays)); where.push(`s.stays >= $${params.length}`); }
+  if (qp.rating === '4') where.push('rv.avg_rating >= 4');
+  if (qp.rating === 'low') where.push('rv.avg_rating < 3');
+  if (qp.rating === 'none') where.push('rv.avg_rating IS NULL');
+  const order = (!staff || qp.sort !== 'spent') && GUEST_SORTS[qp.sort] ? GUEST_SORTS[qp.sort] : GUEST_SORTS.name;
   const { rows } = await query(
-    `SELECT g.*, (SELECT COUNT(*) FROM bookings b WHERE b.guest_id = g.guest_id AND b.status = 'confirmed') AS stays,
-            (SELECT MAX(b.check_in) FROM bookings b WHERE b.guest_id = g.guest_id AND b.status = 'confirmed') AS last_stay,
-            (SELECT ROUND(AVG(r.rating), 1) FROM guest_reviews r JOIN bookings rb ON rb.booking_id = r.booking_id JOIN units ru ON ru.unit_id = rb.unit_id
-              WHERE r.guest_id = g.guest_id AND (${req.user.role === 'owner' ? 'true' : `ru.property_id IN (SELECT property_id FROM property_assignments WHERE user_id = $${params.push(req.user.user_id)})`})) AS avg_rating
-       FROM guests g WHERE ${where.join(' AND ')} ORDER BY g.full_name LIMIT 500`, params);
-  res.json({ guests: rows.map((g) => redactGuest(req.user, g)) });
+    `SELECT g.*, s.stays, s.last_stay, s.next_stay, s.in_house, s.total_spent, rv.avg_rating
+       FROM guests g
+       CROSS JOIN LATERAL (
+         SELECT COUNT(*) FILTER (WHERE b.status = 'confirmed') AS stays,
+                MAX(b.check_in) FILTER (WHERE b.status = 'confirmed') AS last_stay,
+                MIN(b.check_in) FILTER (WHERE b.status = 'confirmed' AND b.check_in > ${TODAY}) AS next_stay,
+                COALESCE(bool_or(b.status = 'confirmed' AND b.check_in <= ${TODAY} AND b.check_out > ${TODAY}), false) AS in_house,
+                COALESCE(SUM(b.total_amount) FILTER (WHERE b.status = 'confirmed'), 0)::numeric(12,2) AS total_spent
+           FROM bookings b JOIN units ux ON ux.unit_id = b.unit_id
+          WHERE b.guest_id = g.guest_id AND b.kind = 'reservation' AND ${seen}) s
+       CROSS JOIN LATERAL (
+         SELECT ROUND(AVG(r.rating), 1) AS avg_rating FROM guest_reviews r JOIN bookings rb ON rb.booking_id = r.booking_id JOIN units ux ON ux.unit_id = rb.unit_id
+          WHERE r.guest_id = g.guest_id AND ${seen}) rv
+      WHERE ${where.join(' AND ')} ORDER BY ${order} LIMIT 500`, params);
+  res.json({ guests: rows.map((g) => { const out = redactGuest(req.user, g); if (staff) delete out.total_spent; return out; }) });
 }));
 
 async function loadGuest(user, id) {

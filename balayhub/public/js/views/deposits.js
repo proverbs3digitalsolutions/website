@@ -1,7 +1,8 @@
 // Security deposit card on a reservation, and the Home reminder for deposits to return.
 
-import { get, post, uploadFile } from '../api.js';
-import { h, peso, fmtDate, fmtDateTime, field, formModal, confirmDialog, toast, badge, todayManila } from '../ui.js';
+import { get, post, uploadFile, qs } from '../api.js';
+import { h, peso, fmtDate, fmtDateTime, field, formModal, confirmDialog, toast, badge, todayManila, emptyState } from '../ui.js';
+import { initFilters, filterBar, changed } from '../filters.js';
 import { state } from '../app.js';
 
 const METHODS = [['cash', 'Cash'], ['gcash', 'GCash'], ['maya', 'Maya'], ['bank_transfer', 'Bank transfer'], ['card', 'Card'], ['other', 'Other']];
@@ -94,8 +95,68 @@ export async function depositsDueCard() {
   if (!d.deposits.length) return null;
   const total = d.deposits.reduce((s, x) => s + Number(x.amount), 0);
   return h('div', { class: 'card' },
-    h('div', { class: 'card__head' }, h('h2', null, 'Deposits to return'), h('span', { class: 'muted small' }, peso(total))),
+    h('div', { class: 'card__head' }, h('h2', null, 'Deposits to return'), h('span', { class: 'muted small' }, peso(total),
+      state.user.role !== 'staff' && [' · ', h('a', { href: '#/stay-reports?tab=deposits&status=due' }, 'See all')])),
     h('ul', { class: 'list' }, d.deposits.map((x) => h('li', null, h('a', { class: 'row', href: `#/reservations/${x.booking_id}` },
       h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, x.guest_name || 'Guest'), h('span', { class: 'row__sub' }, `${x.unit_name} · checked out ${fmtDate(x.check_out)}`)),
       h('div', { class: 'row__end' }, h('span', { class: 'amount' }, peso(x.amount))))))));
+}
+
+// Reports → Deposits: every deposit with filters. Owners and managers.
+// `onUrl(q)` is called with the changed filters so the page can update its URL.
+export async function depositsPanel({ query = {}, onUrl }) {
+  const defaults = { q: '', status: '', property_id: '', unit_id: '', method: '', from: '', to: '', deducted: '', sort: '' };
+  const filters = initFilters('deposits', query, defaults);
+  const { listings } = await get('/listings');
+  const properties = [...new Map(listings.map((l) => [l.property_id, l.property_name])).entries()];
+  const listBox = h('div', { class: 'card card--flush' });
+
+  async function load() {
+    onUrl?.(changed(filters, defaults));
+    const { deposits } = await get(`/deposits${qs(changed(filters, defaults))}`);
+    const filtered = Object.keys(changed(filters, defaults)).some((k) => k !== 'sort');
+    if (!deposits.length) {
+      listBox.replaceChildren(emptyState({
+        iconName: 'file',
+        title: filtered ? 'No results found' : 'No deposits yet',
+        text: filtered ? 'No deposit matches these filters. Try removing a filter.' : 'Record a security deposit on a reservation and it shows up here until you return it.',
+      }));
+      return;
+    }
+    const sum = (list, k) => list.reduce((s, x) => s + Number(x[k] || 0), 0);
+    const held = deposits.filter((x) => x.status === 'held');
+    listBox.replaceChildren(
+      h('p', { class: 'muted small', style: { padding: '12px 16px 0' } },
+        `${deposits.length} deposit${deposits.length === 1 ? '' : 's'} · ${peso(sum(deposits, 'amount'))} received · ${peso(sum(held, 'amount'))} still held · ${peso(sum(deposits, 'deduction_amount'))} deducted`),
+      h('div', { class: 'table-wrap' }, h('table', { class: 'table table--compact' },
+        h('thead', null, h('tr', null, ['Guest', 'Listing', 'Stay', 'Received', 'Status'].map((x) => h('th', null, x)), h('th', { class: 'num' }, 'Amount'), h('th', { class: 'num' }, 'Returned'))),
+        h('tbody', null, deposits.map((x) => {
+          const [cls, text] = STATUS[x.status];
+          return h('tr', null,
+            h('td', null, h('a', { href: `#/reservations/${x.booking_id}` }, x.guest_name || 'Guest'), h('div', { class: 'muted small' }, x.confirmation_code)),
+            h('td', null, x.unit_name, properties.length > 1 && h('div', { class: 'muted small' }, x.property_name)),
+            h('td', { class: 'small' }, `${fmtDate(x.check_in)} – ${fmtDate(x.check_out)}`),
+            h('td', { class: 'small' }, fmtDate(x.received_date), h('div', { class: 'muted small' }, label(x.method))),
+            h('td', null, x.due ? badge('overdue', 'To return') : badge(cls, text)),
+            h('td', { class: 'num' }, peso(x.amount)),
+            h('td', { class: 'num' }, x.refund_amount === null ? '—' : peso(x.refund_amount)));
+        })))));
+  }
+  const bar = filterBar({
+    key: 'deposits', values: filters, defaults, onChange: load,
+    search: { placeholder: 'Search guest or booking code' },
+    quick: [
+      { name: 'status', label: 'Status', all: 'All deposits', options: [['due', 'Due to return'], ['held', 'Held'], ['settled', 'Settled (any)'], ['refunded', 'Returned in full'], ['partly_refunded', 'Partly returned'], ['kept', 'Kept']] },
+      listings.length > 1 && { name: 'unit_id', label: 'Listing', all: 'All listings', options: listings.map((l) => [l.unit_id, `${l.unit_name}${properties.length > 1 ? ` · ${l.property_name}` : ''}`]) },
+    ].filter(Boolean),
+    more: [
+      properties.length > 1 && { name: 'property_id', label: 'Property', all: 'All properties', options: properties },
+      { name: 'date', keys: ['from', 'to'], label: 'Received between', type: 'daterange' },
+      { name: 'method', label: 'Received by', all: 'Any method', options: METHODS },
+      { name: 'deducted', label: 'With a deduction', type: 'check' },
+      { name: 'sort', label: 'Sort by', all: 'Newest received first', options: [['received_asc', 'Oldest received first'], ['checkout', 'Latest check-out'], ['amount', 'Biggest amount']] },
+    ].filter(Boolean),
+  });
+  await load();
+  return h('div', null, bar, listBox);
 }

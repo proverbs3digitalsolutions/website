@@ -5,7 +5,7 @@
 const express = require('express');
 const { query, one } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
-const { validate, uuidParam } = require('../lib/validate');
+const { validate, uuidParam, isValidDate } = require('../lib/validate');
 const { audit } = require('../lib/audit');
 const { requireRole, rateLimit } = require('../lib/auth');
 const { propertyScope } = require('../lib/access');
@@ -85,17 +85,37 @@ async function afterReview(b, r) {
 }
 
 // ---------------------------------------------------------------- host: reviews
+// Filters: rating (1–5, "low" = 3 stars or less, "high" = 4 or more), listing,
+// property, review date range, has a comment, search (guest or comment), sort.
+const REVIEW_SORTS = { newest: 'r.created_at DESC', oldest: 'r.created_at', lowest: 'r.rating, r.created_at DESC', highest: 'r.rating DESC, r.created_at DESC', checkin: 'b.check_in DESC' };
 router.get('/reviews', ah(async (req, res) => {
+  const q = req.query;
   const params = [];
   const scope = propertyScope(req.user, params);
+  const where = [scope];
+  if (/^[1-5]$/.test(String(q.rating || ''))) { params.push(Number(q.rating)); where.push(`r.rating = $${params.length}`); }
+  if (q.rating === 'low') where.push('r.rating <= 3');
+  if (q.rating === 'high') where.push('r.rating >= 4');
+  if (q.unit_id) { params.push(uuidParam(q.unit_id)); where.push(`b.unit_id = $${params.length}`); }
+  if (q.property_id) { params.push(uuidParam(q.property_id)); where.push(`p.property_id = $${params.length}`); }
+  if (isValidDate(q.from)) { params.push(q.from); where.push(`(r.created_at AT TIME ZONE 'Asia/Manila')::date >= $${params.length}`); }
+  if (isValidDate(q.to)) { params.push(q.to); where.push(`(r.created_at AT TIME ZONE 'Asia/Manila')::date <= $${params.length}`); }
+  if (q.has_comment === '1') where.push(`COALESCE(btrim(r.comment), '') <> ''`);
+  if (q.q) {
+    params.push(`%${String(q.q).slice(0, 100)}%`);
+    where.push(`(g.full_name ILIKE $${params.length} OR b.guest_label ILIKE $${params.length} OR r.comment ILIKE $${params.length} OR u.unit_name ILIKE $${params.length})`);
+  }
+  const from = `FROM guest_reviews r JOIN bookings b USING (booking_id) JOIN units u ON u.unit_id = b.unit_id JOIN properties p ON p.property_id = u.property_id
+       LEFT JOIN guests g ON g.guest_id = b.guest_id`;
   const { rows } = await query(
-    `SELECT r.review_id, r.booking_id, r.rating, r.cleanliness, r.comment, r.created_at, b.check_in, b.check_out, u.unit_name,
+    `SELECT r.review_id, r.booking_id, r.rating, r.cleanliness, r.comment, r.created_at, b.check_in, b.check_out, u.unit_name, p.property_name,
             COALESCE(g.full_name, b.guest_label) AS guest_name
-       FROM guest_reviews r JOIN bookings b USING (booking_id) JOIN units u ON u.unit_id = b.unit_id JOIN properties p ON p.property_id = u.property_id
-       LEFT JOIN guests g ON g.guest_id = b.guest_id
-      WHERE ${scope} ORDER BY r.created_at DESC LIMIT 200`, params);
+       ${from} WHERE ${where.join(' AND ')} ORDER BY ${REVIEW_SORTS[q.sort] || REVIEW_SORTS.newest} LIMIT 200`, params);
+  // The headline average is always over every review you can see, filtered or not.
+  const allParams = [];
+  const all = await one(`SELECT COUNT(*)::int AS n, ROUND(AVG(r.rating), 1)::float AS avg ${from} WHERE ${propertyScope(req.user, allParams)}`, allParams);
   const avg = rows.length ? Math.round((rows.reduce((s, r) => s + r.rating, 0) / rows.length) * 10) / 10 : null;
-  res.json({ reviews: rows, average: avg, count: rows.length });
+  res.json({ reviews: rows, average: all.n ? all.avg : null, count: all.n, matched: rows.length, matched_average: avg });
 }));
 
 // ---------------------------------------------------------------- host: discount codes
@@ -111,12 +131,34 @@ const codeSpec = {
   returning_only: { type: 'bool', label: 'Returning guests only' },
 };
 
+// Filters: status (active / scheduled / expired / used up / off), type
+// (percent or amount), returning-guests-only, and search on the code or note.
 router.get('/discount-codes', managers, ah(async (req, res) => {
+  const q = req.query;
+  const params = [req.user.organization_id, manilaToday()];
+  const where = ['d.organization_id = $1'];
+  const usedUp = `(d.max_uses IS NOT NULL AND ${USES} >= d.max_uses)`;
+  const STATUS = {
+    active: `d.active AND (d.valid_from IS NULL OR d.valid_from <= $2) AND (d.valid_until IS NULL OR d.valid_until >= $2) AND NOT ${usedUp}`,
+    scheduled: 'd.active AND d.valid_from > $2',
+    expired: 'd.valid_until < $2',
+    used_up: usedUp,
+    off: 'NOT d.active',
+  };
+  if (STATUS[q.status]) where.push(`(${STATUS[q.status]})`);
+  if (q.type === 'percent') where.push('d.percent_off IS NOT NULL');
+  if (q.type === 'amount') where.push('d.amount_off IS NOT NULL');
+  if (q.returning === '1') where.push('d.returning_only');
+  if (q.q) { params.push(`%${String(q.q).slice(0, 60)}%`); where.push(`(d.code ILIKE $${params.length} OR d.description ILIKE $${params.length})`); }
+  const SORTS = { newest: 'd.created_at DESC', code: 'd.code', most_used: 'uses DESC, d.code', ending: 'd.valid_until NULLS LAST, d.code' };
   const { rows } = await query(
     `SELECT d.*, ${USES} AS uses,
-            (SELECT COALESCE(SUM(c.discount_amount), 0) FROM direct_checkouts c WHERE c.discount_code_id = d.code_id AND c.status = 'confirmed') AS total_discounted
-       FROM discount_codes d WHERE d.organization_id = $1 ORDER BY d.active DESC, d.created_at DESC`, [req.user.organization_id]);
-  res.json({ codes: rows });
+            (SELECT COALESCE(SUM(c.discount_amount), 0) FROM direct_checkouts c WHERE c.discount_code_id = d.code_id AND c.status = 'confirmed') AS total_discounted,
+            (d.valid_until IS NOT NULL AND d.valid_until < $2) AS expired, (d.valid_from IS NOT NULL AND d.valid_from > $2) AS scheduled, ${usedUp} AS used_up
+       FROM discount_codes d WHERE ${where.join(' AND ')} ORDER BY ${SORTS[q.sort] || 'd.active DESC, d.created_at DESC'}`, params);
+  const total = q.status || q.type || q.returning || q.q
+    ? (await one('SELECT COUNT(*)::int AS n FROM discount_codes WHERE organization_id = $1', [req.user.organization_id])).n : rows.length;
+  res.json({ codes: rows, total });
 }));
 
 router.post('/discount-codes', managers, ah(async (req, res) => {

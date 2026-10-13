@@ -2,6 +2,9 @@
 
 import { get, qs } from '../api.js';
 import { h, icon, peso, fmtDate, fmtMonth, label, emptyState, pageHead, todayManila } from '../ui.js';
+import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
+
+const PROPERTY_TYPES = ['apartment', 'boarding_house', 'condominium', 'house', 'commercial', 'dormitory', 'other'];
 
 function presets(today) {
   const [y, m] = today.split('-').map(Number);
@@ -18,51 +21,75 @@ function presets(today) {
 export async function reportsView(el, { query }) {
   const today = todayManila();
   const P = presets(today);
-  const filters = {
-    from: query.from || P.this_month[1],
-    to: query.to || P.this_month[2],
-    property_id: query.property_id || '',
-  };
+  // The period is remembered by name ("This month" stays current); dates only for a custom range.
+  const defaults = { period: 'this_month', from: '', to: '', property_id: '', property_type: '' };
+  const filters = initFilters('reports', query, defaults);
+  // Old links carry only from/to: match them to a preset, or treat them as a custom range.
+  if (query.from && query.to && !query.period) {
+    const match = Object.entries(P).find(([, [, f, t]]) => f === query.from && t === query.to);
+    Object.assign(filters, match ? { period: match[0], from: '', to: '' } : { period: 'custom' });
+  }
+  if (!P[filters.period] && filters.period !== 'custom') filters.period = 'this_month';
   const { properties } = await get('/properties');
+  const types = PROPERTY_TYPES.filter((t) => properties.some((p) => p.property_type === t));
   const body = h('div');
-  const fromInput = h('input', { class: 'input', type: 'date', value: filters.from, 'aria-label': 'From' });
-  const toInput = h('input', { class: 'input', type: 'date', value: filters.to, 'aria-label': 'To' });
-  const propertySelect = h('select', { class: 'input', 'aria-label': 'Property' },
-    h('option', { value: '' }, 'All properties'),
-    properties.map((p) => h('option', { value: p.property_id, selected: p.property_id === filters.property_id }, p.property_name)));
+  const barBox = h('div', { class: 'no-print' });
   const exportLink = h('a', { class: 'btn btn--primary', download: '' }, 'Export (Excel / CSV)');
-  const presetSelect = h('select', { class: 'input', 'aria-label': 'Period' },
-    Object.entries(P).map(([k, [t, f, to]]) => h('option', { value: k, selected: f === filters.from && to === filters.to }, t)),
-    h('option', { value: 'custom', selected: !Object.values(P).some(([, f, to]) => f === filters.from && to === filters.to) }, 'Custom range'));
-  presetSelect.addEventListener('change', () => {
-    const p = P[presetSelect.value];
-    if (!p) return;
-    fromInput.value = p[1]; toInput.value = p[2];
-    apply();
-  });
-  [fromInput, toInput].forEach((i) => i.addEventListener('change', () => { presetSelect.value = 'custom'; apply(); }));
-  propertySelect.addEventListener('change', apply);
 
-  function apply() {
-    filters.from = fromInput.value; filters.to = toInput.value; filters.property_id = propertySelect.value;
-    load();
+  // The dates the report runs for.
+  const range = () => (filters.period === 'custom'
+    ? { from: filters.from || P.this_month[1], to: filters.to || today }
+    : { from: P[filters.period][1], to: P[filters.period][2] });
+  const apiParams = () => ({ ...range(), property_id: filters.property_id, property_type: filters.property_type });
+
+  let last = { ...filters };
+  function renderBar() {
+    barBox.replaceChildren(filterBar({
+      key: 'reports', values: filters, defaults,
+      onChange: () => {
+        // Picking dates makes the period "Custom"; picking a preset clears the dates.
+        let rebuild = false;
+        if (filters.from !== last.from || filters.to !== last.to) { if (filters.from || filters.to) filters.period = 'custom'; rebuild = filters.period !== last.period; }
+        else if (filters.period !== last.period && filters.period !== 'custom') { filters.from = ''; filters.to = ''; rebuild = true; }
+        if (filters.period === 'custom' && !filters.from && !filters.to && last.period !== 'custom') {
+          Object.assign(filters, { from: P[last.period]?.[1] || P.this_month[1], to: P[last.period]?.[2] || today });
+          rebuild = true;
+        }
+        last = { ...filters };
+        if (rebuild) { rememberFilters('reports', filters); renderBar(); }
+        load();
+      },
+      quick: [
+        { name: 'period', label: 'Period', all: false, options: [...Object.entries(P).map(([k, [t]]) => [k, t]), ['custom', 'Custom range']] },
+        properties.length > 1 && { name: 'property_id', label: 'Property', all: 'All properties', options: properties.map((p) => [p.property_id, p.property_name]) },
+      ].filter(Boolean),
+      more: [
+        { name: 'from', label: 'Custom dates', type: 'daterange', keys: ['from', 'to'] },
+        types.length > 1 && { name: 'property_type', label: 'Property type', all: 'All types', options: types.map((t) => [t, label(t)]) },
+      ].filter(Boolean),
+    }));
   }
 
   async function load() {
-    history.replaceState(null, '', `#/reports${qs(filters)}`);
-    exportLink.href = `/api/reports/export${qs(filters)}`;
+    history.replaceState(null, '', `#/reports${qs(changed(filters, defaults))}`);
+    exportLink.href = `/api/reports/export${qs(apiParams())}`;
     body.replaceChildren(h('div', { class: 'skeleton' }));
     let r;
-    try { r = await get(`/reports${qs(filters)}`); } catch (err) {
+    try { r = await get(`/reports${qs(apiParams())}`); } catch (err) {
       body.replaceChildren(h('div', { class: 'alert alert--error' }, err.message));
       return;
     }
+    // Links into Rent & Expenses carry the same period and property.
+    const { from, to } = range();
+    const scoped = (tab, extra = {}) => `#/rent${qs({ tab, from, to, property_id: filters.property_id, ...extra })}`;
     const t = r.totals;
     const hasActivity = Number(t.collected) || Number(t.expenses) || Number(t.billed) || Number(t.outstanding);
     if (!hasActivity) {
       body.replaceChildren(h('div', { class: 'card' }, emptyState({
         iconName: 'chart', title: 'No transactions in this period',
-        text: 'Reports are built from the payments and expenses you record. Choose another period, or record payments to see results here.',
+        text: filters.property_id || filters.property_type
+          ? 'Nothing was recorded for these filters. Try another period, or remove the property filter.'
+          : 'Reports are built from the payments and expenses you record. Choose another period, or record payments to see results here.',
         action: h('a', { class: 'btn btn--secondary', href: '#/rent' }, 'Go to Rent & Expenses'),
       })));
       return;
@@ -73,10 +100,10 @@ export async function reportsView(el, { query }) {
 
     body.replaceChildren(
       h('div', { class: 'stats' },
-        metric('Rent collected', t.collected, '#/rent?tab=payments', 'good', `Billed ${peso(t.billed)}`),
-        metric('Expenses', t.expenses, '#/rent?tab=expenses'),
-        metric('Net operating result', t.net, '#/rent?tab=payments', Number(t.net) < 0 ? 'alert' : null, 'Collected − expenses'),
-        metric('Outstanding rent', t.outstanding, '#/rent?status=outstanding', Number(t.overdue) > 0 ? 'alert' : null, `As of today · ${peso(t.overdue)} overdue`)),
+        metric('Rent collected', t.collected, scoped('payments'), 'good', `Billed ${peso(t.billed)}`),
+        metric('Expenses', t.expenses, scoped('expenses')),
+        metric('Net operating result', t.net, scoped('payments'), Number(t.net) < 0 ? 'alert' : null, 'Collected − expenses'),
+        metric('Outstanding rent', t.outstanding, `#/rent${qs({ status: 'outstanding', property_id: filters.property_id })}`, Number(t.overdue) > 0 ? 'alert' : null, `As of today · ${peso(t.overdue)} overdue`)),
       h('div', { class: 'card' },
         h('div', { class: 'card__head' }, h('h2', null, 'By property')),
         h('div', { class: 'table-wrap' }, h('table', { class: 'table' },
@@ -105,7 +132,7 @@ export async function reportsView(el, { query }) {
           h('p', { class: 'muted small', style: { marginTop: '8px' } }, 'Bars: green = collected, orange = expenses.')),
         h('div', { class: 'card' },
           h('div', { class: 'card__head' }, h('h2', null, 'Expenses by category')),
-          r.by_category.length ? h('ul', { class: 'list' }, r.by_category.map((c) => h('li', null, h('a', { class: 'row', href: `#/rent?tab=expenses` },
+          r.by_category.length ? h('ul', { class: 'list' }, r.by_category.map((c) => h('li', null, h('a', { class: 'row', href: scoped('expenses', { category: c.category }) },
             h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, label(c.category)), h('span', { class: 'row__sub' }, `${c.count} entr${c.count === 1 ? 'y' : 'ies'}`)),
             h('div', { class: 'row__end' }, h('span', { class: 'amount' }, peso(c.amount)))))))
             : h('p', { class: 'muted' }, 'No expenses in this period.'))),
@@ -124,18 +151,13 @@ export async function reportsView(el, { query }) {
     );
   }
 
+  renderBar();
   el.replaceChildren(
     pageHead({
       title: 'Reports', sub: 'Income, expenses and unpaid rent for any period',
       actions: [exportLink, h('button', { class: 'btn btn--secondary', onclick: () => window.print() }, 'Print / PDF'), h('a', { class: 'btn btn--ghost', href: '#/dashboard' }, icon('home'), 'Dashboard')],
     }),
-    h('div', { class: 'card no-print', style: { marginBottom: '16px' } },
-      h('div', { class: 'form-row form-row--2' },
-        h('div', { class: 'field' }, h('label', null, 'Period'), presetSelect),
-        h('div', { class: 'field' }, h('label', null, 'Property'), propertySelect)),
-      h('div', { class: 'form-row form-row--2', style: { marginTop: '12px' } },
-        h('div', { class: 'field' }, h('label', null, 'From'), fromInput),
-        h('div', { class: 'field' }, h('label', null, 'To'), toInput))),
+    barBox,
     body);
   await load();
 }

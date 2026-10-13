@@ -37,11 +37,43 @@ router.get('/tenants', ah(async (req, res) => {
   }
   // Non-owners only see the current lease if it is in a property assigned to them.
   let leaseScope = '';
+  let pastScope = '';
   if (req.user.role !== 'owner') {
     params.push(req.user.user_id);
     leaseScope = ` AND EXISTS (SELECT 1 FROM units ux JOIN property_assignments pa ON pa.property_id = ux.property_id
                                 WHERE ux.unit_id = l.unit_id AND pa.user_id = $${params.length})`;
+    pastScope = ` AND EXISTS (SELECT 1 FROM units ux JOIN property_assignments pa ON pa.property_id = ux.property_id
+                               WHERE ux.unit_id = pl.unit_id AND pa.user_id = $${params.length})`;
   }
+  // Lease filter: current lease, ending soon (or already past its end date), month-to-month, moved out, unassigned.
+  const lease = {
+    active: 'l.lease_id IS NOT NULL',
+    ending30: `l.end_date IS NOT NULL AND l.end_date <= ${TODAY} + 30`,
+    ending60: `l.end_date IS NOT NULL AND l.end_date <= ${TODAY} + 60`,
+    no_end: 'l.lease_id IS NOT NULL AND l.end_date IS NULL',
+    moved_out: `l.lease_id IS NULL AND EXISTS (SELECT 1 FROM leases pl WHERE pl.tenant_id = t.tenant_id AND pl.lease_status IN ('ended', 'terminated')${pastScope})`,
+    none: 'l.lease_id IS NULL',
+  }[req.query.lease];
+  if (lease) where.push(lease);
+  if (req.query.property_id) { params.push(uuidParam(req.query.property_id)); where.push(`p.property_id = $${params.length}`); }
+  if (req.query.unit_id) { params.push(uuidParam(req.query.unit_id)); where.push(`u.unit_id = $${params.length}`); }
+  const balance = {
+    overdue: 'COALESCE(lb.overdue, 0) > 0',
+    owing: 'COALESCE(lb.outstanding, 0) > 0',
+    clear: 'l.lease_id IS NOT NULL AND COALESCE(lb.outstanding, 0) = 0',
+  }[req.query.balance];
+  if (balance) where.push(balance);
+  if (/^\d{1,10}(\.\d{1,2})?$/.test(String(req.query.min_balance || ''))) { params.push(req.query.min_balance); where.push(`COALESCE(lb.outstanding, 0) >= $${params.length}::numeric`); }
+  const SORTS = {
+    name: 't.full_name',
+    balance: 'COALESCE(lb.outstanding, 0) DESC, t.full_name',
+    overdue: 'COALESCE(lb.overdue, 0) DESC, COALESCE(lb.outstanding, 0) DESC, t.full_name',
+    lease_end: 'l.end_date NULLS LAST, t.full_name',
+    move_in: 'l.start_date DESC NULLS LAST, t.full_name',
+    rent: 'l.monthly_rent DESC NULLS LAST, t.full_name',
+    unit: 'p.property_name NULLS LAST, u.unit_name, t.full_name',
+    newest: 't.created_at DESC',
+  };
   const { rows } = await query(
     `WITH ${LEASE_BALANCE_CTE}
      SELECT t.tenant_id, t.full_name, t.email, t.phone, t.status, t.created_at,
@@ -54,7 +86,7 @@ router.get('/tenants', ah(async (req, res) => {
        LEFT JOIN properties p ON p.property_id = u.property_id
        LEFT JOIN lease_balance lb ON lb.lease_id = l.lease_id
       WHERE ${where.join(' AND ')}
-      ORDER BY t.full_name`, params);
+      ORDER BY ${SORTS[req.query.sort] || SORTS.name}`, params);
   res.json({ tenants: rows.map((t) => redactTenant(req.user, t)) });
 }));
 

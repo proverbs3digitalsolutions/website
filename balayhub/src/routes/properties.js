@@ -77,18 +77,37 @@ router.get('/properties', ah(async (req, res) => {
   params.push(status); where.push(`p.status = $${params.length}`);
   if (req.query.q) {
     params.push(`%${String(req.query.q).slice(0, 100)}%`);
-    where.push(`(p.property_name ILIKE $${params.length} OR p.address ILIKE $${params.length} OR p.city ILIKE $${params.length})`);
+    const n = params.length;
+    where.push(`(p.property_name ILIKE $${n} OR p.address ILIKE $${n} OR p.city ILIKE $${n} OR p.province ILIKE $${n})`);
   }
+  if (PROPERTY_TYPES.includes(req.query.type)) { params.push(req.query.type); where.push(`p.property_type = $${params.length}`); }
+  if (req.query.city) { params.push(String(req.query.city).trim().slice(0, 80)); where.push(`lower(trim(p.city)) = lower($${params.length})`); }
+  // Occupancy is checked after grouping: vacant = at least one rentable unit without a tenant.
+  const vacant = `COUNT(u.unit_id) FILTER (WHERE u.status = 'active' AND l.lease_id IS NULL AND u.availability = 'available')`;
+  const having = {
+    vacant: `${vacant} > 0`,
+    full: `COUNT(u.unit_id) FILTER (WHERE u.status = 'active') > 0 AND ${vacant} = 0`,
+    no_units: `COUNT(u.unit_id) FILTER (WHERE u.status = 'active') = 0`,
+  }[req.query.occupancy];
+  const SORTS = {
+    name: 'p.property_name',
+    city: 'lower(p.city), p.property_name',
+    units: 'unit_count DESC, p.property_name',
+    vacant: 'vacant_count DESC, p.property_name',
+    newest: 'p.created_at DESC',
+  };
   const { rows } = await query(
     `SELECT p.*,
             COUNT(u.unit_id) FILTER (WHERE u.status = 'active') AS unit_count,
-            COUNT(l.lease_id) FILTER (WHERE u.status = 'active') AS occupied_count
+            COUNT(l.lease_id) FILTER (WHERE u.status = 'active') AS occupied_count,
+            ${vacant} AS vacant_count
        FROM properties p
        LEFT JOIN units u ON u.property_id = p.property_id
        LEFT JOIN leases l ON l.unit_id = u.unit_id AND l.lease_status = 'active'
       WHERE ${where.join(' AND ')}
-      GROUP BY p.property_id
-      ORDER BY p.property_name`, params);
+      GROUP BY p.property_id${having ? `
+     HAVING ${having}` : ''}
+      ORDER BY ${SORTS[req.query.sort] || SORTS.name}`, params);
   res.json({ properties: rows });
 }));
 

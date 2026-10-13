@@ -2,7 +2,8 @@
 // nightly prices on open nights. Tap an open night to book, block or reprice.
 
 import { get, post, api, qs } from '../api.js';
-import { h, icon, peso, fmtDate, field, formModal, openModal, confirmDialog, toast, emptyState, searchBox } from '../ui.js';
+import { h, icon, peso, fmtDate, field, formModal, openModal, confirmDialog, toast, emptyState, label } from '../ui.js';
+import { initFilters, filterBar, changed } from '../filters.js';
 import { state, navigate } from '../app.js';
 import { addDays, newReservationModal, CHANNEL_LABEL } from './reservations.js';
 
@@ -13,7 +14,15 @@ const shortPeso = (v) => (v === null || v === undefined ? '' : `₱${Math.round(
 
 export async function calendarView(el, { query }) {
   const canManage = state.user.role !== 'staff';
-  const view = { start: query.start || null, days: Number(query.days) === 30 ? 30 : 14, q: query.q || '' };
+  const view = { start: query.start || null, days: Number(query.days) === 30 ? 30 : 14 };
+  // Filters only hide rows (client-side); the grid itself is unchanged.
+  const defaults = { q: '', property_id: '', unit_type: '', cleaning: '', avail: '' };
+  const filters = initFilters('calendar', query, defaults);
+  const { listings: meta } = await get('/listings');
+  const typeOf = new Map(meta.map((l) => [l.unit_id, l.unit_type]));
+  const properties = [...new Map(meta.map((l) => [l.property_id, l.property_name])).entries()];
+  const types = [...new Set(meta.map((l) => l.unit_type))];
+  let lastData = null;
   const grid = h('div', { class: 'cal-scroll' });
   const title = h('strong', { class: 'cal-title' });
   const dateInput = h('input', { class: 'input input--sm', type: 'date', 'aria-label': 'Go to date' });
@@ -21,15 +30,41 @@ export async function calendarView(el, { query }) {
   async function load() {
     const data = await get(`/calendar${qs({ start: view.start, days: view.days })}`);
     view.start = data.start;
-    history.replaceState(null, '', `#/calendar${qs({ start: view.start, days: view.days === 14 ? '' : view.days, q: view.q })}`);
+    lastData = data;
     title.textContent = monthName(data.start);
     dateInput.value = data.start;
     render(data);
   }
 
+  // Booked nights per listing inside the shown dates (reservations and blocks).
+  function bookedNights(data, unitId) {
+    const end = addDays(data.start, data.days);
+    return data.bookings.filter((b) => b.unit_id === unitId).reduce((n, b) => {
+      const from = b.check_in > data.start ? b.check_in : data.start;
+      const to = b.check_out < end ? b.check_out : end;
+      return n + Math.max(0, (Date.parse(to) - Date.parse(from)) / 86400000);
+    }, 0);
+  }
+  function matches(l, data) {
+    const q = filters.q.toLowerCase();
+    if (q && !`${l.unit_name} ${l.property_name}`.toLowerCase().includes(q)) return false;
+    if (filters.property_id && l.property_id !== filters.property_id) return false;
+    if (filters.unit_type && typeOf.get(l.unit_id) !== filters.unit_type) return false;
+    if (filters.cleaning === 'dirty' && l.cleaning_status !== 'dirty') return false;
+    if (filters.cleaning === 'clean' && l.cleaning_status === 'dirty') return false;
+    if (filters.avail) {
+      const booked = bookedNights(data, l.unit_id);
+      if (filters.avail === 'open' && booked >= data.days) return false;
+      if (filters.avail === 'empty' && booked > 0) return false;
+      if (filters.avail === 'booked' && booked === 0) return false;
+    }
+    return true;
+  }
+
   function render(data) {
     const dates = Array.from({ length: data.days }, (_, i) => addDays(data.start, i));
-    const listings = data.listings.filter((l) => !view.q || `${l.unit_name} ${l.property_name}`.toLowerCase().includes(view.q.toLowerCase()));
+    history.replaceState(null, '', `#/calendar${qs({ start: view.start, days: view.days === 14 ? '' : view.days, ...changed(filters, defaults) })}`);
+    const listings = data.listings.filter((l) => matches(l, data));
     if (!data.listings.length) {
       grid.replaceChildren(emptyState({ iconName: 'building', title: 'No listings yet', text: 'Add a listing to start filling your calendar.', action: canManage && h('a', { class: 'btn btn--primary', href: '#/listings?new=1' }, 'Add listing') }));
       return;
@@ -76,7 +111,7 @@ export async function calendarView(el, { query }) {
           h('span', { class: `badge badge--${l.cleaning_status === 'dirty' ? 'overdue' : 'paid'}` }, l.cleaning_status === 'dirty' ? 'Dirty' : 'Clean')),
         h('div', { class: 'cal-days cal-days--body' }, cells, bars)));
     }
-    grid.replaceChildren(listings.length ? table : emptyState({ title: 'No results found', text: `No listing matches “${view.q}”.` }));
+    grid.replaceChildren(listings.length ? table : emptyState({ title: 'No results found', text: 'No listing matches these filters. Try removing a filter.' }));
     const todayCell = grid.querySelector('.cal-day-head.is-today');
     if (todayCell) grid.scrollLeft = Math.max(0, todayCell.offsetLeft - 220);
   }
@@ -140,8 +175,19 @@ export async function calendarView(el, { query }) {
       canManage && h('div', { class: 'page-head__actions' },
         h('a', { class: 'btn btn--secondary', href: '#/pricing' }, '₱ Pricing rules'),
         h('button', { class: 'btn btn--primary', onclick: () => newReservationModal({ onSaved: load }) }, icon('plus'), 'New reservation'))),
+    filterBar({
+      key: 'calendar', values: filters, defaults, onChange: () => { if (lastData) render(lastData); },
+      search: { placeholder: 'Search listings' },
+      quick: [
+        properties.length > 1 && { name: 'property_id', label: 'Property', all: 'All properties', options: properties },
+        { name: 'avail', label: 'Availability', all: 'Any availability', options: [['open', 'Has open nights'], ['empty', 'No bookings in these dates'], ['booked', 'Has bookings in these dates']] },
+      ].filter(Boolean),
+      more: [
+        types.length > 1 && { name: 'unit_type', label: 'Listing type', all: 'All types', options: types.map((t) => [t, label(t)]) },
+        { name: 'cleaning', label: 'Cleaning', all: 'Any', options: [['dirty', 'Needs cleaning'], ['clean', 'Clean']] },
+      ].filter(Boolean),
+    }),
     h('div', { class: 'toolbar' },
-      searchBox({ value: view.q, placeholder: 'Search listings', onSearch: (q) => { view.q = q; load(); } }),
       h('div', { class: 'chips' },
         h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': 'Earlier', onclick: () => { view.start = addDays(view.start, -7); load(); } }, '‹'),
         title,

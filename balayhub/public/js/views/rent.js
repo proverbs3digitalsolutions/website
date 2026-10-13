@@ -3,8 +3,9 @@
 import { get, post, patch, qs, uploadFile } from '../api.js';
 import {
   h, icon, peso, fmtDate, fmtDateTime, fmtMonth, badge, label, options, field, formModal, confirmDialog, emptyState,
-  searchBox, pageHead, toast, todayManila, filesList, openModal, unitLabel } from '../ui.js';
+  pageHead, toast, todayManila, filesList, openModal, unitLabel } from '../ui.js';
 import { state, navigate } from '../app.js';
+import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 
 const METHODS = ['cash', 'bank_transfer', 'gcash', 'maya', 'check', 'other'];
 const CATEGORIES = ['repairs', 'utilities', 'taxes', 'insurance', 'association_dues', 'supplies', 'salaries', 'cleaning', 'other'];
@@ -135,93 +136,225 @@ export async function addExpenseModal({ onSaved, expense } = {}) {
 }
 
 // ---------------------------------------------------------------- Screen 6
+// Each tab (rent due, payments, expenses) has its own filters, remembered separately.
+const TABS = {
+  rent: { key: 'rent-roll', defaults: { status: 'outstanding', q: '', property_id: '', unit_id: '', month: '', lease: '', late: '', min_amount: '', sort: '' } },
+  payments: { key: 'rent-payments', defaults: { q: '', from: '', to: '', method: '', property_id: '', unit_id: '', tenant_id: '', min_amount: '', max_amount: '', include_voided: '', receipt: '', sort: '' } },
+  expenses: { key: 'rent-expenses', defaults: { q: '', category: '', property_id: '', unit_id: '', from: '', to: '', vendor: '', min_amount: '', max_amount: '', source: '', include_voided: '', receipt: '', sort: '' } },
+};
+// Filters that don't narrow the list (so an empty list isn't "no results").
+const NOT_NARROWING = ['status', 'sort'];
+
+// The last 24 months, newest first, for the rent roll's month filter.
+function recentMonths(today) {
+  const [y, m] = today.split('-').map(Number);
+  return Array.from({ length: 24 }, (_, i) => {
+    const d = new Date(Date.UTC(y, m - 1 - i, 1)).toISOString().slice(0, 7);
+    return [d, fmtMonth(`${d}-01`)];
+  });
+}
+
 export async function rentView(el, { query }) {
   const stayOnly = state.user.business_type === 'short_term';
-  const tab = stayOnly ? 'expenses' : (['payments', 'expenses'].includes(query.tab) ? query.tab : 'rent');
-  const filters = { tab, status: query.status || (tab === 'rent' ? 'outstanding' : ''), q: query.q || '', property_id: query.property_id || '', month: query.month || '' };
-  const { properties } = await get('/properties');
+  const firstTab = stayOnly ? 'expenses' : (['payments', 'expenses'].includes(query.tab) ? query.tab : 'rent');
+  let tab = firstTab;
+  const [{ properties }, { units }] = await Promise.all([get('/properties'), get('/units')]);
+  let tenants = null; // loaded the first time the payments filters are shown
+  const values = {};
+  // Only the tab named in the link reads filters from it; other tabs use what was remembered.
+  const valuesFor = (t) => {
+    if (!values[t]) {
+      values[t] = initFilters(TABS[t].key, t === firstTab ? query : {}, TABS[t].defaults);
+      if (t === 'rent' && !['outstanding', 'overdue', 'partial', 'unpaid', 'paid', 'all'].includes(values[t].status)) values[t].status = 'outstanding';
+    }
+    return values[t];
+  };
   const body = h('div');
   const summary = h('div');
-
-  const propertySelect = h('select', { class: 'input', 'aria-label': 'Property', style: { maxWidth: '240px' } },
-    h('option', { value: '' }, 'All properties'),
-    properties.map((p) => h('option', { value: p.property_id, selected: p.property_id === filters.property_id }, p.property_name)));
-  propertySelect.addEventListener('change', () => { filters.property_id = propertySelect.value; load(); });
-
+  const barBox = h('div');
   const statusTabs = h('div', { class: 'tabs', role: 'tablist' });
   const reload = () => load();
 
+  const isFiltered = () => Object.keys(changed(valuesFor(tab), TABS[tab].defaults)).some((k) => !NOT_NARROWING.includes(k));
+  const clearFilters = () => {
+    const f = valuesFor(tab);
+    Object.assign(f, TABS[tab].defaults, tab === 'rent' ? { status: f.status } : {});
+    rememberFilters(TABS[tab].key, f);
+    renderBar();
+    load();
+  };
+  const noResults = () => emptyState({ title: 'No results found', text: 'Nothing matches these filters. Try removing a filter.', action: h('button', { class: 'btn btn--secondary', onclick: clearFilters }, 'Clear filters') });
+  const apiQuery = () => qs(changed(valuesFor(tab), TABS[tab].defaults));
+
   async function load() {
-    history.replaceState(null, '', `#/rent${qs({ ...filters, tab: filters.tab === 'rent' ? '' : filters.tab })}`);
+    const f = valuesFor(tab);
+    history.replaceState(null, '', `#/rent${qs({ tab: tab === 'rent' ? '' : tab, ...changed(f, TABS[tab].defaults) })}`);
     try {
-      if (filters.tab === 'rent') await loadRent(); else if (filters.tab === 'payments') await loadPayments(); else await loadExpenses();
+      if (tab === 'rent') await loadRent(); else if (tab === 'payments') await loadPayments(); else await loadExpenses();
     } catch (err) { body.replaceChildren(h('div', { class: 'alert alert--error' }, err.message)); }
   }
 
   async function loadRent() {
+    const f = valuesFor('rent');
     statusTabs.hidden = false;
-    statusTabs.replaceChildren(...[['outstanding', 'All unpaid'], ['overdue', 'Overdue'], ['partial', 'Partial'], ['unpaid', 'Due'], ['paid', 'Paid'], ['', 'All']].map(([s, t]) =>
-      h('button', { role: 'tab', 'aria-selected': String(filters.status === s), onclick: () => { filters.status = s; load(); } }, t)));
-    const { charges, totals } = await get(`/rent${qs({ status: filters.status, q: filters.q, property_id: filters.property_id, month: filters.month })}`);
+    statusTabs.replaceChildren(...[['outstanding', 'All unpaid'], ['overdue', 'Overdue'], ['partial', 'Partial'], ['unpaid', 'Due'], ['paid', 'Paid'], ['all', 'All']].map(([s, t]) =>
+      h('button', { role: 'tab', 'aria-selected': String(f.status === s), onclick: () => { f.status = s; rememberFilters(TABS.rent.key, f); load(); } }, t)));
+    // "all" isn't a status the server knows, so it lists every charge.
+    const { charges, totals } = await get(`/rent${apiQuery()}`);
+    const filtered = isFiltered();
     summary.replaceChildren(h('div', { class: 'stats' },
       h('div', { class: 'stat' }, h('div', { class: 'stat__label' }, 'Outstanding'), h('div', { class: 'stat__value' }, peso(totals.outstanding))),
       h('div', { class: `stat${Number(totals.overdue) > 0 ? ' stat--alert' : ''}` }, h('div', { class: 'stat__label' }, 'Overdue'), h('div', { class: 'stat__value' }, peso(totals.overdue)), h('div', { class: 'stat__sub' }, `${totals.overdue_count} month${totals.overdue_count === 1 ? '' : 's'}`)),
       h('div', { class: 'stat' }, h('div', { class: 'stat__label' }, 'Partially paid'), h('div', { class: 'stat__value' }, totals.partial_count)),
       h('div', { class: 'stat' }, h('div', { class: 'stat__label' }, 'Due, not yet paid'), h('div', { class: 'stat__value' }, totals.unpaid_count))));
+    const due = charges.reduce((sum, c) => sum + Number(c.balance), 0);
     body.replaceChildren(h('div', { class: 'card' }, charges.length
-      ? h('ul', { class: 'list' }, charges.map((c) => h('li', null, h('div', { class: 'row' },
-        h('a', { class: 'row__main', href: `#/tenants/${c.tenant_id}`, style: { color: 'inherit', textDecoration: 'none' } },
-          h('span', { class: 'row__title' }, c.tenant_name),
-          h('span', { class: 'row__sub' }, `${c.property_name} · Unit ${c.unit_name} · ${fmtMonth(c.period)} · due ${fmtDate(c.due_date)}`),
-          Number(c.amount_applied) > 0 && c.status !== 'paid' && h('span', { class: 'row__sub' }, `Paid ${peso(c.amount_applied)} of ${peso(c.amount_due)}`)),
-        h('div', { class: 'row__end' },
-          h('span', { class: `amount${c.status === 'overdue' ? ' amount--neg' : ''}` }, peso(c.status === 'paid' ? c.amount_due : c.balance)),
-          h('div', { class: 'chips' }, badge(c.status),
-            c.status !== 'paid' && h('button', { class: 'btn btn--secondary btn--sm', onclick: () => recordPaymentModal({ leaseId: c.lease_id, onSaved: reload }) }, 'Record')))))))
-      : emptyState({
-        title: filters.q || filters.property_id ? 'No results found' : (filters.status === 'outstanding' || filters.status === 'overdue' ? 'No unpaid rent' : 'No rent charges'),
-        text: filters.q || filters.property_id ? 'Try clearing the search or property filter.' : 'Rent charges are created monthly from active leases. Assign tenants to units to start tracking.',
-        action: (filters.q || filters.property_id) && h('button', { class: 'btn btn--secondary', onclick: () => { filters.q = ''; filters.property_id = ''; propertySelect.value = ''; search.querySelector('input').value = ''; load(); } }, 'Clear filters'),
-      })));
+      ? [filtered && h('p', { class: 'muted small' }, `Showing ${charges.length} charge${charges.length === 1 ? '' : 's'} · ${peso(due)} still to collect`),
+        h('ul', { class: 'list' }, charges.map((c) => h('li', null, h('div', { class: 'row' },
+          h('a', { class: 'row__main', href: `#/tenants/${c.tenant_id}`, style: { color: 'inherit', textDecoration: 'none' } },
+            h('span', { class: 'row__title' }, c.tenant_name, c.lease_status !== 'active' ? h('span', { class: 'muted small' }, ' (former)') : ''),
+            h('span', { class: 'row__sub' }, `${c.property_name} · Unit ${c.unit_name} · ${fmtMonth(c.period)} · due ${fmtDate(c.due_date)}`),
+            Number(c.amount_applied) > 0 && c.status !== 'paid' && h('span', { class: 'row__sub' }, `Paid ${peso(c.amount_applied)} of ${peso(c.amount_due)}`)),
+          h('div', { class: 'row__end' },
+            h('span', { class: `amount${c.status === 'overdue' ? ' amount--neg' : ''}` }, peso(c.status === 'paid' ? c.amount_due : c.balance)),
+            h('div', { class: 'chips' }, badge(c.status),
+              c.status !== 'paid' && h('button', { class: 'btn btn--secondary btn--sm', onclick: () => recordPaymentModal({ leaseId: c.lease_id, onSaved: reload }) }, 'Record')))))))]
+      : (filtered ? noResults() : emptyState({
+        title: f.status === 'outstanding' || f.status === 'overdue' ? 'No unpaid rent' : 'No rent charges',
+        text: 'Rent charges are created monthly from active leases. Assign tenants to units to start tracking.',
+      }))));
   }
 
   async function loadPayments() {
     statusTabs.hidden = true;
-    const { payments } = await get(`/payments${qs({ q: filters.q, property_id: filters.property_id, include_voided: '1' })}`);
-    const total = payments.filter((p) => !p.voided_at).reduce((s, p) => s + Number(p.amount_paid), 0);
+    const { payments } = await get(`/payments${apiQuery()}`);
+    const kept = payments.filter((p) => !p.voided_at);
+    const total = kept.reduce((s, p) => s + Number(p.amount_paid), 0);
     summary.replaceChildren();
     body.replaceChildren(h('div', { class: 'card' }, payments.length
-      ? [h('p', { class: 'muted small' }, `${payments.filter((p) => !p.voided_at).length} payments · ${peso(total)} (latest 500)`),
+      ? [h('p', { class: 'muted small' }, `${kept.length} payment${kept.length === 1 ? '' : 's'} · ${peso(total)}${payments.length >= 500 ? ' (latest 500)' : ''}`),
         h('ul', { class: 'list' }, payments.map((p) => h('li', null, h('a', { class: 'row', href: `#/payments/${p.payment_id}` },
-          h('div', { class: 'row__main' }, h('span', { class: `row__title${p.voided_at ? ' strike' : ''}` }, p.tenant_name), h('span', { class: 'row__sub' }, `${fmtDate(p.payment_date)} · ${label(p.payment_method)} · ${p.property_name}, Unit ${p.unit_name}`)),
+          h('div', { class: 'row__main' }, h('span', { class: `row__title${p.voided_at ? ' strike' : ''}` }, p.tenant_name), h('span', { class: 'row__sub' }, `${fmtDate(p.payment_date)} · ${label(p.payment_method)} · ${p.property_name}, Unit ${p.unit_name}${p.reference_number ? ` · Ref ${p.reference_number}` : ''}`)),
           h('div', { class: 'row__end' }, h('span', { class: `amount${p.voided_at ? ' strike muted' : ''}` }, peso(p.amount_paid)), p.voided_at && badge('voided', 'Voided'))))))]
-      : emptyState({ title: filters.q || filters.property_id ? 'No results found' : 'No payments recorded yet', text: filters.q || filters.property_id ? 'Try clearing your filters.' : 'Record the first rent payment to see it here.', action: h('button', { class: 'btn btn--primary', onclick: () => recordPaymentModal({ onSaved: reload }) }, 'Record payment') })));
+      : (isFiltered() ? noResults() : emptyState({ title: 'No payments recorded yet', text: 'Record the first rent payment to see it here.', action: h('button', { class: 'btn btn--primary', onclick: () => recordPaymentModal({ onSaved: reload }) }, 'Record payment') }))));
   }
 
   async function loadExpenses() {
     statusTabs.hidden = true;
-    const { expenses } = await get(`/expenses${qs({ q: filters.q, property_id: filters.property_id, include_voided: '1' })}`);
-    const total = expenses.filter((x) => !x.voided_at).reduce((s, x) => s + Number(x.amount), 0);
+    const { expenses } = await get(`/expenses${apiQuery()}`);
+    const kept = expenses.filter((x) => !x.voided_at);
+    const total = kept.reduce((s, x) => s + Number(x.amount), 0);
     summary.replaceChildren();
     body.replaceChildren(h('div', { class: 'card' }, expenses.length
-      ? [h('p', { class: 'muted small' }, `${expenses.filter((x) => !x.voided_at).length} expenses · ${peso(total)} (latest 500)`),
+      ? [h('p', { class: 'muted small' }, `${kept.length} expense${kept.length === 1 ? '' : 's'} · ${peso(total)}${expenses.length >= 500 ? ' (latest 500)' : ''}`),
         h('ul', { class: 'list' }, expenses.map((x) => h('li', null, h('a', { class: 'row', href: `#/expenses/${x.expense_id}` },
-          h('div', { class: 'row__main' }, h('span', { class: `row__title${x.voided_at ? ' strike' : ''}` }, x.description || label(x.category)), h('span', { class: 'row__sub' }, `${fmtDate(x.expense_date)} · ${label(x.category)} · ${x.property_name}${x.unit_name ? `, Unit ${x.unit_name}` : ''}`)),
+          h('div', { class: 'row__main' }, h('span', { class: `row__title${x.voided_at ? ' strike' : ''}` }, x.description || label(x.category)), h('span', { class: 'row__sub' }, `${fmtDate(x.expense_date)} · ${label(x.category)} · ${x.property_name}${x.unit_name ? `, Unit ${x.unit_name}` : ''}${x.vendor_name ? ` · ${x.vendor_name}` : ''}`)),
           h('div', { class: 'row__end' }, h('span', { class: `amount${x.voided_at ? ' strike muted' : ''}` }, peso(x.amount)), x.voided_at && badge('voided', 'Voided'))))))]
-      : emptyState({ title: filters.q || filters.property_id ? 'No results found' : 'No expenses recorded yet', text: 'Track repairs, utilities, dues and other operating costs per property.', action: h('button', { class: 'btn btn--primary', onclick: () => addExpenseModal({ onSaved: reload }) }, 'Add expense') })));
+      : (isFiltered() ? noResults() : emptyState({ title: 'No expenses recorded yet', text: 'Track repairs, utilities, dues and other operating costs per property.', action: h('button', { class: 'btn btn--primary', onclick: () => addExpenseModal({ onSaved: reload }) }, 'Add expense') }))));
   }
 
-  const search = searchBox({ value: filters.q, placeholder: 'Search tenant, unit or reference', onSearch: (q) => { filters.q = q; load(); } });
+  // ---- filter bars
+  const propertyField = () => properties.length > 1 && { name: 'property_id', label: 'Property', all: 'All properties', options: properties.map((p) => [p.property_id, p.property_name]) };
+  const unitField = (f, extra = []) => ({
+    name: 'unit_id', label: 'Unit', all: 'All units',
+    options: [...extra, ...units.filter((u) => !f.property_id || u.property_id === f.property_id)
+      .map((u) => [u.unit_id, `${unitLabel(u.unit_name)}${properties.length > 1 && !f.property_id ? ` · ${u.property_name}` : ''}`])],
+  });
+  const amountFields = [
+    { name: 'min_amount', label: 'Amount from (₱)', type: 'number', min: 0, step: '0.01' },
+    { name: 'max_amount', label: 'Amount up to (₱)', type: 'number', min: 0, step: '0.01' },
+  ];
+  const voidedField = { name: 'include_voided', label: 'Voided entries', all: 'Hide voided', options: [['1', 'Include voided'], ['only', 'Voided only']] };
+  const receiptField = { name: 'receipt', label: 'Receipt / proof', all: 'Any', options: [['yes', 'Attached'], ['no', 'Not attached']] };
+
+  function barConfig(f) {
+    if (tab === 'rent') {
+      return {
+        search: { placeholder: 'Search tenant, unit or property' },
+        quick: [
+          { name: 'month', label: 'Month', all: 'All months', options: recentMonths(todayManila()) },
+          propertyField(),
+        ].filter(Boolean),
+        more: [
+          unitField(f),
+          { name: 'late', label: 'Days late', all: 'Any', options: [['7', 'More than 7 days late'], ['30', 'More than 30 days late'], ['60', 'More than 60 days late'], ['90', 'More than 90 days late']] },
+          { name: 'lease', label: 'Tenant', all: 'Current and former', options: [['current', 'Current tenants'], ['former', 'Moved out (still owing)']] },
+          { name: 'min_amount', label: 'Amount due at least (₱)', type: 'number', min: 0, step: '0.01' },
+          { name: 'sort', label: 'Sort by', all: 'Overdue first, newest due', options: [['due_asc', 'Oldest due date first'], ['amount', 'Biggest amount due'], ['rent', 'Highest monthly rent'], ['tenant', 'Tenant name'], ['unit', 'Property and unit']] },
+        ],
+      };
+    }
+    if (tab === 'payments') {
+      return {
+        search: { placeholder: 'Search tenant, unit, reference or notes' },
+        quick: [
+          { name: 'method', label: 'Method', all: 'All methods', options: METHODS.map((m) => [m, label(m)]) },
+          propertyField(),
+        ].filter(Boolean),
+        more: [
+          { name: 'from', label: 'Date received', type: 'daterange', keys: ['from', 'to'] },
+          unitField(f),
+          { name: 'tenant_id', label: 'Tenant', all: 'All tenants', options: (tenants || []).map((t) => [t.tenant_id, t.full_name]) },
+          ...amountFields, voidedField, receiptField,
+          { name: 'sort', label: 'Sort by', all: 'Newest first', options: [['date_asc', 'Oldest first'], ['amount', 'Biggest amount'], ['amount_asc', 'Smallest amount'], ['tenant', 'Tenant name']] },
+        ],
+      };
+    }
+    return {
+      search: { placeholder: 'Search description, vendor or property' },
+      quick: [
+        { name: 'category', label: 'Category', all: 'All categories', options: CATEGORIES.map((c) => [c, label(c)]) },
+        propertyField(),
+      ].filter(Boolean),
+      more: [
+        { name: 'from', label: 'Expense date', type: 'daterange', keys: ['from', 'to'] },
+        unitField(f, [['none', 'Whole property / common area']]),
+        { name: 'vendor', label: 'Vendor', all: 'Any vendor', options: vendors.map((v) => [v, v]) },
+        ...amountFields,
+        { name: 'source', label: 'Recorded from', all: 'Anywhere', options: [['maintenance', 'Maintenance repairs'], ['direct', 'Added here']] },
+        voidedField, receiptField,
+        { name: 'sort', label: 'Sort by', all: 'Newest first', options: [['date_asc', 'Oldest first'], ['amount', 'Biggest amount'], ['amount_asc', 'Smallest amount'], ['category', 'Category']] },
+      ],
+    };
+  }
+
+  // Vendor names already used, for the expenses vendor filter.
+  let vendors = [];
+  async function renderBar() {
+    const f = valuesFor(tab);
+    if (tab === 'payments' && !tenants) tenants = (await get('/tenants').catch(() => ({ tenants: [] }))).tenants;
+    if (tab === 'expenses' && !vendors.length) {
+      const { expenses } = await get('/expenses?include_voided=1').catch(() => ({ expenses: [] }));
+      vendors = [...new Map(expenses.filter((x) => x.vendor_name?.trim()).map((x) => [x.vendor_name.trim().toLowerCase(), x.vendor_name.trim()])).values()].sort((a, b) => a.localeCompare(b));
+    }
+    let lastProperty = f.property_id;
+    barBox.replaceChildren(filterBar({
+      key: TABS[tab].key, values: f, defaults: TABS[tab].defaults,
+      ...barConfig(f),
+      onChange: () => {
+        // A new property changes the unit choices; drop a unit from another property.
+        if (f.property_id !== lastProperty) {
+          if (f.unit_id && f.unit_id !== 'none' && !units.some((u) => u.unit_id === f.unit_id && (!f.property_id || u.property_id === f.property_id))) f.unit_id = '';
+          rememberFilters(TABS[tab].key, f);
+          renderBar();
+        }
+        load();
+      },
+    }));
+  }
+
   const mainTabs = h('div', { class: 'tabs', role: 'tablist' }, [['rent', 'Rent due'], ['payments', 'Payments'], ['expenses', 'Expenses']].map(([t, txt]) =>
     h('button', {
-      role: 'tab', 'aria-selected': String(filters.tab === t),
-      onclick: (e) => {
-        filters.tab = t; filters.status = t === 'rent' ? 'outstanding' : '';
+      role: 'tab', 'aria-selected': String(tab === t),
+      onclick: async (e) => {
+        tab = t;
         mainTabs.querySelectorAll('button').forEach((b) => b.setAttribute('aria-selected', String(b === e.currentTarget)));
+        await renderBar();
         load();
       },
     }, txt)));
 
+  await renderBar();
   await load();
   el.replaceChildren(
     pageHead({
@@ -232,7 +365,7 @@ export async function rentView(el, { query }) {
         h('button', { class: stayOnly ? 'btn btn--primary' : 'btn btn--secondary', onclick: () => addExpenseModal({ onSaved: reload }) }, icon('plus'), 'Add expense')],
     }),
     !stayOnly && mainTabs,
-    h('div', { class: 'toolbar' }, search, propertySelect),
+    barBox,
     statusTabs, summary, body);
 }
 

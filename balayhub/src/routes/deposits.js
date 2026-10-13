@@ -7,7 +7,7 @@
 const express = require('express');
 const { query, one } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
-const { validate, uuidParam } = require('../lib/validate');
+const { validate, uuidParam, isValidDate } = require('../lib/validate');
 const { audit } = require('../lib/audit');
 const { requireRole } = require('../lib/auth');
 const { propertyScope } = require('../lib/access');
@@ -135,6 +135,40 @@ router.get('/deposits/due', ah(async (req, res) => {
        FROM stay_deposits d JOIN bookings b USING (booking_id) JOIN units u ON u.unit_id = b.unit_id JOIN properties p ON p.property_id = u.property_id
        LEFT JOIN guests g ON g.guest_id = b.guest_id
       WHERE d.status = 'held' AND (b.check_out <= $1 OR b.checked_out_at IS NOT NULL) AND ${propertyScope(req.user, params)} ORDER BY b.check_out LIMIT 20`, params);
+  res.json({ deposits: rows });
+}));
+
+// Every deposit, with filters (Reports → Deposits). Owners and managers.
+// status: held / due (held, guest has checked out) / refunded / partly_refunded /
+// kept / settled (any of the last three); listing, property, method, date
+// received range, search on guest or booking code, sort.
+const DEPOSIT_STATUS = ['held', 'refunded', 'partly_refunded', 'kept'];
+const DEPOSIT_SORTS = { received: 'd.received_date DESC, d.created_at DESC', received_asc: 'd.received_date, d.created_at', checkout: 'b.check_out DESC', amount: 'd.amount DESC' };
+router.get('/deposits', managers, ah(async (req, res) => {
+  const q = req.query;
+  const params = [manilaToday()];
+  const where = [propertyScope(req.user, params)];
+  const due = `(d.status = 'held' AND (b.check_out <= $1 OR b.checked_out_at IS NOT NULL))`;
+  if (DEPOSIT_STATUS.includes(q.status)) { params.push(q.status); where.push(`d.status = $${params.length}`); }
+  if (q.status === 'due') where.push(due);
+  if (q.status === 'settled') where.push(`d.status <> 'held'`);
+  if (q.unit_id) { params.push(uuidParam(q.unit_id)); where.push(`b.unit_id = $${params.length}`); }
+  if (q.property_id) { params.push(uuidParam(q.property_id)); where.push(`p.property_id = $${params.length}`); }
+  if (METHODS.includes(q.method)) { params.push(q.method); where.push(`d.method = $${params.length}`); }
+  if (isValidDate(q.from)) { params.push(q.from); where.push(`d.received_date >= $${params.length}`); }
+  if (isValidDate(q.to)) { params.push(q.to); where.push(`d.received_date <= $${params.length}`); }
+  if (q.deducted === '1') where.push('d.deduction_amount > 0');
+  if (q.q) {
+    params.push(`%${String(q.q).slice(0, 100)}%`);
+    where.push(`(g.full_name ILIKE $${params.length} OR b.guest_label ILIKE $${params.length} OR b.confirmation_code ILIKE $${params.length})`);
+  }
+  const { rows } = await query(
+    `SELECT d.deposit_id, d.booking_id, d.amount, d.received_date::text, d.method, d.status, d.deduction_amount, d.refund_amount, d.settled_at,
+            ${due} AS due, b.check_in::text, b.check_out::text, b.confirmation_code, u.unit_name, p.property_name,
+            COALESCE(g.full_name, b.guest_label) AS guest_name
+       FROM stay_deposits d JOIN bookings b USING (booking_id) JOIN units u ON u.unit_id = b.unit_id JOIN properties p ON p.property_id = u.property_id
+       LEFT JOIN guests g ON g.guest_id = b.guest_id
+      WHERE ${where.join(' AND ')} ORDER BY ${DEPOSIT_SORTS[q.sort] || DEPOSIT_SORTS.received} LIMIT 500`, params);
   res.json({ deposits: rows });
 }));
 

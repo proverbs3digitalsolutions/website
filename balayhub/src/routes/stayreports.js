@@ -10,7 +10,7 @@
 const express = require('express');
 const { query } = require('../db');
 const { HttpError, ah } = require('../lib/http');
-const { isValidDate } = require('../lib/validate');
+const { isValidDate, uuidParam } = require('../lib/validate');
 const { requireRole } = require('../lib/auth');
 const { propertyScope } = require('../lib/access');
 
@@ -41,15 +41,28 @@ function period(q) {
   return period({ month: t.slice(0, 7) });
 }
 
-async function performance(user, { from, to }) {
+// Report filters: property, listing and channel (validated; unknown values are ignored).
+function reportFilters(q) {
+  return {
+    property_id: q.property_id ? uuidParam(q.property_id) : null,
+    unit_id: q.unit_id ? uuidParam(q.unit_id) : null,
+    channel: CHANNEL_LABEL[q.channel] ? q.channel : null,
+  };
+}
+
+async function performance(user, { from, to }, f = {}) {
   const params = [];
-  const scope = propertyScope(user, params);
+  const where = [propertyScope(user, params)];
+  if (f.property_id) { params.push(f.property_id); where.push(`p.property_id = $${params.length}`); }
+  if (f.unit_id) { params.push(f.unit_id); where.push(`u.unit_id = $${params.length}`); }
   // Listings in scope (incl. archived ones that had stays).
   const { rows: listings } = await query(
     `SELECT u.unit_id, u.unit_name, p.property_id, p.property_name, (u.status = 'active' AND p.status = 'active' AND u.nightly_rate IS NOT NULL) AS active
-       FROM units u JOIN properties p ON p.property_id = u.property_id WHERE ${scope} AND (u.nightly_rate IS NOT NULL OR EXISTS (SELECT 1 FROM bookings x WHERE x.unit_id = u.unit_id))
+       FROM units u JOIN properties p ON p.property_id = u.property_id WHERE ${where.join(' AND ')} AND (u.nightly_rate IS NOT NULL OR EXISTS (SELECT 1 FROM bookings x WHERE x.unit_id = u.unit_id))
       ORDER BY p.property_name, u.unit_name`, params);
   const ids = listings.map((l) => l.unit_id);
+  // A channel filter narrows stays; null matches every channel.
+  const channel = f.channel || null;
   // Earned accommodation and channel fees per night inside the period.
   const { rows: nights } = await query(
     `SELECT b.unit_id, b.channel, COUNT(*)::int AS nights,
@@ -57,23 +70,27 @@ async function performance(user, { from, to }) {
             SUM(b.channel_fee / (b.check_out - b.check_in)) AS channel_fees
        FROM bookings b, generate_series(GREATEST(b.check_in, $2::date), LEAST(b.check_out, $3::date) - 1, interval '1 day') n
       WHERE b.unit_id = ANY($1) AND b.kind = 'reservation' AND b.status = 'confirmed' AND b.check_in < $3 AND b.check_out > $2
-      GROUP BY b.unit_id, b.channel`, [ids, from, to]);
+        AND ($4::text IS NULL OR b.channel = $4)
+      GROUP BY b.unit_id, b.channel`, [ids, from, to, channel]);
   const { rows: stays } = await query(
     `SELECT b.unit_id, b.channel, COUNT(*) FILTER (WHERE b.status = 'confirmed')::int AS stays,
             COUNT(*) FILTER (WHERE b.status = 'cancelled')::int AS cancelled,
             SUM(b.cleaning_fee + b.other_fees) FILTER (WHERE b.status = 'confirmed') AS fees,
             SUM(b.check_out - b.check_in) FILTER (WHERE b.status = 'confirmed')::int AS stay_nights
        FROM bookings b WHERE b.unit_id = ANY($1) AND b.kind = 'reservation' AND b.check_in >= $2 AND b.check_in < $3
-      GROUP BY b.unit_id, b.channel`, [ids, from, to]);
+        AND ($4::text IS NULL OR b.channel = $4)
+      GROUP BY b.unit_id, b.channel`, [ids, from, to, channel]);
   const { rows: blocked } = await query(
     `SELECT b.unit_id, COUNT(*)::int AS nights FROM bookings b,
             generate_series(GREATEST(b.check_in, $2::date), LEAST(b.check_out, $3::date) - 1, interval '1 day') n
       WHERE b.unit_id = ANY($1) AND b.kind = 'block' AND b.status = 'confirmed' AND b.check_in < $3 AND b.check_out > $2 GROUP BY b.unit_id`, [ids, from, to]);
   const propIds = [...new Set(listings.map((l) => l.property_id))];
-  const { rows: expenses } = await query(
+  // Expenses aren't tied to a channel, so a channel filter leaves them out; a
+  // listing filter leaves out building-level expenses (dues etc.).
+  const { rows: expenses } = channel ? { rows: [] } : await query(
     `SELECT e.unit_id, e.property_id, e.category, SUM(e.amount) AS amount FROM expenses e
-      WHERE e.property_id = ANY($1) AND (e.unit_id IS NULL OR e.unit_id = ANY($2)) AND e.voided_at IS NULL AND e.expense_date >= $3 AND e.expense_date < $4
-      GROUP BY e.unit_id, e.property_id, e.category`, [propIds, ids, from, to]);
+      WHERE e.property_id = ANY($1) AND ((e.unit_id IS NULL AND NOT $5) OR e.unit_id = ANY($2)) AND e.voided_at IS NULL AND e.expense_date >= $3 AND e.expense_date < $4
+      GROUP BY e.unit_id, e.property_id, e.category`, [propIds, ids, from, to, Boolean(f.unit_id)]);
 
   const days = daysBetween(from, to);
   const today = manilaToday();
@@ -115,7 +132,7 @@ async function performance(user, { from, to }) {
   const totalExpenses = tot.expenses + propertyExpenses;
   const revenue = tot.acc + tot.fees;
   return {
-    from, to_exclusive: to, partial: to > today,
+    from, to_exclusive: to, partial: to > today, expenses_excluded: Boolean(channel),
     totals: {
       revenue: m2(revenue), accommodation: m2(tot.acc), fees: m2(tot.fees), channel_fees: m2(tot.chFees), expenses: m2(totalExpenses),
       net: m2(revenue - tot.chFees - totalExpenses), nights: tot.nights, stays: tot.stays, cancelled: tot.cancelled,
@@ -131,24 +148,27 @@ async function performance(user, { from, to }) {
 
 router.get('/stay-reports', managers, ah(async (req, res) => {
   const p = period(req.query);
-  res.json({ period: p.label, ...(await performance(req.user, p)) });
+  res.json({ period: p.label, ...(await performance(req.user, p, reportFilters(req.query))) });
 }));
 
 // Yearly income summary: per month, earned revenue, money received, channel fees, expenses.
-async function taxSummary(user, year) {
+async function taxSummary(user, year, f = {}) {
   const months = [];
   for (let m = 1; m <= 12; m += 1) {
     const from = `${year}-${String(m).padStart(2, '0')}-01`;
     const to = m === 12 ? `${year + 1}-01-01` : `${year}-${String(m + 1).padStart(2, '0')}-01`;
-    const p = await performance(user, { from, to });
+    const p = await performance(user, { from, to }, f);
     months.push({ month: from.slice(0, 7), revenue: p.totals.revenue, channel_fees: p.totals.channel_fees, expenses: p.totals.expenses, net: p.totals.net, nights: p.totals.nights });
   }
   const params = [`${year}-01-01`, `${year + 1}-01-01`];
-  const scope = propertyScope(user, params);
+  const scope = [propertyScope(user, params)];
+  if (f.property_id) { params.push(f.property_id); scope.push(`p.property_id = $${params.length}`); }
+  if (f.unit_id) { params.push(f.unit_id); scope.push(`u.unit_id = $${params.length}`); }
+  if (f.channel) { params.push(f.channel); scope.push(`b.channel = $${params.length}`); }
   const { rows: received } = await query(
     `SELECT to_char(bp.payment_date, 'YYYY-MM') AS month, bp.payment_method, SUM(bp.amount) AS amount
        FROM booking_payments bp JOIN bookings b ON b.booking_id = bp.booking_id JOIN units u ON u.unit_id = b.unit_id JOIN properties p ON p.property_id = u.property_id
-      WHERE bp.voided_at IS NULL AND bp.payment_date >= $1 AND bp.payment_date < $2 AND ${scope}
+      WHERE bp.voided_at IS NULL AND bp.payment_date >= $1 AND bp.payment_date < $2 AND ${scope.join(' AND ')}
       GROUP BY 1, 2`, params);
   for (const m of months) {
     const rows = received.filter((r) => r.month === m.month);
@@ -169,7 +189,7 @@ async function taxSummary(user, year) {
 router.get('/stay-reports/tax', managers, ah(async (req, res) => {
   const year = /^\d{4}$/.test(req.query.year || '') ? Number(req.query.year) : Number(manilaToday().slice(0, 4));
   if (year < 2000 || year > 2100) throw validationError({ year: 'Choose a valid year.' });
-  res.json(await taxSummary(req.user, year));
+  res.json(await taxSummary(req.user, year, reportFilters(req.query)));
 }));
 
 function csvCell(v) {
@@ -183,7 +203,7 @@ router.get('/stay-reports/export', managers, ah(async (req, res) => {
   if (req.query.kind === 'tax') {
     const year = /^\d{4}$/.test(req.query.year || '') ? Number(req.query.year) : Number(manilaToday().slice(0, 4));
     if (year < 2000 || year > 2100) throw validationError({ year: 'Choose a valid year.' });
-    const t = await taxSummary(req.user, year);
+    const t = await taxSummary(req.user, year, reportFilters(req.query));
     lines = [['Month', 'Revenue earned', 'Payments received', 'Channel fees', 'Expenses', 'Net (earned - fees - expenses)'],
       ...t.months.map((m) => [m.month, m.revenue, m.received, m.channel_fees, m.expenses, m.net]),
       ...t.quarters.map((q) => [q.quarter, q.revenue, q.received, q.channel_fees, q.expenses, q.net]),
@@ -191,7 +211,7 @@ router.get('/stay-reports/export', managers, ah(async (req, res) => {
     name = `balayhub-income-summary-${year}.csv`;
   } else {
     const p = period(req.query);
-    const r = await performance(req.user, p);
+    const r = await performance(req.user, p, reportFilters(req.query));
     lines = [['Listing', 'Building', 'Stays', 'Nights', 'Occupancy %', 'Avg nightly rate', 'Revenue', 'Channel fees', 'Expenses', 'Net'],
       ...r.units.map((u) => [u.unit_name, u.property_name, u.stays, u.nights, u.occupancy ?? '', u.adr, u.revenue, u.channel_fees, u.expenses, u.net]),
       ['Building-level expenses', '', '', '', '', '', '', '', r.building_expenses, ''],

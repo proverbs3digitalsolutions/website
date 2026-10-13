@@ -2,9 +2,10 @@
 
 import { get, post, patch, qs, uploadFile, ApiError } from '../api.js';
 import {
-  h, icon, peso, fmtDate, badge, label, field, formModal, confirmDialog, emptyState, searchBox, pageHead, toast,
+  h, icon, peso, fmtDate, badge, label, field, formModal, confirmDialog, emptyState, pageHead, toast,
   todayManila, filesList, openModal, unitLabel } from '../ui.js';
 import { state, navigate } from '../app.js';
+import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 import { recordPaymentModal } from './rent.js';
 
 function tenantFields(t = {}) {
@@ -124,26 +125,32 @@ export async function assignTenantModal({ tenant, unit, onSaved } = {}) {
 // ---------------------------------------------------------------- list
 export async function tenantsView(el, { query }) {
   const canManage = state.user.role !== 'staff';
-  const filters = { status: query.status === 'archived' ? 'archived' : 'active', q: query.q || '' };
+  const defaults = { status: 'active', q: '', lease: '', property_id: '', unit_id: '', balance: '', min_balance: '', sort: '' };
+  const filters = initFilters('tenants', query, defaults);
+  if (filters.status !== 'archived') filters.status = 'active';
+  const [{ properties }, { units }] = await Promise.all([get('/properties'), get('/units')]);
   const listCard = h('div', { class: 'card' });
   const tabs = h('div', { class: 'tabs', role: 'tablist' });
 
   async function load() {
-    history.replaceState(null, '', `#/tenants${qs(filters)}`);
-    tabs.replaceChildren(...['active', 'archived'].map((s) => h('button', { role: 'tab', 'aria-selected': String(filters.status === s), onclick: () => { filters.status = s; load(); } }, s === 'active' ? 'Current' : 'Archived')));
-    const { tenants } = await get(`/tenants${qs(filters)}`);
+    history.replaceState(null, '', `#/tenants${qs(changed(filters, defaults))}`);
+    tabs.replaceChildren(...['active', 'archived'].map((s) => h('button', { role: 'tab', 'aria-selected': String(filters.status === s), onclick: () => { filters.status = s; rememberFilters('tenants', filters); load(); } }, s === 'active' ? 'Current' : 'Archived')));
+    const { tenants } = await get(`/tenants${qs(changed(filters, defaults))}`);
+    const filtered = Object.keys(changed(filters, defaults)).some((k) => k !== 'status' && k !== 'sort');
+    const owing = tenants.reduce((sum, t) => sum + Number(t.outstanding), 0);
     listCard.replaceChildren(tenants.length
-      ? h('ul', { class: 'list' }, tenants.map((t) => h('li', null, h('a', { class: 'row', href: `#/tenants/${t.tenant_id}` },
-        h('div', { class: 'row__main' },
-          h('span', { class: 'row__title' }, t.full_name),
-          h('span', { class: 'row__sub' }, t.lease_id ? `${t.property_name} · Unit ${t.unit_name} · ${peso(t.monthly_rent)}/mo` : 'No unit assigned'),
-          !t.limited && (t.phone || t.email) && h('span', { class: 'row__sub' }, [t.phone, t.email].filter(Boolean).join(' · '))),
-        h('div', { class: 'row__end' },
-          Number(t.overdue) > 0 ? [h('span', { class: 'amount amount--neg' }, peso(t.overdue)), badge('overdue')]
-            : Number(t.outstanding) > 0 ? [h('span', { class: 'amount' }, peso(t.outstanding)), badge('unpaid', 'Balance')]
-              : t.lease_id ? badge('paid', 'Up to date') : badge('vacant', 'Unassigned'))))))
-      : (filters.q
-        ? emptyState({ title: 'No results found', text: `No tenant matches “${filters.q}”.`, action: h('button', { class: 'btn btn--secondary', onclick: () => { filters.q = ''; search.querySelector('input').value = ''; load(); } }, 'Clear search') })
+      ? [filtered && h('p', { class: 'muted small' }, `Showing ${tenants.length} tenant${tenants.length === 1 ? '' : 's'}${owing > 0 ? ` · ${peso(owing)} unpaid` : ''}`),
+        h('ul', { class: 'list' }, tenants.map((t) => h('li', null, h('a', { class: 'row', href: `#/tenants/${t.tenant_id}` },
+          h('div', { class: 'row__main' },
+            h('span', { class: 'row__title' }, t.full_name),
+            h('span', { class: 'row__sub' }, t.lease_id ? `${t.property_name} · Unit ${t.unit_name} · ${peso(t.monthly_rent)}/mo${t.end_date ? ` · lease ends ${fmtDate(t.end_date)}` : ''}` : 'No unit assigned'),
+            !t.limited && (t.phone || t.email) && h('span', { class: 'row__sub' }, [t.phone, t.email].filter(Boolean).join(' · '))),
+          h('div', { class: 'row__end' },
+            Number(t.overdue) > 0 ? [h('span', { class: 'amount amount--neg' }, peso(t.overdue)), badge('overdue')]
+              : Number(t.outstanding) > 0 ? [h('span', { class: 'amount' }, peso(t.outstanding)), badge('unpaid', 'Balance')]
+                : t.lease_id ? badge('paid', 'Up to date') : badge('vacant', 'Unassigned'))))))]
+      : (filtered
+        ? emptyState({ title: 'No results found', text: filters.q ? `No tenant matches “${filters.q}” with these filters. Try removing a filter.` : 'No tenant matches these filters. Try removing a filter.', action: h('button', { class: 'btn btn--secondary', onclick: () => { Object.assign(filters, defaults, { status: filters.status }); rememberFilters('tenants', filters); renderBar(); load(); } }, 'Clear filters') })
         : emptyState({
           iconName: 'users',
           title: filters.status === 'archived' ? 'No archived tenants' : 'No tenants yet',
@@ -153,7 +160,38 @@ export async function tenantsView(el, { query }) {
             h('a', { class: 'btn btn--secondary', href: '#/properties' }, 'Go to Properties')),
         })));
   }
-  const search = searchBox({ value: filters.q, placeholder: 'Search name, phone, unit or property', onSearch: (q) => { filters.q = q; load().catch((e) => toast(e.message, 'error')); } });
+
+  const barBox = h('div');
+  function renderBar() {
+    // Unit choices follow the chosen property.
+    const unitOptions = units.filter((u) => !filters.property_id || u.property_id === filters.property_id)
+      .map((u) => [u.unit_id, `${unitLabel(u.unit_name)}${properties.length > 1 && !filters.property_id ? ` · ${u.property_name}` : ''}`]);
+    let lastProperty = filters.property_id;
+    barBox.replaceChildren(filterBar({
+      key: 'tenants', values: filters, defaults,
+      onChange: () => {
+        if (filters.property_id !== lastProperty) {
+          if (filters.unit_id && !units.some((u) => u.unit_id === filters.unit_id && (!filters.property_id || u.property_id === filters.property_id))) filters.unit_id = '';
+          lastProperty = filters.property_id;
+          rememberFilters('tenants', filters);
+          renderBar();
+        }
+        load().catch((e) => toast(e.message, 'error'));
+      },
+      search: { placeholder: canManage ? 'Search name, phone, unit or property' : 'Search name, unit or property' },
+      quick: [
+        { name: 'lease', label: 'Lease', all: 'Any lease', options: [['active', 'Has a current lease'], ['ending30', 'Ending within 30 days'], ['ending60', 'Ending within 60 days'], ['no_end', 'No end date (month-to-month)'], ['moved_out', 'Moved out'], ['none', 'No unit assigned']] },
+        { name: 'balance', label: 'Balance', all: 'Any balance', options: [['overdue', 'Overdue'], ['owing', 'Has unpaid balance'], ['clear', 'Up to date']] },
+      ],
+      more: [
+        properties.length > 1 && { name: 'property_id', label: 'Property', all: 'All properties', options: properties.map((p) => [p.property_id, p.property_name]) },
+        { name: 'unit_id', label: 'Unit', all: 'All units', options: unitOptions },
+        { name: 'min_balance', label: 'Owes at least (₱)', type: 'number', min: 0, step: '0.01' },
+        { name: 'sort', label: 'Sort by', all: 'Name (A–Z)', options: [['balance', 'Biggest balance'], ['overdue', 'Most overdue'], ['lease_end', 'Lease ending soonest'], ['move_in', 'Newest move-in'], ['rent', 'Highest rent'], ['unit', 'Property and unit'], ['newest', 'Recently added']] },
+      ].filter(Boolean),
+    }));
+  }
+  renderBar();
   await load();
   el.replaceChildren(
     pageHead({
@@ -162,7 +200,7 @@ export async function tenantsView(el, { query }) {
         h('button', { class: 'btn btn--primary', onclick: () => newTenantModal() }, icon('plus'), 'Add tenant'),
         h('button', { class: 'btn btn--secondary', onclick: () => assignTenantModal() }, 'Assign Unit')],
     }),
-    h('div', { class: 'toolbar' }, search, tabs),
+    tabs, barBox,
     listCard);
 }
 

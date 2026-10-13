@@ -3,9 +3,10 @@
 
 import { get, post, patch, qs } from '../api.js';
 import {
-  h, icon, peso, fmtDate, fmtDateTime, badge, field, formModal, confirmDialog, emptyState, searchBox, toast, openModal, todayManila,
+  h, icon, peso, fmtDate, fmtDateTime, badge, field, formModal, confirmDialog, emptyState, toast, openModal, todayManila,
 } from '../ui.js';
 import { state } from '../app.js';
+import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 import { CHANNEL_LABEL } from './reservations.js';
 
 const VIEWS = [
@@ -55,26 +56,33 @@ function statusAlerts(status) {
 }
 
 // ---------------------------------------------------------------- page
-let refocusSearch = false;
-export async function inboxView(el, { params, query, navigate, rerender }) {
-  const view = VIEWS.some(([k]) => k === query.view) ? query.view : 'open';
-  const q = query.q || '';
-  const [list, counts, status] = await Promise.all([
-    get(`/inbox${qs({ view, q })}`), get('/inbox/counts'), get('/inbox/status'),
-  ]);
-  const href = (extra) => `#/inbox${extra.id ? `/${extra.id}` : ''}${qs({ view: extra.view ?? view, q: extra.q ?? q })}`;
+export async function inboxView(el, { params, query, rerender }) {
+  const defaults = { view: 'open', q: '', unread: '', channel: '', property_id: '', unit_id: '', stay: '', assigned: '', msg_from: '', msg_to: '', attention: '', sort: '' };
   const selected = params.id || null;
+  // A link straight to one conversation (e.g. "Message guest") starts unfiltered,
+  // so saved filters can't hide the conversation it opens.
+  const linked = selected && !Object.keys(defaults).some((k) => query[k]);
+  const filters = linked ? { ...defaults } : initFilters('inbox', query, defaults);
+  if (!VIEWS.some(([k]) => k === filters.view)) filters.view = 'open';
+  const [counts, status, { properties }, { units }, { assignees }] = await Promise.all([
+    get('/inbox/counts'), get('/inbox/status'), get('/properties'), get('/units'), get('/inbox/assignees'),
+  ]);
+  // Links keep the current filters, so opening a conversation doesn't reset the list.
+  const href = (id) => `#/inbox${id ? `/${id}` : ''}${qs(changed(filters, { ...defaults, view: '' }))}`;
+  const stUnits = units.filter((u) => u.nightly_rate !== null && u.nightly_rate !== undefined);
+  const items = h('div');
+  const viewSelect = h('select', { class: 'input input--sm', 'aria-label': 'Show' },
+    VIEWS.map(([k, t]) => h('option', { value: k, selected: k === filters.view }, `${t}${counts.counts[k] !== undefined && Number(counts.counts[k]) ? ` (${counts.counts[k]})` : ''}`)));
+  viewSelect.addEventListener('change', () => { filters.view = viewSelect.value; rememberFilters('inbox', filters); load(); });
 
-  const listPane = h('div', { class: `inbox__list card card--flush${selected ? ' inbox__list--hide-sm' : ''}` },
-    h('div', { class: 'inbox__filters' },
-      h('select', {
-        class: 'input input--sm', 'aria-label': 'Show',
-        onchange: (e) => navigate(href({ view: e.target.value, id: null })),
-      }, VIEWS.map(([k, t]) => h('option', { value: k, selected: k === view }, `${t}${counts.counts[k] !== undefined && Number(counts.counts[k]) ? ` (${counts.counts[k]})` : ''}`))),
-      searchBox({ value: q, placeholder: 'Search guest, listing or code', onSearch: (v) => { refocusSearch = true; navigate(href({ q: v, id: selected })); } })),
-    list.conversations.length
+  async function load() {
+    history.replaceState(null, '', href(selected));
+    viewSelect.value = filters.view;
+    const list = await get(`/inbox${qs(changed(filters, { ...defaults, view: '' }))}`);
+    const filtered = Object.keys(changed(filters, defaults)).some((k) => k !== 'view' && k !== 'sort');
+    items.replaceChildren(list.conversations.length
       ? h('ul', { class: 'list inbox__items' }, list.conversations.map((c) => h('li', null,
-        h('a', { class: `inbox__item${c.conversation_id === selected ? ' is-active' : ''}${c.unread ? ' is-unread' : ''}`, href: href({ id: c.conversation_id }) },
+        h('a', { class: `inbox__item${c.conversation_id === selected ? ' is-active' : ''}${c.unread ? ' is-unread' : ''}`, href: href(c.conversation_id) },
           h('div', { class: 'inbox__item-top' },
             h('strong', null, c.guest_name),
             h('span', { class: 'muted small' }, shortWhen(c.last_message_at))),
@@ -87,10 +95,34 @@ export async function inboxView(el, { params, query, navigate, rerender }) {
             Number(c.failed_count) > 0 && badge('voided', 'Not sent'),
             Number(c.scheduled_count) > 0 && badge('unpaid', `${c.scheduled_count} scheduled`),
             c.assigned_name && h('span', { class: 'badge' }, c.assigned_name))))))
-      : emptyState({
-        title: view === 'open' && !q ? 'No conversations yet' : 'Nothing here',
-        text: view === 'open' && !q ? 'Open a reservation and choose "Message guest" to start one. Guest replies show up here.' : 'Try another filter.',
-      }));
+      : emptyState(filtered ? { title: 'No results found', text: 'Try removing a filter.' }
+        : filters.view === 'open' ? { title: 'No conversations yet', text: 'Open a reservation and choose "Message guest" to start one. Guest replies show up here.' }
+          : { title: 'Nothing here', text: 'Try another view.' }));
+    el.querySelector('.inbox__back')?.setAttribute('href', href(null));
+  }
+
+  const bar = filterBar({
+    key: 'inbox', values: filters, defaults, onChange: load,
+    extra: viewSelect,
+    search: { placeholder: 'Search guest, listing or code' },
+    quick: [{ name: 'unread', label: 'Unread only', type: 'check' }],
+    more: [
+      { name: 'stay', label: 'Stay', all: 'Any stay', options: [['upcoming', 'Upcoming'], ['in_house', 'Staying now'], ['past', 'Checked out'], ['cancelled', 'Cancelled']] },
+      { name: 'channel', label: 'Channel', all: 'All channels', options: Object.entries(CHANNEL_LABEL) },
+      properties.length > 1 && { name: 'property_id', label: 'Property', all: 'All properties', options: properties.map((p) => [p.property_id, p.property_name]) },
+      { name: 'unit_id', label: 'Listing', all: 'All listings', options: stUnits.map((u) => [u.unit_id, `${u.unit_name}${properties.length > 1 ? ` · ${u.property_name || ''}` : ''}`]) },
+      assignees.length > 1 && { name: 'assigned', label: 'Assigned to', all: 'Anyone', options: [['unassigned', 'Not assigned'], ...assignees.map((a) => [a.user_id, a.full_name])] },
+      { name: 'attention', label: 'Needs attention', all: 'Any', options: [['awaiting_reply', 'Guest wrote last'], ['failed', 'Message not sent'], ['scheduled', 'Has scheduled messages']] },
+      { name: 'msg_from', label: 'Last message from', type: 'date' },
+      { name: 'msg_to', label: 'Last message to', type: 'date' },
+      { name: 'sort', label: 'Sort by', all: 'Unread first', options: [['recent', 'Latest message'], ['oldest', 'Oldest message'], ['check_in', 'Check-in date']] },
+    ].filter(Boolean),
+  });
+  await load();
+
+  const listPane = h('div', { class: `inbox__list card card--flush${selected ? ' inbox__list--hide-sm' : ''}` },
+    h('div', { class: 'inbox__filters' }, bar),
+    items);
 
   let threadPane;
   if (selected) {
@@ -108,16 +140,10 @@ export async function inboxView(el, { params, query, navigate, rerender }) {
         h('a', { class: 'btn btn--secondary', href: '#/inbox-settings' }, 'Templates & automatic messages'))),
     h('div', { class: 'inbox-alerts' }, statusAlerts(status)),
     h('div', { class: `inbox${selected ? ' inbox--open' : ''}` }, listPane, threadPane));
-  if (refocusSearch) {
-    refocusSearch = false;
-    const input = listPane.querySelector('input[type=search]');
-    input?.focus();
-    input?.setSelectionRange(input.value.length, input.value.length);
-  }
 
   if (selected) {
     try {
-      await renderThread(threadPane, selected, { status, back: href({ id: null }), rerender });
+      await renderThread(threadPane, selected, { status, back: href(null), rerender });
     } catch (err) {
       threadPane.replaceChildren(h('div', { class: 'card' }, emptyState({ title: err.status === 404 ? 'Not found' : "Couldn't load", text: err.message })));
     }

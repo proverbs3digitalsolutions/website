@@ -143,12 +143,23 @@ function range(q) {
   return { from, to };
 }
 
-async function buildReport(user, from, to, propertyId) {
+const PROPERTY_TYPES = ['apartment', 'boarding_house', 'condominium', 'house', 'commercial', 'dormitory', 'other'];
+
+// Report filters from the query string: one property, or every property of one type.
+function reportFilters(q) {
+  return {
+    propertyId: UUID_RE.test(q.property_id || '') ? q.property_id : null,
+    propertyType: PROPERTY_TYPES.includes(q.property_type) ? q.property_type : null,
+  };
+}
+
+async function buildReport(user, from, to, propertyId, propertyType = null) {
   const org = user.organization_id;
   await syncCharges(org);
   const filter = (params) => {
     let s = propertyScope(user, params);
     if (propertyId) { params.push(propertyId); s += ` AND p.property_id = $${params.length}`; }
+    if (propertyType) { params.push(propertyType); s += ` AND p.property_type = $${params.length}`; }
     return s;
   };
 
@@ -233,8 +244,8 @@ async function buildReport(user, from, to, propertyId) {
 
 router.get('/reports', ah(async (req, res) => {
   const { from, to } = range(req.query);
-  const propertyId = UUID_RE.test(req.query.property_id || '') ? req.query.property_id : null;
-  res.json(await buildReport(req.user, from, to, propertyId));
+  const { propertyId, propertyType } = reportFilters(req.query);
+  res.json(await buildReport(req.user, from, to, propertyId, propertyType));
 }));
 
 function csvCell(v) {
@@ -247,8 +258,8 @@ const csvRows = (rows) => rows.map((r) => r.map(csvCell).join(',')).join('\r\n')
 
 router.get('/reports/export', ah(async (req, res) => {
   const { from, to } = range(req.query);
-  const propertyId = UUID_RE.test(req.query.property_id || '') ? req.query.property_id : null;
-  const r = await buildReport(req.user, from, to, propertyId);
+  const { propertyId, propertyType } = reportFilters(req.query);
+  const r = await buildReport(req.user, from, to, propertyId, propertyType);
   const lines = [
     ['BalayHub financial report'], ['Workspace', req.user.organization_name], ['Period', `${from} to ${to}`],
     ['Generated', new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' })], ['Currency', 'PHP'], [],
