@@ -410,6 +410,15 @@ dialog.modal::backdrop { background: rgba(10, 20, 35, .45); }
 .cal-cell.is-past { background: repeating-linear-gradient(135deg, #fafbfc, #fafbfc 6px, #f3f5f8 6px, #f3f5f8 12px); color: #a7b0bb; }
 .cal-cell.is-today { box-shadow: inset 2px 0 0 var(--teal); }
 .cal-cell.has-override { color: var(--navy); font-weight: 750; }
+.cal-cell.is-holiday { background: color-mix(in srgb, var(--sand, #dcc9a3) 38%, transparent); }
+.cal-cell.is-season { background: color-mix(in srgb, var(--sage, #7fb069) 18%, transparent); }
+.cal-cell.is-weekend { font-weight: 650; }
+.cal-swatch--holiday { background: color-mix(in srgb, var(--sand, #dcc9a3) 70%, white); }
+.cal-swatch--season { background: color-mix(in srgb, var(--sage, #7fb069) 40%, white); }
+.pricing-order { margin: 0; padding-left: 20px; }
+.pricing-order li { margin: 2px 0; }
+.holiday-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 16px; margin: 0; padding: 0; list-style: none; }
+.holiday-list li { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px solid var(--line, #e5e7eb); padding: 4px 0; }
 .cal-bar {
   position: absolute; top: 8px; height: 26px; border-radius: 13px; border: 0; z-index: 2; cursor: pointer;
   color: #fff; font-size: .78rem; font-weight: 700; padding: 0 10px; text-align: left;

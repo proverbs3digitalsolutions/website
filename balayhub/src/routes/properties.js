@@ -45,6 +45,10 @@ const unitSpec = {
   payment_option: { type: 'enum', values: ['full', 'deposit', 'either'], label: 'Online payment' },
   min_nights: { type: 'int', min: 1, max: 60, label: 'Minimum nights' },
   balance_due_days: { type: 'int', min: 0, max: 60, label: 'Balance due' },
+  weekend_rate: { type: 'money', label: 'Weekend rate' },
+  holiday_rate: { type: 'money', label: 'Holiday rate' },
+  weekly_discount: { type: 'int', min: 0, max: 50, label: 'Weekly discount' },
+  monthly_discount: { type: 'int', min: 0, max: 70, label: 'Monthly discount' },
 };
 
 // Occupancy is derived from active leases, never stored by hand.
@@ -55,6 +59,7 @@ const UNIT_SELECT = `
          to_char(u.checkout_time, 'HH24:MI') AS checkout_time, u.cleaning_status,
          u.wifi_name, u.wifi_password, u.checkin_instructions, u.house_rules,
          u.description, u.bookable_online, u.payment_option, u.min_nights, u.balance_due_days,
+         u.weekend_rate, u.holiday_rate, u.weekly_discount, u.monthly_discount,
          l.lease_id AS active_lease_id, l.end_date AS lease_end_date, t.tenant_id, t.full_name AS tenant_name,
          CASE WHEN u.status = 'archived' THEN 'archived'
               WHEN l.lease_id IS NOT NULL THEN 'occupied'
@@ -201,14 +206,17 @@ router.post('/properties/:id/units', managers, ah(async (req, res) => {
         `INSERT INTO units (property_id, unit_name, unit_type, monthly_rent, security_deposit_amount, availability, availability_date,
                             nightly_rate, cleaning_fee, max_guests, checkin_time, checkout_time,
                             wifi_name, wifi_password, checkin_instructions, house_rules,
-                            description, bookable_online, payment_option, min_nights, balance_due_days)
+                            description, bookable_online, payment_option, min_nights, balance_due_days,
+                            weekend_rate, holiday_rate, weekly_discount, monthly_discount)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,COALESCE($11::time, '14:00'),COALESCE($12::time, '12:00'),$13,$14,$15,$16,
-                 $17, $18, COALESCE($19, 'either'), COALESCE($20, 1), COALESCE($21, 3)) RETURNING *`,
+                 $17, $18, COALESCE($19, 'either'), COALESCE($20, 1), COALESCE($21, 3),
+                 $22, $23, COALESCE($24, 0), COALESCE($25, 0)) RETURNING *`,
         [property.property_id, body.unit_name, body.unit_type, body.monthly_rent || '0.00', body.security_deposit_amount || '0.00',
           body.availability || 'available', body.availability_date, body.nightly_rate, body.cleaning_fee || '0.00',
           body.max_guests, body.checkin_time, body.checkout_time,
           body.wifi_name, body.wifi_password, body.checkin_instructions, body.house_rules,
-          body.description, Boolean(body.bookable_online), body.payment_option, body.min_nights, body.balance_due_days]);
+          body.description, Boolean(body.bookable_online), body.payment_option, body.min_nights, body.balance_due_days,
+          body.weekend_rate, body.holiday_rate, body.weekly_discount, body.monthly_discount]);
       await audit(db, req.user, 'unit.created', 'unit', u.unit_id, { property_id: property.property_id, name: u.unit_name });
       return u;
     });
@@ -227,7 +235,8 @@ router.patch('/units/:id', managers, ah(async (req, res) => {
   // Giving a long-term unit a nightly rate turns it into a listing.
   if (body.nightly_rate && !unit.nightly_rate && unit.status === 'active') await checkListingLimit(req.user);
   const keys = Object.keys(body).filter((k) => body[k] !== null
-    || ['availability_date', 'nightly_rate', 'max_guests', 'wifi_name', 'wifi_password', 'checkin_instructions', 'house_rules', 'description'].includes(k));
+    || ['availability_date', 'nightly_rate', 'max_guests', 'wifi_name', 'wifi_password', 'checkin_instructions', 'house_rules', 'description',
+      'weekend_rate', 'holiday_rate'].includes(k));
   if (!keys.length) return res.json({ unit });
   const sets = keys.map((k, i) => `${k} = $${i + 2}`);
   try {

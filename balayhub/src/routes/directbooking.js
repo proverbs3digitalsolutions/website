@@ -14,7 +14,8 @@ const { audit } = require('../lib/audit');
 const { requireRole, rateLimit } = require('../lib/auth');
 const { loadUnit } = require('../lib/access');
 const { planStatus } = require('../lib/plans');
-const { quote } = require('../lib/pricing');
+const { quote, nightlyPrices } = require('../lib/pricing');
+const { addDays } = require('../lib/holidays');
 const secretbox = require('../lib/secretbox');
 const paymongo = require('../lib/paymongo');
 const storage = require('../lib/storage');
@@ -201,14 +202,14 @@ publicRouter.get('/public/book/:slug/units/:unitId/availability', ah(async (req,
   const from = isValidDate(req.query.from) && req.query.from >= manilaToday() ? req.query.from : manilaToday();
   const to = new Date(Date.parse(`${from}T00:00:00Z`) + 62 * 86400000).toISOString().slice(0, 10);
   const { rows } = await query(
-    `SELECT d::date::text AS date, COALESCE(r.price, $4::numeric) AS price,
+    `SELECT d::date::text AS date,
             EXISTS (SELECT 1 FROM bookings b WHERE b.unit_id = $1 AND b.status = 'confirmed' AND d::date >= b.check_in AND d::date < b.check_out)
          OR EXISTS (SELECT 1 FROM direct_checkouts c WHERE c.unit_id = $1 AND c.status = 'pending' AND c.hold_until > now()
                       AND d::date >= c.check_in AND d::date < c.check_out) AS taken
        FROM generate_series($2::date, $3::date, interval '1 day') d
-       LEFT JOIN nightly_rates r ON r.unit_id = $1 AND r.rate_date = d::date
-      ORDER BY d`, [u.unit_id, from, to, u.nightly_rate]);
-  res.json({ from, to, days: rows });
+      ORDER BY d`, [u.unit_id, from, to]);
+  const prices = new Map((await nightlyPrices(u.unit_id, from, addDays(to, 1))).map((n) => [n.night, n]));
+  res.json({ from, to, days: rows.map((r) => ({ ...r, price: prices.get(r.date)?.price ?? null, holiday: prices.get(r.date)?.kind === 'holiday' ? prices.get(r.date).label : null })) });
 }));
 
 async function priceStay(u, checkIn, checkOut) {
@@ -219,8 +220,10 @@ async function priceStay(u, checkIn, checkOut) {
   }
   const nights = nightsBetween(checkIn, checkOut);
   if (nights > 60) throw validationError({ check_out: 'For stays longer than 60 nights, please contact the host.' });
-  if (nights < u.min_nights) throw validationError({ check_out: `This place has a minimum stay of ${u.min_nights} nights.` });
   const q = await quote(u.unit_id, checkIn, checkOut);
+  if (nights < q.min_nights) {
+    throw validationError({ check_out: `${q.min_nights_reason ? `During ${q.min_nights_reason}, this` : 'This'} place has a minimum stay of ${q.min_nights} nights.` });
+  }
   const accommodation = Number(q.accommodation_total);
   const cleaning = Number(u.cleaning_fee || 0);
   const total = Math.round((accommodation + cleaning) * 100) / 100;
@@ -229,7 +232,8 @@ async function priceStay(u, checkIn, checkOut) {
   // A deposit only makes sense if the balance isn't already due.
   const depositAllowed = u.payment_option !== 'full' && due > manilaToday();
   return {
-    nights, accommodation_total: accommodation.toFixed(2), cleaning_fee: cleaning.toFixed(2), total: total.toFixed(2), deposit: deposit.toFixed(2),
+    nights, subtotal: q.subtotal, discount_label: q.discount_label, discount_amount: q.discount_amount,
+    accommodation_total: accommodation.toFixed(2), cleaning_fee: cleaning.toFixed(2), total: total.toFixed(2), deposit: deposit.toFixed(2),
     balance_due_date: due, deposit_allowed: depositAllowed, full_allowed: u.payment_option !== 'deposit' || !depositAllowed,
   };
 }

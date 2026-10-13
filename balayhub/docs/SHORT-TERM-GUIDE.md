@@ -66,6 +66,23 @@ Each host can have a public booking page, such as `https://balayhub.proverbs3dig
 
 The booking page is paused automatically if your plan ends.
 
+## Pricing helpers
+
+Set them per listing (Listings → Edit → *Pricing helpers*) and in **Calendar → Pricing rules**:
+
+- **Weekend rate** for Friday and Saturday nights.
+- **Holiday rate**, applied automatically on the nights before and during Philippine holiday long
+  weekends (Holy Week, Christmas to New Year, Independence Day, National Heroes Day, etc.).
+  Chinese New Year and Eid dates are set by proclamation each year and may move; check the list
+  on the Pricing rules page and set a calendar price for any night that needs it.
+- **Seasons**: a date range with its own nightly rate and/or minimum stay (e.g. "Summer peak",
+  "Christmas, 3-night minimum"), for one listing or all of them.
+- **Weekly (7+ nights) and monthly (28+ nights) discounts.**
+
+Order of priority for a night: a price set on the calendar → holiday rate → season → weekend
+rate → base rate; then the long-stay discount. Rules apply to new quotes, new reservations and the
+booking page. Existing reservations keep their price.
+
 ## Guests paying the balance online
 
 When PayMongo is connected (Settings → Direct booking page), every reservation has a private

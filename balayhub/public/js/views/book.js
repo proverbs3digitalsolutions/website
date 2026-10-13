@@ -164,7 +164,8 @@ export async function bookListingView(el, { params, query }) {
       }
       summary.replaceChildren(h('dl', { class: 'dl' },
         h('dt', null, 'Dates'), h('dd', null, `${fmtDate(checkIn)} – ${fmtDate(checkOut)}`),
-        h('dt', null, `${q.nights} night${q.nights > 1 ? 's' : ''}`), h('dd', null, peso(q.accommodation_total)),
+        h('dt', null, `${q.nights} night${q.nights > 1 ? 's' : ''}`), h('dd', null, peso(q.discount_label ? q.subtotal : q.accommodation_total)),
+        q.discount_label && [h('dt', null, q.discount_label.replace(/^./, (c) => c.toUpperCase())), h('dd', null, `− ${peso(q.discount_amount)}`)],
         Number(q.cleaning_fee) > 0 && [h('dt', null, 'Cleaning fee'), h('dd', null, peso(q.cleaning_fee))],
         h('dt', null, 'Total'), h('dd', null, h('strong', null, peso(q.total))),
         q.deposit_allowed && [h('dt', null, '50% deposit'), h('dd', null, `${peso(q.deposit)} now, ${peso(Number(q.total) - Number(q.deposit))} due by ${fmtDate(q.balance_due_date)}`)]),

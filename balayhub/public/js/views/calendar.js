@@ -35,6 +35,7 @@ export async function calendarView(el, { query }) {
       return;
     }
     const rates = new Map(data.rates.map((r) => [`${r.unit_id}|${r.rate_date}`, r.price]));
+    const prices = new Map((data.prices || []).map((p) => [`${p.unit_id}|${p.date}`, p]));
     const table = h('div', { class: 'cal', style: { '--cal-days': data.days } });
     table.append(h('div', { class: 'cal-row cal-row--head' },
       h('div', { class: 'cal-side' }, `${listings.length} listing${listings.length === 1 ? '' : 's'}`),
@@ -44,11 +45,13 @@ export async function calendarView(el, { query }) {
 
     for (const l of listings) {
       const cells = dates.map((d) => {
-        const price = rates.has(`${l.unit_id}|${d}`) ? rates.get(`${l.unit_id}|${d}`) : l.nightly_rate;
+        const p = prices.get(`${l.unit_id}|${d}`);
+        const price = p ? p.price : rates.has(`${l.unit_id}|${d}`) ? rates.get(`${l.unit_id}|${d}`) : l.nightly_rate;
+        const why = p?.label ? ` (${p.label})` : '';
         return h('button', {
-          class: `cal-cell${d < data.today ? ' is-past' : ''}${d === data.today ? ' is-today' : ''}${rates.has(`${l.unit_id}|${d}`) ? ' has-override' : ''}`,
-          type: 'button', 'aria-label': `${l.unit_name}, ${fmtDate(d)}, ${shortPeso(price) || 'no rate'}`,
-          onclick: () => cellMenu(l, d, price),
+          class: `cal-cell${d < data.today ? ' is-past' : ''}${d === data.today ? ' is-today' : ''}${rates.has(`${l.unit_id}|${d}`) ? ' has-override' : ''}${p && ['holiday', 'season', 'weekend'].includes(p.kind) ? ` is-${p.kind}` : ''}`,
+          type: 'button', 'aria-label': `${l.unit_name}, ${fmtDate(d)}, ${shortPeso(price) || 'no rate'}${why}`, title: p?.label || null,
+          onclick: () => cellMenu(l, d, price, p),
         }, shortPeso(price));
       });
       const bars = data.bookings.filter((b) => b.unit_id === l.unit_id).map((b) => {
@@ -78,12 +81,12 @@ export async function calendarView(el, { query }) {
     if (todayCell) grid.scrollLeft = Math.max(0, todayCell.offsetLeft - 220);
   }
 
-  function cellMenu(listing, date, price) {
+  function cellMenu(listing, date, price, rule) {
     if (!canManage) { toast('Only owners and managers can change the calendar.'); return; }
     const m = openModal({
       title: `${listing.unit_name} · ${fmtDate(date)}`,
       body: h('div', { class: 'form' },
-        h('p', { class: 'muted' }, `Nightly price: ${price ? peso(price) : 'not set'}`),
+        h('p', { class: 'muted' }, `Nightly price: ${price ? peso(price) : 'not set'}${rule?.label ? ` · ${rule.label}` : ''}`),
         h('button', { class: 'btn btn--primary btn--block', onclick: () => { m.close(); newReservationModal({ unitId: listing.unit_id, checkIn: date, onSaved: load }); } }, icon('plus'), 'New reservation'),
         h('button', { class: 'btn btn--secondary btn--block', onclick: () => { m.close(); blockModal(listing, date); } }, '🔒 Block dates'),
         h('button', { class: 'btn btn--secondary btn--block', onclick: () => { m.close(); priceModal(listing, date, price); } }, '₱ Set nightly price')),
@@ -111,7 +114,7 @@ export async function calendarView(el, { query }) {
         h('div', { class: 'form-row form-row--2' },
           field({ name: 'start_date', label: 'From night', type: 'date', required: true, value: date }),
           field({ name: 'end_date', label: 'To night', type: 'date', required: true, value: date })),
-        field({ name: 'price', label: 'Price per night', type: 'money', value: price, hint: `Leave empty to use the listing's base rate (${listing.nightly_rate ? peso(listing.nightly_rate) : 'not set'}).` }),
+        field({ name: 'price', label: 'Price per night', type: 'money', value: price, hint: 'A price set here wins over weekend, holiday and season rates. Leave empty to go back to those.' }),
       ],
       onSubmit: async (d) => { await api('PUT', '/rates', { ...d, unit_id: listing.unit_id }); toast('Price saved.'); load(); },
     });
@@ -127,12 +130,16 @@ export async function calendarView(el, { query }) {
   dateInput.addEventListener('change', () => { if (dateInput.value) { view.start = dateInput.value; load(); } });
   const legend = h('div', { class: 'chips cal-legend' },
     ['direct', 'airbnb', 'booking', 'agoda', 'vrbo', 'expedia', 'tripcom'].map((c) => h('span', { class: 'cal-legend__item' }, h('span', { class: `cal-swatch cal-bar--${c}` }), CHANNEL_LABEL[c])),
-    h('span', { class: 'cal-legend__item' }, h('span', { class: 'cal-swatch cal-bar--block' }), 'Blocked'));
+    h('span', { class: 'cal-legend__item' }, h('span', { class: 'cal-swatch cal-bar--block' }), 'Blocked'),
+    h('span', { class: 'cal-legend__item' }, h('span', { class: 'cal-swatch cal-swatch--holiday' }), 'Holiday rate'),
+    h('span', { class: 'cal-legend__item' }, h('span', { class: 'cal-swatch cal-swatch--season' }), 'Season rate'));
 
   el.replaceChildren(
     h('div', { class: 'page-head' },
       h('div', { class: 'page-head__title' }, h('h1', null, 'Multi-calendar'), h('p', null, 'Tap an open night to book, block or change its price')),
-      canManage && h('div', { class: 'page-head__actions' }, h('button', { class: 'btn btn--primary', onclick: () => newReservationModal({ onSaved: load }) }, icon('plus'), 'New reservation'))),
+      canManage && h('div', { class: 'page-head__actions' },
+        h('a', { class: 'btn btn--secondary', href: '#/pricing' }, '₱ Pricing rules'),
+        h('button', { class: 'btn btn--primary', onclick: () => newReservationModal({ onSaved: load }) }, icon('plus'), 'New reservation'))),
     h('div', { class: 'toolbar' },
       searchBox({ value: view.q, placeholder: 'Search listings', onSearch: (q) => { view.q = q; load(); } }),
       h('div', { class: 'chips' },

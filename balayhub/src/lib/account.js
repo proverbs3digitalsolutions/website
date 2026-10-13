@@ -26,7 +26,7 @@ async function exportOrganization(orgId) {
   };
   for (const t of ['properties', 'guests', 'bookings', 'booking_payments', 'guest_registrations', 'conversations', 'messages',
     'message_templates', 'automations', 'cleaning_tasks', 'ical_feeds', 'tenants', 'leases', 'payments', 'expenses',
-    'maintenance_requests', 'files', 'billing_payments', 'invitations', 'audit_logs', 'direct_checkouts', 'balance_checkouts']) {
+    'maintenance_requests', 'files', 'billing_payments', 'invitations', 'audit_logs', 'direct_checkouts', 'balance_checkouts', 'seasons']) {
     out[t] = await byOrg(t);
   }
   return out;
@@ -35,7 +35,7 @@ async function exportOrganization(orgId) {
 // Tables purgeOrganization() clears. test/account.test.js fails if a new table
 // is added to the schema without being listed here.
 const PURGED_TABLES = [
-  'push_subscriptions', 'balance_checkouts', 'direct_checkouts', 'automation_runs', 'messages', 'conversations', 'guest_registrations', 'files', 'cleaning_tasks', 'booking_payments',
+  'push_subscriptions', 'seasons', 'balance_checkouts', 'direct_checkouts', 'automation_runs', 'messages', 'conversations', 'guest_registrations', 'files', 'cleaning_tasks', 'booking_payments',
   'billing_payments', 'receipt_counters', 'bookings', 'ical_feeds', 'guests', 'nightly_rates', 'payments', 'rent_charges',
   'leases', 'tenants', 'expenses', 'maintenance_requests', 'automations', 'message_templates', 'property_assignments',
   'units', 'properties', 'invitations', 'audit_logs', 'sessions', 'auth_tokens', 'consent_records', 'users', 'organizations',
@@ -49,6 +49,7 @@ async function purgeOrganization(orgId) {
     const units = 'SELECT u.unit_id FROM units u JOIN properties p USING (property_id) WHERE p.organization_id = $1';
     const users = 'SELECT user_id FROM users WHERE organization_id = $1';
     await run('DELETE FROM push_subscriptions WHERE organization_id = $1');
+    await run('DELETE FROM seasons WHERE organization_id = $1');
     await run('DELETE FROM balance_checkouts WHERE organization_id = $1');
     await run('DELETE FROM direct_checkouts WHERE organization_id = $1');
     await run(`DELETE FROM automation_runs WHERE automation_id IN (SELECT automation_id FROM automations WHERE organization_id = $1)

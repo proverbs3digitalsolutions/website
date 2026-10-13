@@ -8,7 +8,8 @@ import { state } from '../app.js';
 const GUIDES = [
   ['Check a guest in and out', ['Open Home: today\'s arrivals and departures are listed with Check in / Check out buttons.', 'Checking out marks the unit for cleaning and creates a cleaning task.']],
   ['Record a payment and send a receipt', ['Open the reservation and click Record payment.', 'Choose GCash, Maya, cash or bank transfer and tick "Email a receipt".', 'The balance updates right away.']],
-  ['Block dates or change a price', ['Open the Calendar and tap an open night.', 'Choose Block (owner stay, repairs) or Set nightly price for holidays and weekends.']],
+  ['Block dates or change a price', ['Open the Calendar and tap an open night.', 'Choose Block (owner stay, repairs) or Set nightly price for that night.']],
+  ['Charge more on weekends and holidays', ['Edit a listing and fill in Pricing helpers: weekend rate, holiday rate, weekly and monthly discounts.', 'For peak months or a minimum stay over Holy Week or Christmas, open Calendar → Pricing rules → Add season.', 'PH holidays are applied automatically.']],
   ['Reply to a guest', ['Open Inbox, choose the conversation and type your message, or insert a template.', 'Use ✨ Draft reply with AI if it is turned on. Always read before sending.']],
   ['Handle cleaning', ['Open Housekeeping to see today\'s cleanings and the next guest\'s arrival.', 'Use "Copy for cleaner" to send the checklist by Messenger or Viber.']],
   ['Use BalayHub on your phone', ['Open BalayHub in your phone\'s browser and log in.', 'iPhone: Share → Add to Home Screen. Android: menu ⋮ → Add to Home screen.', 'It then opens like an app.']],

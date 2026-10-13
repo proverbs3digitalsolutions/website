@@ -80,7 +80,7 @@ async function overlapError(unitId, checkIn, checkOut, exceptId) {
   return new HttpError(409, `These dates overlap ${what} on this listing.`, { code: 'DATES_TAKEN', fields: { check_in: 'Dates not available', check_out: 'Dates not available' } });
 }
 
-const { quote } = require('../lib/pricing');
+const { quote, nightlyPrices } = require('../lib/pricing');
 
 // ---------------------------------------------------------------- listings
 router.get('/listings', ah(async (req, res) => {
@@ -533,7 +533,12 @@ router.get('/calendar', ah(async (req, res) => {
       ORDER BY b.check_in`, [ids, start, end]);
   const { rows: rates } = await query(
     `SELECT unit_id, rate_date, price FROM nightly_rates WHERE unit_id = ANY($1) AND rate_date >= $2 AND rate_date < $3`, [ids, start, end]);
-  res.json({ start, days, today: await today(), listings, bookings, rates });
+  // Each night's price after weekend, holiday and season rules.
+  const prices = [];
+  for (const l of listings) {
+    for (const n of await nightlyPrices(l.unit_id, start, end)) prices.push({ unit_id: l.unit_id, date: n.night, price: n.price, kind: n.kind, label: n.label });
+  }
+  res.json({ start, days, today: await today(), listings, bookings, rates, prices });
 }));
 
 router.put('/rates', managers, ah(async (req, res) => {

@@ -8,6 +8,14 @@ import { state, navigate } from '../app.js';
 import { messageGuest } from './inbox.js';
 import { checkinCard } from './checkin.js';
 
+// " · 2 holiday nights, 1 weekend night" for a quote.
+function nightsNote(q) {
+  const count = (k) => q.nights.filter((n) => n.kind === k).length;
+  const parts = [['holiday', 'holiday'], ['season', 'season'], ['weekend', 'weekend']]
+    .map(([k, w]) => [count(k), w]).filter(([n]) => n > 0).map(([n, w]) => `${n} ${w} night${n > 1 ? 's' : ''}`);
+  return parts.length ? ` · includes ${parts.join(', ')}` : '';
+}
+
 export const CHANNEL_LABEL = { direct: 'Direct', airbnb: 'Airbnb', booking: 'Booking.com', agoda: 'Agoda', vrbo: 'Vrbo', expedia: 'Expedia', tripcom: 'Trip.com', other: 'Other' };
 const METHOD_LABEL = { cash: 'Cash', bank_transfer: 'Bank transfer', gcash: 'GCash', maya: 'Maya', card: 'Card', channel_payout: 'Channel payout', other: 'Other' };
 
@@ -91,7 +99,7 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
       const nights = q.nights.length;
       quoteBox.textContent = q.missing_rates
         ? `${nights} night${nights > 1 ? 's' : ''}. This listing has no nightly rate for some nights — enter the total yourself.`
-        : `${nights} night${nights > 1 ? 's' : ''} · ${peso(q.accommodation_total)} for the stay${Number(q.cleaning_fee) ? ` + ${peso(q.cleaning_fee)} cleaning` : ''}${q.max_guests ? ` · up to ${q.max_guests} guests` : ''}`;
+        : `${nights} night${nights > 1 ? 's' : ''} · ${peso(q.accommodation_total)} for the stay${q.discount_pct ? ` (after ${q.discount_label})` : ''}${Number(q.cleaning_fee) ? ` + ${peso(q.cleaning_fee)} cleaning` : ''}${q.max_guests ? ` · up to ${q.max_guests} guests` : ''}${nightsNote(q)}${q.min_nights > nights ? ` · Note: minimum stay is ${q.min_nights} nights${q.min_nights_reason ? ` during ${q.min_nights_reason}` : ''}.` : ''}`;
       if (!q.missing_rates) form.elements.accommodation_total.value = q.accommodation_total;
       form.elements.cleaning_fee.value = q.cleaning_fee;
     } catch (err) { quoteBox.textContent = err.message; }

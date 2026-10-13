@@ -24,6 +24,7 @@ import { termsView } from './views/terms.js';
 import { bookHostView, bookListingView, bookDoneView } from './views/book.js';
 import { launchpadView } from './views/launchpad.js';
 import { payBalanceView } from './views/pay.js';
+import { pricingView } from './views/pricing.js';
 import { registerServiceWorker, forgetThisDevice } from './notifications.js';
 
 export const state = { user: null, requireEmailVerification: true };
@@ -64,6 +65,7 @@ const routes = [
   ['/home', homeView, APP],
   ['/launchpad', launchpadView, APP],
   ['/calendar', calendarView, APP],
+  ['/pricing', pricingView, APP],
   ['/reservations', reservationsView, APP],
   ['/reservations/:id', reservationDetailView, APP],
   ['/listings', listingsView, APP],
