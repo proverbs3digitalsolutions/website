@@ -53,6 +53,8 @@ function startScheduler() {
   every(60 * 60 * 1000, 'support', require('../routes/support').autoClose, 95 * 1000);
 
   every(60 * 60 * 1000, 'account', require('./account').purgeDue, 90 * 1000);
+  // Expired or idle sessions and old one-time sign-in tokens.
+  every(60 * 60 * 1000, 'auth-cleanup', require('./auth').purgeExpiredAuth, 100 * 1000);
   // Keep the public demo's dates current.
   every(60 * 60 * 1000, 'demo', require('./demo').refreshDemo, 50 * 1000);
 }

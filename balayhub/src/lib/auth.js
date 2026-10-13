@@ -135,6 +135,20 @@ function planGuard(req, res, next) {
   return next(new HttpError(402, READ_ONLY_MSG[s.reason], { code: 'PLAN_READ_ONLY' }));
 }
 
+// Scheduler: delete sessions that are expired or idle (the same rules loadSession
+// uses to reject them), and one-time tokens that are expired or were used over
+// 7 days ago. Returns how many rows were deleted.
+async function purgeExpiredAuth() {
+  const s = await query(
+    `DELETE FROM sessions WHERE expires_at <= now() OR last_seen_at <= now() - make_interval(hours => $1)`,
+    [config.sessionIdleHours],
+  );
+  const t = await query(
+    `DELETE FROM auth_tokens WHERE expires_at <= now() OR (used_at IS NOT NULL AND used_at < now() - interval '7 days')`,
+  );
+  return s.rowCount + t.rowCount;
+}
+
 const requireRole = (...roles) => (req, res, next) =>
   (roles.includes(req.user?.role) ? next() : next(forbidden()));
 
@@ -162,4 +176,5 @@ function rateLimit({ windowMs, max, key }) {
 module.exports = {
   hashPassword, verifyPassword, burnPasswordCheck, newToken, hashToken,
   createSession, destroySession, loadSession, requireAuth, requireWorkspace, requireRole, rateLimit, planGuard,
+  purgeExpiredAuth,
 };

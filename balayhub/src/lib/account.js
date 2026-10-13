@@ -29,6 +29,15 @@ async function exportOrganization(orgId) {
     'maintenance_requests', 'files', 'billing_payments', 'invitations', 'audit_logs', 'direct_checkouts', 'balance_checkouts', 'seasons', 'unit_owners', 'guest_reviews', 'discount_codes', 'gate_passes', 'stay_deposits', 'support_tickets']) {
     out[t] = await byOrg(t);
   }
+  // Support conversation as the customer sees it: internal staff notes are left
+  // out, and BalayHub staff are not identified (the app shows "BalayHub Support").
+  const tickets = 'SELECT ticket_id FROM support_tickets WHERE organization_id = $1';
+  out.support_messages = await q(`SELECT message_id, ticket_id, CASE WHEN author_kind = 'support' THEN NULL ELSE author_id END AS author_id,
+      author_kind, body, created_at FROM support_messages WHERE ticket_id IN (${tickets}) AND NOT internal ORDER BY created_at`);
+  out.support_events = await q(`SELECT event_id, ticket_id, kind, from_status, to_status, CASE WHEN actor_kind = 'support' THEN NULL ELSE actor_id END AS actor_id,
+      actor_kind, note, created_at FROM support_events WHERE ticket_id IN (${tickets}) ORDER BY created_at`);
+  // Privacy Notice / Terms consents of the workspace's members.
+  out.consent_records = await q('SELECT c.* FROM consent_records c JOIN users u USING (user_id) WHERE u.organization_id = $1 ORDER BY c.consent_timestamp');
   return out;
 }
 

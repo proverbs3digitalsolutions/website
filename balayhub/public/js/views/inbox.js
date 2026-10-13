@@ -375,6 +375,9 @@ function describeAutomation(a) {
 export async function inboxSettingsView(el, { rerender }) {
   const [{ templates, variables }, { automations, can_edit: canEdit, sending }] = await Promise.all([get('/message-templates'), get('/automations')]);
 
+  // Templates apply to the whole workspace, so only the owner can change them.
+  const canEditTemplates = state.user.role === 'owner';
+
   const editTemplate = (t) => formModal({
     title: t ? 'Edit template' : 'New template',
     submitText: 'Save template',
@@ -444,7 +447,7 @@ export async function inboxSettingsView(el, { rerender }) {
     h('div', { class: 'card' },
       h('div', { class: 'card__head' }, h('h2', null, 'Automatic messages'),
         canEdit && h('button', { class: 'btn btn--primary btn--sm', onclick: () => editAutomation(null) }, icon('plus'), 'Add')),
-      !canEdit && h('p', { class: 'muted small' }, 'Only the workspace owner can change automatic messages.'),
+      !canEdit && h('p', { class: 'muted small' }, 'Only the workspace owner can change these.'),
       automations.length ? h('ul', { class: 'list' }, automations.map((a) => h('li', null, h('div', { class: 'row' },
         h('div', { class: 'row__main' },
           h('span', { class: 'row__title' }, a.name),
@@ -459,12 +462,13 @@ export async function inboxSettingsView(el, { rerender }) {
         : h('p', { class: 'muted small' }, 'No automatic messages yet.')),
     h('div', { class: 'card' },
       h('div', { class: 'card__head' }, h('h2', null, 'Message templates'),
-        h('button', { class: 'btn btn--primary btn--sm', onclick: () => editTemplate(null) }, icon('plus'), 'New template')),
+        canEditTemplates && h('button', { class: 'btn btn--primary btn--sm', onclick: () => editTemplate(null) }, icon('plus'), 'New template')),
+      !canEditTemplates && h('p', { class: 'muted small' }, 'Only the workspace owner can change these.'),
       h('ul', { class: 'list' }, templates.map((t) => h('li', null, h('div', { class: 'row' },
         h('div', { class: 'row__main' },
           h('span', { class: 'row__title' }, t.name),
           h('span', { class: 'row__sub' }, t.subject)),
-        h('div', { class: 'row__end chips' },
+        canEditTemplates && h('div', { class: 'row__end chips' },
           h('button', { class: 'btn btn--ghost btn--sm', onclick: () => editTemplate(t) }, 'Edit'),
           !t.system_key && h('button', { class: 'btn btn--ghost btn--sm', onclick: () => archiveTemplate(t) }, 'Delete'))))))));
 }

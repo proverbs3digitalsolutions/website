@@ -74,6 +74,8 @@ test('scheduler sends when due and the form is in; waits for the form until the 
 });
 
 test('admin page shows names and IDs, confirms receipt; expires after check-out', async () => {
+  // IDs show on the link only when the host chose to include them.
+  await host.patch(`/api/properties/${prop.property_id}/gatepass`, { gatepass_attach_ids: true });
   const g = client(srv.base);
   const p = (await g.get(`/api/public/gatepass/${passToken}`)).data;
   assert.deepEqual(p.guests, ['Rafael Diaz', 'Ana Diaz']);

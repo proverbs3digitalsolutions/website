@@ -2,7 +2,8 @@
 
 // Condo gate pass: many buildings require the guests' names (and IDs) before
 // arrival. BalayHub emails the building admin a summary and a private link to
-// a printable pass with the ID photos; the admin confirms receipt with a click.
+// a printable pass (with the ID photos when the property's gatepass_attach_ids
+// setting is on); the admin confirms receipt with a click.
 
 const fs = require('fs');
 const path = require('path');
@@ -117,7 +118,7 @@ function passText(b, token) {
     `Booking reference: ${b.confirmation_code}`,
     b.gatepass_notes ? `\n${b.gatepass_notes}` : null,
     '',
-    `Gate pass${b.ids.length ? ' with guest IDs' : ''} (printable): ${passLink(token)}`,
+    `Gate pass${b.gatepass_attach_ids && b.ids.length ? ' with guest IDs' : ''} (printable): ${passLink(token)}`,
     `Please open the link and press "Confirm received" so we know you got it.`,
     '',
     `Authorized by: ${host}`,
@@ -249,6 +250,10 @@ async function loadByToken(token) {
   if (!gp) throw notFound('This gate pass link is not valid.');
   const b = await passData(gp.booking_id);
   if (!b || b.status !== 'confirmed' || manilaToday() > addDays(b.check_out, 1) || gp.property_id !== b.property_id) throw notFound('This gate pass has expired.');
+  // Guest IDs are shared with the admin only while the property's "include ID
+  // photos" setting is on. It's read now (not when the pass was sent), so turning
+  // it off hides the IDs on the page and their file URLs 404 like unknown files.
+  if (!b.gatepass_attach_ids) b.ids = [];
   return { gp, b };
 }
 

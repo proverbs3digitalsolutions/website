@@ -15,8 +15,8 @@ export async function gatepassSettingsView(el, { rerender }) {
       field({ name: 'gatepass_days_before', label: 'Send how many days before check-in?', type: 'select', value: String(p.gatepass_days_before), placeholderOption: false,
         options: [['0', 'On the check-in day'], ['1', '1 day before'], ['2', '2 days before'], ['3', '3 days before'], ['5', '5 days before'], ['7', '7 days before']],
         hint: 'BalayHub waits for the guest\'s check-in form (names, IDs) until the day before arrival, then sends what it has and tells you.' }),
-      field({ name: 'gatepass_attach_ids', label: 'Attach the guests\' ID photos to the email', type: 'checkbox', value: p.gatepass_attach_ids,
-        hint: 'Off (recommended): the admin views the IDs through a private link that stops working after check-out. On: copies stay in the admin\'s mailbox and are not deleted after the stay.' }),
+      field({ name: 'gatepass_attach_ids', label: 'Include guest ID photos (in the email and on the gate pass link)', type: 'checkbox', value: p.gatepass_attach_ids,
+        hint: 'On: the IDs are attached to the email and shown on the private gate pass link. Copies stay in the admin\'s mailbox and are not deleted after the stay. Off: the admin gets the guests\' names and details only, with no ID photos. Turning it off also hides IDs on passes already sent.' }),
       field({ name: 'gatepass_authorized_by', label: 'Authorized by (unit owner name on file with admin)', value: p.gatepass_authorized_by, maxlength: 120 }),
       field({ name: 'gatepass_notes', label: 'Notes for the admin (optional)', type: 'textarea', value: p.gatepass_notes, maxlength: 1000, placeholder: 'e.g. Parking slot B2-15 is assigned to the guest. Pets not allowed.' }),
     ],
@@ -29,11 +29,11 @@ export async function gatepassSettingsView(el, { rerender }) {
   el.replaceChildren(
     pageHead({ title: 'Gate pass', sub: 'Send guest details to the building admin before arrival', back: { href: '#/listings', label: 'Listings' } }),
     h('div', { class: 'card' },
-      h('p', null, 'Many condos need the guests\' names and IDs before they arrive. Set the admin\'s email per building and BalayHub sends a gate pass automatically, with a link where the admin views the IDs and confirms receipt.'),
+      h('p', null, 'Many condos need the guests\' names and IDs before they arrive. Set the admin\'s email per building and BalayHub sends a gate pass automatically, with a private link where the admin views the pass and confirms receipt.'),
       h('p', { class: 'muted small' }, 'Guest names and IDs come from the guest check-in form. Include {{checkin_link}} in your booking confirmation so guests fill it in early.')),
     properties.length ? h('div', { class: 'card' }, h('ul', { class: 'list' }, properties.map((p) => h('li', null, h('div', { class: 'row' },
       h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, p.property_name),
-        h('span', { class: 'row__sub' }, p.admin_email ? `${p.admin_email} · ${p.gatepass_enabled ? `automatic, ${p.gatepass_days_before === 0 ? 'on check-in day' : `${p.gatepass_days_before} day${p.gatepass_days_before > 1 ? 's' : ''} before`}` : 'send by hand from each reservation'}${p.gatepass_attach_ids ? ' · IDs attached' : ''}` : 'No admin email yet')),
+        h('span', { class: 'row__sub' }, p.admin_email ? `${p.admin_email} · ${p.gatepass_enabled ? `automatic, ${p.gatepass_days_before === 0 ? 'on check-in day' : `${p.gatepass_days_before} day${p.gatepass_days_before > 1 ? 's' : ''} before`}` : 'send by hand from each reservation'}${p.gatepass_attach_ids ? ' · IDs included' : ''}` : 'No admin email yet')),
       h('div', { class: 'row__end' }, p.gatepass_enabled ? badge('paid', 'On') : badge('voided', 'Off'),
         h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => edit(p) }, 'Set up')))))))
       : h('div', { class: 'card' }, emptyState({ iconName: 'building', title: 'No listings yet', text: 'Add a listing first.' })));
@@ -94,7 +94,7 @@ export async function gatepassPublicView(el, { params }) {
           h('dt', null, 'Reference'), h('dd', null, d.code),
           h('dt', null, 'Authorized by'), h('dd', null, d.authorized_by, d.contact ? h('div', { class: 'muted small' }, d.contact) : null)),
         d.notes && h('p', { style: { whiteSpace: 'pre-wrap' } }, d.notes),
-        d.ids.length > 0 && [h('h2', { class: 'subhead', style: { marginTop: '14px' } }, 'Guest IDs'),
+        d.ids?.length > 0 && [h('h2', { class: 'subhead', style: { marginTop: '14px' } }, 'Guest IDs'),
           h('div', { class: 'gp__ids' }, d.ids.map((x) => h('img', { src: x.url, alt: `Guest ID ${x.n}` })))]),
       h('div', { class: 'chips no-print', style: { marginTop: '12px' } },
         d.acknowledged_at ? h('span', { class: 'badge badge--paid' }, `Received ✓ ${fmtDateTime(d.acknowledged_at)}`)

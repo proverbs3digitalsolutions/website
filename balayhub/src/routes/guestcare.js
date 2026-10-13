@@ -14,6 +14,9 @@ const { normalize, USES } = require('../lib/discounts');
 const router = express.Router();
 const publicRouter = express.Router();
 const managers = requireRole('owner', 'manager');
+// Workspace-wide settings (discount codes) are owner-only: managers may be
+// limited to some properties (founder decision 2026-10-13).
+const owners = requireRole('owner');
 const validationError = (fields) => new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields });
 const manilaToday = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
 const daysBetween = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
@@ -161,7 +164,7 @@ router.get('/discount-codes', managers, ah(async (req, res) => {
   res.json({ codes: rows, total });
 }));
 
-router.post('/discount-codes', managers, ah(async (req, res) => {
+router.post('/discount-codes', owners, ah(async (req, res) => {
   const body = validate(req.body, codeSpec);
   const code = normalize(body.code);
   if (!/^[A-Z0-9-]{3,20}$/.test(code)) throw validationError({ code: 'Use 3–20 letters, numbers or dashes, e.g. BALIK10.' });
@@ -185,7 +188,7 @@ router.post('/discount-codes', managers, ah(async (req, res) => {
   }
 }));
 
-router.post('/discount-codes/:id/active', managers, ah(async (req, res) => {
+router.post('/discount-codes/:id/active', owners, ah(async (req, res) => {
   const { active } = validate(req.body, { active: { type: 'bool', label: 'Active' } });
   const d = await one('UPDATE discount_codes SET active = $3 WHERE code_id = $1 AND organization_id = $2 RETURNING code', [uuidParam(req.params.id), req.user.organization_id, Boolean(active)]);
   if (!d) throw notFound();

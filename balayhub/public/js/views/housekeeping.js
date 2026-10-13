@@ -46,8 +46,12 @@ async function copyText(text) {
   }
 }
 
+// Only members who can open a task at this property: owners, plus managers and
+// staff assigned to it (property_ids is null for owners).
+const eligibleFor = (assignees, propertyId) => assignees.filter((a) => !a.property_ids || (propertyId && a.property_ids.includes(propertyId)));
+
 async function assignModal(t, onSaved) {
-  const { assignees } = await get('/cleaning-assignees');
+  const assignees = eligibleFor((await get('/cleaning-assignees')).assignees, t.property_id);
   formModal({
     title: 'Assign cleaning',
     submitText: 'Save',
@@ -68,13 +72,27 @@ async function assignModal(t, onSaved) {
 async function newTaskModal(onSaved) {
   const { listings } = await get('/listings');
   const { assignees } = await get('/cleaning-assignees');
+  const unitField = field({ name: 'unit_id', label: 'Listing', type: 'select', required: true, options: listings.map((l) => [l.unit_id, `${l.unit_name} — ${l.property_name}`]) });
+  const memberField = field({ name: 'assigned_to', label: 'Team member', type: 'select', placeholderOption: 'Not a team member', options: [],
+    hint: 'Only people who can see this listing are shown.' });
+  const unitSelect = unitField.querySelector('select');
+  const memberSelect = memberField.querySelector('select');
+  const fillMembers = () => {
+    const propertyId = listings.find((l) => l.unit_id === unitSelect.value)?.property_id;
+    const keep = memberSelect.value;
+    const eligible = eligibleFor(assignees, propertyId);
+    memberSelect.replaceChildren(h('option', { value: '' }, 'Not a team member'),
+      ...eligible.map((a) => h('option', { value: a.user_id, selected: a.user_id === keep }, a.full_name)));
+  };
+  unitSelect.addEventListener('change', fillMembers);
+  fillMembers();
   formModal({
     title: 'Add cleaning task',
     submitText: 'Add task',
     fields: [
-      field({ name: 'unit_id', label: 'Listing', type: 'select', required: true, options: listings.map((l) => [l.unit_id, `${l.unit_name} — ${l.property_name}`]) }),
+      unitField,
       field({ name: 'due_date', label: 'Date', type: 'date', required: true, value: todayManila() }),
-      field({ name: 'assigned_to', label: 'Team member', type: 'select', placeholderOption: 'Not a team member', options: assignees.map((a) => [a.user_id, a.full_name]) }),
+      memberField,
       field({ name: 'assignee_name', label: 'Or a cleaner without a login', maxlength: 80 }),
       field({ name: 'notes', label: 'Notes', type: 'textarea', maxlength: 1000, placeholder: 'e.g. Deep clean, change curtains' }),
     ],

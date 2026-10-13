@@ -2,7 +2,8 @@
 
 // Guest inbox: one conversation per reservation, emailed to the guest; guest
 // replies come back over IMAP (lib/inbound.js). Templates and automatic
-// messages live here too. Owners and managers only.
+// messages live here too. Owners and managers only; changing templates and
+// automatic messages is owner-only (workspace-wide settings).
 
 const express = require('express');
 const { query, one } = require('../db');
@@ -334,14 +335,14 @@ router.get('/message-templates', ah(async (req, res) => {
 }));
 
 // Switch the built-in guest messages to English or Taglish.
-router.post('/message-templates/language', requireRole('owner', 'manager'), ah(async (req, res) => {
+router.post('/message-templates/language', owners, ah(async (req, res) => {
   const { language } = validate(req.body, { language: { type: 'enum', values: ['en', 'tl'], required: true, label: 'Language' } });
   const r = await messaging.setTemplateLanguage(req.user.organization_id, language, req.user.user_id);
   await audit(null, req.user, 'template.language_switched', 'organization', req.user.organization_id, { language, copied: r.copied });
   res.json(r);
 }));
 
-router.post('/message-templates', ah(async (req, res) => {
+router.post('/message-templates', owners, ah(async (req, res) => {
   const body = validate(req.body, templateSpec);
   const t = await one(
     `INSERT INTO message_templates (organization_id, name, subject, body, created_by) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
@@ -350,7 +351,7 @@ router.post('/message-templates', ah(async (req, res) => {
   res.status(201).json({ template: t });
 }));
 
-router.patch('/message-templates/:id', ah(async (req, res) => {
+router.patch('/message-templates/:id', owners, ah(async (req, res) => {
   const t = await loadTemplate(req.user, uuidParam(req.params.id));
   const body = validate(req.body, templateSpec, { partial: true });
   const keys = Object.keys(body).filter((k) => body[k] !== null);
@@ -362,7 +363,7 @@ router.patch('/message-templates/:id', ah(async (req, res) => {
   res.json({ template: await loadTemplate(req.user, t.template_id) });
 }));
 
-router.post('/message-templates/:id/archive', ah(async (req, res) => {
+router.post('/message-templates/:id/archive', owners, ah(async (req, res) => {
   const t = await loadTemplate(req.user, uuidParam(req.params.id));
   const used = await one('SELECT name FROM automations WHERE template_id = $1 AND enabled LIMIT 1', [t.template_id]);
   if (used) throw new HttpError(409, `This template is used by the automatic message "${used.name}". Turn that off first.`, { code: 'IN_USE' });

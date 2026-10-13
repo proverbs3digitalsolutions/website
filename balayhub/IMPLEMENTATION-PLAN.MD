@@ -45,9 +45,10 @@ Before starting, run `/proverbs3-dfss` analysis on this feature so the requireme
 ### Security and privacy fixes found while writing BACKEND-SCHEMA (do before or with Sprint A)
 
 - ✅ 2026-10-13: Staff no longer receive the guest's private check-in link (it exposed guest phone and email). Covered by a test.
-- **Gate pass link:** hide guest ID photos when "Attach IDs" is off. Today the setting only affects the email.
-- **Clean-up job:** delete expired sessions and one-time sign-in tokens.
-- **Workspace export:** include support messages, events and consent records.
+- ✅ 2026-10-13: Gate pass link hides guest ID photos when "Include guest ID photos" is off. The setting now covers both the email and the link, and applies to passes already sent.
+- ✅ 2026-10-13: An hourly clean-up job deletes expired or idle sessions and old one-time sign-in tokens.
+- ✅ 2026-10-13: The workspace export now includes support messages (without internal staff notes), ticket events and consent records.
+- Open: when a stay moves to a unit in another property, its open cleaning task keeps its assignee, who may not be able to see the new property. The fix is to clear the assignee in that case.
 - **Encryption key backups:** keep the encryption key out of the uploads backup by always setting DATA_ENCRYPTION_KEY and the VAPID keys in `deploy/.env`. The founder action is in BLOCKERS.
 - **Lower priority:**
   - Store guest link tokens hashed.
@@ -71,6 +72,7 @@ Before starting, run `/proverbs3-dfss` analysis on this feature so the requireme
 |---|---|
 | 2026-10-10 | MVP for long-term rentals: properties, units, tenants, leases, rent, payments, expenses, maintenance, reports. Hostinger deployment. Review fixes and the first QA report. |
 | 2026-10-12 | Short-term module: listings, reservations, guests, multi-calendar, rates and blocks, iCal sync, Home overview. Inbox with templates, automatic messages and AI drafts. Housekeeping. Receipts. Plans, trial, demo, platform admin. Landing page. Google sign-in. Email setup. |
+| 2026-10-13 (later) | Eight canon docs and CLAUDE.md. Staff no longer receive guests' check-in links. Discount codes and message templates are owner-only (D-28). Cleaning tasks can only go to people who can see the property (D-29). The gate pass link respects the guest ID setting. Expired logins are cleaned up hourly. The export is fuller. 182 tests pass. |
 | 2026-10-13 | Onboarding Launchpad and guest check-in form. PayMongo plan payments. Launch readiness (terms, password change, export, deletion, health check). Direct booking page and pay-the-balance links. New brand. Installable app and push notifications. Pricing helpers. Owner statements. Reviews, repeat guests and discount codes. Condo gate pass. Security deposits. Short-term reports and tax summary. Taglish for guests. Four-agent QA sweep with fixes. New landing page with a 3-step Get started and EN/TL. Light and dark mode. Help center and support tickets. BalayHub assistant (off until a key is added). Filters on every list page. My account page and the hidden Log out fix. 169 automated tests pass. |
 
 ## Session notes

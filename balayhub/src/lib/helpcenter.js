@@ -101,7 +101,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'discount-codes', category: 'money', roles: MANAGERS, title: 'Discount codes for your booking page',
+    slug: 'discount-codes', category: 'money', roles: OWNER, title: 'Discount codes for your booking page',
     keywords: 'discount code promo returning guests coupon',
     body: [
       'Guests → Discount codes → New code. Choose percent or peso off (accommodation only), optional dates, minimum nights, usage limit, or returning guests only.',

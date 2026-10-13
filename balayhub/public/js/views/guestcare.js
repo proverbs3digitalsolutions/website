@@ -85,7 +85,8 @@ export async function discountCodesView(el, { rerender, query = {} }) {
   const toggle = async (c) => {
     try { await post(`/discount-codes/${c.code_id}/active`, { active: !c.active }); toast(c.active ? 'Code turned off.' : 'Code turned on.'); rerender(); } catch (err) { toast(err.message, 'error'); }
   };
-  const canManage = ['owner', 'manager'].includes(state.user.role);
+  // Codes apply to the whole workspace, so only the owner can change them.
+  const canManage = state.user.role === 'owner';
   // Why a code can't be used right now (or nothing if it can).
   const stateBadge = (c) => (!c.active ? badge('voided', 'Off') : c.expired ? badge('overdue', 'Expired') : c.used_up ? badge('partial', 'Used up')
     : c.scheduled ? badge('unpaid', `Starts ${fmtDate(c.valid_from)}`) : null);
@@ -132,5 +133,6 @@ export async function discountCodesView(el, { rerender, query = {} }) {
   el.replaceChildren(
     pageHead({ title: 'Discount codes', sub: 'For your direct booking page', back: { href: '#/guests', label: 'Guests' },
       actions: canManage && h('button', { class: 'btn btn--primary', type: 'button', onclick: add }, '+ New code') }),
+    !canManage && h('p', { class: 'muted small' }, 'Only the workspace owner can change these.'),
     bar, listBox);
 }

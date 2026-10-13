@@ -104,12 +104,20 @@ router.get('/cleaning-tasks/:id', ah(async (req, res) => {
   res.json({ task, files });
 }));
 
-async function checkAssignee(user, body) {
+// A team member can take a cleaning task only if they can open it: owners
+// always; managers and staff only with a property_assignments row for the
+// task's property. "No one" and a named cleaner without a login stay allowed.
+async function checkAssignee(user, body, propertyId, propertyName) {
   if (!body.assigned_to) return;
-  const params = [body.assigned_to, user.organization_id];
   const member = await one(
-    `SELECT user_id FROM users WHERE user_id = $1 AND organization_id = $2 AND account_status = 'active'`, params);
+    `SELECT u.user_id, u.role = 'owner' OR EXISTS (
+              SELECT 1 FROM property_assignments pa WHERE pa.user_id = u.user_id AND pa.property_id = $3) AS eligible
+       FROM users u WHERE u.user_id = $1 AND u.organization_id = $2 AND u.account_status = 'active'`,
+    [body.assigned_to, user.organization_id, propertyId]);
   if (!member) throw validationError({ assigned_to: 'Choose a member of this workspace.' });
+  if (!member.eligible) {
+    throw validationError({ assigned_to: `This team member isn't assigned to ${propertyName}. Add them to the property in Settings → Team first, or pick someone else.` });
+  }
 }
 
 // Add a cleaning task by hand (e.g. a mid-stay clean or deep clean).
@@ -122,7 +130,7 @@ router.post('/cleaning-tasks', managers, ah(async (req, res) => {
     notes: { type: 'text', max: 1000, label: 'Notes' },
   });
   const unit = await loadUnit(req.user, body.unit_id);
-  await checkAssignee(req.user, body);
+  await checkAssignee(req.user, body, unit.property_id, unit.property_name);
   const t = await one(
     `INSERT INTO cleaning_tasks (organization_id, unit_id, due_date, assigned_to, assignee_name, notes, checklist, created_by,
                                  next_check_in)
@@ -144,7 +152,7 @@ router.patch('/cleaning-tasks/:id', managers, ah(async (req, res) => {
     due_date: { type: 'date', label: 'Date' },
     notes: { type: 'text', max: 1000, label: 'Notes' },
   }, { partial: true });
-  await checkAssignee(req.user, body);
+  await checkAssignee(req.user, body, task.property_id, task.property_name);
   // A task goes to either a team member or a named cleaner, not both.
   if (body.assigned_to) body.assignee_name = null;
   else if (body.assignee_name) body.assigned_to = null;
@@ -207,10 +215,15 @@ router.post('/cleaning-tasks/:id/status', ah(async (req, res) => {
   res.json({ task: await loadTask(req.user, task.task_id) });
 }));
 
-// People a task can be assigned to (any active team member).
+// People a task can be assigned to (any active team member). property_ids
+// lists the properties a manager or staff member is assigned to (null for
+// owners, who can take any task), so the picker can show only eligible people.
 router.get('/cleaning-assignees', managers, ah(async (req, res) => {
   const { rows } = await query(
-    `SELECT user_id, full_name, role FROM users WHERE organization_id = $1 AND account_status = 'active' ORDER BY role = 'staff' DESC, full_name`,
+    `SELECT u.user_id, u.full_name, u.role,
+            CASE WHEN u.role = 'owner' THEN NULL
+                 ELSE COALESCE((SELECT array_agg(pa.property_id) FROM property_assignments pa WHERE pa.user_id = u.user_id), '{}') END AS property_ids
+       FROM users u WHERE u.organization_id = $1 AND u.account_status = 'active' ORDER BY u.role = 'staff' DESC, u.full_name`,
     [req.user.organization_id]);
   res.json({ assignees: rows });
 }));
