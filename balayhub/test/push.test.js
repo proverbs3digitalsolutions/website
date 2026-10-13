@@ -11,7 +11,7 @@ push.webpush.sendNotification = async (sub, payload) => {
   sent.push({ endpoint: sub.endpoint, ...JSON.parse(payload) });
   return { statusCode: 201 };
 };
-const subscription = (name) => ({ endpoint: `https://push.example.com/send/${name}-abcdef`, keys: { p256dh: 'BPublicKeyValue123', auth: 'authsecret' } });
+const subscription = (name) => ({ endpoint: `https://fcm.googleapis.com/fcm/send/${name}-abcdef`, keys: { p256dh: 'BPublicKeyValue123', auth: 'authsecret' } });
 
 let srv; let owner; let staff; let prop; let prop2;
 test.before(async () => {
@@ -31,6 +31,7 @@ test('devices subscribe; settings list only the types for that role', async () =
   assert.equal(s.types.length, 5);
   assert.deepEqual((await staff.get('/api/push/settings')).data.types.map((t) => t.key), ['cleaning']);
   assert.equal((await owner.post('/api/push/subscribe', { subscription: { endpoint: 'http://insecure', keys: {} } })).status, 400);
+  assert.equal((await owner.post('/api/push/subscribe', { subscription: { endpoint: 'https://internal.example.com/hook-123456', keys: { p256dh: 'x', auth: 'y' } } })).status, 400, 'only real push services');
   assert.equal((await owner.post('/api/push/subscribe', { subscription: subscription('owner'), device: 'Chrome on Android' })).status, 200);
   assert.equal((await staff.post('/api/push/subscribe', { subscription: subscription('staff') })).status, 200);
   assert.deepEqual((await owner.get('/api/push/settings')).data.devices.map((d) => d.device), ['Chrome on Android']);

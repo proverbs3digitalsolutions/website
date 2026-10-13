@@ -69,7 +69,7 @@ router.post('/reservations/:id/deposit', ah(async (req, res) => {
     throw err;
   }
   await audit(null, req.user, 'deposit.received', 'booking', b.booking_id, { amount: body.amount });
-  const mail = body.send_receipt ? await emailGuest(b, d, 'received') : null;
+  const mail = body.send_receipt ? await emailGuest(b, d, 'received', req.user) : null;
   res.status(201).json({ deposit: await depositOf(b.booking_id), receipt: mail });
 }));
 
@@ -100,7 +100,7 @@ router.post('/reservations/:id/deposit/settle', managers, ah(async (req, res) =>
       refund ? body.refund_reference : null, req.user.user_id]);
   if (!row) throw new HttpError(409, 'This deposit has already been settled.', { code: 'SETTLED' });
   await audit(null, req.user, 'deposit.settled', 'booking', b.booking_id, { status, refund: (refund / 100).toFixed(2), deduction: (ded / 100).toFixed(2) });
-  const mail = body.send_receipt ? await emailGuest(b, row, 'settled') : null;
+  const mail = body.send_receipt ? await emailGuest(b, row, 'settled', req.user) : null;
   res.json({ deposit: await depositOf(b.booking_id), receipt: mail });
 }));
 
@@ -115,16 +115,16 @@ router.post('/reservations/:id/deposit/reopen', requireRole('owner'), ah(async (
   res.json({ deposit: await depositOf(b.booking_id) });
 }));
 
-async function emailGuest(b, d, kind) {
+async function emailGuest(b, d, kind, user) {
   if (!b.guest_email) return { sent: false, error: 'The guest has no email address.' };
   const { sendMail } = require('../lib/mailer');
   const first = String(b.guest_name || 'Guest').split(' ')[0];
   const stay = `${b.unit_name}, ${b.property_name} (${b.check_in} to ${b.check_out}, booking ${b.confirmation_code})`;
   const text = kind === 'received'
-    ? `Hi ${first},\n\nWe received your refundable security deposit of ${peso(d.amount)} by ${METHOD_LABEL[d.method]} on ${d.received_date.toISOString ? d.received_date.toISOString().slice(0, 10) : d.received_date} for ${stay}.\n\nWe'll return it after check-out once the unit has been checked.\n\nSalamat!\n${b.workspace_name}`
+    ? `Hi ${first},\n\nWe received your refundable security deposit of ${peso(d.amount)} by ${METHOD_LABEL[d.method]} on ${d.received_date} for ${stay}.\n\nWe'll return it after check-out once the unit has been checked.\n\nSalamat!\n${b.workspace_name}`
     : `Hi ${first},\n\nHere is the summary of your security deposit for ${stay}:\n\nDeposit:   ${peso(d.amount)}\n${Number(d.deduction_amount) > 0 ? `Deduction: ${peso(d.deduction_amount)}\nReason:    ${d.deduction_reason}\n` : ''}Returned:  ${peso(d.refund_amount)}${Number(d.refund_amount) > 0 ? ` by ${METHOD_LABEL[d.refund_method]}${d.refund_reference ? ` (ref. ${d.refund_reference})` : ''}` : ''}\n\nThank you for staying with us${Number(d.deduction_amount) > 0 ? '. If you have questions about the deduction, just reply to this email' : ''}.\n\nSalamat!\n${b.workspace_name}`;
   const r = await sendMail({ to: b.guest_email, subject: kind === 'received' ? `Security deposit received · ${b.confirmation_code}` : `Your security deposit · ${b.confirmation_code}`, text });
-  return r.notConfigured || r.error ? { sent: false, error: r.reason || 'Email is not set up yet.' } : { sent: true, to: b.guest_email };
+  return r.notConfigured || r.error ? { sent: false, error: r.reason || 'Email is not set up yet.' } : { sent: true, to: user?.role === 'staff' ? 'the guest' : b.guest_email };
 }
 
 // Deposits still held after check-out (for Home).

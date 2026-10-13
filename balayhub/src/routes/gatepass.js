@@ -218,7 +218,8 @@ async function sendDuePasses() {
     if (!r.has_form && !lastChance) continue;
     if (planStatus(r).read_only) continue;
     try {
-      await sendPass(r.booking_id);
+      const row = await sendPass(r.booking_id);
+      if (row.status === 'failed') continue; // retried on a later run; the host sees the error on the reservation
       sent += 1;
       if (!r.has_form && !r.missing_form_noted_at) {
         await query('UPDATE gate_passes SET missing_form_noted_at = now() WHERE booking_id = $1', [r.booking_id]);

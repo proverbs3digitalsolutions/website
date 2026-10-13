@@ -38,7 +38,7 @@ async function assignUnits(db, orgId, ownerId, unitIds) {
   const { rows } = await db.query(
     `SELECT u.unit_id FROM units u JOIN properties p USING (property_id) WHERE p.organization_id = $1 AND u.unit_id = ANY($2)`, [orgId, unitIds]);
   if (rows.length !== new Set(unitIds).size) throw validationError({ unit_ids: 'One or more selected units were not found.' });
-  await db.query('UPDATE units SET owner_id = NULL WHERE owner_id = $1 AND NOT (unit_id = ANY($2))', [ownerId, unitIds]);
+  await db.query(`UPDATE units SET owner_id = NULL WHERE owner_id = $1 AND NOT (unit_id = ANY($2)) AND status = 'active'`, [ownerId, unitIds]);
   await db.query('UPDATE units SET owner_id = $1 WHERE unit_id = ANY($2)', [ownerId, unitIds]);
 }
 
@@ -105,7 +105,7 @@ router.post('/unit-owners/:id/archive', ownersOnly, ah(async (req, res) => {
 }));
 
 function monthParam(v) {
-  if (typeof v !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(v)) throw validationError({ month: 'Choose a month.' });
+  if (typeof v !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(v) || Number(v.slice(0, 4)) < 2000 || Number(v.slice(0, 4)) > 2100) throw validationError({ month: 'Choose a month.' });
   return v;
 }
 

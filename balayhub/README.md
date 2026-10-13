@@ -15,6 +15,7 @@ createdb balayhub                       # or point DATABASE_URL at any empty dat
 cp .env.example .env                    # then edit it; export the variables or use your process manager
 npm run seed                            # optional demo data (demo@balayhub.test / demo-password-1)
 npm start                               # runs migrations, then serves http://localhost:3000
+createdb balayhub_test                  # once, for the tests
 npm test                                # API tests (uses the balayhub_test database)
 ```
 
@@ -81,6 +82,12 @@ See `.env.example`. Important settings for production:
 | `PLATFORM_ADMIN_EMAILS` | Emails that can open the platform Admin page ([SELLING.md](docs/SELLING.md)) |
 | `SALES_CONTACT_EMAIL` / `TRIAL_DAYS` | Contact shown on the landing page; free-trial length (default 14) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Optional. "Continue with Google" ([GOOGLE-SIGNIN.md](docs/GOOGLE-SIGNIN.md)) |
+| `INBOUND_ADDRESS` | Optional. Address guests reply to (defaults to the `MAIL_FROM` address) |
+| `PAYMONGO_SECRET_KEY` / `PAYMONGO_WEBHOOK_SECRET` / `PAYMONGO_METHODS` | Plan billing through PayMongo ([SELLING.md](docs/SELLING.md)); hosts add their own keys for guest payments in the app |
+| `DATA_ENCRYPTION_KEY` | Optional. Encrypts hosts' PayMongo keys (generated and kept in `STORAGE_DIR` if empty) |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Optional. Phone/browser notifications (generated and kept in `STORAGE_DIR` if empty) |
+| `GUEST_ID_RETENTION_DAYS` | Days after check-out before guest ID photos are deleted (default 30) |
+| `SESSION_TTL_HOURS` / `SESSION_IDLE_HOURS` | How long sign-ins last (defaults 168 and 12) |
 
 ## Deploying
 
@@ -106,13 +113,16 @@ balayhub/
   src/
     server.js         Express app, security headers, error handling
     lib/              auth & sessions, access scoping, ledger (charges/balances), validation, audit, mail
-    routes/           auth, team, properties/units, tenants/leases, money (rent/payments/expenses), maintenance, reports, files
-  public/             the web app (vanilla ES modules, no build step)
+    routes/           long-term: auth, team, properties/units, tenants/leases, money, maintenance, reports, files
+                      short-term: stays (reservations, calendar, guests), inbox, housekeeping, directbooking,
+                      balancepay, checkin, gatepass, deposits, pricing, owners, guestcare (reviews, codes),
+                      stayreports, push; account, billing, onboarding, admin
+  public/             the web app (vanilla ES modules, no build step), service worker, manifest
   scripts/            migrate, seed
-  test/               API tests (node:test, real PostgreSQL)
-  docs/               plan, architecture, QA report, privacy checklist
+  test/               API tests (node:test, real PostgreSQL) and e2e-*-browser.js Playwright journeys
+  docs/               deploy, short-term guide, inbox, selling, launch checklist, privacy, architecture
 ```
 
-## Not in this MVP (planned next)
+## Not built yet (planned)
 
-Automated SMS and email rent reminders, a tenant portal, online payments (GCash or Maya through a payment provider), push notifications, deposit refund tracking, utility billing, and e-signatures. These are listed as should-have and nice-to-have in `docs/PROJECT-PLAN.md`.
+SMS reminders, a Facebook Messenger inbox, and for long-term rentals: a tenant portal, online rent payments, utility billing and e-signatures. (Short-term stays already have online payments, push notifications and security deposits.)

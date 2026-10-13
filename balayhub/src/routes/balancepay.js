@@ -86,24 +86,35 @@ publicRouter.get('/public/pay/:token', ah(async (req, res) => {
 
 const checkoutLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 10, key: (req) => `paycheckout|${req.params.token}` });
 
+const isReusable = (c, amount) => Number(c.amount) === amount && c.checkout_url && Date.now() - new Date(c.created_at) < REUSE_MS;
+
 publicRouter.post('/public/pay/:token/checkout', checkoutLimiter, ah(async (req, res) => {
-  const b = await loadByToken(req.params.token);
+  let b = await loadByToken(req.params.token);
   if (!b.accepting) throw new HttpError(409, 'Online payment is not available for this booking. Please contact your host.', { code: 'NOT_ACCEPTING' });
+  const key = secretbox.decrypt(b.paymongo_key_enc);
+  if (!key) throw new HttpError(502, 'Online payment is not available right now. Please contact your host.', { code: 'PAYMENT_FAILED' });
+  // Close older checkouts first (outside any transaction: this calls PayMongo and
+  // may record a payment that came in), then work from the balance after that.
+  const { rows: stale } = await query(`SELECT * FROM balance_checkouts WHERE booking_id = $1 AND status = 'pending'`, [b.booking_id]);
+  const toClose = stale.filter((c) => !isReusable(c, Number(b.balance)));
+  for (const c of toClose) await closeCheckout(c.checkout_ref).catch(() => {});
+  if (toClose.length) b = await loadByToken(req.params.token);
   const amount = Number(b.balance);
   if (!(amount > 0)) throw new HttpError(409, 'This booking is already fully paid. Thank you!', { code: 'PAID' });
   if (amount < 100) throw new HttpError(409, 'The balance is too small to pay online. Please pay your host directly.', { code: 'TOO_SMALL' });
-  const key = secretbox.decrypt(b.paymongo_key_enc);
-  if (!key) throw new HttpError(502, 'Online payment is not available right now. Please contact your host.', { code: 'PAYMENT_FAILED' });
   // One checkout at a time per booking: the booking row lock makes a second
-  // tab wait until the first has its PayMongo session, then reuse it.
+  // tab wait until the first has its PayMongo session, then reuse it. Nothing
+  // inside takes a second database connection.
   const result = await tx(async (db) => {
-    // NO KEY UPDATE: still lets markPaid (another connection) insert a payment for this booking.
     await db.query('SELECT booking_id FROM bookings WHERE booking_id = $1 FOR NO KEY UPDATE', [b.booking_id]);
+    const { rows: [now] } = await db.query(`SELECT ${BALANCE} AS balance FROM bookings b WHERE b.booking_id = $1`, [b.booking_id]);
+    if (Number(now.balance) !== amount) throw new HttpError(409, 'The amount due just changed. Please reload the page.', { code: 'CHANGED' });
     const { rows: open } = await db.query(
       `SELECT * FROM balance_checkouts WHERE booking_id = $1 AND status = 'pending' ORDER BY created_at DESC`, [b.booking_id]);
-    const reusable = open.find((c) => Number(c.amount) === amount && c.checkout_url && Date.now() - new Date(c.created_at) < REUSE_MS);
+    const reusable = open.find((c) => isReusable(c, amount));
     if (reusable) return { url: reusable.checkout_url };
-    for (const c of open) await closeCheckout(c.checkout_ref).catch(() => {});
+    // Another open checkout (e.g. started a moment ago in another tab): don't start a second one.
+    if (open.length) throw new HttpError(409, 'A payment for this booking is already in progress. Please wait a minute and reload.', { code: 'IN_PROGRESS' });
     const { rows: [c] } = await db.query(
       `INSERT INTO balance_checkouts (organization_id, booking_id, amount, key_enc, test_mode) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
       [b.organization_id, b.booking_id, amount.toFixed(2), b.paymongo_key_enc, b.test_mode]);

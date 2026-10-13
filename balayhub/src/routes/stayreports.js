@@ -25,7 +25,10 @@ const CHANNEL_LABEL = { direct: 'Direct', airbnb: 'Airbnb', booking: 'Booking.co
 
 function period(q) {
   const t = manilaToday();
-  if (/^\d{4}$/.test(q.year || '')) return { from: `${q.year}-01-01`, to: `${Number(q.year) + 1}-01-01`, label: q.year };
+  if (/^\d{4}$/.test(q.year || '')) {
+    if (Number(q.year) < 2000 || Number(q.year) > 2100) throw validationError({ year: 'Choose a valid year.' });
+    return { from: `${q.year}-01-01`, to: `${Number(q.year) + 1}-01-01`, label: q.year };
+  }
   if (/^\d{4}-\d{2}$/.test(q.month || '') && isValidDate(`${q.month}-01`)) {
     const [y, m] = q.month.split('-').map(Number);
     return { from: `${q.month}-01`, to: new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10), label: q.month };
@@ -179,6 +182,7 @@ router.get('/stay-reports/export', managers, ah(async (req, res) => {
   let lines; let name;
   if (req.query.kind === 'tax') {
     const year = /^\d{4}$/.test(req.query.year || '') ? Number(req.query.year) : Number(manilaToday().slice(0, 4));
+    if (year < 2000 || year > 2100) throw validationError({ year: 'Choose a valid year.' });
     const t = await taxSummary(req.user, year);
     lines = [['Month', 'Revenue earned', 'Payments received', 'Channel fees', 'Expenses', 'Net (earned - fees - expenses)'],
       ...t.months.map((m) => [m.month, m.revenue, m.received, m.channel_fees, m.expenses, m.net]),

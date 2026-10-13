@@ -92,8 +92,7 @@ function createApp() {
     },
   }));
 
-  // eslint-disable-next-line no-unused-vars
-  app.use((err, req, res, next) => {
+  app.use((err, req, res, next) => { // Express needs all four arguments for an error handler
     if (err.type === 'entity.too.large') err = new HttpError(413, 'That file or request is too large (max 10 MB).', { code: 'TOO_LARGE' });
     if (err.type === 'entity.parse.failed') err = new HttpError(400, 'Malformed request.', { code: 'BAD_REQUEST' });
     if (err instanceof HttpError) {

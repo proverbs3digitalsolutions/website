@@ -144,7 +144,8 @@ router.get('/guests', ah(async (req, res) => {
   const { rows } = await query(
     `SELECT g.*, (SELECT COUNT(*) FROM bookings b WHERE b.guest_id = g.guest_id AND b.status = 'confirmed') AS stays,
             (SELECT MAX(b.check_in) FROM bookings b WHERE b.guest_id = g.guest_id AND b.status = 'confirmed') AS last_stay,
-            (SELECT ROUND(AVG(r.rating), 1) FROM guest_reviews r WHERE r.guest_id = g.guest_id) AS avg_rating
+            (SELECT ROUND(AVG(r.rating), 1) FROM guest_reviews r JOIN bookings rb ON rb.booking_id = r.booking_id JOIN units ru ON ru.unit_id = rb.unit_id
+              WHERE r.guest_id = g.guest_id AND (${req.user.role === 'owner' ? 'true' : `ru.property_id IN (SELECT property_id FROM property_assignments WHERE user_id = $${params.push(req.user.user_id)})`})) AS avg_rating
        FROM guests g WHERE ${where.join(' AND ')} ORDER BY g.full_name LIMIT 500`, params);
   res.json({ guests: rows.map((g) => redactGuest(req.user, g)) });
 }));
@@ -371,7 +372,10 @@ router.patch('/reservations/:id', managers, ah(async (req, res) => {
     if (err.constraint === 'bookings_no_overlap') throw await overlapError(merged.unit_id, merged.check_in, merged.check_out, booking.booking_id);
     throw err;
   }
-  await closeOpenCheckouts(booking.booking_id);
+  // Only changes to what's owed close the guest's open payment page (not notes etc.).
+  if (['unit_id', 'check_in', 'check_out', 'accommodation_total', 'cleaning_fee', 'other_fees'].some((k) => k in body && String(body[k]) !== String(booking[k]))) {
+    await closeOpenCheckouts(booking.booking_id);
+  }
   res.json({ reservation: redactGuest(req.user, await loadBooking(req.user, booking.booking_id)) });
 }));
 

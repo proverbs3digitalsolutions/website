@@ -8,7 +8,8 @@ types.setTypeParser(1700, (v) => v);
 types.setTypeParser(1082, (v) => v);
 types.setTypeParser(20, (v) => Number(v)); // bigint counts
 
-const pool = new Pool({ connectionString: config.databaseUrl, max: 10 });
+// connectionTimeoutMillis: a request waiting for a free connection fails instead of hanging forever.
+const pool = new Pool({ connectionString: config.databaseUrl, max: 10, connectionTimeoutMillis: 15000 });
 
 async function query(text, params) {
   return pool.query(text, params);

@@ -14,7 +14,7 @@ async function startServer() {
   const server = createApp().listen(0);
   await new Promise((r) => server.once('listening', r));
   const base = `http://127.0.0.1:${server.address().port}`;
-  return { base, close: async () => { server.close(); await pool.end(); } };
+  return { base, close: async () => { server.close(); await pool.end(); require('fs').rmSync(process.env.STORAGE_DIR, { recursive: true, force: true }); } };
 }
 
 // Minimal cookie-keeping API client.

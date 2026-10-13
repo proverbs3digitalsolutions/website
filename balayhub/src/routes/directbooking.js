@@ -26,7 +26,6 @@ const publicRouter = express.Router();
 const owners = requireRole('owner');
 const managers = requireRole('owner', 'manager');
 
-const TODAY = `(now() AT TIME ZONE 'Asia/Manila')::date`;
 const HOLD_MINUTES = 30;
 const MAX_DAYS_AHEAD = 540; // about 18 months
 const MAX_OPEN_HOLDS = 2; // per visitor or email, across all hosts

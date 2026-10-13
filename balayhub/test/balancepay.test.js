@@ -157,6 +157,26 @@ test('a checkout is never marked expired unless PayMongo says so', async () => {
   assert.equal((await sql(`SELECT COUNT(*)::int AS n FROM balance_checkouts WHERE booking_id = $1 AND status = 'pending'`, [r.booking_id]))[0].n, 1);
 });
 
+test('editing notes keeps the payment page open; a paid-but-unconfirmed checkout is never charged again', async () => {
+  const r = (await owner.post('/api/reservations', { unit_id: res.unit_id, check_in: d(60), check_out: d(61), guest_name: 'Fe', guest_email: 'fe@example.com' })).data.reservation;
+  const t = (await owner.get(`/api/reservations/${r.booking_id}/payment-link`)).data.link.split('/#/pay/')[1];
+  const g = client(srv.base);
+  await g.post(`/api/public/pay/${t}/checkout`);
+  const s = last();
+  await owner.patch(`/api/reservations/${r.booking_id}`, { notes: 'Late arrival' });
+  assert.equal(s.attributes.status, 'active', 'notes-only edit leaves the session open');
+  // The guest paid but never came back; later they open the link again after the reuse window.
+  pay(s, Math.round(Number(s.attributes.line_items[0].amount)));
+  await sql(`UPDATE balance_checkouts SET created_at = now() - interval '2 hours' WHERE provider_checkout_id = $1`, [s.id]);
+  const n = sessions.size;
+  const again = await g.post(`/api/public/pay/${t}/checkout`);
+  assert.equal(again.status, 409);
+  assert.equal(again.data.code, 'PAID');
+  assert.equal(sessions.size, n, 'no second checkout created');
+  const pays = await sql(`SELECT COUNT(*)::int AS n FROM booking_payments WHERE booking_id = $1 AND voided_at IS NULL`, [r.booking_id]);
+  assert.equal(pays[0].n, 1);
+});
+
 test('cancelled bookings and ended plans cannot take payments', async () => {
   const r3 = (await owner.post('/api/reservations', { unit_id: res.unit_id, check_in: d(30), check_out: d(31), guest_name: 'Cid', guest_email: 'cid@example.com' })).data.reservation;
   const t3 = (await owner.get(`/api/reservations/${r3.booking_id}/payment-link`)).data.link.split('/#/pay/')[1];

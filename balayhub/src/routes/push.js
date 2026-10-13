@@ -7,6 +7,15 @@ const push = require('../lib/push');
 
 const router = express.Router();
 
+// Only browser push services, so the server never posts to arbitrary URLs.
+const PUSH_HOSTS = [/^fcm\.googleapis\.com$/, /^updates\.push\.services\.mozilla\.com$/, /^web\.push\.apple\.com$/, /\.notify\.windows\.com$/, /^android\.googleapis\.com$/];
+function isPushService(url) {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' && !u.port && PUSH_HOSTS.some((re) => re.test(u.hostname));
+  } catch { return false; }
+}
+
 router.get('/push/settings', ah(async (req, res) => {
   const u = await one('SELECT notify_prefs FROM users WHERE user_id = $1', [req.user.user_id]);
   const { rows } = await query('SELECT device, created_at FROM push_subscriptions WHERE user_id = $1 ORDER BY created_at', [req.user.user_id]);
@@ -18,7 +27,7 @@ router.get('/push/settings', ah(async (req, res) => {
 router.post('/push/subscribe', ah(async (req, res) => {
   const s = req.body?.subscription;
   const endpoint = String(s?.endpoint || '');
-  if (!/^https:\/\/[^\s]{10,800}$/.test(endpoint) || typeof s?.keys?.p256dh !== 'string' || typeof s?.keys?.auth !== 'string'
+  if (!/^https:\/\/[^\s]{10,800}$/.test(endpoint) || !isPushService(endpoint) || typeof s?.keys?.p256dh !== 'string' || typeof s?.keys?.auth !== 'string'
       || s.keys.p256dh.length > 200 || s.keys.auth.length > 100) {
     throw new HttpError(400, 'Invalid notification subscription.', { code: 'BAD_REQUEST' });
   }

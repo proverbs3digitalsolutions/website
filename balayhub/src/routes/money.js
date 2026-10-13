@@ -45,7 +45,7 @@ router.get('/rent', ah(async (req, res) => {
   if (status === 'outstanding') where.push(`c.status <> 'paid'`);
   else if (['paid', 'partial', 'unpaid', 'overdue'].includes(status)) { params.push(status); where.push(`c.status = $${params.length}`); }
   if (req.query.property_id) { params.push(uuidParam(req.query.property_id)); where.push(`p.property_id = $${params.length}`); }
-  if (req.query.month && /^\d{4}-\d{2}$/.test(req.query.month)) { params.push(`${req.query.month}-01`); where.push(`c.period = $${params.length}::date`); }
+  if (req.query.month && /^\d{4}-\d{2}$/.test(req.query.month) && isValidDate(`${req.query.month}-01`)) { params.push(`${req.query.month}-01`); where.push(`c.period = $${params.length}::date`); }
   if (req.query.q) {
     params.push(`%${String(req.query.q).slice(0, 100)}%`);
     where.push(`(t.full_name ILIKE $${params.length} OR u.unit_name ILIKE $${params.length} OR p.property_name ILIKE $${params.length})`);

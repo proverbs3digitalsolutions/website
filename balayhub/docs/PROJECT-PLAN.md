@@ -53,7 +53,7 @@ Deferred (should-have and nice-to-have): automated SMS and email reminders, tena
 | 5 Code review & critic | Code Critic | independent review pass; findings and fixes in `docs/QA-REPORT.md` |
 | 6 Testing & QA | QA | `test/` (API), browser end-to-end run; results in `docs/QA-REPORT.md` |
 | 7 Final review | Checker | requirements traceability in `docs/QA-REPORT.md` |
-| 8 Deployment | DevOps | `Dockerfile`, `docker-compose.yml`, README deployment checklist. Production hosting is **not yet provisioned** |
+| 8 Deployment | DevOps | `Dockerfile`, `docker-compose.yml` (local), `docker-compose.prod.yml` + `deploy/` scripts for the Hostinger VPS (see `docs/DEPLOY-HOSTINGER.md`). Live at the production domain with Caddy HTTPS |
 | 9–10 Monitoring and improvement | Support / PM | post-launch backlog above |
 
 ## Screen map (Stage 2)

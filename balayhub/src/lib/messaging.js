@@ -161,13 +161,17 @@ Salamat po!
 async function setTemplateLanguage(organizationId, language, userId) {
   await ensureDefaults(organizationId);
   const target = language === 'tl' ? TAGLISH_TEMPLATES : Object.fromEntries(DEFAULT_TEMPLATES.map((t) => [t.system_key, t]));
-  const stock = new Set([...DEFAULT_TEMPLATES.map((t) => t.body), ...Object.values(TAGLISH_TEMPLATES).map((t) => t.body)]);
+  const all = [...DEFAULT_TEMPLATES, ...Object.values(TAGLISH_TEMPLATES)];
+  // Also the older thank-you text that migration 018 appended {{review_link}} to.
+  const oldThanks = DEFAULT_TEMPLATES.find((t) => t.system_key === 'thanks').body.replace('\n\n{{review_link}}', '');
+  const stockBodies = new Set([...all.map((t) => t.body), `${oldThanks}\n\n{{review_link}}`]);
+  const stockSubjects = new Set(all.map((t) => t.subject));
   let copied = 0;
   await tx(async (db) => {
     for (const [key, t] of Object.entries(target)) {
       const { rows: [cur] } = await db.query('SELECT * FROM message_templates WHERE organization_id = $1 AND system_key = $2 FOR UPDATE', [organizationId, key]);
       if (!cur) continue;
-      if (!stock.has(cur.body)) {
+      if (!stockBodies.has(cur.body) || !stockSubjects.has(cur.subject)) {
         await db.query(`INSERT INTO message_templates (organization_id, name, subject, body, created_by) VALUES ($1,$2,$3,$4,$5)`,
           [organizationId, `${cur.name} (my version)`.slice(0, 120), cur.subject, cur.body, userId]);
         copied += 1;
