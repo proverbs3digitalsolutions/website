@@ -10,6 +10,11 @@ const path = require('path');
 const config = require('../config');
 
 let key = null;
+function readKeyFile(file) {
+  const k = Buffer.from(fs.readFileSync(file, 'utf8').trim(), 'hex');
+  if (k.length !== 32) throw new Error(`The data encryption key file ${file} is damaged. Restore it from a backup, or set DATA_ENCRYPTION_KEY.`);
+  return k;
+}
 function getKey() {
   if (key) return key;
   if (config.dataEncryptionKey) {
@@ -17,15 +22,23 @@ function getKey() {
     return key;
   }
   const file = path.resolve(config.storageDir, '.data-key');
+  let k;
   try {
-    key = Buffer.from(fs.readFileSync(file, 'utf8').trim(), 'hex');
-  } catch {
+    k = readKeyFile(file);
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err; // damaged or unreadable: never replace it silently
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    const fresh = crypto.randomBytes(32);
-    fs.writeFileSync(file, fresh.toString('hex'), { mode: 0o600, flag: 'wx' });
-    key = fresh;
+    try {
+      // Write to a temp file, then link into place, so a crash can't leave a half-written key.
+      const tmp = `${file}.${process.pid}.tmp`;
+      fs.writeFileSync(tmp, crypto.randomBytes(32).toString('hex'), { mode: 0o600 });
+      try { fs.linkSync(tmp, file); } finally { fs.unlinkSync(tmp); }
+    } catch (e) {
+      if (e.code !== 'EEXIST') throw e; // another process created it first
+    }
+    k = readKeyFile(file);
   }
-  if (key.length !== 32) throw new Error('Invalid data encryption key file.');
+  key = k; // cache only a validated key
   return key;
 }
 

@@ -58,7 +58,9 @@ Each host can have a public booking page, such as `https://balayhub.proverbs3dig
 - The guest is emailed the booking confirmation (with the check-in form link) and a receipt.
 - You get a note in the Inbox.
 - Your calendar link updates Airbnb and Booking.com on their next sync, so the dates get blocked there too.
-- While a guest is paying, their dates are held for 30 minutes so no one else can book them on your page.
+- While a guest is paying, their dates are held for 30 minutes so no one else can book them on your page. If they cancel, or the 30 minutes run out, the dates are released and that checkout is closed at PayMongo so it can't be paid later. Each visitor can have at most 2 unpaid checkouts open, and bookings open up to about 18 months ahead.
+- A 50% deposit is only offered when the balance due date is still ahead; stays closer than that are paid in full.
+- **Test mode:** with a `sk_test_` key, guests see a TEST MODE notice and bookings are labelled as test bookings. Switch to your live key before sharing the link.
 - In the rare case a channel booking lands on the same dates before the payment finishes, no double booking is made. You get an email to refund the guest or offer other dates from your PayMongo dashboard.
 - For 50% deposits, the reservation shows the remaining balance. Use the *Payment reminder* template, or an automatic message, to ask for it before check-in.
 

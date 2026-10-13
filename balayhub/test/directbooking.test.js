@@ -15,6 +15,7 @@ const direct = require('../src/routes/directbooking');
 // Fake PayMongo that remembers which secret key created each checkout.
 const realFetch = globalThis.fetch;
 const sessions = new Map();
+const expired = new Set();
 globalThis.fetch = async (url, opts = {}) => {
   const u = String(url);
   if (!u.startsWith('https://api.paymongo.com/')) return realFetch(url, opts);
@@ -27,6 +28,8 @@ globalThis.fetch = async (url, opts = {}) => {
     sessions.set(id, { key, data: { id, attributes: { ...a, checkout_url: `https://checkout.paymongo.com/${id}`, status: 'active', payments: [] } } });
     return json({ data: sessions.get(id).data });
   }
+  const ex = /checkout_sessions\/(cs_\w+)\/expire$/.exec(u);
+  if (ex && sessions.has(ex[1])) { expired.add(ex[1]); sessions.get(ex[1]).data.attributes.status = 'expired'; return json({ data: sessions.get(ex[1]).data }); }
   const m = /checkout_sessions\/(cs_\w+)$/.exec(u);
   if (m && sessions.has(m[1]) && sessions.get(m[1]).key === key) return json({ data: sessions.get(m[1]).data });
   return json({ errors: [{ detail: 'not found' }] }, 404);
@@ -131,8 +134,9 @@ test('guest pays a 50% deposit with the host\'s own key; dates are held; booking
   assert.ok(st.data.stay.checkin_link.includes('/#/checkin/'));
   assert.equal((await g.get(`/api/public/book/status/${token}`)).data.status, 'confirmed', 'idempotent');
 
-  const b = await sql(`SELECT b.*, (SELECT COUNT(*)::int FROM booking_payments p WHERE p.booking_id = b.booking_id) AS pays FROM bookings b WHERE b.notes LIKE 'Booked online%'`);
+  const b = await sql(`SELECT b.*, (SELECT COUNT(*)::int FROM booking_payments p WHERE p.booking_id = b.booking_id) AS pays FROM bookings b WHERE b.notes LIKE '%Booked online%'`);
   assert.equal(b.length, 1);
+  assert.match(b[0].notes, /^TEST MODE booking/, 'test-key bookings are clearly labelled');
   assert.equal(b[0].channel, 'direct');
   assert.equal(b[0].pays, 1);
   assert.equal(b[0].total_amount, '5500.00');
@@ -195,4 +199,62 @@ test('reconcile confirms without the guest returning; ended trial and demo canno
 test('turning the page off hides it', async () => {
   await owner.patch('/api/direct-booking', { enabled: false });
   assert.equal((await client(srv.base).get(`/api/public/book/${slug}`)).status, 404);
+});
+
+test('review fixes: hold limits per visitor, cancel releases dates, late payment loses to a valid hold, deposits only when the balance is not yet due, far-future dates refused', async () => {
+  await owner.patch('/api/direct-booking', { enabled: true });
+  await sql(`UPDATE direct_checkouts SET status = 'expired' WHERE status = 'pending'`);
+  const g = client(srv.base);
+  // Max 2 open holds per visitor.
+  assert.equal((await g.post(`/api/public/book/${slug}/units/${unit.unit_id}/checkout`, form({ check_in: d(60), check_out: d(62), pay: 'full', email: 'a1@example.com' }))).status, 200);
+  const sA = lastSession();
+  assert.equal((await g.post(`/api/public/book/${slug}/units/${unit.unit_id}/checkout`, form({ check_in: d(70), check_out: d(72), pay: 'full', email: 'a2@example.com' }))).status, 200);
+  const third = await g.post(`/api/public/book/${slug}/units/${unit.unit_id}/checkout`, form({ check_in: d(80), check_out: d(82), pay: 'full', email: 'a3@example.com' }));
+  assert.equal(third.status, 429);
+  // Cancelling on PayMongo releases the dates immediately.
+  const tokA = sA.attributes.cancel_url.split('cancelled=')[1];
+  assert.equal((await g.post(`/api/public/book/cancel/${tokA}`)).data.status, 'expired');
+  const avail = (await g.get(`/api/public/book/${slug}/units/${unit.unit_id}/availability?from=${d(59)}`)).data.days;
+  assert.equal(avail.find((x) => x.date === d(60)).taken, false);
+  await sql(`UPDATE direct_checkouts SET status = 'expired' WHERE status = 'pending'`);
+
+  // Guest A's hold lapses; guest B holds the same nights; A pays late → A gets "conflict", B keeps the dates.
+  const ga = client(srv.base);
+  await ga.post(`/api/public/book/${slug}/units/${unit.unit_id}/checkout`, form({ check_in: d(90), check_out: d(92), pay: 'full', email: 'late@example.com' }));
+  const late = lastSession();
+  await sql(`UPDATE direct_checkouts SET hold_until = now() - interval '1 minute', client_hash = 'x' WHERE provider_checkout_id = $1`, [late.id]);
+  const gb = client(srv.base);
+  const rb = await gb.post(`/api/public/book/${slug}/units/${unit.unit_id}/checkout`, form({ check_in: d(90), check_out: d(92), pay: 'full', email: 'ontime@example.com' }));
+  assert.equal(rb.status, 200, JSON.stringify(rb.data));
+  const ontime = lastSession();
+  pay(late.id, 550000);
+  assert.equal((await ga.get(`/api/public/book/status/${late.attributes.success_url.split('/done/')[1]}`)).data.status, 'conflict');
+  pay(ontime.id, 550000);
+  assert.equal((await gb.get(`/api/public/book/status/${ontime.attributes.success_url.split('/done/')[1]}`)).data.status, 'confirmed');
+
+  // Deposit not allowed when check-in is within the balance-due window.
+  await sql(`UPDATE direct_checkouts SET status = 'expired' WHERE status = 'pending'`);
+  const q = (await g.get(`/api/public/book/${slug}/units/${unit.unit_id}/quote?check_in=${d(1)}&check_out=${d(3)}`)).data;
+  assert.equal(q.deposit_allowed, false);
+  assert.equal((await client(srv.base).post(`/api/public/book/${slug}/units/${unit.unit_id}/checkout`, form({ check_in: d(1), check_out: d(3), pay: 'deposit', email: 'soon@example.com' }))).status, 400);
+  assert.equal((await g.get(`/api/public/book/${slug}/units/${unit.unit_id}/quote?check_in=${d(700)}&check_out=${d(702)}`)).status, 400);
+});
+
+test('review fixes: a changed host key does not lose a pending payment; lapsed holds are expired at PayMongo', async () => {
+  await sql(`UPDATE direct_checkouts SET status = 'expired' WHERE status = 'pending'`);
+  const g = client(srv.base);
+  await g.post(`/api/public/book/${slug}/units/${unit.unit_id}/checkout`, form({ check_in: d(100), check_out: d(102), pay: 'full', email: 'key@example.com' }));
+  const s = lastSession();
+  // Host replaces the key with a different (also valid) one before the guest's payment is confirmed.
+  await owner.patch('/api/direct-booking', { paymongo_secret_key: 'sk_test_hostOTHER9876543210' });
+  pay(s.id, 550000);
+  assert.equal(await direct.reconcileDirect() >= 1, true);
+  assert.equal((await sql('SELECT status FROM direct_checkouts WHERE provider_checkout_id = $1', [s.id]))[0].status, 'confirmed');
+  // A lapsed, unpaid hold is expired at PayMongo so it can't be paid later.
+  await g.post(`/api/public/book/${slug}/units/${unit.unit_id}/checkout`, form({ check_in: d(110), check_out: d(112), pay: 'full', email: 'lapse@example.com' }));
+  const s2 = lastSession();
+  await sql(`UPDATE direct_checkouts SET hold_until = now() - interval '1 minute' WHERE provider_checkout_id = $1`, [s2.id]);
+  await direct.reconcileDirect();
+  assert.equal((await sql('SELECT status FROM direct_checkouts WHERE provider_checkout_id = $1', [s2.id]))[0].status, 'expired');
+  assert.ok(expired.has(s2.id), 'PayMongo session expired');
 });

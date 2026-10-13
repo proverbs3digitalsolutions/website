@@ -244,7 +244,7 @@ router.get('/reservations/quote', ah(async (req, res) => {
 router.get('/reservations/:id', ah(async (req, res) => {
   const booking = await loadBooking(req.user, uuidParam(req.params.id));
   const { rows: payments } = await query(
-    `SELECT bp.*, u.full_name AS recorded_by_name FROM booking_payments bp JOIN users u ON u.user_id = bp.recorded_by
+    `SELECT bp.*, u.full_name AS recorded_by_name FROM booking_payments bp LEFT JOIN users u ON u.user_id = bp.recorded_by
       WHERE bp.booking_id = $1 ORDER BY bp.payment_date DESC, bp.created_at DESC`, [booking.booking_id]);
   res.json({ reservation: redactGuest(req.user, booking), payments });
 }));

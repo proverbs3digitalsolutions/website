@@ -35,7 +35,8 @@ export async function bookHostView(el, { params }) {
   document.title = `${host.name} — Book direct`;
   el.replaceChildren(shell(host.name, params.slug,
     h('section', { class: 'bk-hero' }, h('h1', null, host.name), host.intro && h('p', null, host.intro),
-      host.demo && h('p', { class: 'alert alert--info' }, 'This is a demo booking page. Bookings and payments are turned off.')),
+      host.demo && h('p', { class: 'alert alert--info' }, 'This is a demo booking page. Bookings and payments are turned off.'),
+      host.test_mode && h('p', { class: 'alert alert--warn' }, 'TEST MODE: this page uses a PayMongo test key, so payments are not real.')),
     !host.accepting && !host.demo && h('div', { class: 'alert alert--warn' }, 'Online booking is paused right now. Please contact the host directly.'),
     listings.length
       ? h('div', { class: 'bk-grid' }, listings.map((l) => h('a', { class: 'bk-card', href: `#/book/${params.slug}/${l.unit_id}` },
@@ -63,7 +64,13 @@ export async function bookListingView(el, { params, query }) {
     return;
   }
   document.title = `${l.unit_name} — ${host.name}`;
-  if (query.cancelled) toast('Payment cancelled. Your dates were not booked.');
+  if (query.cancelled) {
+    // Release the held dates right away so they can be booked again.
+    history.replaceState(null, '', `#/book/${slug}/${params.unitId}`);
+    post(`/public/book/cancel/${encodeURIComponent(query.cancelled)}`).catch(() => {});
+    toast('Payment cancelled. Nothing was charged and your dates were not booked.');
+  }
+  const testBanner = host.test_mode && h('div', { class: 'alert alert--warn' }, 'TEST MODE: this page uses a PayMongo test key, so payments are not real.');
 
   // Gallery
   const main = cover(l, 'bk-gallery__main');
@@ -147,12 +154,20 @@ export async function bookListingView(el, { params, query }) {
     try {
       const q = await get(`/public/book/${encodeURIComponent(slug)}/units/${l.unit_id}/quote?check_in=${checkIn}&check_out=${checkOut}`);
       current = q;
+      // Show only the payment choices allowed for these dates.
+      const full = payChoice.querySelector('input[value=full]');
+      const dep = payChoice.querySelector('input[value=deposit]');
+      if (dep) { dep.closest('label').hidden = !q.deposit_allowed; if (!q.deposit_allowed && dep.checked && full) full.checked = true; }
+      if (full) full.closest('label').hidden = !q.full_allowed;
+      if (!q.deposit_allowed && opt === 'deposit' && !full) {
+        payChoice.querySelector('.error').textContent = 'Your stay is too soon for a deposit; it will be charged in full.';
+      }
       summary.replaceChildren(h('dl', { class: 'dl' },
         h('dt', null, 'Dates'), h('dd', null, `${fmtDate(checkIn)} – ${fmtDate(checkOut)}`),
         h('dt', null, `${q.nights} night${q.nights > 1 ? 's' : ''}`), h('dd', null, peso(q.accommodation_total)),
         Number(q.cleaning_fee) > 0 && [h('dt', null, 'Cleaning fee'), h('dd', null, peso(q.cleaning_fee))],
         h('dt', null, 'Total'), h('dd', null, h('strong', null, peso(q.total))),
-        opt !== 'full' && [h('dt', null, '50% deposit'), h('dd', null, `${peso(q.deposit)} now, ${peso(Number(q.total) - Number(q.deposit))} due by ${fmtDate(q.balance_due_date)}`)]),
+        q.deposit_allowed && [h('dt', null, '50% deposit'), h('dd', null, `${peso(q.deposit)} now, ${peso(Number(q.total) - Number(q.deposit))} due by ${fmtDate(q.balance_due_date)}`)]),
       !q.available && h('div', { class: 'alert alert--error' }, 'Sorry, these dates are no longer available.'));
       submit.disabled = !q.available || !host.accepting;
     } catch (err) {
@@ -190,7 +205,8 @@ export async function bookListingView(el, { params, query }) {
     try {
       const r = await post(`/public/book/${encodeURIComponent(slug)}/units/${l.unit_id}/checkout`, {
         check_in: checkIn, check_out: checkOut, num_guests: Number(d.num_guests), name: d.name, email: d.email, phone: d.phone, notes: d.notes,
-        pay: form.querySelector('input[name=pay]:checked')?.value, consent: form.elements.consent.checked,
+        pay: current.deposit_allowed ? (form.querySelector('input[name=pay]:checked')?.value || 'full') : 'full',
+        consent: form.elements.consent.checked,
       });
       location.href = r.checkout_url;
     } catch (err) {
@@ -209,6 +225,7 @@ export async function bookListingView(el, { params, query }) {
   updateQuote();
 
   el.replaceChildren(shell(host.name, slug,
+    testBanner,
     h('a', { class: 'back', href: `#/book/${slug}` }, '‹ All places'),
     h('h1', { class: 'bk-title' }, l.unit_name),
     h('p', { class: 'muted' }, [l.property_name, l.city, l.province].filter(Boolean).join(', ')),
