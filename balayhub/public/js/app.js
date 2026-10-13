@@ -23,6 +23,7 @@ import { guestCheckinView } from './views/checkin.js';
 import { termsView } from './views/terms.js';
 import { bookHostView, bookListingView, bookDoneView } from './views/book.js';
 import { launchpadView } from './views/launchpad.js';
+import { payBalanceView } from './views/pay.js';
 
 export const state = { user: null, requireEmailVerification: true };
 
@@ -40,6 +41,7 @@ const routes = [
   ['/verify', authViews.verifyView, OPEN],
   ['/privacy', privacyView, OPEN],
   ['/terms', termsView, OPEN],
+  ['/pay/:token', payBalanceView, OPEN],
   ['/book/:slug', bookHostView, OPEN],
   ['/book/:slug/done/:token', bookDoneView, OPEN],
   ['/book/:slug/:unitId', bookListingView, OPEN],

@@ -71,7 +71,9 @@ Salamat po!
 
 A friendly reminder that your remaining balance of {{balance}} for {{listing_name}} ({{check_in}} – {{check_out}}) is due before check-in.
 
-You can pay by GCash, Maya or bank transfer. Please reply with your reference number once paid.
+{{payment_link}}
+
+You can also pay by GCash, Maya or bank transfer. If you do, please reply with your reference number.
 
 Thank you!
 {{host_name}}`,
@@ -82,6 +84,7 @@ const DEFAULT_AUTOMATIONS = [
   { key: 'confirmation', name: 'Send booking confirmation when a reservation is created', trigger_event: 'booking_created', offset_days: 0 },
   { key: 'checkin', name: 'Send check-in instructions 1 day before arrival', trigger_event: 'before_check_in', offset_days: 1, send_time: '10:00' },
   { key: 'thanks', name: 'Send a thank-you the day after check-out', trigger_event: 'after_check_out', offset_days: 1, send_time: '10:00' },
+  { key: 'payment_reminder', name: 'Remind guests with a balance 3 days before check-in', trigger_event: 'before_check_in', offset_days: 3, send_time: '10:00' },
 ];
 
 // Create default templates and (disabled) automations the first time a workspace uses the inbox.
@@ -123,11 +126,16 @@ async function bookingContext(bookingId) {
   // Every reservation gets a private check-in form link the first time it's needed.
   await query(`UPDATE bookings SET checkin_token = $2 WHERE booking_id = $1 AND checkin_token IS NULL AND kind = 'reservation'`,
     [bookingId, crypto.randomBytes(18).toString('base64url')]);
+  // A balance payment link, when the host takes payments online.
+  await query(`UPDATE bookings b SET pay_token = $2 FROM organizations o
+                WHERE b.booking_id = $1 AND b.pay_token IS NULL AND b.kind = 'reservation'
+                  AND o.organization_id = b.organization_id AND o.paymongo_key_hint IS NOT NULL`,
+    [bookingId, crypto.randomBytes(18).toString('base64url')]);
   return one(
     `SELECT b.*, u.unit_name, u.checkin_time, u.checkout_time, u.wifi_name, u.wifi_password, u.checkin_instructions, u.house_rules,
             p.property_name, p.address, p.city, p.province, p.organization_id AS org_id,
             g.full_name AS guest_name, g.email AS guest_email,
-            o.name AS workspace_name,
+            o.name AS workspace_name, o.paymongo_key_hint,
             (SELECT full_name FROM users WHERE organization_id = b.organization_id AND role = 'owner' ORDER BY created_at LIMIT 1) AS owner_name,
             (b.total_amount - COALESCE((SELECT SUM(amount) FROM booking_payments bp WHERE bp.booking_id = b.booking_id AND bp.voided_at IS NULL), 0))::numeric(12,2) AS balance
        FROM bookings b
@@ -160,6 +168,9 @@ function variables(ctx, sender) {
     checkin_instructions: ctx.checkin_instructions || '',
     house_rules: ctx.house_rules || '',
     checkin_link: ctx.checkin_token ? `${config.appUrl}/#/checkin/${ctx.checkin_token}` : '',
+    // A full sentence (or nothing) so templates read well either way.
+    payment_link: ctx.pay_token && ctx.paymongo_key_hint && Number(ctx.balance) > 0
+      ? `Pay securely online (GCash, Maya or card): ${config.appUrl}/#/pay/${ctx.pay_token}` : '',
     workspace_name: ctx.workspace_name,
     host_name: sender || ctx.owner_name || ctx.workspace_name,
   };
@@ -313,7 +324,7 @@ function automationSendAt(a, b) {
 // last 24 hours qualify, so turning an automation on never mass-mails old guests.
 async function runAutomations() {
   const { rows: autos } = await query(
-    `SELECT a.*, t.subject, t.body FROM automations a JOIN message_templates t USING (template_id)
+    `SELECT a.*, t.subject, t.body, t.system_key FROM automations a JOIN message_templates t USING (template_id)
       WHERE a.enabled AND NOT t.archived`);
   const inactive = autos.length ? await inactiveOrgIds() : new Set();
   let sent = 0;
@@ -334,6 +345,11 @@ async function runAutomations() {
       const ctx = await bookingContext(b.booking_id);
       if (!ctx.guest_email) {
         await query('UPDATE automation_runs SET skipped = $3 WHERE automation_id = $1 AND booking_id = $2', [a.automation_id, b.booking_id, 'no guest email']);
+        continue;
+      }
+      // Payment reminders only go to guests who still owe something.
+      if (a.system_key === 'payment_reminder' && Number(ctx.balance) <= 0) {
+        await query('UPDATE automation_runs SET skipped = $3 WHERE automation_id = $1 AND booking_id = $2', [a.automation_id, b.booking_id, 'fully paid']);
         continue;
       }
       const vars = variables(ctx);

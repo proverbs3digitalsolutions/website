@@ -217,7 +217,7 @@ test('archive, snooze, assign and views', async () => {
 test('automatic messages: only for stays due in the last day, once each, when turned on', async () => {
   outbox.length = 0;
   const autos = (await owner.get('/api/automations')).data.automations;
-  assert.equal(autos.length, 3);
+  assert.equal(autos.length, 4);
   assert.ok(autos.every((a) => !a.enabled), 'defaults start off');
   const checkin = autos.find((a) => a.trigger_event === 'before_check_in');
   assert.equal(await messaging.runAutomations(), 0);
@@ -330,7 +330,7 @@ test('review fixes: defaults created once under concurrency; stuck-send reset us
   const c = await ownerAccount(srv.base, 'race@example.com', 'Race Co');
   await Promise.all([c.get('/api/message-templates'), c.get('/api/automations'), c.get('/api/inbox'), c.get('/api/automations')]);
   const n = await sql(`SELECT COUNT(*)::int AS n FROM automations a JOIN organizations o USING (organization_id) WHERE o.name = 'Race Co'`);
-  assert.equal(n[0].n, 3);
+  assert.equal(n[0].n, 4);
 
   // An old message being retried right now is not flipped back to failed.
   const [m] = await sql(`INSERT INTO messages (conversation_id, organization_id, direction, body, status, scheduled_at, sending_started_at)

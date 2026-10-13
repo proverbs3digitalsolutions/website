@@ -233,6 +233,15 @@ export async function reservationDetailView(el, { params, rerender }) {
 
   const checkin = canManage && r.status === 'confirmed' ? await checkinCard(r.booking_id, rerender) : null;
 
+  // Private link where the guest pays the balance online (host's PayMongo).
+  const copyPayLink = async () => {
+    try {
+      const l = await get(`/reservations/${r.booking_id}/payment-link`);
+      if (!l.available) { toast(l.reason, 'error'); return; }
+      try { await navigator.clipboard.writeText(l.link); toast(`Payment link for ${peso(l.balance)} copied. Send it to the guest.`); } catch { window.prompt('Copy the payment link:', l.link); }
+    } catch (err) { toast(err.message, 'error'); }
+  };
+
   const emailReceipt = async (p) => {
     try { await post(`/booking-payments/${p.payment_id}/send-receipt`); toast(`Receipt emailed to ${r.guest_email}.`); rerender(); } catch (err) { toast(err.message, 'error'); }
   };
@@ -272,7 +281,9 @@ export async function reservationDetailView(el, { params, rerender }) {
         checkin),
       h('div', { class: 'stack' },
         h('div', { class: 'card' },
-          h('div', { class: 'card__head' }, h('h2', null, 'Payment'), confirmed && h('button', { class: 'btn btn--primary btn--sm', onclick: recordPayment }, 'Record payment')),
+          h('div', { class: 'card__head' }, h('h2', null, 'Payment'), h('div', { class: 'chips' },
+            canManage && confirmed && Number(r.balance) > 0 && h('button', { class: 'btn btn--secondary btn--sm', onclick: copyPayLink }, 'Copy payment link'),
+            confirmed && h('button', { class: 'btn btn--primary btn--sm', onclick: recordPayment }, 'Record payment'))),
           h('dl', { class: 'dl' },
             h('dt', null, 'Accommodation'), h('dd', null, peso(r.accommodation_total)),
             h('dt', null, 'Cleaning fee'), h('dd', null, peso(r.cleaning_fee)),
