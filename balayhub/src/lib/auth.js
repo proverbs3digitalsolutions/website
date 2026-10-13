@@ -55,8 +55,8 @@ async function createSession(res, userId) {
   const token = newToken();
   const ttl = config.sessionTtlHours * 3600;
   await query(
-    `INSERT INTO sessions (token_hash, user_id, expires_at) VALUES ($1, $2, now() + make_interval(secs => $3))`,
-    [hashToken(token), userId, ttl],
+    `INSERT INTO sessions (token_hash, user_id, expires_at, user_agent) VALUES ($1, $2, now() + make_interval(secs => $3), $4)`,
+    [hashToken(token), userId, ttl, String(res.req?.get('user-agent') || '').slice(0, 300) || null],
   );
   setSessionCookie(res, token, ttl);
 }
@@ -117,7 +117,7 @@ function requireWorkspace(req, res, next) {
 
 // Read-only workspaces (the public demo, an ended trial, an overdue plan) can
 // view and export everything but not change anything.
-const PLAN_EXEMPT = /^\/(auth\/|admin\/|invitations\/|billing\/|push\/|support\/|assistant\/|workspace\/delete\/cancel$)/;
+const PLAN_EXEMPT = /^\/(auth\/|admin\/|invitations\/|billing\/|push\/|support\/|assistant\/|account\/|workspace\/delete\/cancel$)/;
 function planGuard(req, res, next) {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) || !req.user?.organization_id) return next();
   // Guest-facing pages (opened by a private link) don't depend on who is signed in.

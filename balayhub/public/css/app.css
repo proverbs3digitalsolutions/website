@@ -252,7 +252,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
     background: var(--surface); color: var(--text); padding: 20px 14px; border-right: 1px solid var(--line);
   }
   .sidebar .brand { padding: 4px 8px 18px; }
-  .sidebar nav { display: grid; gap: 2px; }
+  .sidebar nav { display: grid; gap: 2px; align-content: start; flex: 1 1 auto; min-height: 0; overflow-y: auto; margin: 0 -6px; padding: 0 6px; }
   .sidebar nav a {
     display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px;
     color: var(--muted); text-decoration: none; font-weight: 600; font-size: .95rem;
@@ -260,7 +260,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   .sidebar nav a svg { width: 20px; height: 20px; }
   .sidebar nav a:hover { background: var(--teal-soft); color: var(--accent); }
   .sidebar nav a[aria-current="page"] { background: var(--forest); color: #fff; }
-  .sidebar__foot { margin-top: auto; border-top: 1px solid var(--line); padding: 14px 8px 0; font-size: .85rem; }
+  .sidebar__foot { flex: none; border-top: 1px solid var(--line); padding: 12px 8px 0; font-size: .85rem; }
   .sidebar__foot strong { display: block; }
   .sidebar__foot span { color: var(--muted); }
   .sidebar__foot button { margin-top: 10px; }
@@ -1104,3 +1104,19 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .flt__chip { border: 1px solid var(--line-2); background: var(--green-soft); color: var(--text); border-radius: 999px; padding: 4px 10px; font-size: .8rem; font-weight: 600; cursor: pointer; }
 .flt__chip:hover { border-color: var(--forest); }
 .flt__clear { border: 0; background: none; color: var(--accent); font-weight: 700; font-size: .8rem; cursor: pointer; text-decoration: underline; padding: 4px 6px; }
+
+/* ---------------------------------------------------------------- my account */
+.acct-avatar { width: 64px; height: 64px; border-radius: 50%; background: var(--forest); color: #fff; display: grid; place-items: center; font-weight: 800; font-size: 1.4rem; flex: none; }
+.acct-avatar--sm { width: 32px; height: 32px; font-size: .8rem; }
+.acct-hero { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+.acct-hero__main { flex: 1 1 240px; min-width: 0; display: grid; gap: 4px; }
+.acct-hero__main h1 { font-size: 1.5rem; }
+.acct-hero__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.acct-pref { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.acct-pref:first-of-type { border-top: 0; }
+.sidebar__me { display: flex; align-items: center; gap: 10px; color: var(--text); text-decoration: none; border-radius: 10px; padding: 6px; margin: -6px; }
+.sidebar__me > span:last-child { display: grid; min-width: 0; }
+.sidebar__me strong, .sidebar__me span span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar__me:hover, .sidebar__me[aria-current="page"] { background: var(--teal-soft); }
+.topbar__me { display: flex; align-items: center; gap: 8px; text-decoration: none; color: var(--text); }
+.sidebar__foot .acct-avatar { color: #fff; }

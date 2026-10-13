@@ -30,6 +30,7 @@ import { guestReviewView } from './views/review.js';
 import { gatepassSettingsView, gatepassPublicView } from './views/gatepass.js';
 import { stayReportsView } from './views/stayreports.js';
 import { reviewsView, discountCodesView } from './views/guestcare.js';
+import { accountView } from './views/account.js';
 import { helpView, helpNewView, helpTicketView, adminSupportView, adminSupportTicketView } from './views/help.js';
 import { registerServiceWorker, forgetThisDevice } from './notifications.js';
 import { themeSwitch } from './themeswitch.js';
@@ -91,6 +92,7 @@ const routes = [
   ['/admin', adminView, APP],
   ['/admin/support', adminSupportView, APP],
   ['/admin/support/:id', adminSupportTicketView, APP],
+  ['/account', accountView, APP],
   ['/help', helpView, APP],
   ['/help/new', helpNewView, APP],
   ['/help/tickets/:id', helpTicketView, APP],
@@ -237,7 +239,7 @@ function navLink([path, text, ic], current) {
   return h('a', { href: `#${path}`, 'aria-current': isCurrent(path, current) ? 'page' : null }, icon(ic), h('span', null, text));
 }
 
-async function logout() {
+export async function logout() {
   await forgetThisDevice();
   resetAssistant();
   try { await post('/auth/logout'); } catch { /* ignore */ }
@@ -250,11 +252,14 @@ function openMore(current) {
   const close = () => sheet.remove();
   const sheet = h('div', { class: 'morenav', onclick: (e) => { if (e.target === sheet) close(); } },
     h('div', { class: 'morenav__sheet', role: 'menu' },
+      h('a', { href: '#/account', onclick: close, 'aria-current': isCurrent('/account', current) ? 'page' : null }, icon('users'), 'My account'),
       moreNav().map(([p, t, ic]) => h('a', { href: `#${p}`, onclick: close, 'aria-current': isCurrent(p, current) ? 'page' : null }, icon(ic), t)),
       h('div', { class: 'morenav__theme' }, themeSwitch()),
       h('button', { onclick: () => { close(); logout(); } }, icon('logout'), 'Log out')));
   document.body.append(sheet);
 }
+
+const initials = (name) => String(name || '').split(/\s+/).filter(Boolean).slice(0, 2).map((x) => x[0].toUpperCase()).join('') || '?';
 
 function buildShell(path) {
   const u = state.user;
@@ -266,11 +271,13 @@ function buildShell(path) {
       brand(homeRoute()),
       h('nav', { 'aria-label': 'Main' }, NAV.map((n) => navLink(n, path))),
       h('div', { class: 'sidebar__foot' },
-        h('strong', null, u.full_name),
-        h('span', null, `${u.organization_name} · ${({ owner: 'Owner', manager: 'Manager', staff: 'Staff' })[u.role]}`),
+        h('a', { class: 'sidebar__me', href: '#/account', 'aria-current': isCurrent('/account', path) ? 'page' : null },
+          h('span', { class: 'acct-avatar acct-avatar--sm', 'aria-hidden': 'true' }, initials(u.full_name)),
+          h('span', null, h('strong', null, u.full_name), h('span', null, `${u.organization_name} · ${({ owner: 'Owner', manager: 'Manager', staff: 'Staff' })[u.role]}`))),
         themeSwitch({ compact: true }),
         h('button', { class: 'btn btn--secondary btn--sm btn--block', onclick: logout }, 'Log out'))),
-    h('header', { class: 'topbar' }, brand(homeRoute()), h('span', { class: 'topbar__org' }, u.organization_name)),
+    h('header', { class: 'topbar' }, brand(homeRoute()),
+      h('a', { class: 'topbar__me', href: '#/account', 'aria-label': 'My account' }, h('span', { class: 'topbar__org' }, u.organization_name), h('span', { class: 'acct-avatar acct-avatar--sm', 'aria-hidden': 'true' }, initials(u.full_name)))),
     h('div', { class: 'shell__main' }, planBanner(), content),
     h('nav', { class: 'bottomnav', 'aria-label': 'Main' },
       bottomKeys.map(([p, t, ic]) => h('a', { href: `#${p}`, 'aria-current': isCurrent(p, path) ? 'page' : null }, icon(ic), t === 'Rent & Expenses' ? 'Rent' : t)),

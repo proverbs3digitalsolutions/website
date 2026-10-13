@@ -17,7 +17,7 @@ function propertyChecks(properties, selected = []) {
 }
 
 // What each role can do, worded for the kind of rentals the workspace has.
-const ROLE_TEXT = {
+export const ROLE_TEXT = {
   short_term: {
     manager: 'Co-host for assigned buildings: reservations, guests, inbox, calendar and prices, cleaning, payments and deposits.',
     staff: 'Cleaners and front desk: see stays and cleaning tasks for assigned buildings, check guests in and out, record payments and deposits. No guest phone numbers or emails, no inbox or reports.',
@@ -54,7 +54,7 @@ export async function settingsView(el, { rerender, query = {} }) {
       h('dt', null, 'Email'), h('dd', null, u.email),
       h('dt', null, 'Workspace'), h('dd', null, u.organization_name),
       h('dt', null, 'Role'), h('dd', null, label(u.role))),
-    h('div', { style: { marginTop: '12px' } }, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: changePassword }, 'Change password')),
+    h('div', { class: 'chips', style: { marginTop: '12px' } }, h('a', { class: 'btn btn--secondary btn--sm', href: '#/account' }, 'My account'), h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: changePassword }, 'Change password')),
     u.role === 'owner' && h('div', { class: 'form', style: { marginTop: '14px' } },
       field({ name: 'business_type', label: 'Modules for this workspace', type: 'select', value: u.business_type, placeholderOption: false, options: [
         ['short_term', 'Short-term stays (Airbnb, staycations)'], ['long_term', 'Long-term rentals (leases, monthly rent)'], ['both', 'Both'],
@@ -286,7 +286,7 @@ function guestLanguageCard(u, rerender) {
       h('div', null, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: save }, 'Save'))));
 }
 
-function changePassword() {
+export function changePassword() {
   formModal({
     title: 'Change password',
     submitText: 'Change password',

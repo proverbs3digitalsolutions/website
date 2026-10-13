@@ -46,6 +46,82 @@ router.post('/auth/change-password', requireAuth, pwLimiter, ah(async (req, res)
   res.json({ ok: true });
 }));
 
+// ---------------------------------------------------------------- my account
+// "Chrome on Android" from a user-agent string; good enough to recognise a device.
+function deviceName(ua) {
+  if (!ua) return 'Earlier sign-in';
+  const browser = /Edg\//.test(ua) ? 'Edge' : /SamsungBrowser/.test(ua) ? 'Samsung Internet' : /OPR\//.test(ua) ? 'Opera'
+    : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'Browser';
+  const os = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android'
+    : /Windows/.test(ua) ? 'Windows' : /Mac OS X|Macintosh/.test(ua) ? 'Mac' : /CrOS/.test(ua) ? 'Chromebook' : /Linux/.test(ua) ? 'Linux' : '';
+  return os ? `${browser} on ${os}` : browser;
+}
+const sessionId = (hash) => hash.slice(0, 16);
+
+router.get('/account/profile', requireAuth, ah(async (req, res) => {
+  const u = req.user;
+  const extra = await one('SELECT created_at, google_sub IS NOT NULL AS google_linked, notify_prefs FROM users WHERE user_id = $1', [u.user_id]);
+  const { rows: sessions } = await query(
+    `SELECT token_hash, created_at, last_seen_at, user_agent FROM sessions
+      WHERE user_id = $1 AND expires_at > now() AND last_seen_at > now() - make_interval(hours => $2) ORDER BY last_seen_at DESC LIMIT 20`,
+    [u.user_id, config.sessionIdleHours]);
+  let workspace = null; let properties = []; let owner = null; let activity = []; let support = null;
+  if (u.organization_id) {
+    const { planStatus } = require('../lib/plans');
+    const org = await one('SELECT created_at FROM organizations WHERE organization_id = $1', [u.organization_id]);
+    workspace = { name: u.organization_name, business_type: u.business_type, role: u.role, created_at: org.created_at, plan: planStatus(u),
+      members: (await one(`SELECT COUNT(*)::int AS n FROM users WHERE organization_id = $1 AND account_status = 'active'`, [u.organization_id])).n };
+    // Which properties this person works on (owners see everything).
+    ({ rows: properties } = await query(
+      u.role === 'owner'
+        ? `SELECT p.property_id, p.property_name, p.city, (SELECT COUNT(*)::int FROM units x WHERE x.property_id = p.property_id AND x.status = 'active') AS units
+             FROM properties p WHERE p.organization_id = $1 AND p.status = 'active' ORDER BY p.property_name`
+        : `SELECT p.property_id, p.property_name, p.city, (SELECT COUNT(*)::int FROM units x WHERE x.property_id = p.property_id AND x.status = 'active') AS units
+             FROM property_assignments a JOIN properties p USING (property_id) WHERE a.user_id = $2 AND p.organization_id = $1 AND p.status = 'active' ORDER BY p.property_name`,
+      u.role === 'owner' ? [u.organization_id] : [u.organization_id, u.user_id]));
+    if (u.role !== 'owner') owner = await one(`SELECT full_name, email FROM users WHERE organization_id = $1 AND role = 'owner' AND account_status = 'active' ORDER BY created_at LIMIT 1`, [u.organization_id]);
+    ({ rows: activity } = await query(
+      `SELECT action, record_type, created_at FROM audit_logs WHERE organization_id = $1 AND actor_user_id = $2
+        AND action NOT IN ('auth.login', 'auth.logout', 'auth.login_google', 'file.downloaded') ORDER BY created_at DESC LIMIT 15`,
+      [u.organization_id, u.user_id]));
+    support = await one(
+      `SELECT COUNT(*) FILTER (WHERE status IN ('new', 'in_progress', 'waiting_on_customer'))::int AS open,
+              COUNT(*) FILTER (WHERE status = 'waiting_on_customer')::int AS waiting
+         FROM support_tickets WHERE created_by = $1`, [u.user_id]);
+  }
+  res.json({
+    user: { full_name: u.full_name, email: u.email, phone: u.phone, email_verified: Boolean(u.email_verified_at), created_at: extra.created_at, google_linked: extra.google_linked,
+      notifications_on: Object.keys(extra.notify_prefs || {}).length > 0 },
+    workspace, properties, owner, activity, support,
+    sessions: sessions.map((x) => ({ id: sessionId(x.token_hash), device: deviceName(x.user_agent), created_at: x.created_at, last_seen_at: x.last_seen_at, current: x.token_hash === u.token_hash })),
+  });
+}));
+
+router.patch('/account/profile', requireAuth, ah(async (req, res) => {
+  const body = validate(req.body, {
+    full_name: { type: 'string', required: true, max: 120, label: 'Full name' },
+    phone: { type: 'phone', label: 'Mobile number' },
+  });
+  await query('UPDATE users SET full_name = $2, phone = $3 WHERE user_id = $1', [req.user.user_id, body.full_name, body.phone || null]);
+  await audit(null, req.user, 'user.profile_updated', 'user', req.user.user_id);
+  res.json({ ok: true });
+}));
+
+// Sign out one other device, or every device except this one.
+router.post('/account/sessions/logout-others', requireAuth, ah(async (req, res) => {
+  const { rowCount } = await query('DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2', [req.user.user_id, req.user.token_hash]);
+  await audit(null, req.user, 'auth.signed_out_others', 'user', req.user.user_id, { sessions: rowCount });
+  res.json({ ok: true, signed_out: rowCount });
+}));
+
+router.post('/account/sessions/:id/logout', requireAuth, ah(async (req, res) => {
+  const id = String(req.params.id);
+  if (!/^[a-f0-9]{16}$/.test(id)) throw new HttpError(404, 'Not found.', { code: 'NOT_FOUND' });
+  const { rowCount } = await query(`DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2 AND left(token_hash, 16) = $3`, [req.user.user_id, req.user.token_hash, id]);
+  if (!rowCount) throw new HttpError(404, 'That device is already signed out.', { code: 'NOT_FOUND' });
+  res.json({ ok: true });
+}));
+
 const exportLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 10, key: (req) => `export|${req.user.organization_id}` });
 
 workspaceRouter.get('/workspace/export', owners, exportLimiter, ah(async (req, res) => {
