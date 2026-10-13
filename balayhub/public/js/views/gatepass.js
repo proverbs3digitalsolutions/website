@@ -16,7 +16,7 @@ export async function gatepassSettingsView(el, { rerender }) {
         options: [['0', 'On the check-in day'], ['1', '1 day before'], ['2', '2 days before'], ['3', '3 days before'], ['5', '5 days before'], ['7', '7 days before']],
         hint: 'BalayHub waits for the guest\'s check-in form (names, IDs) until the day before arrival, then sends what it has and tells you.' }),
       field({ name: 'gatepass_attach_ids', label: 'Attach the guests\' ID photos to the email', type: 'checkbox', value: p.gatepass_attach_ids,
-        hint: 'Off: the admin views the IDs through a private link that stops working after check-out (safer).' }),
+        hint: 'Off (recommended): the admin views the IDs through a private link that stops working after check-out. On: copies stay in the admin\'s mailbox and are not deleted after the stay.' }),
       field({ name: 'gatepass_authorized_by', label: 'Authorized by (unit owner name on file with admin)', value: p.gatepass_authorized_by, maxlength: 120 }),
       field({ name: 'gatepass_notes', label: 'Notes for the admin (optional)', type: 'textarea', value: p.gatepass_notes, maxlength: 1000, placeholder: 'e.g. Parking slot B2-15 is assigned to the guest. Pets not allowed.' }),
     ],
@@ -64,7 +64,7 @@ export async function gatepassCard(bookingId, rerender) {
 }
 
 // ---------------------------------------------------------------- building admin's page
-export async function gatepassPublicView(el, { params, query = {} }) {
+export async function gatepassPublicView(el, { params }) {
   const token = params.token;
   const page = (...children) => h('div', { class: 'gc' },
     h('header', { class: 'gc__top no-print' }, brand(null)),
@@ -78,7 +78,6 @@ export async function gatepassPublicView(el, { params, query = {} }) {
   const ack = async () => {
     try { await post(`/public/gatepass/${encodeURIComponent(token)}/ack`); d.acknowledged_at = new Date().toISOString(); toast('Thank you! The host has been told you received it.'); draw(); } catch (err) { toast(err.message, 'error'); }
   };
-  if (query.ack && !d.acknowledged_at) await ack();
   function draw() {
     el.replaceChildren(page(
       h('div', { class: 'card receipt' },

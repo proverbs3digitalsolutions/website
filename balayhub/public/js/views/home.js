@@ -5,6 +5,7 @@ import { h, icon, peso, fmtDate, fmtMonth, badge, emptyState, toast, todayManila
 import { state, navigate } from '../app.js';
 import { barChart, lineChart, SERIES } from '../charts.js';
 import { launchpadReminder } from './launchpad.js';
+import { depositsDueCard } from './deposits.js';
 
 const shortDay = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
 const pesoWhole = (v) => `₱${Math.round(Number(v || 0)).toLocaleString('en-PH')}`;
@@ -146,7 +147,7 @@ function revenueSection() {
 const label = (v) => ({ direct: 'Direct', airbnb: 'Airbnb', booking: 'Booking.com', agoda: 'Agoda', other: 'Other' })[v] || v;
 
 export async function homeView(el, { rerender } = {}) {
-  const [{ listings }, onboard] = await Promise.all([get('/listings'), launchpadReminder(rerender)]);
+  const [{ listings }, onboard, deposits] = await Promise.all([get('/listings'), launchpadReminder(rerender), depositsDueCard()]);
   const first = state.user.full_name.split(' ')[0];
   const head = h('div', { class: 'page-head' },
     h('div', { class: 'page-head__title' }, h('h1', null, `Welcome back, ${first}`), h('p', null, `${state.user.organization_name} · ${fmtDate(todayManila())}`)),
@@ -161,5 +162,5 @@ export async function homeView(el, { rerender } = {}) {
     })));
     return;
   }
-  el.replaceChildren(head, h('div', { class: 'stack' }, onboard, overviewCard(), trendsCard(), revenueSection()));
+  el.replaceChildren(head, h('div', { class: 'stack' }, onboard, overviewCard(), deposits, trendsCard(), revenueSection()));
 }

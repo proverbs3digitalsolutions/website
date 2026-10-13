@@ -101,10 +101,37 @@ test('send by hand with IDs attached; staff and other workspaces can\'t', async 
   assert.equal(r.status, 200, JSON.stringify(r.data));
   const m = outbox.at(-1);
   assert.equal(m.attachments.length, 2);
-  // Sending again keeps the same link and clears the receipt confirmation.
+  const tok1 = m.text.match(/#\/gatepass\/([A-Za-z0-9_-]+)/)[1];
+  // Sending again to the same admin keeps the link.
   await host.post(`/api/reservations/${b.booking_id}/gatepass/send`);
   const st = (await host.get(`/api/reservations/${b.booking_id}/gatepass`)).data.pass;
   assert.equal(st.send_count, 2);
+  assert.equal(outbox.at(-1).text.match(/#\/gatepass\/([A-Za-z0-9_-]+)/)[1], tok1);
+  // A corrected admin email gets a new link; the old recipient loses access.
+  await host.patch(`/api/properties/${prop.property_id}/gatepass`, { admin_email: 'newadmin@azure.ph' });
+  await host.post(`/api/reservations/${b.booking_id}/gatepass/send`);
+  const tok2 = outbox.at(-1).text.match(/#\/gatepass\/([A-Za-z0-9_-]+)/)[1];
+  assert.notEqual(tok2, tok1);
+  assert.equal((await client(srv.base).get(`/api/public/gatepass/${tok1}`)).status, 404);
+  assert.equal((await client(srv.base).get(`/api/public/gatepass/${tok2}`)).status, 200);
+
+  // Moved to another building: the old link stops working and the new building gets a pass.
+  const p2 = (await host.post('/api/properties', { property_name: 'Grass Residences', property_type: 'condominium', address: 'EDSA', city: 'Quezon City', province: 'Metro Manila' })).data.property;
+  const u2 = (await host.post(`/api/properties/${p2.property_id}/units`, { unit_name: 'T1-805', unit_type: 'studio', nightly_rate: '2000', max_guests: 4 })).data.unit;
+  await host.patch(`/api/properties/${p2.property_id}/gatepass`, { admin_email: 'admin@grass.ph', gatepass_enabled: true, gatepass_days_before: 7 });
+  const moved = await newStay(4, 'Mover', 1);
+  await host.post(`/api/reservations/${moved.booking_id}/gatepass/send`);
+  const tokA = outbox.at(-1).text.match(/#\/gatepass\/([A-Za-z0-9_-]+)/)[1];
+  assert.equal((await host.patch(`/api/reservations/${moved.booking_id}`, { unit_id: u2.unit_id })).status, 200);
+  assert.equal((await client(srv.base).get(`/api/public/gatepass/${tokA}`)).status, 404);
+  await fillForm(moved, 0);
+  outbox.length = 0;
+  assert.ok(await gatepass.sendDuePasses() >= 1);
+  assert.ok(outbox.some((x) => x.to === 'admin@grass.ph' && /T1-805/.test(x.text)));
+
+  // Stays that are over can't be sent.
+  const past = (await host.post('/api/reservations', { unit_id: unit.unit_id, check_in: d(-9), check_out: d(-8), guest_name: 'Past' })).data.reservation;
+  assert.equal((await host.post(`/api/reservations/${past.booking_id}/gatepass/send`)).status, 409);
 
   const inv = await host.post('/api/team/invitations', { email: 'staff@example.com', role: 'staff', property_ids: [prop.property_id] });
   const staff = client(srv.base);

@@ -101,7 +101,7 @@ export async function guestCheckinView(el, { params }) {
       photos, progress),
     h('div', { class: 'field', dataset: { field: 'consent' } },
       h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'consent', checked: Boolean(r) }),
-        h('span', null, `I agree that ${s.workspace_name} may use these details and ID photos to register our stay with the building, as required under the Data Privacy Act. ID photos are deleted ${s.id_retention_days} days after check-out.`)),
+        h('span', null, `I agree that ${s.workspace_name} may use these details and ID photos to register our stay with the building, as required under the Data Privacy Act. BalayHub deletes the ID photos ${s.id_retention_days} days after check-out; copies given to the building follow the building's own rules.`)),
       h('div', { class: 'error', role: 'alert' })),
     submit);
 

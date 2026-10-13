@@ -118,7 +118,7 @@ function passText(b, token) {
     b.gatepass_notes ? `\n${b.gatepass_notes}` : null,
     '',
     `Gate pass${b.ids.length ? ' with guest IDs' : ''} (printable): ${passLink(token)}`,
-    `Please click to confirm you received this: ${passLink(token)}?ack=1`,
+    `Please open the link and press "Confirm received" so we know you got it.`,
     '',
     `Authorized by: ${host}`,
     b.owner?.email ? `Contact: ${b.owner.email}` : null,
@@ -133,13 +133,20 @@ async function sendPass(bookingId, { user = null } = {}) {
   const b = await passData(bookingId);
   if (!b || b.kind !== 'reservation') throw notFound();
   if (b.status !== 'confirmed') throw new HttpError(409, 'This reservation is cancelled.', { code: 'CANCELLED' });
+  if (manilaToday() > b.check_out) throw new HttpError(409, 'This stay is over, so no gate pass is needed.', { code: 'STAY_OVER' });
   if (b.is_demo || planStatus(b).read_only) throw new HttpError(409, 'Gate passes can\'t be sent while the workspace is read-only.', { code: 'READ_ONLY' });
   const to = parseEmails(b.admin_email);
   if (!to?.length) throw new HttpError(409, 'Add the building admin\'s email first (Listings → Gate pass settings).', { code: 'NO_ADMIN_EMAIL' });
+  // A new private link whenever the recipients or the building change, so earlier
+  // recipients (e.g. a mistyped address, the previous building) lose access.
   const gp = await one(
-    `INSERT INTO gate_passes (organization_id, booking_id, token) VALUES ($1,$2,$3)
-     ON CONFLICT (booking_id) DO UPDATE SET booking_id = EXCLUDED.booking_id RETURNING *`,
-    [b.organization_id, b.booking_id, crypto.randomBytes(18).toString('base64url')]);
+    `INSERT INTO gate_passes (organization_id, booking_id, token, property_id, sent_to) VALUES ($1,$2,$3,$4,$5)
+     ON CONFLICT (booking_id) DO UPDATE SET
+       token = CASE WHEN gate_passes.sent_to IS DISTINCT FROM EXCLUDED.sent_to OR gate_passes.property_id IS DISTINCT FROM EXCLUDED.property_id
+                    THEN EXCLUDED.token ELSE gate_passes.token END,
+       property_id = EXCLUDED.property_id
+     RETURNING *`,
+    [b.organization_id, b.booking_id, crypto.randomBytes(18).toString('base64url'), b.property_id, to.join(', ')]);
   const attachments = b.gatepass_attach_ids ? b.ids.map((f) => ({ filename: f.file_name, path: path.resolve(config.storageDir, f.storage_key), contentType: f.mime_type }))
     .filter((a) => a.path.startsWith(path.resolve(config.storageDir) + path.sep) && fs.existsSync(a.path)) : undefined;
   const { sendMail } = require('../lib/mailer');
@@ -193,19 +200,23 @@ router.post('/reservations/:id/gatepass/send', managers, ah(async (req, res) => 
 async function sendDuePasses() {
   const today = manilaToday();
   const { rows } = await query(
-    `SELECT b.booking_id, b.check_in::text, (r.registration_id IS NOT NULL) AS has_form, gp.status AS pass_status, gp.missing_form_noted_at
+    `SELECT b.booking_id, b.check_in::text, (r.registration_id IS NOT NULL) AS has_form, gp.status AS pass_status, gp.missing_form_noted_at,
+            o.plan, o.trial_ends_at, o.paid_until, o.is_demo, o.deletion_scheduled_at
        FROM bookings b JOIN units u ON u.unit_id = b.unit_id JOIN properties p ON p.property_id = u.property_id
        JOIN organizations o ON o.organization_id = b.organization_id
        LEFT JOIN guest_registrations r ON r.booking_id = b.booking_id
        LEFT JOIN gate_passes gp ON gp.booking_id = b.booking_id
       WHERE b.kind = 'reservation' AND b.status = 'confirmed' AND p.gatepass_enabled AND p.admin_email IS NOT NULL AND NOT o.is_demo
+        AND o.deletion_scheduled_at IS NULL
         AND b.check_in >= $1::date AND b.check_in - p.gatepass_days_before <= $1::date
-        AND (gp.gatepass_id IS NULL OR (gp.status = 'failed' AND gp.send_count = 0 AND gp.created_at > now() - interval '1 day'))
+        AND (gp.gatepass_id IS NULL OR gp.property_id IS DISTINCT FROM p.property_id
+             OR (gp.status = 'failed' AND gp.send_count = 0 AND gp.created_at > now() - interval '1 day'))
       ORDER BY b.check_in LIMIT 50`, [today]);
   let sent = 0;
   for (const r of rows) {
     const lastChance = r.check_in <= addDays(today, 1);
     if (!r.has_form && !lastChance) continue;
+    if (planStatus(r).read_only) continue;
     try {
       await sendPass(r.booking_id);
       sent += 1;
@@ -236,7 +247,7 @@ async function loadByToken(token) {
   const gp = await one('SELECT * FROM gate_passes WHERE token = $1', [token]);
   if (!gp) throw notFound('This gate pass link is not valid.');
   const b = await passData(gp.booking_id);
-  if (!b || b.status !== 'confirmed' || manilaToday() > addDays(b.check_out, 1)) throw notFound('This gate pass has expired.');
+  if (!b || b.status !== 'confirmed' || manilaToday() > addDays(b.check_out, 1) || gp.property_id !== b.property_id) throw notFound('This gate pass has expired.');
   return { gp, b };
 }
 

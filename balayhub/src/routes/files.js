@@ -47,6 +47,15 @@ async function checkRecord(user, type, id) {
       if (!row) throw notFound();
       return row;
     }
+    case 'deposit': {
+      const { propertyScope } = require('../lib/access');
+      const params = [id];
+      const row = await one(`SELECT d.deposit_id FROM stay_deposits d JOIN bookings b USING (booking_id)
+                               JOIN units u ON u.unit_id = b.unit_id JOIN properties p ON p.property_id = u.property_id
+                              WHERE d.deposit_id = $1 AND ${propertyScope(user, params)}`, params);
+      if (!row) throw notFound();
+      return row;
+    }
     case 'registration': {
       // Guest IDs: owners and managers only.
       if (user.role === 'staff') throw forbidden('Guest IDs are limited to owners and property managers.');

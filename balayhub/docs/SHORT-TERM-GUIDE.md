@@ -81,6 +81,14 @@ and security). Turn on automatic sending and choose how many days before check-i
 - IDs are shown through the private link by default (it stops working the day after check-out).
   You can choose to attach them to the email instead.
 
+## Security deposits
+
+On a reservation, **Record deposit** when the guest pays the refundable deposit (the listing's
+"Security deposit" amount is suggested). It is kept apart from booking income. After check-out it
+appears on Home under **Deposits to return**. Press **Return deposit**: return it all, or deduct
+for damage with a reason the guest sees, and add photos. The guest can get an acknowledgement and a
+summary by email. Staff can record deposits; owners and managers return them.
+
 ## Pricing helpers
 
 Set them per listing (Listings → Edit → *Pricing helpers*) and in **Calendar → Pricing rules**:
