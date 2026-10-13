@@ -18,7 +18,7 @@ const router = express.Router();
 const managers = requireRole('owner', 'manager');
 
 const TODAY = `(now() AT TIME ZONE 'Asia/Manila')::date`;
-const CHANNELS = ['direct', 'airbnb', 'booking', 'agoda', 'other'];
+const CHANNELS = ['direct', 'airbnb', 'booking', 'agoda', 'vrbo', 'expedia', 'tripcom', 'other'];
 const METHODS = ['cash', 'bank_transfer', 'gcash', 'maya', 'card', 'channel_payout', 'other'];
 
 const today = async () => (await one(`SELECT ${TODAY} AS d`)).d;
@@ -692,7 +692,7 @@ router.post('/units/:id/channels/rotate', managers, ah(async (req, res) => {
 router.post('/ical-feeds', managers, ah(async (req, res) => {
   const body = validate(req.body, {
     unit_id: { type: 'uuid', required: true, label: 'Listing' },
-    channel: { type: 'enum', values: ['airbnb', 'booking', 'agoda', 'other'], required: true, label: 'Channel' },
+    channel: { type: 'enum', values: ['airbnb', 'booking', 'agoda', 'vrbo', 'expedia', 'tripcom', 'other'], required: true, label: 'Channel' },
     url: { type: 'string', required: true, max: 1000, label: 'Calendar link' },
   });
   const unit = await loadUnit(req.user, body.unit_id);

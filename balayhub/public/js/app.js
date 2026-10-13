@@ -306,11 +306,19 @@ onAuthLost(async (err) => {
   }
 });
 
-export function afterLogin() {
+export async function afterLogin() {
   let ret = null;
   try { ret = sessionStorage.getItem('bh-return'); sessionStorage.removeItem('bh-return'); } catch { /* ignore */ }
-  const next = setupRedirect() || (ret && ret.startsWith('#/') && !/^#\/(login|signup|$)/.test(ret) ? ret : homeRoute());
-  navigate(next, { replace: true });
+  let next = setupRedirect() || (ret && ret.startsWith('#/') && !/^#\/(login|signup|$)/.test(ret) ? ret : null);
+  // Owners still setting up start on the Launchpad (until it's finished or they hide the reminder).
+  const u = state.user;
+  if (!next && u?.role === 'owner' && u.business_type !== 'long_term' && !u.plan?.is_demo) {
+    try {
+      const o = await get('/onboarding');
+      if (!o.complete && !o.dismissed) next = '#/launchpad';
+    } catch { /* fall back to Home */ }
+  }
+  navigate(next || homeRoute(), { replace: true });
 }
 
 function updateOnline() {

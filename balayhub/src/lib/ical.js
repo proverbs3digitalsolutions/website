@@ -162,7 +162,7 @@ function fetchText(rawUrl, redirects = 3) {
 }
 
 // ---------------------------------------------------------------- import: sync
-const CHANNEL_LABEL = { airbnb: 'Airbnb', booking: 'Booking.com', agoda: 'Agoda', other: 'Channel' };
+const CHANNEL_LABEL = { airbnb: 'Airbnb', booking: 'Booking.com', agoda: 'Agoda', vrbo: 'Vrbo', expedia: 'Expedia', tripcom: 'Trip.com', other: 'Channel' };
 
 function randomCode(prefix) {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';

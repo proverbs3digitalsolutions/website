@@ -126,7 +126,7 @@ export async function calendarView(el, { query }) {
 
   dateInput.addEventListener('change', () => { if (dateInput.value) { view.start = dateInput.value; load(); } });
   const legend = h('div', { class: 'chips cal-legend' },
-    ['direct', 'airbnb', 'booking', 'agoda'].map((c) => h('span', { class: 'cal-legend__item' }, h('span', { class: `cal-swatch cal-bar--${c}` }), CHANNEL_LABEL[c])),
+    ['direct', 'airbnb', 'booking', 'agoda', 'vrbo', 'expedia', 'tripcom'].map((c) => h('span', { class: 'cal-legend__item' }, h('span', { class: `cal-swatch cal-bar--${c}` }), CHANNEL_LABEL[c])),
     h('span', { class: 'cal-legend__item' }, h('span', { class: 'cal-swatch cal-bar--block' }), 'Blocked'));
 
   el.replaceChildren(

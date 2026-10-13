@@ -366,6 +366,9 @@ dialog.modal::backdrop { background: rgba(10, 20, 35, .45); }
 .badge--ch-airbnb { background: #fdecee; color: #c0263a; }
 .badge--ch-booking { background: #e6eefb; color: #1e4fa3; }
 .badge--ch-agoda { background: #f2ebfb; color: #6a35b5; }
+.badge--ch-vrbo { background: #e0f4f8; color: #0e6f86; }
+.badge--ch-expedia { background: #fdeee4; color: #b43c0a; }
+.badge--ch-tripcom { background: #ebeafd; color: #4338ca; }
 .badge--ch-other { background: var(--gray-soft); color: var(--muted); }
 
 /* charts */
@@ -418,6 +421,9 @@ dialog.modal::backdrop { background: rgba(10, 20, 35, .45); }
 .cal-bar--airbnb { background: #d93b52; }
 .cal-bar--booking { background: #1e4fa3; }
 .cal-bar--agoda { background: #6a35b5; }
+.cal-bar--vrbo { background: #0891b2; }
+.cal-bar--expedia { background: #c2410c; }
+.cal-bar--tripcom { background: #4f46e5; }
 .cal-bar--other { background: #5b6878; }
 .cal-bar--block { background: #c9d1dc; color: #3b4652; }
 .cal-legend { margin-bottom: 10px; gap: 12px; font-size: .82rem; color: var(--muted); }

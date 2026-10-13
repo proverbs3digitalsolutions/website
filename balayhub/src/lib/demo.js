@@ -30,8 +30,8 @@ const CONVERSATIONS = [
 async function createStaysWorkspace({ email, passwordHash, isDemo = false }) {
   return tx(async (db) => {
     const { rows: [org] } = await db.query(
-      `INSERT INTO organizations (name, business_type, plan, is_demo, demo_anchor)
-       VALUES ('Reyes Staycations', 'short_term', 'comped', $1, $2) RETURNING organization_id`, [isDemo, isDemo ? manilaToday() : null]);
+      `INSERT INTO organizations (name, business_type, plan, is_demo, demo_anchor, onboarding_dismissed_at)
+       VALUES ('Reyes Staycations', 'short_term', 'comped', $1, $2, now()) RETURNING organization_id`, [isDemo, isDemo ? manilaToday() : null]);
     const orgId = org.organization_id;
     const { rows: [owner] } = await db.query(
       `INSERT INTO users (full_name, email, password_hash, organization_id, role, email_verified_at)

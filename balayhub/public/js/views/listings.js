@@ -149,7 +149,7 @@ async function channelsModal(listing, onChange) {
   const addForm = h('form', { class: 'form', novalidate: true },
     status,
     h('div', { class: 'form-row form-row--2' },
-      field({ name: 'channel', label: 'Channel', type: 'select', value: 'airbnb', placeholderOption: false, options: [['airbnb', 'Airbnb'], ['booking', 'Booking.com'], ['agoda', 'Agoda'], ['other', 'Other']] }),
+      field({ name: 'channel', label: 'Channel', type: 'select', value: 'airbnb', placeholderOption: false, options: [['airbnb', 'Airbnb'], ['booking', 'Booking.com'], ['agoda', 'Agoda'], ['vrbo', 'Vrbo'], ['expedia', 'Expedia'], ['tripcom', 'Trip.com'], ['other', 'Other (any site with a calendar link)']] }),
       field({ name: 'url', label: 'Their calendar (iCal) link', type: 'url', placeholder: 'https://www.airbnb.com/calendar/ical/…' })),
     h('div', { class: 'form-actions' }, h('button', { class: 'btn btn--primary', type: 'submit' }, 'Connect calendar')));
   addForm.addEventListener('submit', async (e) => {

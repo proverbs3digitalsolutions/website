@@ -78,6 +78,9 @@ BalayHub syncs with the channels through **calendar (iCal) links**. These are fr
 - **Booking.com:** Rates & Availability → **Sync calendars** → Import calendar
 - **Agoda (YCS):** Calendar → **iCal / Calendar sync** → Import
 
+- **Vrbo, Expedia, Trip.com:** look for "Calendar sync", "iCal" or "Import/Export calendar" in the property's calendar settings. Not every account type has it (for example many Expedia and Trip.com hotel accounts don't); if yours doesn't, you can still add those bookings by hand and choose the channel so your reports show where bookings come from.
+- **Any other site** that gives you a calendar link (for example Holidu, Plum Guide or Glamping Hub): choose **Other**.
+
   _Channels rename these menus from time to time. If a step looks different, search their help center for "import calendar" or "iCal"._
 
 **2. Bring channel bookings into BalayHub.** On each channel, copy its **Export calendar** link. Then in BalayHub open **Listings → Channels → "Bring in bookings from your channels"**, choose the channel, paste the link and click **Connect calendar**.
