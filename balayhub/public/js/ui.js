@@ -265,6 +265,7 @@ export function readForm(form) {
 
 export function clearErrors(form) {
   form.querySelectorAll('.field--invalid').forEach((f) => f.classList.remove('field--invalid'));
+  form.querySelectorAll('[aria-invalid]').forEach((f) => f.removeAttribute('aria-invalid'));
   form.querySelectorAll('.field .error').forEach((e) => { e.textContent = ''; });
   form.querySelector('.form-error')?.replaceChildren();
 }
@@ -275,8 +276,11 @@ export function showErrors(form, fields = {}) {
     const wrap = form.querySelector(`[data-field="${CSS.escape(name)}"]`);
     if (!wrap) continue;
     wrap.classList.add('field--invalid');
-    wrap.querySelector('.error').textContent = msg;
-    first ||= wrap.querySelector('input, select, textarea');
+    const err = wrap.querySelector('.error');
+    if (err) err.textContent = msg;
+    const input = wrap.querySelector('input, select, textarea');
+    input?.setAttribute('aria-invalid', 'true');
+    first ||= input;
   }
   first?.focus();
 }

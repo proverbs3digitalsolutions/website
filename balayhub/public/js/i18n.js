@@ -145,6 +145,20 @@ const TL = {
   'Please choose a photo.': 'Pumili ng litrato.',
   'This photo is too large. Please take a smaller one.': 'Masyadong malaki ang litrato. Kumuha ng mas maliit.',
   // review page
+  'Full name (as on your ID)': 'Buong pangalan (gaya ng nasa ID)',
+  'Mobile': 'Mobile',
+  'Code {code}': 'Code {code}',
+  'Code {code} applied: −{amount}.': 'Nagamit ang code {code}: −{amount}.',
+  'from ': 'mula ',
+  'Holiday price': 'Holiday price',
+  'Show photo {n}': 'Ipakita ang litrato {n}',
+  '{amount}, due by {date}': '{amount}, bayaran hanggang {date}',
+  'This booking was cancelled': 'Na-cancel ang booking na ito',
+  'Due by {date}': 'Bayaran hanggang {date}',
+  'Your stay has ended or was cancelled': 'Tapos na o na-cancel ang stay mo',
+  'You can leave feedback once your stay starts.': 'Puwede kang mag-feedback kapag nagsimula na ang stay mo.',
+  'Feedback opens soon': 'Malapit nang magbukas ang feedback',
+  '1 star – {label}': '1 star – {label}',
   'Poor': 'Hindi maganda', 'Fair': 'Okay lang', 'Good': 'Maganda', 'Very good': 'Napakaganda', 'Excellent': 'Sobrang ganda',
   'Tap a star': 'Pindutin ang star', 'Optional': 'Optional',
   'Your feedback goes only to your host. ': 'Sa host mo lang mapupunta ang feedback mo. ',
@@ -162,6 +176,44 @@ const TL = {
   '{listing} · {dates}. This is private: only your host sees it.': '{listing} · {dates}. Private ito: ang host mo lang ang makakakita.',
   '{n} stars – {label}': '{n} star – {label}',
 };
+
+// Messages that come from the server (validation, codes, discounts), in Taglish.
+const SERVER_TL = [
+  [/^Please check the highlighted fields\.$/, () => 'Pakitingnan ang mga naka-highlight.'],
+  [/^(.+) is required\.$/, (m) => `Kailangan ang ${t(m[1]).toLowerCase()}.`],
+  [/^Enter a valid email address\.$/, () => 'Maglagay ng tamang email address.'],
+  [/^Enter a valid phone number\.$/, () => 'Maglagay ng tamang mobile number.'],
+  [/^(.+) must be at most (\d+) characters\.$/, (m) => `Hanggang ${m[2]} characters lang ang ${t(m[1]).toLowerCase()}.`],
+  [/^(.+) must be at least (\d+)\.$/, (m) => `Dapat hindi bababa sa ${m[2]} ang ${t(m[1]).toLowerCase()}.`],
+  [/^(.+) must be at most (\d+)\.$/, (m) => `Hanggang ${m[2]} lang ang ${t(m[1]).toLowerCase()}.`],
+  [/^Please agree to continue\.$/, () => 'Paki-agree para makatuloy.'],
+  [/^This code is not valid\.$/, () => 'Hindi valid ang code na ito.'],
+  [/^This code has expired or is not active yet\.$/, () => 'Expired na o hindi pa active ang code na ito.'],
+  [/^This code has been fully used\.$/, () => 'Naubos na ang gamit ng code na ito.'],
+  [/^This code is for stays of (\d+) nights or more\.$/, (m) => `Para sa stay na ${m[1]} gabi pataas ang code na ito.`],
+  [/^This code is for returning guests\. (.*)$/, () => 'Para sa bumabalik na guests ang code na ito. Gamitin ang pangalan at email ng nakaraan mong stay.'],
+  [/^For returning guests: checked at payment against your previous stay\.$/, () => 'Para sa bumabalik na guests: titingnan sa pagbabayad gamit ang nakaraan mong stay.'],
+  [/^(\d+)% (weekly|monthly) discount$/, (m) => `${m[1]}% ${m[2]} discount`],
+  [/^(.+) off$/, (m) => `${m[1]} bawas`],
+  [/^During (.+), this place has a minimum stay of (\d+) nights\.$/, (m) => `Sa ${m[1]}, minimum ${m[2]} gabi ang stay dito.`],
+  [/^This place has a minimum stay of (\d+) nights\.$/, (m) => `Minimum ${m[1]} gabi ang stay dito.`],
+  [/^Choose a date from today onwards\.$/, () => 'Pumili ng petsa mula ngayon.'],
+  [/^Choose a check-out date after check-in\.$/, () => 'Pumili ng check-out pagkatapos ng check-in.'],
+  [/^For stays longer than 60 nights, please contact the host\.$/, () => 'Para sa stay na higit 60 gabi, paki-contact ang host.'],
+  [/^Sorry, those dates were just booked\. Please choose other dates\.$/, () => 'Pasensya na, kaka-book lang ng mga petsang iyon. Pumili ng ibang petsa.'],
+  [/^Couldn't reach the payment service\. Please try again in a moment\.$/, () => 'Hindi maabot ang payment service. Pakisubukan ulit mamaya.'],
+  [/^This booking is already fully paid\. Thank you!$/, () => 'Bayad na nang buo ang booking na ito. Salamat!'],
+];
+export function tServer(msg) {
+  if (current !== 'tl' || !msg) return msg;
+  for (const [re, fn] of SERVER_TL) { const m = re.exec(msg); if (m) return fn(m); }
+  return TL[msg] || msg;
+}
+export const tFields = (fields) => (fields ? Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, tServer(v)])) : fields);
+
+export function fmtDateTimeL(d) {
+  return d ? new Date(d).toLocaleString(locale(), { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' }) : '';
+}
 
 // Pages can add their own Taglish wording (e.g. the landing page).
 export function extendTranslations(dict) { Object.assign(TL, dict); }

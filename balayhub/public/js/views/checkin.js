@@ -2,8 +2,8 @@
 // Also: the host's "Guest check-in form" card on the reservation page.
 
 import { get, post, api, ApiError } from '../api.js';
-import { h, brand, field, fmtDate, fmtDateTime, toast, clearErrors, showErrors, readForm, confirmDialog } from '../ui.js';
-import { t, initGuestLang, langToggle, fmtDateL } from '../i18n.js';
+import { h, brand, field, fmtDateTime, toast, clearErrors, showErrors, readForm, confirmDialog } from '../ui.js';
+import { t, tServer, tFields, initGuestLang, langToggle, fmtDateL, fmtDateTimeL } from '../i18n.js';
 
 const fmtTime = (t) => {
   if (!t) return '';
@@ -30,6 +30,7 @@ async function shrinkImage(file) {
 
 // ---------------------------------------------------------------- guest page
 export async function guestCheckinView(el, { params }) {
+  initGuestLang();
   const token = params.token;
   const page = (...children) => h('div', { class: 'gc' },
     h('header', { class: 'gc__top gc__top--lang' }, brand(null), langToggle(() => guestCheckinView(el, { params }))),
@@ -46,8 +47,8 @@ export async function guestCheckinView(el, { params }) {
   initGuestLang(s.guest_language);
   const header = h('div', { class: 'gc__stay card' },
     h('p', { class: 'gc__eyebrow' }, s.workspace_name),
-    h('h1', null, s.guest_first_name ? t('Hi {name}! Please register before you arrive', { name: s.guest_first_name }) : t('Guest registration')),
-    h('p', { class: 'muted' }, t('The building requires the names and a valid ID of everyone staying. It takes about 2 minutes.')),
+    h('h1', null, s.closed ? t('Guest registration') : s.guest_first_name ? t('Hi {name}! Please register before you arrive', { name: s.guest_first_name }) : t('Guest registration')),
+    !s.closed && h('p', { class: 'muted' }, t('The building requires the names and a valid ID of everyone staying. It takes about 2 minutes.')),
     h('dl', { class: 'dl', style: { marginTop: '12px' } },
       h('dt', null, t('Stay')), h('dd', null, `${s.listing}, ${s.property}${s.city ? `, ${s.city}` : ''}`),
       h('dt', null, t('Check-in')), h('dd', null, s.checkin_time ? t('{date}, from {time}', { date: fmtDateL(s.check_in), time: fmtTime(s.checkin_time) }) : fmtDateL(s.check_in)),
@@ -65,9 +66,11 @@ export async function guestCheckinView(el, { params }) {
     if (others.children.length + 1 >= s.guests_allowed) { toast(t('This unit allows up to {n} guests.', { n: s.guests_allowed }), 'error'); return; }
     const row = h('div', { class: 'gc__guest' },
       h('input', { class: 'input', name: 'guest', value, maxlength: 120, placeholder: t('Full name'), 'aria-label': t('Guest {n} full name', { n: others.children.length + 2 }) }),
-      h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': t('Remove'), onclick: () => row.remove() }, '✕'));
+      h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': t('Remove'), onclick: () => { row.remove(); renumber(); } }, '✕'));
     others.append(row);
   };
+  // Keep "Guest 2, Guest 3…" labels in order after removing someone.
+  function renumber() { [...others.querySelectorAll('input')].forEach((inp, i) => inp.setAttribute('aria-label', t('Guest {n} full name', { n: i + 2 }))); }
   const initial = r?.guests?.length ? r.guests : Array.from({ length: Math.max(0, (s.num_guests || 1) - 1) }, () => '');
   initial.forEach((g) => addGuest(g));
 
@@ -79,7 +82,7 @@ export async function guestCheckinView(el, { params }) {
   const submit = h('button', { class: 'btn btn--primary btn--block', type: 'submit' }, r ? t('Save changes') : t('Submit registration'));
 
   const form = h('form', { class: 'form card', novalidate: true },
-    r && h('div', { class: 'alert alert--ok' }, `${t('Received {when}', { when: fmtDateTime(r.submitted_at) })}${r.id_count ? (r.id_count > 1 ? t(' with {n} ID photos', { n: r.id_count }) : t(' with 1 ID photo')) : ''}${t('. You can update it below.')}`),
+    r && h('div', { class: 'alert alert--ok' }, `${t('Received {when}', { when: fmtDateTimeL(r.submitted_at) })}${r.id_count ? (r.id_count > 1 ? t(' with {n} ID photos', { n: r.id_count }) : t(' with 1 ID photo')) : ''}${t('. You can update it below.')}`),
     formError,
     h('h2', null, t('Main guest')),
     field({ name: 'lead_name', label: t('Full name (as on your ID)'), required: true, value: r?.lead_name || '', maxlength: 120, autocomplete: 'name' }),
@@ -139,9 +142,9 @@ export async function guestCheckinView(el, { params }) {
         h('p', null, h('button', { class: 'linkbtn', onclick: () => guestCheckinView(el, { params }) }, t('Review or change my answers'))))));
     } catch (err) {
       progress.textContent = '';
-      const msg = err instanceof ApiError ? err.message : (err.message || t('Something went wrong. Please try again.'));
+      const msg = err instanceof ApiError ? tServer(err.message) : (err.message || t('Something went wrong. Please try again.'));
       formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, err.offline ? t("You're offline. Your answers are still here; try again when you're connected.") : msg));
-      if (err.fields) showErrors(form, err.fields);
+      if (err.fields) showErrors(form, tFields(err.fields));
       formError.scrollIntoView?.({ block: 'nearest' });
     } finally {
       busy = false;

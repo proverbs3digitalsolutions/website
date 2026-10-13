@@ -310,8 +310,8 @@ export async function render() {
     shell = null;
     const mount = h('div');
     app.replaceChildren(mount);
-    try { await route.view(mount, ctx); } catch (err) { mount.replaceChildren(errorState(err, render)); }
     document.title = 'BalayHub — Rental Property Management';
+    try { await route.view(mount, ctx); } catch (err) { mount.replaceChildren(errorState(err, render)); }
   }
 }
 

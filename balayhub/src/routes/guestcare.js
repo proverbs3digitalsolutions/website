@@ -42,6 +42,7 @@ publicRouter.get('/public/review/:token', ah(async (req, res) => {
   res.json({
     host: b.host_name, listing: b.unit_name, check_in: b.check_in, check_out: b.check_out, guest_first_name: b.guest_first_name || null,
     reviewed: Boolean(b.reviewed_at), open: b.open, guest_language: b.guest_language,
+    not_yet: b.status === 'confirmed' && manilaToday() < b.check_in,
   });
 }));
 

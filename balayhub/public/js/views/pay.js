@@ -2,11 +2,13 @@
 
 import { get, post } from '../api.js';
 import { h, brand, toast } from '../ui.js';
-import { t, initGuestLang, langToggle, fmtDateL as fmtDate } from '../i18n.js';
+import { t, tServer, initGuestLang, langToggle, fmtDateL as fmtDate } from '../i18n.js';
 
-const peso = (v) => `₱${Number(v || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+// Same peso format as the booking pages: no centavos when it's a whole amount.
+const peso = (v) => { const n = Number(v || 0); return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`; };
 
 export async function payBalanceView(el, { params, query }) {
+  initGuestLang();
   const token = params.token;
   const page = (...children) => h('div', { class: 'gc' },
     h('header', { class: 'gc__top gc__top--lang' }, brand(null), langToggle(() => payBalanceView(el, { params, query: {} }))),
@@ -30,7 +32,7 @@ export async function payBalanceView(el, { params, query }) {
     d = await get(`/public/pay/${encodeURIComponent(token)}`);
     if (Number(d.balance) <= 0) toast(t('Payment received. Thank you!'));
   }
-  const paidUp = Number(d.balance) <= 0;
+  const paidUp = Number(d.balance) <= 0 && !d.cancelled;
   const btn = h('button', { class: 'btn btn--primary btn--block', type: 'button' }, t('Pay {amount} now', { amount: peso(d.balance) }));
   btn.addEventListener('click', async () => {
     btn.disabled = true;
@@ -39,7 +41,7 @@ export async function payBalanceView(el, { params, query }) {
       const r = await post(`/public/pay/${encodeURIComponent(token)}/checkout`);
       location.href = r.checkout_url;
     } catch (err) {
-      toast(err.message, 'error');
+      toast(tServer(err.message), 'error');
       btn.disabled = false;
       btn.textContent = t('Pay {amount} now', { amount: peso(d.balance) });
     }
@@ -49,7 +51,7 @@ export async function payBalanceView(el, { params, query }) {
     h('div', { class: 'card bk-done' },
       paidUp && h('div', { class: 'gc__tick', 'aria-hidden': 'true' }, '✓'),
       h('p', { class: 'gc__eyebrow' }, d.host),
-      h('h1', null, paidUp ? t('Your booking is fully paid') : `${d.guest_first_name ? t('Hi {name}! ', { name: d.guest_first_name }) : ''}${t('Pay your balance')}`),
+      h('h1', null, d.cancelled ? t('This booking was cancelled') : paidUp ? t('Your booking is fully paid') : `${d.guest_first_name ? t('Hi {name}! ', { name: d.guest_first_name }) : ''}${t('Pay your balance')}`),
       h('dl', { class: 'dl' },
         h('dt', null, t('Stay')), h('dd', null, `${d.listing}, ${d.property}`),
         h('dt', null, t('Dates')), h('dd', null, `${fmtDate(d.check_in)} – ${fmtDate(d.check_out)}`),

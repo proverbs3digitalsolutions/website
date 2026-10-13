@@ -3,7 +3,7 @@
 
 import { get, post, ApiError } from '../api.js';
 import { h, brand, field, toast, readForm, clearErrors, showErrors, todayManila } from '../ui.js';
-import { t, locale, initGuestLang, langToggle, fmtDateL as fmtDate } from '../i18n.js';
+import { t, tServer, tFields, locale, initGuestLang, langToggle, fmtDateL as fmtDate } from '../i18n.js';
 
 const peso = (v) => { const n = Number(v || 0); return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`; };
 const photoUrl = (id) => `/api/public/listing-photos/${id}`;
@@ -28,6 +28,7 @@ function cover(l, cls = 'bk-card__img') {
 
 // ---------------------------------------------------------------- host page
 export async function bookHostView(el, { params }) {
+  initGuestLang();
   let data;
   try { data = await get(`/public/book/${encodeURIComponent(params.slug)}`); } catch (err) {
     el.replaceChildren(shell(null, params.slug, h('div', { class: 'card' }, h('h1', null, t('Page not found')), h('p', { class: 'muted' }, err.message))));
@@ -55,6 +56,7 @@ export async function bookHostView(el, { params }) {
 
 // ---------------------------------------------------------------- one listing
 export async function bookListingView(el, { params, query }) {
+  initGuestLang();
   const slug = params.slug;
   let data;
   try { data = await get(`/public/book/${encodeURIComponent(slug)}`); } catch (err) {
@@ -81,8 +83,8 @@ export async function bookListingView(el, { params, query }) {
   // Gallery
   const main = cover(l, 'bk-gallery__main');
   const gallery = h('div', { class: 'bk-gallery' }, main,
-    l.photos.length > 1 && h('div', { class: 'bk-gallery__thumbs' }, l.photos.map((id) => h('button', {
-      type: 'button', class: 'bk-gallery__thumb', 'aria-label': t('Show photo'),
+    l.photos.length > 1 && h('div', { class: 'bk-gallery__thumbs' }, l.photos.map((id, i) => h('button', {
+      type: 'button', class: 'bk-gallery__thumb', 'aria-label': t('Show photo {n}', { n: i + 1 }),
       onclick: () => { main.src = photoUrl(id); },
     }, h('img', { src: photoUrl(id), alt: '', loading: 'lazy' })))));
 
@@ -112,8 +114,9 @@ export async function bookListingView(el, { params, query }) {
       const disabled = past || !info || (info.taken && !(checkIn && !checkOut && date > checkIn && !takenBetween(checkIn, date)));
       cells.push(h('button', {
         type: 'button', disabled,
-        class: `bk-cal__day${info?.taken ? ' is-taken' : ''}${date === checkIn || date === checkOut ? ' is-picked' : ''}${inRange ? ' is-range' : ''}`,
-        'aria-label': `${fmtDate(date)}${info?.taken ? t(', not available') : info ? `, ${peso(info.price)}` : ''}`,
+        class: `bk-cal__day${info?.taken ? ' is-taken' : ''}${date === checkIn || date === checkOut ? ' is-picked' : ''}${inRange ? ' is-range' : ''}${info?.holiday && !info.taken ? ' is-holiday' : ''}`,
+        title: info?.holiday && !info.taken ? `${t('Holiday price')}: ${info.holiday}` : null,
+        'aria-label': `${fmtDate(date)}${info?.taken ? t(', not available') : info ? `, ${peso(info.price)}${info.holiday ? ` (${info.holiday})` : ''}` : ''}`,
         onclick: () => pick(date),
       }, h('span', null, String(dd)), info && !info.taken && !past && h('small', null, `₱${Math.round(info.price / 100) / 10}k`)));
     }
@@ -157,12 +160,14 @@ export async function bookListingView(el, { params, query }) {
   const codeBox = h('details', { class: 'field bk-code', dataset: { field: 'code' } },
     h('summary', null, t('Have a discount code?')),
     h('div', { class: 'chips' }, codeInput, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: applyCode }, t('Apply'))),
-    codeMsg);
+    codeMsg, h('div', { class: 'error', role: 'alert' }));
   const submit = h('button', { class: 'btn btn--primary btn--block', type: 'submit', disabled: true }, t('Continue to payment'));
   let current = null;
   async function updateQuote() {
     current = null;
     submit.disabled = true;
+    payChoice.querySelector('.error').textContent = '';
+    codeBox.querySelector('.error').textContent = '';
     if (!checkIn || !checkOut) {
       summary.replaceChildren(h('p', { class: 'muted' }, checkIn ? t('Check-in {date}. Now choose check-out.', { date: fmtDate(checkIn) }) : t('Choose your dates on the calendar to see the price.')));
       return;
@@ -170,7 +175,7 @@ export async function bookListingView(el, { params, query }) {
     try {
       const promo = promoCode ? `&code=${encodeURIComponent(promoCode)}` : '';
       const q = await get(`/public/book/${encodeURIComponent(slug)}/units/${l.unit_id}/quote?check_in=${checkIn}&check_out=${checkOut}${promo}`);
-      codeMsg.textContent = q.code_error || (q.promo_code ? `${t('Code {code} applied: {label}.', { code: q.promo_code, label: q.promo_label })}${q.promo_note ? ` ${q.promo_note}` : ''}` : '');
+      codeMsg.textContent = tServer(q.code_error) || (q.promo_code ? `${t('Code {code} applied: −{amount}.', { code: q.promo_code, amount: peso(q.promo_discount) })}${q.promo_note ? ` ${tServer(q.promo_note)}` : ''}` : '');
       codeMsg.className = q.code_error ? 'error' : 'muted small';
       current = q;
       // Show only the payment choices allowed for these dates.
@@ -183,16 +188,18 @@ export async function bookListingView(el, { params, query }) {
       }
       summary.replaceChildren(h('dl', { class: 'dl' },
         h('dt', null, t('Dates')), h('dd', null, `${fmtDate(checkIn)} – ${fmtDate(checkOut)}`),
-        h('dt', null, q.nights > 1 ? t('{n} nights', { n: q.nights }) : t('1 night')), h('dd', null, peso(q.discount_label ? q.subtotal : q.accommodation_total)),
-        q.discount_label && [h('dt', null, q.discount_label.replace(/^./, (c) => c.toUpperCase())), h('dd', null, `− ${peso(q.discount_amount)}`)],
-        q.promo_code && [h('dt', null, `Code ${q.promo_code}`), h('dd', null, `− ${peso(q.promo_discount)}`)],
+        h('dt', null, q.nights > 1 ? t('{n} nights', { n: q.nights }) : t('1 night')), h('dd', null, peso(q.discount_label || q.promo_code ? q.subtotal : q.accommodation_total)),
+        q.discount_label && [h('dt', null, tServer(q.discount_label).replace(/^./, (c) => c.toUpperCase())), h('dd', null, `− ${peso(q.discount_amount)}`)],
+        q.promo_code && [h('dt', null, t('Code {code}', { code: q.promo_code })), h('dd', null, `− ${peso(q.promo_discount)}`)],
         Number(q.cleaning_fee) > 0 && [h('dt', null, t('Cleaning fee')), h('dd', null, peso(q.cleaning_fee))],
         h('dt', null, t('Total')), h('dd', null, h('strong', null, peso(q.total))),
         q.deposit_allowed && [h('dt', null, t('50% deposit')), h('dd', null, t('{now} now, {rest} due by {date}', { now: peso(q.deposit), rest: peso(Number(q.total) - Number(q.deposit)), date: fmtDate(q.balance_due_date) }))]),
       !q.available && h('div', { class: 'alert alert--error' }, t('Sorry, these dates are no longer available.')));
       submit.disabled = !q.available || !host.accepting;
     } catch (err) {
-      summary.replaceChildren(h('div', { class: 'alert alert--error' }, err.message));
+      // Show the actual reason (e.g. minimum stay), not just "check the highlighted fields".
+      const reason = err.fields ? Object.values(err.fields)[0] : err.message;
+      summary.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, tServer(reason)));
     }
   }
 
@@ -233,8 +240,9 @@ export async function bookListingView(el, { params, query }) {
       });
       location.href = r.checkout_url;
     } catch (err) {
-      formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, err instanceof ApiError ? err.message : t('Something went wrong. Please try again.')));
-      if (err.fields) showErrors(form, err.fields);
+      formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, err instanceof ApiError ? tServer(err.message) : t('Something went wrong. Please try again.')));
+      if (err.fields) showErrors(form, tFields(err.fields));
+      if (err.fields?.code) { codeBox.open = true; codeMsg.textContent = ''; }
       if (err.code === 'DATES_TAKEN') { days = new Map(); await loadDays(monthStart); drawCal(); }
       submit.disabled = false;
       submit.textContent = t('Continue to payment');
@@ -244,6 +252,9 @@ export async function bookListingView(el, { params, query }) {
 
   await loadDays(monthStart);
   await loadDays(nextMonth(monthStart));
+  // The lowest price on the open nights shown (weekend, holiday and season rates differ).
+  const open = [...days.values()].filter((x) => !x.taken && x.price !== null && x.date >= todayManila()).map((x) => Number(x.price));
+  const fromPrice = open.length ? Math.min(...open) : Number(l.nightly_rate);
   drawCal();
   updateQuote();
 
@@ -264,13 +275,15 @@ export async function bookListingView(el, { params, query }) {
         h('h2', null, t('Availability')),
         calBox),
       h('aside', { class: 'card bk-book' },
-        h('div', { class: 'bk-book__price' }, h('strong', null, peso(l.nightly_rate)), t(' / night')),
+        h('div', { class: 'bk-book__price' }, fromPrice < Number(l.nightly_rate) || [...days.values()].some((x) => !x.taken && Number(x.price) !== Number(l.nightly_rate)) ? t('from ') : null,
+          h('strong', null, peso(fromPrice)), t(' / night')),
         summary,
         form))));
 }
 
 // ---------------------------------------------------------------- after payment
 export async function bookDoneView(el, { params }) {
+  initGuestLang();
   const show = (s, extra) => el.replaceChildren(shell(s?.stay?.host, params.slug, extra));
   let tries = 0;
   async function check() {
@@ -293,7 +306,7 @@ export async function bookDoneView(el, { params }) {
           h('dt', null, t('Dates')), h('dd', null, `${fmtDate(st.check_in)} – ${fmtDate(st.check_out)}`),
           h('dt', null, t('Guests')), h('dd', null, String(st.guests)),
           h('dt', null, t('Paid')), h('dd', null, peso(st.paid)),
-          Number(st.balance) > 0 && [h('dt', null, t('Balance')), h('dd', null, t('{amount}, due {n} days before check-in', { amount: peso(st.balance), n: st.balance_due_days }))]),
+          Number(st.balance) > 0 && [h('dt', null, t('Balance')), h('dd', null, t('{amount}, due by {date}', { amount: peso(st.balance), date: fmtDate(addDays(st.check_in, -st.balance_due_days)) }))]),
         st.checkin_link && h('a', { class: 'btn btn--primary', href: st.checkin_link.slice(st.checkin_link.indexOf('#')) }, t('Register your guests now')),
         h('p', { class: 'muted small' }, t("The building needs everyone's names and a valid ID before arrival. You can also do this later from the link in your email."))));
       return;
