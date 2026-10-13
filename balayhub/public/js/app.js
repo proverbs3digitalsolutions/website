@@ -25,6 +25,7 @@ import { bookHostView, bookListingView, bookDoneView } from './views/book.js';
 import { launchpadView } from './views/launchpad.js';
 import { payBalanceView } from './views/pay.js';
 import { pricingView } from './views/pricing.js';
+import { ownersView, ownerStatementView } from './views/owners.js';
 import { registerServiceWorker, forgetThisDevice } from './notifications.js';
 
 export const state = { user: null, requireEmailVerification: true };
@@ -66,6 +67,8 @@ const routes = [
   ['/launchpad', launchpadView, APP],
   ['/calendar', calendarView, APP],
   ['/pricing', pricingView, APP],
+  ['/owners', ownersView, APP],
+  ['/owners/:id/statement', ownerStatementView, APP],
   ['/reservations', reservationsView, APP],
   ['/reservations/:id', reservationDetailView, APP],
   ['/listings', listingsView, APP],
@@ -89,6 +92,7 @@ const NAV_SHORT = [
   ['/housekeeping', 'Housekeeping', 'sparkle'],
   ['/listings', 'Listings', 'building'],
   ['/guests', 'Guests', 'users'],
+  ['/owners', 'Unit owners', 'file'],
   ['/rent?tab=expenses', 'Expenses', 'wallet'],
   ['/maintenance', 'Maintenance', 'wrench'],
   ['/settings', 'Settings', 'settings'],
@@ -115,12 +119,13 @@ const NAV_BOTH = [
   ['/rent', 'Rent & Expenses', 'wallet'],
   ['/reports', 'Reports', 'chart'],
   ['/guests', 'Guests', 'users'],
+  ['/owners', 'Unit owners', 'file'],
   ['/maintenance', 'Maintenance', 'wrench'],
   ['/settings', 'Settings', 'settings'],
 ];
 // Staff don't see guest conversations; the platform admin gets an Admin link.
 const navFor = () => [...({ short_term: NAV_SHORT, both: NAV_BOTH }[state.user?.business_type] || NAV_LONG)
-  .filter(([p]) => (p !== '/inbox' || state.user?.role !== 'staff') && (p !== '/launchpad' || state.user?.role === 'owner')),
+  .filter(([p]) => (p !== '/inbox' || state.user?.role !== 'staff') && (!['/launchpad', '/owners'].includes(p) || state.user?.role === 'owner')),
 ...(state.user?.is_platform_admin ? [['/admin', 'Admin', 'shield']] : [])];
 
 // Trial / read-only / demo notice at the top of every app page.

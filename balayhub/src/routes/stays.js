@@ -264,6 +264,7 @@ const reservationSpec = {
   accommodation_total: { type: 'money', label: 'Accommodation total' },
   cleaning_fee: { type: 'money', label: 'Cleaning fee' },
   other_fees: { type: 'money', label: 'Other fees' },
+  channel_fee: { type: 'money', label: 'Channel fee' },
   notes: { type: 'text', max: 1000, label: 'Notes' },
   send_confirmation: { type: 'bool', label: 'Email confirmation' },
 };
@@ -301,10 +302,10 @@ router.post('/reservations', managers, ah(async (req, res) => {
       }
       const { rows: [b] } = await db.query(
         `INSERT INTO bookings (organization_id, unit_id, kind, guest_id, channel, check_in, check_out, num_guests,
-                               accommodation_total, cleaning_fee, other_fees, confirmation_code, notes, created_by)
-         VALUES ($1,$2,'reservation',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING booking_id, confirmation_code`,
+                               accommodation_total, cleaning_fee, other_fees, channel_fee, confirmation_code, notes, created_by)
+         VALUES ($1,$2,'reservation',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING booking_id, confirmation_code`,
         [req.user.organization_id, unit.unit_id, guestId, body.channel || 'direct', body.check_in, body.check_out, body.num_guests,
-          accommodation, body.cleaning_fee ?? unit.cleaning_fee ?? '0.00', body.other_fees || '0.00', ical.randomCode('BH'), body.notes, req.user.user_id]);
+          accommodation, body.cleaning_fee ?? unit.cleaning_fee ?? '0.00', body.other_fees || '0.00', body.channel_fee || '0.00', ical.randomCode('BH'), body.notes, req.user.user_id]);
       await audit(db, req.user, 'reservation.created', 'booking', b.booking_id, { code: b.confirmation_code, check_in: body.check_in, check_out: body.check_out });
       // Claim the "on booking" automation now, so it can't also send the confirmation.
       if (body.send_confirmation) await receipts.claimConfirmation(db, b.booking_id, req.user.organization_id);
@@ -325,9 +326,9 @@ router.patch('/reservations/:id', managers, ah(async (req, res) => {
   const body = validate(req.body, {
     unit_id: reservationSpec.unit_id, check_in: reservationSpec.check_in, check_out: reservationSpec.check_out,
     num_guests: reservationSpec.num_guests, channel: reservationSpec.channel, accommodation_total: reservationSpec.accommodation_total,
-    cleaning_fee: reservationSpec.cleaning_fee, other_fees: reservationSpec.other_fees, notes: reservationSpec.notes,
+    cleaning_fee: reservationSpec.cleaning_fee, other_fees: reservationSpec.other_fees, channel_fee: reservationSpec.channel_fee, notes: reservationSpec.notes,
   }, { partial: true });
-  for (const k of ['unit_id', 'check_in', 'check_out', 'channel', 'accommodation_total', 'cleaning_fee', 'other_fees']) {
+  for (const k of ['unit_id', 'check_in', 'check_out', 'channel', 'accommodation_total', 'cleaning_fee', 'other_fees', 'channel_fee']) {
     if (k in body && body[k] === null) delete body[k];
   }
   if (booking.ical_feed_id && (body.check_in || body.check_out || body.unit_id)) {

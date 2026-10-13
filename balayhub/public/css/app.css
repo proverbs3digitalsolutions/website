@@ -797,3 +797,10 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .lpad-reminder__icon svg { width: 24px; height: 24px; }
 .lpad-reminder__text { flex: 1 1 260px; display: grid; gap: 4px; }
 .lpad-reminder__text .bar { max-width: 360px; }
+
+/* ================================================================ owner statements */
+.statement { max-width: 900px; }
+.statement__sum { max-width: 460px; }
+.statement__payout strong { font-size: 1.2rem; }
+.table--compact td, .table--compact th { padding: 8px 10px; }
+.table td.num { white-space: nowrap; font-variant-numeric: tabular-nums; }

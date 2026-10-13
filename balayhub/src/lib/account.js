@@ -26,7 +26,7 @@ async function exportOrganization(orgId) {
   };
   for (const t of ['properties', 'guests', 'bookings', 'booking_payments', 'guest_registrations', 'conversations', 'messages',
     'message_templates', 'automations', 'cleaning_tasks', 'ical_feeds', 'tenants', 'leases', 'payments', 'expenses',
-    'maintenance_requests', 'files', 'billing_payments', 'invitations', 'audit_logs', 'direct_checkouts', 'balance_checkouts', 'seasons']) {
+    'maintenance_requests', 'files', 'billing_payments', 'invitations', 'audit_logs', 'direct_checkouts', 'balance_checkouts', 'seasons', 'unit_owners']) {
     out[t] = await byOrg(t);
   }
   return out;
@@ -38,7 +38,7 @@ const PURGED_TABLES = [
   'push_subscriptions', 'seasons', 'balance_checkouts', 'direct_checkouts', 'automation_runs', 'messages', 'conversations', 'guest_registrations', 'files', 'cleaning_tasks', 'booking_payments',
   'billing_payments', 'receipt_counters', 'bookings', 'ical_feeds', 'guests', 'nightly_rates', 'payments', 'rent_charges',
   'leases', 'tenants', 'expenses', 'maintenance_requests', 'automations', 'message_templates', 'property_assignments',
-  'units', 'properties', 'invitations', 'audit_logs', 'sessions', 'auth_tokens', 'consent_records', 'users', 'organizations',
+  'units', 'unit_owners', 'properties', 'invitations', 'audit_logs', 'sessions', 'auth_tokens', 'consent_records', 'users', 'organizations',
 ];
 
 // Permanently delete a workspace, its members' accounts and its stored files.
@@ -71,6 +71,7 @@ async function purgeOrganization(orgId) {
     await run('DELETE FROM message_templates WHERE organization_id = $1');
     await run('DELETE FROM property_assignments WHERE property_id IN (SELECT property_id FROM properties WHERE organization_id = $1)');
     await run('DELETE FROM units WHERE property_id IN (SELECT property_id FROM properties WHERE organization_id = $1)');
+    await run('DELETE FROM unit_owners WHERE organization_id = $1');
     await run('DELETE FROM properties WHERE organization_id = $1');
     await run('DELETE FROM invitations WHERE organization_id = $1');
     await run('DELETE FROM audit_logs WHERE organization_id = $1');

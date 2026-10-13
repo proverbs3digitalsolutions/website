@@ -83,6 +83,19 @@ Order of priority for a night: a price set on the calendar → holiday rate → 
 rate → base rate; then the long-stay discount. Rules apply to new quotes, new reservations and the
 booking page. Existing reservations keep their price.
 
+## Owner statements (if you manage units for other owners)
+
+Open **Unit owners** (owners of the BalayHub workspace only), add each owner with their email,
+management fee % and their units. *Statement for last month* shows, for stays that checked out in
+that month: each stay's total, the channel fee, the cleaning fee (when you keep it for cleaning),
+the net rental income, your management fee, the units' expenses and the **payout to the owner**.
+Print it / save it as PDF, or email it to the owner.
+
+For it to be complete:
+- Enter the **channel fee / commission** on each reservation (Edit reservation). Stays synced from a
+  channel calendar have no amounts — enter what the guest paid; the statement warns you about these.
+- Record unit expenses (repairs, supplies, dues) against the unit in Expenses.
+
 ## Guests paying the balance online
 
 When PayMongo is connected (Settings → Direct booking page), every reservation has a private
@@ -141,4 +154,4 @@ cd /opt/balayhub-src/balayhub
 This backs up your data, downloads the new version and restarts BalayHub. The database is upgraded automatically. Your existing workspace keeps its current type; to switch to short-term, go to **Settings → Modules for this workspace → Short-term stays → Save**.
 
 ## Coming next
-Pricing helpers (weekend and holiday rates, minimum nights, weekly/monthly discounts), owner statements for hosts who manage units for other owners, and guest reviews with repeat-guest discounts.
+Guest reviews with repeat-guest flags and direct-booking discount codes.
