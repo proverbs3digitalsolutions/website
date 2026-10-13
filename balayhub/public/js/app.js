@@ -22,6 +22,7 @@ import { adminView } from './views/admin.js';
 import { guestCheckinView } from './views/checkin.js';
 import { termsView } from './views/terms.js';
 import { bookHostView, bookListingView, bookDoneView } from './views/book.js';
+import { launchpadView } from './views/launchpad.js';
 
 export const state = { user: null, requireEmailVerification: true };
 
@@ -58,6 +59,7 @@ const routes = [
   ['/maintenance/:id', maintenanceDetailView, APP],
   ['/settings', settingsView, APP],
   ['/home', homeView, APP],
+  ['/launchpad', launchpadView, APP],
   ['/calendar', calendarView, APP],
   ['/reservations', reservationsView, APP],
   ['/reservations/:id', reservationDetailView, APP],
@@ -75,6 +77,7 @@ const routes = [
 
 const NAV_SHORT = [
   ['/home', 'Home', 'home'],
+  ['/launchpad', 'Launchpad', 'rocket'],
   ['/inbox', 'Inbox', 'inbox'],
   ['/calendar', 'Calendar', 'calendar'],
   ['/reservations', 'Reservations', 'bed'],
@@ -96,6 +99,7 @@ const NAV_LONG = [
 ];
 const NAV_BOTH = [
   ['/home', 'Home', 'home'],
+  ['/launchpad', 'Launchpad', 'rocket'],
   ['/inbox', 'Inbox', 'inbox'],
   ['/calendar', 'Calendar', 'calendar'],
   ['/reservations', 'Reservations', 'bed'],
@@ -111,7 +115,7 @@ const NAV_BOTH = [
 ];
 // Staff don't see guest conversations; the platform admin gets an Admin link.
 const navFor = () => [...({ short_term: NAV_SHORT, both: NAV_BOTH }[state.user?.business_type] || NAV_LONG)
-  .filter(([p]) => p !== '/inbox' || state.user?.role !== 'staff'),
+  .filter(([p]) => (p !== '/inbox' || state.user?.role !== 'staff') && (p !== '/launchpad' || state.user?.role === 'owner')),
 ...(state.user?.is_platform_admin ? [['/admin', 'Admin', 'shield']] : [])];
 
 // Trial / read-only / demo notice at the top of every app page.
@@ -147,6 +151,9 @@ function planBanner() {
   }
   return null;
 }
+// Phone bottom bar: the first four everyday screens; everything else is under "More".
+const bottomNav = () => navFor().filter(([p]) => p !== '/launchpad').slice(0, 4);
+const moreNav = () => { const b = bottomNav(); return navFor().filter((n) => !b.includes(n)); };
 export const homeRoute = () => (state.user?.business_type === 'long_term' ? '#/dashboard' : '#/home');
 
 function parseHash() {
@@ -210,7 +217,7 @@ function openMore(current) {
   const close = () => sheet.remove();
   const sheet = h('div', { class: 'morenav', onclick: (e) => { if (e.target === sheet) close(); } },
     h('div', { class: 'morenav__sheet', role: 'menu' },
-      navFor().slice(4).map(([p, t, ic]) => h('a', { href: `#${p}`, onclick: close, 'aria-current': isCurrent(p, current) ? 'page' : null }, icon(ic), t)),
+      moreNav().map(([p, t, ic]) => h('a', { href: `#${p}`, onclick: close, 'aria-current': isCurrent(p, current) ? 'page' : null }, icon(ic), t)),
       h('button', { onclick: () => { close(); logout(); } }, icon('logout'), 'Log out')));
   document.body.append(sheet);
 }
@@ -219,7 +226,7 @@ function buildShell(path) {
   const u = state.user;
   const content = h('main', { class: 'content', id: 'main' });
   const NAV = navFor();
-  const bottomKeys = NAV.slice(0, 4);
+  const bottomKeys = bottomNav();
   const el = h('div', { class: 'shell' },
     h('aside', { class: 'sidebar' },
       brand(homeRoute()),
@@ -232,7 +239,7 @@ function buildShell(path) {
     h('div', { class: 'shell__main' }, planBanner(), content),
     h('nav', { class: 'bottomnav', 'aria-label': 'Main' },
       bottomKeys.map(([p, t, ic]) => h('a', { href: `#${p}`, 'aria-current': isCurrent(p, path) ? 'page' : null }, icon(ic), t === 'Rent & Expenses' ? 'Rent' : t)),
-      h('button', { type: 'button', onclick: () => openMore(path), 'aria-current': NAV.slice(4).some(([p]) => isCurrent(p, path)) ? 'page' : null }, icon('more'), 'More')));
+      h('button', { type: 'button', onclick: () => openMore(path), 'aria-current': moreNav().some(([p]) => isCurrent(p, path)) ? 'page' : null }, icon('more'), 'More')));
   // Unread guest messages badge on the Inbox link.
   unreadCount().then((n) => {
     if (!n) return;

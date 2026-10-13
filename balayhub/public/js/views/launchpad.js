@@ -1,0 +1,97 @@
+// Launchpad: a guided, step-by-step setup for new owners, plus quick how-to guides.
+
+import { get, post } from '../api.js';
+import { h, icon, toast } from '../ui.js';
+import { state } from '../app.js';
+
+// Everyday how-tos, always available here.
+const GUIDES = [
+  ['Check a guest in and out', ['Open Home: today\'s arrivals and departures are listed with Check in / Check out buttons.', 'Checking out marks the unit for cleaning and creates a cleaning task.']],
+  ['Record a payment and send a receipt', ['Open the reservation and click Record payment.', 'Choose GCash, Maya, cash or bank transfer and tick "Email a receipt".', 'The balance updates right away.']],
+  ['Block dates or change a price', ['Open the Calendar and tap an open night.', 'Choose Block (owner stay, repairs) or Set nightly price for holidays and weekends.']],
+  ['Reply to a guest', ['Open Inbox, choose the conversation and type your message, or insert a template.', 'Use ✨ Draft reply with AI if it is turned on. Always read before sending.']],
+  ['Handle cleaning', ['Open Housekeeping to see today\'s cleanings and the next guest\'s arrival.', 'Use "Copy for cleaner" to send the checklist by Messenger or Viber.']],
+  ['Use BalayHub on your phone', ['Open BalayHub in your phone\'s browser and log in.', 'iPhone: Share → Add to Home Screen. Android: menu ⋮ → Add to Home screen.', 'It then opens like an app.']],
+];
+
+function stepCard(st, isNext, rerender) {
+  const status = st.done ? h('span', { class: 'lp-status lp-status--done' }, '✓ Done')
+    : st.skipped ? h('span', { class: 'lp-status lp-status--skip' }, 'Skipped')
+      : isNext ? h('span', { class: 'lp-status lp-status--next' }, 'Next step')
+        : h('span', { class: 'lp-status' }, `${st.minutes} min`);
+  const skip = async (undo) => {
+    try { await post('/onboarding/skip', { step: st.key, undo }); rerender(); } catch (err) { toast(err.message, 'error'); }
+  };
+  return h('details', { class: `lpad-step${st.done ? ' is-done' : ''}${isNext ? ' is-next' : ''}`, open: isNext ? true : null },
+    h('summary', null,
+      h('span', { class: 'lpad-step__check', 'aria-hidden': 'true' }, st.done ? '✓' : ''),
+      h('span', { class: 'lpad-step__title' }, st.title, st.optional && h('span', { class: 'muted small' }, ' · optional')),
+      status),
+    h('div', { class: 'lpad-step__body' },
+      h('p', null, st.why),
+      h('ol', { class: 'lpad-how' }, st.how.map((x) => h('li', null, x))),
+      h('div', { class: 'chips' },
+        !st.done && h('a', { class: `btn btn--sm ${isNext ? 'btn--primary' : 'btn--secondary'}`, href: st.href }, st.action),
+        st.done && h('a', { class: 'btn btn--ghost btn--sm', href: st.href }, 'Open'),
+        st.optional && !st.done && !st.skipped && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => skip(false) }, 'Skip for now'),
+        st.skipped && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => skip(true) }, 'Show again'))));
+}
+
+export async function launchpadView(el, { rerender }) {
+  if (state.user.role !== 'owner') {
+    el.replaceChildren(h('div', { class: 'card' }, h('h1', null, 'Launchpad'), h('p', { class: 'muted' }, 'The workspace owner sets up BalayHub here. Ask them if something is missing.')));
+    return;
+  }
+  const o = await get('/onboarding');
+  const next = o.steps.find((x) => !x.done && !x.skipped);
+  const pct = Math.round((100 * o.done) / o.total);
+  const first = state.user.full_name.split(' ')[0];
+
+  el.replaceChildren(
+    h('div', { class: 'lpad-hero card' },
+      h('div', { class: 'lpad-hero__text' },
+        h('p', { class: 'lpad-eyebrow' }, 'Launchpad'),
+        h('h1', null, o.complete ? `You're all set, ${first}! 🎉` : `Let's get BalayHub ready, ${first}`),
+        h('p', { class: 'muted' }, o.complete
+          ? 'Everything important is set up. You can come back here any time for the how-to guides below.'
+          : 'Follow these steps in order. Each one takes a few minutes, and they tick themselves off as you go.'),
+        h('div', { class: 'lpad-progress' },
+          h('div', { class: 'bar' }, h('span', { style: { width: `${pct}%` } })),
+          h('span', { class: 'small' }, `${o.done} of ${o.total} steps done`)),
+        next && h('a', { class: 'btn btn--primary', href: next.href }, icon('plus'), `Next: ${next.title}`)),
+      h('div', { class: 'lpad-hero__art', 'aria-hidden': 'true' }, icon('rocket'))),
+    o.phases.map((ph, i) => {
+      const steps = o.steps.filter((x) => x.phase === ph.key);
+      const done = steps.filter((x) => x.done || x.skipped).length;
+      return h('section', { class: 'lpad-phase card' },
+        h('div', { class: 'lpad-phase__head' },
+          h('span', { class: `lpad-phase__num${done === steps.length ? ' is-done' : ''}` }, done === steps.length ? '✓' : String(i + 1)),
+          h('div', null, h('h2', null, ph.title), h('p', { class: 'muted small' }, ph.text)),
+          h('span', { class: 'muted small lpad-phase__count' }, `${done}/${steps.length}`)),
+        h('div', { class: 'lpad-steps' }, steps.map((st) => stepCard(st, st === next, rerender))));
+    }),
+    h('section', { class: 'card' },
+      h('div', { class: 'card__head' }, h('h2', null, 'How do I…?')),
+      h('div', { class: 'lpad-guides' }, GUIDES.map(([t, lines]) => h('details', { class: 'lpad-guide' },
+        h('summary', null, t), h('ol', { class: 'lpad-how' }, lines.map((x) => h('li', null, x))))))),
+    h('p', { class: 'muted small center', style: { marginTop: '16px' } }, 'Need help? Reply to any email from BalayHub, or contact us from Settings → Plan & billing.'));
+}
+
+// Small reminder on Home until setup is finished (owners only).
+export async function launchpadReminder(rerender) {
+  if (state.user.role !== 'owner' || state.user.plan?.is_demo) return null;
+  let o;
+  try { o = await get('/onboarding'); } catch { return null; }
+  if (o.complete || o.dismissed) return null;
+  const next = o.steps.find((x) => !x.done && !x.skipped);
+  const hide = async () => { try { await post('/onboarding/dismiss'); rerender(); } catch (err) { toast(err.message, 'error'); } };
+  return h('div', { class: 'card lpad-reminder' },
+    h('span', { class: 'lpad-reminder__icon', 'aria-hidden': 'true' }, icon('rocket')),
+    h('div', { class: 'lpad-reminder__text' },
+      h('strong', null, `Finish setting up BalayHub: ${o.done} of ${o.total} steps done`),
+      next && h('span', { class: 'muted small' }, `Next: ${next.title}`),
+      h('div', { class: 'bar' }, h('span', { style: { width: `${Math.round((100 * o.done) / o.total)}%` } }))),
+    h('div', { class: 'chips' },
+      h('a', { class: 'btn btn--primary btn--sm', href: '#/launchpad' }, 'Open Launchpad'),
+      h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: hide }, 'Hide')));
+}

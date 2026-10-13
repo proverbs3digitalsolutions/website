@@ -4,6 +4,7 @@ import { get, post, qs } from '../api.js';
 import { h, icon, peso, fmtDate, fmtMonth, badge, emptyState, toast, todayManila } from '../ui.js';
 import { state, navigate } from '../app.js';
 import { barChart, lineChart, SERIES } from '../charts.js';
+import { launchpadReminder } from './launchpad.js';
 
 const shortDay = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
 const pesoWhole = (v) => `₱${Math.round(Number(v || 0)).toLocaleString('en-PH')}`;
@@ -144,28 +145,8 @@ function revenueSection() {
 
 const label = (v) => ({ direct: 'Direct', airbnb: 'Airbnb', booking: 'Booking.com', agoda: 'Agoda', other: 'Other' })[v] || v;
 
-// "Get started" checklist for a new owner. Returns null when finished or hidden.
-async function onboardingCard(rerender) {
-  if (state.user.role !== 'owner' || state.user.plan?.is_demo) return null;
-  let o;
-  try { o = await get('/onboarding'); } catch { return null; }
-  if (o.complete || o.dismissed) return null;
-  const next = o.steps.find((x) => !x.done);
-  const hide = async () => { try { await post('/onboarding/dismiss'); rerender(); } catch (err) { toast(err.message, 'error'); } };
-  return h('div', { class: 'card onboard' },
-    h('div', { class: 'card__head' },
-      h('div', null, h('h2', null, 'Get started with BalayHub'), h('p', { class: 'muted small' }, `${o.done} of ${o.total} done`)),
-      h('button', { class: 'btn btn--ghost btn--sm', onclick: hide }, 'Hide')),
-    h('div', { class: 'bar' }, h('span', { style: { width: `${Math.round((100 * o.done) / o.total)}%` } })),
-    h('ol', { class: 'onboard__steps' }, o.steps.map((x) => h('li', { class: `onboard__step${x.done ? ' is-done' : ''}${x === next ? ' is-next' : ''}` },
-      h('span', { class: 'onboard__check', 'aria-hidden': 'true' }, x.done ? '✓' : ''),
-      h('div', { class: 'onboard__text' }, h('strong', null, x.title), !x.done && h('span', { class: 'muted small' }, x.text)),
-      !x.done && h('a', { class: `btn btn--sm ${x === next ? 'btn--primary' : 'btn--secondary'}`, href: x.href }, x.action),
-      x.done && h('span', { class: 'sr-only' }, 'Done')))));
-}
-
 export async function homeView(el, { rerender } = {}) {
-  const [{ listings }, onboard] = await Promise.all([get('/listings'), onboardingCard(rerender)]);
+  const [{ listings }, onboard] = await Promise.all([get('/listings'), launchpadReminder(rerender)]);
   const first = state.user.full_name.split(' ')[0];
   const head = h('div', { class: 'page-head' },
     h('div', { class: 'page-head__title' }, h('h1', null, `Welcome back, ${first}`), h('p', null, `${state.user.organization_name} · ${fmtDate(todayManila())}`)),
@@ -173,7 +154,7 @@ export async function homeView(el, { rerender } = {}) {
       h('a', { class: 'btn btn--primary', href: '#/reservations?new=1' }, icon('plus'), 'New reservation'),
       h('a', { class: 'btn btn--secondary', href: '#/calendar' }, 'Calendar')));
   if (!listings.length) {
-    el.replaceChildren(head, onboard, onboard ? null : h('div', { class: 'card' }, emptyState({
+    el.replaceChildren(head, onboard, h('div', { class: 'card' }, emptyState({
       iconName: 'building', title: state.user.role === 'owner' ? 'Add your first listing' : 'No listings assigned to you yet',
       text: 'A listing is a unit you rent out per night — like a condo unit in a tower. Add it with its nightly rate, then connect your Airbnb or Booking.com calendar.',
       action: state.user.role !== 'staff' && h('button', { class: 'btn btn--primary', onclick: () => navigate('#/listings?new=1') }, icon('plus'), 'Add listing'),

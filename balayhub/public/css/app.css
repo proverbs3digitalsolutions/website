@@ -738,3 +738,47 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .bk-cal__day.is-picked small { color: #e6fff8; }
 .bk-done { text-align: center; display: grid; gap: 12px; justify-items: center; max-width: 560px; margin: 0 auto; }
 .bk-done .dl { text-align: left; width: 100%; }
+
+/* ================================================================ launchpad */
+.lpad-hero { display: flex; gap: 20px; align-items: center; justify-content: space-between; background: linear-gradient(135deg, var(--teal-soft), var(--sand-soft)); border: 1px solid var(--line); }
+.lpad-hero__text { display: grid; gap: 10px; max-width: 640px; }
+.lpad-hero h1 { font-size: clamp(1.4rem, 4vw, 1.9rem); }
+.lpad-hero .btn { justify-self: start; }
+.lpad-eyebrow { color: var(--forest); font-weight: 700; font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; }
+.lpad-hero__art { flex: none; width: 120px; height: 120px; border-radius: 50%; background: #fff; display: grid; place-items: center; color: var(--forest); box-shadow: var(--shadow); }
+.lpad-hero__art svg { width: 60px; height: 60px; }
+@media (max-width: 639px) { .lpad-hero__art { display: none; } }
+.lpad-progress { display: grid; gap: 6px; max-width: 420px; }
+.lpad-progress .bar { height: 10px; background: #fff; }
+.lpad-phase__head { display: flex; gap: 14px; align-items: center; margin-bottom: 10px; }
+.lpad-phase__head > div { flex: 1; min-width: 0; }
+.lpad-phase__num { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-family: var(--font-head); font-weight: 700; background: var(--teal-soft); color: var(--forest); }
+.lpad-phase__num.is-done { background: var(--forest); color: #fff; }
+.lpad-phase__count { flex: none; }
+.lpad-steps { display: grid; gap: 8px; }
+.lpad-step { border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.lpad-step.is-next { border-color: var(--forest); box-shadow: 0 0 0 3px var(--teal-soft); }
+.lpad-step summary { display: flex; align-items: center; gap: 12px; padding: 12px 14px; cursor: pointer; list-style: none; }
+.lpad-step summary::-webkit-details-marker { display: none; }
+.lpad-step__check { flex: none; width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--line-2); display: grid; place-items: center; font-size: .8rem; font-weight: 800; }
+.lpad-step.is-done .lpad-step__check { background: var(--forest); border-color: var(--forest); color: #fff; }
+.lpad-step.is-next .lpad-step__check { border-color: var(--forest); }
+.lpad-step__title { flex: 1; font-weight: 650; }
+.lpad-step.is-done .lpad-step__title { color: var(--muted); }
+.lpad-step__body { padding: 0 14px 14px 50px; display: grid; gap: 10px; }
+@media (max-width: 559px) { .lpad-step__body { padding-left: 14px; } }
+.lpad-how { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.lpad-status { flex: none; font-size: .75rem; font-weight: 700; color: var(--muted); padding: 3px 8px; border-radius: 99px; background: var(--gray-soft); }
+.lpad-status--done { background: var(--green-soft); color: var(--green); }
+.lpad-status--next { background: var(--forest); color: #fff; }
+.lpad-status--skip { background: var(--sand-soft); color: #8a6a2c; }
+.lpad-guides { display: grid; gap: 8px; }
+@media (min-width: 760px) { .lpad-guides { grid-template-columns: 1fr 1fr; align-items: start; } }
+.lpad-guide { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }
+.lpad-guide summary { font-weight: 650; cursor: pointer; }
+.lpad-guide .lpad-how { margin-top: 8px; }
+.lpad-reminder { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; border: 1px solid var(--teal-soft); background: linear-gradient(90deg, var(--teal-soft), #fff 60%); }
+.lpad-reminder__icon { flex: none; width: 44px; height: 44px; border-radius: 50%; background: var(--forest); color: #fff; display: grid; place-items: center; }
+.lpad-reminder__icon svg { width: 24px; height: 24px; }
+.lpad-reminder__text { flex: 1 1 260px; display: grid; gap: 4px; }
+.lpad-reminder__text .bar { max-width: 360px; }

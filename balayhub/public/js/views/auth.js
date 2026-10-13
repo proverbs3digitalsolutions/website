@@ -257,7 +257,7 @@ export async function setupView(el) {
     onSubmit: async (data) => {
       await post('/workspace', data);
       await refreshUser();
-      navigate(data.business_type === 'long_term' ? '#/properties?new=1' : '#/listings?new=1', { replace: true });
+      navigate(data.business_type === 'long_term' ? '#/properties?new=1' : '#/launchpad', { replace: true });
     },
   });
   el.append(publicPage(authCard(`Welcome, ${state.user.full_name.split(' ')[0]}!`,

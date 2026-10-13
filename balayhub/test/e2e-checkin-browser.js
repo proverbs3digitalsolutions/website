@@ -15,7 +15,7 @@ const BASE = process.env.BASE_URL || 'http://localhost:3000';
   page.on('console', (m) => { if (m.type() === 'error' && !/40[0-9]/.test(m.text())) errors.push(`console: ${m.text()}`); });
   const step = async (name, fn) => { try { await fn(); console.log('ok  ', name); } catch (e) { failed += 1; console.log('FAIL', name, e.message.split('\n')[0]); await page.screenshot({ path: SHOTS + 'fail-' + name.replace(/\W+/g, '_') + '.png' }); } };
   let link;
-  await step('new owner sees the get-started checklist', async () => {
+  await step('new owner is guided by the Launchpad', async () => {
     const email = `new${Date.now()}@example.com`;
     await page.goto(BASE + '/#/signup');
     await page.locator('[name=full_name]').fill('New Host');
@@ -32,9 +32,13 @@ const BASE = process.env.BASE_URL || 'http://localhost:3000';
     await page.goto(BASE + '/#/setup');
     await page.locator('[name=name]').fill('New Host Stays');
     await page.locator('form button[type=submit]').click();
-    await page.getByRole('heading', { name: 'Add listing' }).waitFor(); // first-run opens "Add listing"
+    // First run lands on the Launchpad.
+    await page.getByRole('heading', { name: /Let's get BalayHub ready/ }).waitFor();
+    await page.screenshot({ path: SHOTS + 'o-launchpad.png', fullPage: true });
+    await page.getByRole('link', { name: /Next: Add your first listing/ }).click();
+    await page.getByRole('heading', { name: 'Add listing' }).waitFor();
     await page.goto(BASE + '/#/home');
-    await page.getByRole('heading', { name: 'Get started with BalayHub' }).waitFor();
+    await page.getByText(/Finish setting up BalayHub/).waitFor();
     await page.screenshot({ path: SHOTS + 'o-checklist.png', fullPage: true });
   });
   await step('host copies the check-in link from a reservation', async () => {

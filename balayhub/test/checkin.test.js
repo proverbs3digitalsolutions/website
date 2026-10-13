@@ -21,16 +21,25 @@ test.before(async () => {
 });
 test.after(async () => { await srv.close(); });
 
-test('onboarding checklist tracks real progress and can be hidden', async () => {
+test('launchpad tracks real progress, optional steps can be skipped, reminder can be hidden', async () => {
   let o = (await owner.get('/api/onboarding')).data;
-  assert.equal(o.total, 6);
+  assert.equal(o.total, 11);
+  assert.equal(o.phases.length, 5);
   assert.equal(o.done, 0);
   assert.equal(o.steps[0].key, 'listings');
+  assert.ok(o.steps.every((x) => x.how.length && x.why && x.href));
   prop = (await owner.post('/api/properties', { property_name: 'Azure', property_type: 'condominium', address: 'Bicutan Ave', city: 'Taguig', province: 'Metro Manila' })).data.property;
   unit = (await owner.post(`/api/properties/${prop.property_id}/units`, { unit_name: '1201', unit_type: 'studio', nightly_rate: '2000', max_guests: 4, wifi_name: 'Net' })).data.unit;
   res = (await owner.post('/api/reservations', { unit_id: unit.unit_id, check_in: d(3), check_out: d(5), guest_name: 'Rafael Diaz', guest_email: 'rafael@example.com', num_guests: 3 })).data.reservation;
   o = (await owner.get('/api/onboarding')).data;
   assert.deepEqual(o.steps.filter((x) => x.done).map((x) => x.key), ['listings', 'guest_info', 'reservation']);
+  assert.equal((await owner.post('/api/onboarding/skip', { step: 'listings' })).status, 400, 'required steps cannot be skipped');
+  assert.equal((await owner.post('/api/onboarding/skip', { step: 'photos' })).status, 200);
+  o = (await owner.get('/api/onboarding')).data;
+  assert.equal(o.steps.find((x) => x.key === 'photos').skipped, true);
+  assert.equal(o.done, 4);
+  await owner.post('/api/onboarding/skip', { step: 'photos', undo: true });
+  assert.equal((await owner.get('/api/onboarding')).data.steps.find((x) => x.key === 'photos').skipped, false);
   assert.equal((await owner.post('/api/onboarding/dismiss')).status, 200);
   assert.equal((await owner.get('/api/onboarding')).data.dismissed, true);
   await owner.post('/api/onboarding/dismiss', { show: true });
