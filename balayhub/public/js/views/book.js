@@ -3,7 +3,13 @@
 
 import { get, post, ApiError } from '../api.js';
 import { h, brand, field, toast, readForm, clearErrors, showErrors, todayManila } from '../ui.js';
-import { t, tServer, tFields, locale, initGuestLang, langToggle, fmtDateL as fmtDate } from '../i18n.js';
+import { t, tServer, tFields, locale, initGuestLang, langToggle, guestLang, extendTranslations, fmtDateL as fmtDate } from '../i18n.js';
+
+// Taglish for the wording this page adds (the policy text itself comes from the server).
+extendTranslations({
+  'Cancellation policy': 'Patakaran sa pagkansela',
+  'Pay a {pct}% deposit now, the rest before check-in': '{pct}% deposit ngayon, ang natitira bago mag-check-in',
+});
 
 const peso = (v) => { const n = Number(v || 0); return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`; };
 const photoUrl = (id) => `/api/public/listing-photos/${id}`;
@@ -148,7 +154,7 @@ export async function bookListingView(el, { params, query }) {
   const payChoice = h('div', { class: 'field', dataset: { field: 'pay' } },
     h('label', null, t('Payment')),
     (opt === 'full' || opt === 'either') && h('label', { class: 'check' }, h('input', { type: 'radio', name: 'pay', value: 'full', checked: true }), h('span', null, t('Pay in full now'))),
-    (opt === 'deposit' || opt === 'either') && h('label', { class: 'check' }, h('input', { type: 'radio', name: 'pay', value: 'deposit', checked: opt === 'deposit' }), h('span', { class: 'pay-dep' }, t('Pay a 50% deposit now, the rest before check-in'))),
+    (opt === 'deposit' || opt === 'either') && h('label', { class: 'check' }, h('input', { type: 'radio', name: 'pay', value: 'deposit', checked: opt === 'deposit' }), h('span', { class: 'pay-dep' }, t('Pay a {pct}% deposit now, the rest before check-in', { pct: l.deposit_pct }))),
     h('div', { class: 'error', role: 'alert' }));
   const formError = h('div');
   // Discount code
@@ -193,7 +199,7 @@ export async function bookListingView(el, { params, query }) {
         q.promo_code && [h('dt', null, t('Code {code}', { code: q.promo_code })), h('dd', null, `− ${peso(q.promo_discount)}`)],
         Number(q.cleaning_fee) > 0 && [h('dt', null, t('Cleaning fee')), h('dd', null, peso(q.cleaning_fee))],
         h('dt', null, t('Total')), h('dd', null, h('strong', null, peso(q.total))),
-        q.deposit_allowed && [h('dt', null, t('50% deposit')), h('dd', null, t('{now} now, {rest} due by {date}', { now: peso(q.deposit), rest: peso(Number(q.total) - Number(q.deposit)), date: fmtDate(q.balance_due_date) }))]),
+        q.deposit_allowed && [h('dt', null, t('{pct}% deposit', { pct: l.deposit_pct })), h('dd', null, t('{now} now, {rest} due by {date}', { now: peso(q.deposit), rest: peso(Number(q.total) - Number(q.deposit)), date: fmtDate(q.balance_due_date) }))]),
       !q.available && h('div', { class: 'alert alert--error' }, t('Sorry, these dates are no longer available.')));
       submit.disabled = !q.available || !host.accepting;
     } catch (err) {
@@ -203,6 +209,10 @@ export async function bookListingView(el, { params, query }) {
     }
   }
 
+  // The cancellation policy, shown before the guest pays (nothing when the host hasn't set one).
+  const policyWording = l.cancellation && ((guestLang() === 'tl' && l.cancellation.tl) || l.cancellation.en);
+  const policyBlock = policyWording && h('div', { class: 'bk-policy', dataset: { field: 'policy' } },
+    h('strong', null, t('Cancellation policy')), h('p', { class: 'small' }, policyWording));
   const form = h('form', { class: 'form', novalidate: true },
     formError,
     h('div', { class: 'form-row form-row--2' },
@@ -213,6 +223,7 @@ export async function bookListingView(el, { params, query }) {
       field({ name: 'phone', label: t('Mobile number'), type: 'tel', required: true, inputmode: 'tel', autocomplete: 'tel', placeholder: '0917 123 4567' })),
     field({ name: 'notes', label: t('Message to the host (optional)'), type: 'textarea', maxlength: 1000, placeholder: t('Arrival time, special requests…') }),
     codeBox,
+    policyBlock,
     payChoice,
     h('div', { class: 'field', dataset: { field: 'consent' } },
       h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'consent' }),

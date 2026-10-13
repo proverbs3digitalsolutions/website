@@ -1120,3 +1120,20 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .sidebar__me:hover, .sidebar__me[aria-current="page"] { background: var(--teal-soft); }
 .topbar__me { display: flex; align-items: center; gap: 8px; text-decoration: none; color: var(--text); }
 .sidebar__foot .acct-avatar { color: #fff; }
+
+/* ---------------------------------------------------------------- phase 1 money: proofs, policy, manual payments */
+.proof { display: grid; gap: 8px; min-width: 0; padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--line); }
+.proof a { display: block; max-width: 100%; }
+.proof img { display: block; width: 100%; max-width: 100%; max-height: 360px; object-fit: contain; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); }
+.bk-policy { background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 4px; }
+.bk-policy p { margin: 0; color: var(--muted); }
+.bk-cal__blank { display: block; }
+.pay-dep { font-weight: 650; }
+.bill { grid-template-columns: minmax(0, 1fr) auto; }
+.bill dd { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gc__instructions { background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; color: var(--text); overflow-wrap: anywhere; }
+.form-error:empty { display: none; }
+.form-error { margin-bottom: 8px; }
+.keep-line { margin-top: 12px; display: grid; gap: 2px; }
+.keep-line__save { color: var(--green); font-size: .88rem; font-weight: 650; }
+@media (max-width: 480px) { .bill dd { white-space: normal; } }

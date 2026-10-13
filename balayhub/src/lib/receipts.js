@@ -26,8 +26,8 @@ async function receiptData(paymentId) {
       await db.query('UPDATE booking_payments SET receipt_number = $2 WHERE payment_id = $1', [paymentId, await nextReceiptNumber(db, p.organization_id)]);
     }
   });
-  return one(
-    `SELECT bp.*, b.confirmation_code, b.check_in, b.check_out, b.total_amount, b.guest_id,
+  const r = await one(
+    `SELECT bp.*, b.confirmation_code, b.check_in, b.check_out, b.total_amount, b.extras_total, b.guest_id,
             COALESCE(g.full_name, b.guest_label, 'Guest') AS guest_name, g.email AS guest_email,
             u.unit_name, p.property_name, o.name AS workspace_name, ru.full_name AS recorded_by_name,
             (b.total_amount - b.channel_fee - COALESCE((SELECT SUM(x.amount) FROM booking_payments x WHERE x.booking_id = b.booking_id AND x.voided_at IS NULL
@@ -40,9 +40,21 @@ async function receiptData(paymentId) {
        LEFT JOIN guests g ON g.guest_id = b.guest_id
        LEFT JOIN users ru ON ru.user_id = bp.recorded_by
       WHERE bp.payment_id = $1`, [paymentId]);
+  if (r) {
+    r.charges = (await query(
+      `SELECT description, quantity, unit_price, amount FROM booking_charges
+        WHERE booking_id = $1 AND voided_at IS NULL ORDER BY created_at, charge_id`, [r.booking_id])).rows;
+  }
+  return r;
 }
 
 function receiptText(r) {
+  const charges = r.charges.length ? [
+    '',
+    'Itemised charges:',
+    ...r.charges.map((c) => `  ${c.description}${c.quantity > 1 ? ` (${c.quantity} × ${messaging.fmtPeso(c.unit_price)})` : ''}: ${messaging.fmtPeso(c.amount)}`),
+    `  Extras total: ${messaging.fmtPeso(r.extras_total)}`,
+  ] : [];
   return [
     `ACKNOWLEDGEMENT RECEIPT ${r.receipt_number}`,
     `${r.workspace_name}`,
@@ -54,6 +66,7 @@ function receiptText(r) {
     '',
     `For: ${r.unit_name}, ${r.property_name}`,
     `Stay: ${messaging.fmtDate(r.check_in)} – ${messaging.fmtDate(r.check_out)} · Booking ${r.confirmation_code}`,
+    ...charges,
     `Booking total: ${messaging.fmtPeso(r.total_amount)}`,
     `Remaining balance: ${messaging.fmtPeso(Math.max(0, Number(r.balance_after)))}`,
     '',

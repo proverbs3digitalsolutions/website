@@ -75,6 +75,7 @@ export async function settingsView(el, { rerender, query = {} }) {
   if (!u.plan?.is_demo) sections.push(await notificationsCard(rerender).catch(() => null));
   if (u.role === 'owner' && u.plan && !u.plan.is_demo) sections.push(await planCard(u));
   if (u.role === 'owner' && u.plan && !u.plan.is_demo && u.business_type !== 'long_term') sections.push(await bookingCard(rerender));
+  if (u.role === 'owner' && u.plan && !u.plan.is_demo && u.business_type !== 'long_term') sections.push(await manualPaymentsCard(rerender));
   if (u.role === 'owner' && u.plan && !u.plan.is_demo) sections.push(dataCard(u, rerender));
 
   if (u.role === 'owner') {
@@ -330,6 +331,32 @@ function dataCard(u, rerender) {
 }
 
 // ---------------------------------------------------------------- direct booking page
+// Owners let guests pay by GCash, Maya or bank transfer and write the details they pay to.
+async function manualPaymentsCard(rerender) {
+  let m;
+  try { m = await get('/workspace/manual-payments'); } catch { return null; }
+  const enabled = h('input', { type: 'checkbox', checked: m.enabled });
+  const details = h('textarea', {
+    class: 'input', rows: 4, maxlength: 1000, value: m.instructions || '', 'aria-label': 'Payment details for guests',
+    placeholder: 'e.g. GCash 0917 123 4567 (Maria Santos)\nBDO savings 0012 3456 7890 (Maria Santos)',
+  });
+  const save = async () => {
+    try {
+      await patch('/workspace/manual-payments', { enabled: enabled.checked, instructions: details.value });
+      toast('Manual payments saved.');
+      rerender();
+    } catch (err) { toast(err.message, 'error'); }
+  };
+  return h('div', { class: 'card' },
+    h('div', { class: 'card__head' }, h('h2', null, 'Manual payments')),
+    h('p', { class: 'muted small' }, 'Let guests pay by GCash, Maya or bank transfer. They send you a screenshot from their payment page; you check it and confirm it, which records the payment on the reservation. BalayHub does not check the money for you.'),
+    h('div', { class: 'form' },
+      h('label', { class: 'check' }, enabled, h('span', null, 'Accept manual payments on the payment page')),
+      h('div', { class: 'field' }, h('label', null, 'Payment details guests should use'), details,
+        h('div', { class: 'hint' }, 'Shown on the payment page, up to 1,000 characters. Add the GCash number, bank name and account name.')),
+      h('div', null, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: save }, 'Save'))));
+}
+
 async function bookingCard(rerender) {
   let b;
   try { b = await get('/direct-booking'); } catch { return null; }

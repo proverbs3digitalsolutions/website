@@ -11,6 +11,9 @@ import { checkinCard } from './checkin.js';
 import { stars } from './guestcare.js';
 import { gatepassCard } from './gatepass.js';
 import { depositCard } from './deposits.js';
+import { chargesCard } from './charges.js';
+import { refundsCard } from './refunds.js';
+import { proofsCard } from './proofs.js';
 
 const ordinal = (n) => { const s = ['th', 'st', 'nd', 'rd']; const v = n % 100; return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`; };
 // "VIP", "Returning guest · 3rd stay", "Do not rebook"
@@ -270,7 +273,7 @@ export async function reservationDetailView(el, { params, rerender }) {
   });
 
   const cancel = async () => {
-    const reason = await confirmDialog({ title: 'Cancel this reservation?', text: 'The dates become available again. Payments stay on record; refund them outside BalayHub and void them here if needed.', confirmText: 'Cancel reservation', cancelText: 'Keep reservation', danger: true, reason: true });
+    const reason = await confirmDialog({ title: 'Cancel this reservation?', text: 'The dates become available again. Payments stay on record. Record any money you give back in the Refunds card.', confirmText: 'Cancel reservation', cancelText: 'Keep reservation', danger: true, reason: true });
     if (!reason) return;
     try { await post(`/reservations/${r.booking_id}/cancel`, { reason }); toast('Reservation cancelled.'); rerender(); } catch (err) { toast(err.message, 'error'); }
   };
@@ -284,6 +287,14 @@ export async function reservationDetailView(el, { params, rerender }) {
   const checkin = canManage && r.status === 'confirmed' ? await checkinCard(r.booking_id, rerender) : null;
   const gatepass = canManage && r.status === 'confirmed' && r.check_out >= todayManila() ? await gatepassCard(r.booking_id, rerender) : null;
   const deposit = await depositCard(r, rerender);
+  // Money cards sit under Payment. A card that fails to load is skipped, so the page still opens.
+  const card = (build) => build(r, rerender).catch(() => null);
+  const charges = await card(chargesCard);
+  const proofs = canManage ? await card(proofsCard) : null;
+  const refunds = await card(refundsCard);
+  const overpaid = canManage && Number(r.balance) < 0 ? Math.abs(Number(r.balance)) : 0;
+  const keep = Number(r.total_amount) - Number(r.channel_fee);
+  const feeSaved = r.channel === 'direct' ? Math.round(Number(r.accommodation_total) * 15) / 100 : 0;
 
   // Private link where the guest pays the balance online (host's PayMongo).
   const copyPayLink = async () => {
@@ -337,7 +348,10 @@ export async function reservationDetailView(el, { params, rerender }) {
           r.review.comment && h('p', { style: { whiteSpace: 'pre-wrap' } }, `“${r.review.comment}”`)),
         checkin, gatepass, deposit),
       h('div', { class: 'stack' },
-        h('div', { class: 'card' },
+        h('div', { class: 'card', id: 'payment-card' },
+          overpaid > 0 && h('div', { class: 'alert alert--warn', role: 'alert', style: { marginBottom: '12px' } },
+            `Guest overpaid by ${peso(overpaid)} — `,
+            h('a', { href: '#refunds-card', onclick: (e) => { e.preventDefault(); document.getElementById('refunds-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, 'record a refund')),
           h('div', { class: 'card__head' }, h('h2', null, 'Payment'), h('div', { class: 'chips' },
             canManage && confirmed && Number(r.balance) > 0 && h('button', { class: 'btn btn--secondary btn--sm', onclick: copyPayLink }, 'Copy payment link'),
             confirmed && h('button', { class: 'btn btn--primary btn--sm', onclick: recordPayment }, 'Record payment'))),
@@ -349,6 +363,10 @@ export async function reservationDetailView(el, { params, rerender }) {
             Number(r.channel_fee) > 0 && [h('dt', null, 'Channel fee'), h('dd', { class: 'muted' }, `− ${peso(r.channel_fee)}`)],
             h('dt', null, 'Paid'), h('dd', null, peso(r.amount_paid)),
             h('dt', null, 'Balance'), h('dd', { class: Number(r.balance) > 0 ? 'amount--neg' : '' }, h('strong', null, peso(r.balance)))),
+          canManage && h('div', { class: 'keep-line' },
+            h('div', null, 'You keep ', h('strong', null, peso(keep))),
+            feeSaved > 0 && h('div', { class: 'keep-line__save' }, `No channel fee — about ${peso(feeSaved)} saved vs a 15% channel fee`),
+            r.channel !== 'direct' && Number(r.channel_fee) === 0 && h('div', { class: 'muted small' }, 'Enter the channel fee (Edit) to see what you keep.')),
           h('h3', { class: 'subhead', style: { marginTop: '16px' } }, 'Payments'),
           payments.length ? h('ul', { class: 'list' }, payments.map((p) => h('li', null, h('div', { class: 'row' },
             h('div', { class: 'row__main' },
@@ -359,7 +377,8 @@ export async function reservationDetailView(el, { params, rerender }) {
               h('a', { class: 'btn btn--ghost btn--sm', href: `#/receipts/${p.payment_id}` }, 'Receipt'),
               canManage && r.guest_email && h('button', { class: 'btn btn--ghost btn--sm', onclick: () => emailReceipt(p) }, p.receipt_sent_at ? 'Email again' : 'Email'),
               canManage && h('button', { class: 'btn btn--ghost btn--sm', onclick: () => voidPayment(p) }, 'Void')))))))
-            : h('p', { class: 'muted small' }, 'No payments recorded yet.')))));
+            : h('p', { class: 'muted small' }, 'No payments recorded yet.')),
+        charges, proofs, refunds && h('div', { id: 'refunds-card' }, refunds))));
 }
 
 // ---------------------------------------------------------------- printable receipt

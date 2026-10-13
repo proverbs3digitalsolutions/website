@@ -1,7 +1,7 @@
 'use strict';
 
 // Direct booking: each host's public booking page, paid through the host's own
-// PayMongo account (full payment or a 50% deposit). A booking is created only
+// PayMongo account (full payment or the listing's deposit). A booking is created only
 // after BalayHub confirms the payment with PayMongo using the host's key.
 
 const crypto = require('crypto');
@@ -20,6 +20,7 @@ const { addDays } = require('../lib/holidays');
 const secretbox = require('../lib/secretbox');
 const paymongo = require('../lib/paymongo');
 const storage = require('../lib/storage');
+const { describePolicy } = require('../lib/policies');
 
 const router = express.Router();
 const publicRouter = express.Router();
@@ -175,12 +176,16 @@ async function loadHost(slug) {
 
 const PUBLIC_UNIT = `
   SELECT u.unit_id, u.unit_name, u.description, u.max_guests, u.nightly_rate, u.cleaning_fee, u.min_nights, u.payment_option,
+         u.deposit_pct, u.cancellation_policy, u.cancellation_policy_text,
          u.balance_due_days, u.house_rules, to_char(u.checkin_time, 'HH24:MI') AS checkin_time, to_char(u.checkout_time, 'HH24:MI') AS checkout_time,
          p.property_name, p.city, p.province,
          COALESCE((SELECT json_agg(f.file_id ORDER BY f.sort_order, f.uploaded_at) FROM files f
                     WHERE f.related_record_type = 'listing' AND f.related_record_id = u.unit_id), '[]') AS photos
     FROM units u JOIN properties p USING (property_id)
    WHERE p.organization_id = $1 AND u.bookable_online AND u.status = 'active' AND p.status = 'active' AND u.nightly_rate IS NOT NULL`;
+
+// A listing as guests see it: the policy as its wording, not the raw columns.
+const guestListing = ({ cancellation_policy, cancellation_policy_text, ...l }) => ({ ...l, cancellation: describePolicy(cancellation_policy, cancellation_policy_text) });
 
 async function loadPublicUnit(host, unitId) {
   if (!/^[0-9a-f-]{36}$/i.test(String(unitId))) throw notFound('This listing is not available.');
@@ -192,7 +197,7 @@ async function loadPublicUnit(host, unitId) {
 publicRouter.get('/public/book/:slug', ah(async (req, res) => {
   const host = await loadHost(req.params.slug);
   const { rows } = await query(`${PUBLIC_UNIT} ORDER BY p.property_name, u.unit_name`, [host.organization_id]);
-  res.json({ host: { name: host.name, intro: host.booking_intro, accepting: host.accepting, demo: host.is_demo, test_mode: host.test_mode, guest_language: host.guest_language }, listings: rows });
+  res.json({ host: { name: host.name, intro: host.booking_intro, accepting: host.accepting, demo: host.is_demo, test_mode: host.test_mode, guest_language: host.guest_language }, listings: rows.map(guestListing) });
 }));
 
 // Taken nights and prices for a date range (for the availability calendar).
@@ -235,7 +240,7 @@ async function priceStay(u, checkIn, checkOut, promo = {}) {
   }
   const cleaning = Number(u.cleaning_fee || 0);
   const total = Math.round((accommodation + cleaning) * 100) / 100;
-  const deposit = Math.round(total * 50) / 100;
+  const deposit = Math.round(total * u.deposit_pct) / 100;
   const due = new Date(Date.parse(`${checkIn}T00:00:00Z`) - u.balance_due_days * 86400000).toISOString().slice(0, 10);
   // A deposit only makes sense if the balance isn't already due.
   const depositAllowed = u.payment_option !== 'full' && due > manilaToday();
@@ -325,7 +330,7 @@ publicRouter.post('/public/book/:slug/units/:unitId/checkout', checkoutLimiter, 
   });
 
   const key = secretbox.decrypt(host.paymongo_key_enc);
-  const label = `${u.unit_name} · ${price.nights} night${price.nights > 1 ? 's' : ''} (${body.check_in} to ${body.check_out})${body.pay === 'deposit' ? ' · 50% deposit' : ''}`;
+  const label = `${u.unit_name} · ${price.nights} night${price.nights > 1 ? 's' : ''} (${body.check_in} to ${body.check_out})${body.pay === 'deposit' ? ` · ${u.deposit_pct}% deposit` : ''}`;
   try {
     if (!key) throw Object.assign(new Error('Online payment is not set up correctly for this host.'), { status: 502 });
     const data = await paymongo.request(key, 'POST', '/checkout_sessions', {
@@ -363,7 +368,8 @@ publicRouter.get('/public/book/status/:token', ah(async (req, res) => {
   const status = await refreshCheckout(c.checkout_ref).catch(() => null);
   const row = await one(
     `SELECT c.status, c.check_in, c.check_out, c.num_guests, c.guest_name, c.pay_type, c.total_amount, c.amount_due_now,
-            u.unit_name, u.balance_due_days, p.property_name, o.name AS host_name, o.guest_language, b.confirmation_code, b.checkin_token
+            u.unit_name, u.balance_due_days, u.cancellation_policy, u.cancellation_policy_text,
+            p.property_name, o.name AS host_name, o.guest_language, b.confirmation_code, b.checkin_token
        FROM direct_checkouts c JOIN units u USING (unit_id) JOIN properties p ON p.property_id = u.property_id
        JOIN organizations o ON o.organization_id = c.organization_id LEFT JOIN bookings b ON b.booking_id = c.booking_id
       WHERE c.checkout_ref = $1`, [c.checkout_ref]);
@@ -374,6 +380,7 @@ publicRouter.get('/public/book/status/:token', ah(async (req, res) => {
       guests: row.num_guests, guest_name: row.guest_name, pay_type: row.pay_type, total: row.total_amount, paid: row.amount_due_now,
       balance: (Number(row.total_amount) - Number(row.amount_due_now)).toFixed(2), balance_due_days: row.balance_due_days,
       guest_language: row.guest_language, code: row.confirmation_code, checkin_link: row.checkin_token ? `${config.appUrl}/#/checkin/${row.checkin_token}` : null,
+      cancellation: describePolicy(row.cancellation_policy, row.cancellation_policy_text),
     },
   });
 }));
@@ -428,6 +435,10 @@ async function refreshCheckout(ref) {
 
 const METHOD_MAP = { gcash: 'gcash', paymaya: 'maya', maya: 'maya', card: 'card', grab_pay: 'other', qrph: 'other' };
 
+// The share of the total paid as a deposit. Checkouts don't store the percentage, so it is
+// worked out from the two amounts (the checkout total is fixed when the guest pays).
+const depositPctOf = (c) => Math.round((Number(c.amount_due_now) * 100) / Number(c.total_amount));
+
 // Turn a paid checkout into a confirmed reservation with its payment (once).
 async function finalize(ref, method) {
   const result = await tx(async (db) => {
@@ -467,7 +478,7 @@ async function finalize(ref, method) {
          VALUES ($1,$2,'reservation',$3,'direct',$4,$5,$6,$7,$8,$9,$10) RETURNING booking_id`,
         [c.organization_id, c.unit_id, g.guest_id, c.check_in, c.check_out, c.num_guests, c.accommodation_total, c.cleaning_fee, code,
           [c.test_mode ? 'TEST MODE booking (PayMongo test key, no real payment).' : null,
-            `Booked online (${c.pay_type === 'deposit' ? '50% deposit paid' : 'paid in full'}).`,
+            `Booked online (${c.pay_type === 'deposit' ? `${depositPctOf(c)}% deposit paid` : 'paid in full'}).`,
             promo ? `Discount code ${promo.code}: −₱${Number(c.discount_amount).toLocaleString('en-PH')} (already taken off the accommodation).` : null,
             g.do_not_rebook ? '⚠ This guest is marked "Do not rebook" in Guests.' : null,
             c.notes ? `Guest's message: ${c.notes}` : null].filter(Boolean).join('\n')]);
@@ -515,7 +526,7 @@ async function afterBooking({ bookingId, ownerId, c, flagged }) {
   await query(
     `INSERT INTO messages (conversation_id, organization_id, direction, from_name, body, status) VALUES ($1,$2,'note','BalayHub',$3,'note')`,
     [conv.conversation_id, conv.organization_id,
-      `New direct booking: ${c.guest_name}, ${c.check_in} to ${c.check_out}, ${c.num_guests} guest(s). Paid ₱${Number(c.amount_due_now).toLocaleString('en-PH')} online${c.pay_type === 'deposit' ? ` (50% deposit; balance ₱${(Number(c.total_amount) - Number(c.amount_due_now)).toLocaleString('en-PH')} due before check-in)` : ' (in full)'}.${flagged ? ' ⚠ This guest is marked "Do not rebook" in Guests.' : ''}`]);
+      `New direct booking: ${c.guest_name}, ${c.check_in} to ${c.check_out}, ${c.num_guests} guest(s). Paid ₱${Number(c.amount_due_now).toLocaleString('en-PH')} online${c.pay_type === 'deposit' ? ` (${depositPctOf(c)}% deposit; balance ₱${(Number(c.total_amount) - Number(c.amount_due_now)).toLocaleString('en-PH')} due before check-in)` : ' (in full)'}.${flagged ? ' ⚠ This guest is marked "Do not rebook" in Guests.' : ''}`]);
   await query(`UPDATE conversations SET unread = true, status = 'open', last_message_at = now() WHERE conversation_id = $1`, [conv.conversation_id]);
 }
 

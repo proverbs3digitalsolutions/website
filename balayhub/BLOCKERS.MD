@@ -56,7 +56,7 @@ Last updated: 2026-10-13
   - the monthly and quarterly filing rules
 
   Until confirmed, BalayHub won't generate "BIR-compliant" invoices.
-- [ ] **Owner fees.** Which fee rule do most of your owners use: % of gross, % of net after channel fees, or a flat monthly fee? Do owners need a login, or is an emailed PDF enough?
+- [ ] **Owner fees.** Also confirm D-37: should extras go to the owner's gross, should refunds reduce the owner's statement, and should the management fee be charged after refunds? Which fee rule do most of your owners use: % of gross, % of net after channel fees, or a flat monthly fee? Do owners need a login, or is an emailed PDF enough?
 - [ ] **Free plan.** Offer a permanent free plan for 1 unit, as Hospitable and Zeevou do, to win the largest group of hosts? Today there's a 14-day trial.
 - [ ] **Smarter pricing scope.** Simple rules (gap nights, last-minute, events) are planned. Should BalayHub also adjust prices automatically from your own occupancy? This is not AI, but it is more complex.
 

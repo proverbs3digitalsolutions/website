@@ -268,6 +268,18 @@ Key constraint: **`bookings_no_overlap`** is an `EXCLUDE USING gist (unit_id WIT
 | payment_id | uuid → booking_payments | Set when paid |
 | payment_method, last_checked_at, created_at, paid_at | | |
 
+#### Phase 1 money tables (migrations 027–028, 2026-10-13)
+
+| Table / column | Key fields | Notes |
+|---|---|---|
+| `booking_charges` | booking_id, category (`early_checkin`, `late_checkout`, `extra_guest`, `extra_bed`, `airport_transfer`, `damage`, `extra_cleaning`, `other`), description, quantity (1–99), unit_price (> 0), amount (generated: quantity × unit_price), created_by, voided_at/by/reason | Extra charges on a stay. Their non-voided sum is kept in `bookings.extras_total`. |
+| `bookings.extras_total` | numeric ≥ 0 | Part of the generated `total_amount` (= accommodation + cleaning + other fees + extras). |
+| `booking_refunds` | booking_id, amount (> 0), refund_date, method, reference_number, reason (required), recorded_by, idempotency_key (unique per workspace), voided_at/by/reason | A record of money returned. The total of non-voided refunds can't exceed the non-voided payments. It doesn't change the balance. |
+| `payment_proofs` | booking_id, amount (> 0), method (`gcash`, `maya`, `bank_transfer`, `other`), reference_number, payer_name, note, status (`pending`, `confirmed`, `rejected`), reviewed_by/at, reject_reason, payment_id → booking_payments | Sent by the guest from the pay page. Confirming creates a `booking_payment`. There are at most 5 pending per booking. |
+| `units` | cancellation_policy (`flexible`, `moderate`, `strict`, `non_refundable`, `custom`, or NULL), cancellation_policy_text, deposit_pct (10–90, default 50) | Policy presets live in `src/lib/policies.js`. |
+| `organizations` | manual_payments_enabled, manual_payment_instructions | Owner-only setting. Shown on the guest pay page. |
+| `files.related_record_type` | adds `payment_proof`, `booking_payment` | Owners and managers only. Downloads are audited. |
+
 ### 2.6 Messaging (guest inbox)
 
 **conversations**: one thread per reservation.
@@ -635,6 +647,11 @@ The workspace export (`exportOrganization`) is not complete. It leaves out `supp
 | Message templates and automations | Templates: view, create, edit, archive. Automations: view, create, edit, remove | Templates: view and use only (owner-only edits since 2026-10-13, D-28). Automations: view only | None | None | None |
 | Housekeeping (cleaning tasks) | View, create, edit, assign, cancel; edit default checklist | Same except the default checklist (assigned) | View (assigned); tick items; start, finish, reopen; attach photos; no create, edit or cancel | None | None |
 | Guest reviews | View (all) | View (assigned) | View (assigned) | None | Review link: submit one review, from check-in until 60 days after check-out |
+| Extra charges | View, add, void (with reason) | Same (assigned properties) | View only | None | See the lines on the pay page |
+| Refunds | View, record, void (capped at amount paid) | Same (assigned properties) | View only | None | None |
+| Payment proofs and proof files | View, confirm, reject | Same (assigned properties) | None | None | Submit a proof with one screenshot via the pay link, at most 5 pending; refused for cancelled, paid or ended stays |
+| Manual payment settings | View, change | None | None | None | Sees the instructions on the pay page when enabled |
+| Cancellation policy and deposit % (per listing) | View, change | Same (assigned properties) | None | None | Sees the policy and the deposit amount on the booking page |
 | Discount codes | View, create, turn on or off | View only (owner-only changes since 2026-10-13, D-28) | None | None | Apply a code at checkout |
 | Direct booking page and the host's PayMongo key | View, edit; the key is write-only (hint shown) | None | None | None | Public booking page by slug |
 | Tenants | View, create, edit, archive; export one tenant's record | View, create, edit, archive (tenants with leases in assigned properties, or not placed) | View names only (contact details and notes removed) | None | None |

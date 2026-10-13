@@ -1,8 +1,9 @@
 'use strict';
 
 // Monthly owner statement: stays that checked out in the month on the owner's
-// units, less channel fees, cleaning fees (when the manager keeps them), the
-// management fee and the units' expenses, giving the owner's payout.
+// units, less channel fees, cleaning fees (when the manager keeps them), refunds
+// paid in the month, the management fee and the units' expenses, giving the
+// owner's payout.
 
 const { query, one } = require('../db');
 
@@ -40,6 +41,24 @@ async function ownerStatement(orgId, ownerId, month) {
       WHERE e.unit_id = ANY($1) AND e.voided_at IS NULL AND e.expense_date >= $2 AND e.expense_date < $3
       ORDER BY e.expense_date`, [ids, start, end]);
 
+  // Refunds dated in the month on confirmed stays of these units (cancelled stays were never in
+  // the gross, so their refunds don't touch the owner). Refunding an overpayment does not reduce
+  // the owner's income: the bill already dropped by that amount when the charge was voided (D-32).
+  // So each booking loses only the refunds that go beyond its overpayment.
+  const { rows: refundRows } = await query(
+    `SELECT b.booking_id, b.total_amount, SUM(r.amount) AS in_period,
+            COALESCE((SELECT SUM(p.amount) FROM booking_payments p WHERE p.booking_id = b.booking_id AND p.voided_at IS NULL), 0) AS paid,
+            COALESCE((SELECT SUM(x.amount) FROM booking_refunds x WHERE x.booking_id = b.booking_id AND x.voided_at IS NULL AND x.refund_date < $2), 0) AS before_period
+       FROM booking_refunds r JOIN bookings b ON b.booking_id = r.booking_id
+      WHERE b.unit_id = ANY($1) AND b.kind = 'reservation' AND b.status = 'confirmed'
+        AND r.voided_at IS NULL AND r.refund_date >= $2 AND r.refund_date < $3
+      GROUP BY b.booking_id, b.total_amount`, [ids, start, end]);
+  const refunds = refundRows.reduce((s, r) => {
+    const over = Math.max(0, cents(r.paid) - cents(r.total_amount));
+    const before = cents(r.before_period);
+    return s + Math.max(0, before + cents(r.in_period) - over) - Math.max(0, before - over);
+  }, 0);
+
   let gross = 0; let channelFees = 0; let cleaning = 0;
   const lines = stays.map((s) => {
     const g = cents(s.total_amount); const cf = cents(s.channel_fee);
@@ -47,7 +66,8 @@ async function ownerStatement(orgId, ownerId, month) {
     gross += g; channelFees += cf; cleaning += cl;
     return { ...s, net: money(g - cf - cl), missing_amount: g === 0 };
   });
-  const net = gross - channelFees - cleaning;
+  // The management fee is a share of what is left after refunds, so it doesn't apply to money given back.
+  const net = gross - channelFees - cleaning - refunds;
   const fee = Math.round((Math.max(net, 0) * Number(owner.management_fee_pct)) / 100);
   const exp = expenses.reduce((s, e) => s + cents(e.amount), 0);
   const nights = stays.reduce((s, x) => s + Number(x.nights), 0);
@@ -57,6 +77,8 @@ async function ownerStatement(orgId, ownerId, month) {
     workspace: org.name,
     owner: { owner_id: owner.owner_id, full_name: owner.full_name, email: owner.email, management_fee_pct: owner.management_fee_pct, cleaning_to_manager: owner.cleaning_to_manager },
     units, stays: lines, expenses,
+    // Outside totals so the totals keep their shape; net_rental and payout already include it.
+    refunded: money(refunds),
     totals: {
       stays: stays.length, nights, occupancy_pct: units.length ? Math.min(100, Math.round((100 * nights) / (units.length * days))) : 0,
       gross: money(gross), channel_fees: money(channelFees), cleaning_fees: money(cleaning), net_rental: money(net),
@@ -84,6 +106,7 @@ function statementText(s, monthLabel) {
     `Gross bookings:        ${peso(t.gross)}`,
     `Less channel fees:     ${peso(t.channel_fees)}`,
     ...(s.owner.cleaning_to_manager ? [`Less cleaning fees:    ${peso(t.cleaning_fees)}`] : []),
+    `Less refunds:          ${peso(s.refunded)}`,
     `Net rental income:     ${peso(t.net_rental)}`,
     `Management fee (${Number(s.owner.management_fee_pct)}%): ${peso(t.management_fee)}`,
     `Expenses:              ${peso(t.expenses)}`,

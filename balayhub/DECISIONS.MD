@@ -72,3 +72,47 @@ Last updated: 2026-10-13
 
 **D-30 · 2026-10-13 · BalayHub aims to be "a Guesty for Filipino hosts", built in-house.** It will cover services, features, scheduling and finance on one platform, for hosts with 1–10 units. New work excludes integrations (channel-manager APIs, an open API, marketplaces, smart locks, accounting sync) and new AI features. *Why:* founder request. Competing on peso pricing, local payments, condo and BIR needs, Taglish and simplicity beats copying Guesty's integration ecosystem. The roadmap comes from the research in `docs/research/00-SUMMARY.md`. Official two-way channel APIs (previously "later phase") are excluded for now.
 
+## Phase 1: money (2026-10-13)
+
+**D-31 · 2026-10-13 · Extra charges raise the stay total.** A new `extras_total`, the sum of non-voided extra charges, is part of `total_amount`, so the existing balance, pay links, receipts and reports include extras automatically. Only owners and managers add or void charges; staff can view them. Charges can be added after check-out, because damage is often found after the guest leaves. Any charge change closes open online-payment links so a guest can't pay an old amount.
+
+**D-32 · 2026-10-13 · Voiding a charge after the guest paid is allowed.** The reservation then shows "Guest overpaid by ₱X — record a refund" to owners and managers. *Why:* blocking the void would leave a wrong bill. A visible warning plus the refund log keeps the money traceable.
+
+**D-33 · 2026-10-13 · Cancellation policy presets.**
+- Flexible: full refund up to 1 day before check-in.
+- Moderate: full refund up to 5 days before; 50% after that, including after check-in.
+- Strict: 50% up to 7 days before; nothing after.
+- Non-refundable: nothing.
+- Custom: the host's own text, with no automatic suggestion.
+
+Suggested refunds round half a centavo up. The suggestion uses the listing's *current* policy, not the one in force when the guest booked. Saving the policy at booking time is a possible later improvement.
+
+**D-34 · 2026-10-13 · Refunds are a record, not a balance change.** Refunds are logged separately (amount, date, method, reference, reason) and capped at the amount paid. They don't change the balance formula. Refunds are protected against double saving.
+
+**D-35 · 2026-10-13 · Deposit percentage per listing (10–90%, default 50%).** This replaces the fixed 50% for direct bookings. Existing listings keep 50%.
+
+**D-36 · 2026-10-13 · Manual payments with proof.**
+- Owners turn on manual payments and write their GCash, Maya or bank details.
+- Guests send a proof (amount, method, reference, screenshot) on the pay page. The host confirms it, which records the payment and can send a receipt, or rejects it with a reason, which is emailed to the guest.
+- Proofs are refused for cancelled stays, fully paid stays, or after check-out, matching the online checkout rule.
+- A proof larger than the current balance can't be confirmed. The host records the right amount by hand instead.
+- Proof screenshots are visible to owners and managers only.
+
+*Why:* many Filipino guests pay by GCash or bank transfer, and hosts need these payments inside BalayHub's records.
+
+**D-37 · 2026-10-13 · Reports and owner statements with extras and refunds.**
+- Extras count as revenue, in the stay's check-in month, like cleaning and other fees. Average nightly rate stays accommodation-only.
+- The income summary shows payments received, refunds (by refund date) and net received.
+- Owner statements include extras in the owner's gross, as other fees already are, and have a "Less refunds" line for refunds on the owner's confirmed stays in that month. A refund that only returns an overpayment doesn't reduce the owner.
+- The management fee is worked out after refunds.
+
+*Why:* this follows the existing logic, and owners shouldn't be paid for money that went back to guests. These choices are open to founder change (see BLOCKERS, owner fees).
+
+**D-38 · 2026-10-13 · Payment-proof safeguards (from the security review).**
+- At most 5 pending proofs per booking.
+- A proof can't be confirmed if its reference number matches one already confirmed on the same booking.
+- The balance check runs after the booking lock, so two proofs confirmed at the same moment can't both be recorded.
+- A refund retry key that was already used on another booking is refused (409).
+- The guest's bill no longer shows the booking platform's commission. Anything already settled outside BalayHub shows as one neutral "Adjustments" line, so the bill still adds up.
+- Downloads of payment proofs and payment files are recorded in the audit log.
+

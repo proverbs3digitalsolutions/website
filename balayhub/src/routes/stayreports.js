@@ -3,9 +3,10 @@
 // Short-term rental reports: performance for any period (occupancy, average
 // nightly rate, RevPAR, by channel and by listing, profit after channel fees
 // and expenses), and a yearly income summary for the bookkeeper (BIR filing).
-// Revenue is "earned" per night (accommodation spread over the stay; cleaning
-// and other fees on check-in). The tax summary also shows money actually
-// received (payments by date), which is what most small hosts report.
+// Revenue is "earned" per night (accommodation spread over the stay; cleaning,
+// other fees and extra charges on check-in). The tax summary also shows money
+// actually received (payments by date, less refunds by date), which is what
+// most small hosts report.
 
 const express = require('express');
 const { query } = require('../db');
@@ -72,10 +73,11 @@ async function performance(user, { from, to }, f = {}) {
       WHERE b.unit_id = ANY($1) AND b.kind = 'reservation' AND b.status = 'confirmed' AND b.check_in < $3 AND b.check_out > $2
         AND ($4::text IS NULL OR b.channel = $4)
       GROUP BY b.unit_id, b.channel`, [ids, from, to, channel]);
+  // Extras are one-off charges on check-in, so they sit in fees next to cleaning and other fees.
   const { rows: stays } = await query(
     `SELECT b.unit_id, b.channel, COUNT(*) FILTER (WHERE b.status = 'confirmed')::int AS stays,
             COUNT(*) FILTER (WHERE b.status = 'cancelled')::int AS cancelled,
-            SUM(b.cleaning_fee + b.other_fees) FILTER (WHERE b.status = 'confirmed') AS fees,
+            SUM(b.cleaning_fee + b.other_fees + b.extras_total) FILTER (WHERE b.status = 'confirmed') AS fees,
             SUM(b.check_out - b.check_in) FILTER (WHERE b.status = 'confirmed')::int AS stay_nights
        FROM bookings b WHERE b.unit_id = ANY($1) AND b.kind = 'reservation' AND b.check_in >= $2 AND b.check_in < $3
         AND ($4::text IS NULL OR b.channel = $4)
@@ -170,19 +172,35 @@ async function taxSummary(user, year, f = {}) {
        FROM booking_payments bp JOIN bookings b ON b.booking_id = bp.booking_id JOIN units u ON u.unit_id = b.unit_id JOIN properties p ON p.property_id = u.property_id
       WHERE bp.voided_at IS NULL AND bp.payment_date >= $1 AND bp.payment_date < $2 AND ${scope.join(' AND ')}
       GROUP BY 1, 2`, params);
+  // Refunds are money paid back, counted by refund date. Like payments, they include cancelled stays.
+  const { rows: refunded } = await query(
+    `SELECT to_char(r.refund_date, 'YYYY-MM') AS month, SUM(r.amount) AS amount
+       FROM booking_refunds r JOIN bookings b ON b.booking_id = r.booking_id JOIN units u ON u.unit_id = b.unit_id JOIN properties p ON p.property_id = u.property_id
+      WHERE r.voided_at IS NULL AND r.refund_date >= $1 AND r.refund_date < $2 AND ${scope.join(' AND ')}
+      GROUP BY 1`, params);
   for (const m of months) {
     const rows = received.filter((r) => r.month === m.month);
-    m.received = m2(rows.reduce((s, r) => s + cents(r.amount), 0));
+    const paid = rows.reduce((s, r) => s + cents(r.amount), 0);
+    const back = cents(refunded.find((r) => r.month === m.month)?.amount);
+    m.received = m2(paid);
+    m.refunds = m2(back);
+    m.net_received = m2(paid - back);
     m.received_by_method = Object.fromEntries(rows.map((r) => [r.payment_method, Number(r.amount).toFixed(2)]));
   }
   const sum = (list, k) => m2(list.reduce((s, x) => s + cents(x[k]), 0));
   const quarters = [1, 2, 3, 4].map((q) => {
     const list = months.slice((q - 1) * 3, q * 3);
-    return { quarter: `Q${q}`, revenue: sum(list, 'revenue'), received: sum(list, 'received'), channel_fees: sum(list, 'channel_fees'), expenses: sum(list, 'expenses'), net: sum(list, 'net') };
+    return {
+      quarter: `Q${q}`, revenue: sum(list, 'revenue'), received: sum(list, 'received'), refunds: sum(list, 'refunds'), net_received: sum(list, 'net_received'),
+      channel_fees: sum(list, 'channel_fees'), expenses: sum(list, 'expenses'), net: sum(list, 'net'),
+    };
   });
   return {
     year, months, quarters,
-    totals: { revenue: sum(months, 'revenue'), received: sum(months, 'received'), channel_fees: sum(months, 'channel_fees'), expenses: sum(months, 'expenses'), net: sum(months, 'net') },
+    totals: {
+      revenue: sum(months, 'revenue'), received: sum(months, 'received'), refunds: sum(months, 'refunds'), net_received: sum(months, 'net_received'),
+      channel_fees: sum(months, 'channel_fees'), expenses: sum(months, 'expenses'), net: sum(months, 'net'),
+    },
   };
 }
 
@@ -204,10 +222,11 @@ router.get('/stay-reports/export', managers, ah(async (req, res) => {
     const year = /^\d{4}$/.test(req.query.year || '') ? Number(req.query.year) : Number(manilaToday().slice(0, 4));
     if (year < 2000 || year > 2100) throw validationError({ year: 'Choose a valid year.' });
     const t = await taxSummary(req.user, year, reportFilters(req.query));
-    lines = [['Month', 'Revenue earned', 'Payments received', 'Channel fees', 'Expenses', 'Net (earned - fees - expenses)'],
-      ...t.months.map((m) => [m.month, m.revenue, m.received, m.channel_fees, m.expenses, m.net]),
-      ...t.quarters.map((q) => [q.quarter, q.revenue, q.received, q.channel_fees, q.expenses, q.net]),
-      ['Total', t.totals.revenue, t.totals.received, t.totals.channel_fees, t.totals.expenses, t.totals.net]];
+    // Refund columns go last so the first six keep their positions in existing spreadsheets.
+    lines = [['Month', 'Revenue earned', 'Payments received', 'Channel fees', 'Expenses', 'Net (earned - fees - expenses)', 'Refunds', 'Net received (payments - refunds)'],
+      ...t.months.map((m) => [m.month, m.revenue, m.received, m.channel_fees, m.expenses, m.net, m.refunds, m.net_received]),
+      ...t.quarters.map((q) => [q.quarter, q.revenue, q.received, q.channel_fees, q.expenses, q.net, q.refunds, q.net_received]),
+      ['Total', t.totals.revenue, t.totals.received, t.totals.channel_fees, t.totals.expenses, t.totals.net, t.totals.refunds, t.totals.net_received]];
     name = `balayhub-income-summary-${year}.csv`;
   } else {
     const p = period(req.query);

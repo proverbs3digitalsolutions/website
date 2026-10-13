@@ -40,7 +40,7 @@ extendTranslations({
   'Seasons, minimum nights, weekly and monthly discounts': 'Seasons, minimum nights, weekly at monthly discount',
   'Your own booking page with photos and a live availability calendar': 'Sariling booking page na may litrato at live na availability calendar',
   'Guests pay with GCash, Maya or card through your own PayMongo account': 'Nagbabayad ang guests gamit GCash, Maya o card sa sarili mong PayMongo account',
-  'Full payment or 50% deposit, with a payment link for the balance': 'Buong bayad o 50% deposit, may payment link para sa balanse',
+  'Full payment or a deposit (set per listing, default 50%), with a payment link for the balance': 'Buong bayad o deposit (itakda kada listing, default 50%), may payment link para sa balanse',
   'Discount codes for returning guests and quiet weeks': 'Discount codes para sa bumabalik na guests at matumal na linggo',
   'Guest inbox with templates and automatic messages': 'Guest inbox na may templates at automatic messages',
   'AI reply drafts in English, Tagalog or Taglish': 'AI reply drafts sa English, Tagalog o Taglish',
@@ -175,7 +175,7 @@ const GROUPS = [
     'Weekend and PH holiday rates (Holy Week, Christmas, long weekends) applied automatically', 'Seasons, minimum nights, weekly and monthly discounts']],
   ['cash', 'Direct bookings & payments', 'Take bookings without channel fees, and get paid straight to your own account.', [
     'Your own booking page with photos and a live availability calendar', 'Guests pay with GCash, Maya or card through your own PayMongo account',
-    'Full payment or 50% deposit, with a payment link for the balance', 'Discount codes for returning guests and quiet weeks']],
+    'Full payment or a deposit (set per listing, default 50%), with a payment link for the balance', 'Discount codes for returning guests and quiet weeks']],
   ['inbox', 'Guest experience', 'Every guest gets the right message at the right time, in the language they prefer.', [
     'Guest inbox with templates and automatic messages', 'AI reply drafts in English, Tagalog or Taglish',
     'Online check-in form: guest names and IDs before arrival', 'Private reviews after each stay, and repeat-guest and VIP flags']],

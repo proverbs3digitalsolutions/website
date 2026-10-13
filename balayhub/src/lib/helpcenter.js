@@ -56,7 +56,7 @@ const ARTICLES = [
     body: [
       'Reservations → New reservation (owners and managers). Pick the listing and dates; the price fills in from your rates, discounts and holiday prices. You can change it.',
       'Enter the guest name; a guest with the same email as a past guest joins their profile (shown as "Returning").',
-      'On the reservation: Check in / Check out, Record payment, Copy payment link, Edit (incl. channel fee), Message guest, Cancel.',
+      'On the reservation: Check in / Check out, Record payment, Copy payment link, Edit (incl. channel fee), Message guest, Cancel. Owners and managers also see Extra charges, Payment proofs and Refunds under the Payment card, plus a "You keep" line (total minus channel fee).',
       'Checking out marks the listing dirty and creates a cleaning task.',
       'Saved views on the left (Check-ins today, Upcoming unpaid…) and the search and filters help you find stays quickly.',
     ],
@@ -88,16 +88,59 @@ const ARTICLES = [
       'The balance updates right away. Receipts are numbered acknowledgement receipts (not BIR official receipts).',
       'For Airbnb/Booking.com stays, enter the channel fee on the reservation; the balance is then the payout you expect.',
       'A wrong entry can be voided with a reason (owners and managers); it stays in the history.',
+      'If a guest has paid more than the total (for example after an extra charge was voided), the reservation shows "Guest overpaid" to owners and managers. Record a refund to settle it.',
     ],
   },
   {
     slug: 'online-payments', category: 'money', roles: MANAGERS, title: 'Take payments online (PayMongo, GCash, Maya)',
-    keywords: 'paymongo online payment gcash maya card direct booking page payment link balance deposit 50%',
+    keywords: 'paymongo online payment gcash maya card direct booking page payment link balance deposit percentage',
     body: [
       'Settings → Direct booking page → connect your own PayMongo secret key (start with a test key sk_test_…). Money goes to your PayMongo account.',
-      'Your booking page shows your listings with photos and live availability; guests pay in full or a 50% deposit (set per listing).',
+      'Your booking page shows your listings with photos and live availability; guests pay in full or a deposit (set per listing, default 50%).',
       'For any reservation with a balance, use Copy payment link, or turn on the balance reminder message, so guests pay the rest online.',
       'BalayHub confirms every payment with PayMongo before recording it, and emails the guest a receipt.',
+    ],
+  },
+  {
+    slug: 'extra-charges', category: 'money', roles: MANAGERS, title: 'Extra charges and pay links',
+    keywords: 'extra charge late check-out early check-in extra guest extra bed damage cleaning airport transfer add void pay link balance',
+    body: [
+      'Open the reservation → Extra charges → Add charge. Pick a category (late check-out, extra guest, damage…), adjust the description, quantity and price.',
+      'Each charge raises the booking total, so the balance goes up. Extras count as income in your reports.',
+      'After adding a charge, BalayHub offers to copy the guest\'s private pay link so you can send the new balance.',
+      'A wrong charge can be voided with a reason. The line stays in the history and the total and balance come back down. Charges cannot be changed on a cancelled reservation.',
+      'Staff can see charges but cannot add or void them.',
+    ],
+  },
+  {
+    slug: 'payment-proofs', category: 'money', roles: MANAGERS, title: 'Payment proofs: GCash and bank transfer screenshots',
+    keywords: 'payment proof screenshot gcash maya bank transfer manual payments confirm reject instructions pay page',
+    body: [
+      'Settings → Manual payments (owner): turn it on and type the GCash number, bank name and account name guests should pay.',
+      'Guests open their private payment link, pay you, then send a screenshot, amount and reference number from the same page.',
+      'Home shows "Payments to check" when proofs are waiting. Open the reservation → Payment proofs, compare the screenshot with your GCash or bank account, then Confirm payment (records the payment and can email a receipt) or Reject with a reason the guest receives.',
+      'BalayHub does not check the money for you. Always check your own account before confirming.',
+      'The payment link also works for guests who pay by manual transfer only, so Copy payment link and the {{payment_link}} message variable work without PayMongo.',
+    ],
+  },
+  {
+    slug: 'cancellation-refunds', category: 'money', roles: MANAGERS, title: 'Cancellation policies and refunds',
+    keywords: 'cancellation policy refund flexible moderate strict non-refundable custom suggested refund guest cancel',
+    body: [
+      'Listings → Edit → Cancellation policy: Flexible, Moderate, Strict, Non-refundable or your own wording. Guests see it on your booking page before they pay, and in the {{cancellation_policy}} message variable.',
+      'On a reservation, the Refunds card shows the policy and a suggested refund based on the days before check-in. It is only a suggestion; you decide the amount.',
+      'Record refund: amount, date, method (cash, bank transfer, GCash, Maya, card), reference number and reason. You can never refund more than the guest has paid.',
+      'BalayHub does not send the money. Return it yourself, then record it here. A wrong entry can be voided with a reason.',
+      'Staff can read the refund log but only owners and managers can record or void refunds.',
+    ],
+  },
+  {
+    slug: 'deposit-percentage', category: 'money', roles: MANAGERS, title: 'Deposit percentage per listing',
+    keywords: 'deposit percentage percent down payment booking page partial pay later balance 50% per listing',
+    body: [
+      'Listings → Edit → Deposit (% of the total): the share a guest pays now on your booking page, from 10% to 90%. The default is 50%.',
+      'The rest is due before check-in; guests pay it with their private payment link. Stays that are too soon for a deposit are charged in full.',
+      'This is separate from a security deposit, which you record on the reservation and return after check-out.',
     ],
   },
   {
@@ -114,6 +157,7 @@ const ARTICLES = [
     body: [
       'Inbox shows every guest conversation. Write a reply, insert a template, or use AI draft (if available) and edit before sending.',
       'Templates & automatic messages: booking confirmation, check-in instructions (day before), thank-you after check-out (with a private review link), balance reminder. Turn each on and adjust the timing.',
+      'Message variables include {{payment_link}} (works with PayMongo or manual payments turned on) and {{cancellation_policy}} (the listing\'s policy, in the guest language).',
       'Settings → Language for guests switches the built-in messages and guest pages to Taglish.',
       'Guest messages on Airbnb stay on Airbnb; the inbox is for guests you reach by email, including direct bookings.',
     ],

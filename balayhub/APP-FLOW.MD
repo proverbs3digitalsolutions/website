@@ -204,6 +204,12 @@ All guest pages have an English / Tagalog toggle (Taglish text). The default is 
 - Shows the stay and balance. **Pay ₱… now** → PayMongo → back here → "Confirming your payment…" → "Payment received. Thank you!" when the balance is zero.
 - Fully paid → "Your booking is fully paid". Cancelled → "This booking was cancelled". No PayMongo → "Online payment is not available for this booking. Please contact your host." Bad link → "Link not found".
 
+**Since Phase 1 (2026-10-13):**
+- The pay page shows an itemised bill: nights, cleaning, other fees, each extra charge, payments and the balance.
+- If the host turned on manual payments, a second card shows the host's GCash, Maya and bank details, plus a form: amount (prefilled with the balance), method, reference, payer name and a screenshot.
+- Sending it shows "Thank you, your proof was sent". The host confirms it before it counts as paid.
+- Proofs are refused for cancelled, fully paid or ended stays, and when 5 are already waiting.
+
 ### 6.5 Guest check-in form `#/checkin/<token>`
 - Shows stay, times and booking code.
 - Main guest (name, mobile, email), **+ Add guest** (up to the listing's max; more shows an error toast), arrival time, plate, notes, ID photos, consent.
@@ -272,6 +278,19 @@ Managers follow the same flows unless section 8 says otherwise.
 - **Gate pass card:** status, **Send now / Send again**, **Preview**, or "Set up the admin email" → `#/gatepass-settings`.
 - **Deposit card:** **Record deposit**, then **Return deposit** (deduction, reason, photos, email), owner-only **undo** back to held.
 - Cancelled → red banner with the reason; most actions hidden.
+
+**Phase 1 cards on the reservation detail page (right column, under Payment):**
+- **Extra charges:** add a charge (category, description, quantity, price), with an optional "Send pay link" after adding. Void with a reason.
+- **Payment proofs** (owners and managers): each proof with its screenshot. *Confirm* records the payment, with an optional receipt. *Reject* needs a reason, which is emailed to the guest.
+- **Refunds:** the listing's policy, a suggested refund, paid, refunded and left to refund, and a refund log. *Record refund* and *Void*.
+- **Payment card additions:**
+  - a "You keep" line (total minus channel fee), with a hint when an OTA booking has no channel fee entered
+  - "No channel fee — about ₱X saved" on direct bookings
+  - an "Guest overpaid by ₱X — record a refund" alert when the balance is below zero
+- **Home:** owners and managers see "Payments to check (n)" when proofs are pending.
+- **Settings → Manual payments** (owner): an on/off switch plus your GCash, Maya and bank details.
+- **Listings → Edit:** deposit %, cancellation policy and custom policy text.
+- **Booking page:** shows the listing's cancellation policy before payment, in English or Taglish.
 
 ### 7.7 Receipt `#/receipts/<id>`
 Printable acknowledgement receipt. **Print / save as PDF**. Voided receipts show "VOIDED". **‹ Reservation** back.

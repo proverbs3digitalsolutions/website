@@ -65,15 +65,17 @@ export async function stayReportsView(el, { query = {} }) {
       try { t = await get(`/stay-reports/tax${apiQ}`); } catch (err) { fail(err); return; }
       const row = (label, x, strong) => h('tr', { class: strong ? 'is-total' : null },
         h('td', null, label), h('td', { class: 'num' }, peso(x.revenue)), h('td', { class: 'num' }, peso(x.received)),
-        h('td', { class: 'num' }, peso(x.channel_fees)), h('td', { class: 'num' }, peso(x.expenses)), h('td', { class: 'num' }, peso(x.net)));
+        h('td', { class: 'num' }, peso(x.channel_fees)), h('td', { class: 'num' }, peso(x.expenses)), h('td', { class: 'num' }, peso(x.net)),
+        h('td', { class: 'num' }, peso(x.refunds)), h('td', { class: 'num' }, peso(x.net_received)));
       box.replaceChildren(
         filters.channel ? h('p', { class: 'muted small' }, 'Expenses aren\'t split by channel, so they are left out while a channel is chosen.') : '',
         h('div', { class: 'card' },
           h('div', { class: 'grid grid--4 stats' },
-            stat('Revenue earned', peso(t.totals.revenue)), stat('Payments received', peso(t.totals.received)),
+            stat('Revenue earned', peso(t.totals.revenue)),
+            stat('Net received', peso(t.totals.net_received), `${peso(t.totals.received)} paid in − ${peso(t.totals.refunds)} refunded`),
             stat('Expenses', peso(t.totals.expenses)), stat('Net income', peso(t.totals.net), 'earned − channel fees − expenses'))),
         h('div', { class: 'card card--flush' }, h('div', { class: 'table-wrap' }, h('table', { class: 'table table--compact' },
-          h('thead', null, h('tr', null, ['Month', 'Revenue earned', 'Payments received', 'Channel fees', 'Expenses', 'Net'].map((x, i) => h('th', { class: i ? 'num' : null }, x)))),
+          h('thead', null, h('tr', null, ['Month', 'Revenue earned', 'Payments received', 'Channel fees', 'Expenses', 'Net', 'Refunds', 'Net received'].map((x, i) => h('th', { class: i ? 'num' : null }, x)))),
           h('tbody', null,
             t.months.map((m) => row(`${MONTHS[Number(m.month.slice(5)) - 1]} ${year}`, m)),
             t.quarters.map((q) => row(`${q.quarter} total`, q, true)),
@@ -81,8 +83,9 @@ export async function stayReportsView(el, { query = {} }) {
         h('div', { class: 'card' },
           h('h2', null, 'For your bookkeeper'),
           h('ul', { class: 'muted small' },
-            h('li', null, h('strong', null, 'Revenue earned'), ' counts each night of a stay in the month it happens (cleaning and other fees on check-in).'),
+            h('li', null, h('strong', null, 'Revenue earned'), ' counts each night of a stay in the month it happens (cleaning, other fees and extra charges on check-in).'),
             h('li', null, h('strong', null, 'Payments received'), ' is the money actually recorded as received that month (cash, GCash, bank…), after voids. Security deposits are not included.'),
+            h('li', null, h('strong', null, 'Refunds'), ' is money paid back to guests that month. ', h('strong', null, 'Net received'), ' is payments less refunds. Money kept from a cancelled stay is in Net received, because you collected it, but not in Revenue earned.'),
             h('li', null, 'Most small hosts registered with BIR report gross receipts quarterly. Your accountant decides which figure and tax option apply to you. BalayHub receipts are acknowledgement receipts, not BIR official receipts.'),
             h('li', null, 'Enter channel fees on each reservation and record expenses so the net figures are complete.'))));
     }

@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const config = require('../config');
 const { pool, one, query, tx } = require('../db');
 const { sendMail, mailEnabled } = require('./mailer');
+const { describePolicy } = require('./policies');
 
 // ---------------------------------------------------------------- default content
 const DEFAULT_TEMPLATES = [
@@ -232,16 +233,17 @@ async function bookingContext(bookingId) {
   // A private review link (the guest rates their stay; only the host sees it).
   await query(`UPDATE bookings SET review_token = $2 WHERE booking_id = $1 AND review_token IS NULL AND kind = 'reservation'`,
     [bookingId, crypto.randomBytes(18).toString('base64url')]);
-  // A balance payment link, when the host takes payments online.
+  // A balance payment link, when the host takes payments online (PayMongo) or accepts manual payments.
   await query(`UPDATE bookings b SET pay_token = $2 FROM organizations o
                 WHERE b.booking_id = $1 AND b.pay_token IS NULL AND b.kind = 'reservation'
-                  AND o.organization_id = b.organization_id AND o.paymongo_key_hint IS NOT NULL`,
+                  AND o.organization_id = b.organization_id AND (o.paymongo_key_hint IS NOT NULL OR o.manual_payments_enabled)`,
     [bookingId, crypto.randomBytes(18).toString('base64url')]);
   return one(
     `SELECT b.*, u.unit_name, u.checkin_time, u.checkout_time, u.wifi_name, u.wifi_password, u.checkin_instructions, u.house_rules,
+            u.cancellation_policy, u.cancellation_policy_text,
             p.property_name, p.address, p.city, p.province, p.organization_id AS org_id,
             g.full_name AS guest_name, g.email AS guest_email,
-            o.name AS workspace_name, o.paymongo_key_hint, o.plan, o.trial_ends_at, o.paid_until, o.is_demo, o.deletion_scheduled_at,
+            o.name AS workspace_name, o.paymongo_key_hint, o.manual_payments_enabled, o.guest_language, o.plan, o.trial_ends_at, o.paid_until, o.is_demo, o.deletion_scheduled_at,
             (SELECT full_name FROM users WHERE organization_id = b.organization_id AND role = 'owner' ORDER BY created_at LIMIT 1) AS owner_name,
             EXISTS (SELECT 1 FROM guest_reviews r WHERE r.booking_id = b.booking_id) AS reviewed,
             (b.total_amount - b.channel_fee - COALESCE((SELECT SUM(amount) FROM booking_payments bp WHERE bp.booking_id = b.booking_id AND bp.voided_at IS NULL), 0))::numeric(12,2) AS balance
@@ -251,6 +253,22 @@ async function bookingContext(bookingId) {
        JOIN organizations o ON o.organization_id = b.organization_id
        LEFT JOIN guests g ON g.guest_id = b.guest_id
       WHERE b.booking_id = $1`, [bookingId]);
+}
+
+// A full sentence (or nothing). Online checkout wins; otherwise the manual GCash/Maya/bank page.
+function paymentLink(ctx) {
+  if (!ctx.pay_token || !(Number(ctx.balance) > 0)) return '';
+  const pay = require('../routes/balancepay');
+  const url = `${config.appUrl}/#/pay/${ctx.pay_token}`;
+  if (pay.acceptsOnline(ctx)) return `Pay securely online (GCash, Maya or card): ${url}`;
+  if (ctx.manual_payments_enabled && !pay.manualRefusal(ctx)) return `Pay by GCash, Maya or bank transfer, then send your proof of payment: ${url}`;
+  return '';
+}
+
+// The listing's cancellation policy in the guest's language (empty when none is set).
+function cancellationPolicy(ctx) {
+  const p = describePolicy(ctx.cancellation_policy, ctx.cancellation_policy_text);
+  return p ? ((ctx.guest_language === 'tl' && p.tl) || p.en) : '';
 }
 
 function variables(ctx, sender) {
@@ -276,8 +294,8 @@ function variables(ctx, sender) {
     house_rules: ctx.house_rules || '',
     checkin_link: ctx.checkin_token ? `${config.appUrl}/#/checkin/${ctx.checkin_token}` : '',
     // A full sentence (or nothing) so templates read well either way.
-    payment_link: ctx.pay_token && Number(ctx.balance) > 0 && require('../routes/balancepay').acceptsOnline(ctx)
-      ? `Pay securely online (GCash, Maya or card): ${config.appUrl}/#/pay/${ctx.pay_token}` : '',
+    payment_link: paymentLink(ctx),
+    cancellation_policy: cancellationPolicy(ctx),
     review_link: ctx.review_token && !ctx.reviewed && ctx.status === 'confirmed'
       ? `How was your stay? Tell us privately (1 minute): ${config.appUrl}/#/review/${ctx.review_token}` : '',
     workspace_name: ctx.workspace_name,

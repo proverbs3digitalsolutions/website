@@ -72,6 +72,28 @@ async function checkRecord(user, type, id) {
       if (!row) throw notFound();
       return row;
     }
+    case 'payment_proof': {
+      // Guest payment screenshots: owners and managers only, never staff.
+      if (user.role === 'staff') throw forbidden('Payment proofs are limited to owners and property managers.');
+      const { propertyScope } = require('../lib/access');
+      const params = [id];
+      const row = await one(`SELECT pp.proof_id FROM payment_proofs pp JOIN bookings b ON b.booking_id = pp.booking_id
+                               JOIN units u ON u.unit_id = b.unit_id JOIN properties p ON p.property_id = u.property_id
+                              WHERE pp.proof_id = $1 AND ${propertyScope(user, params)}`, params);
+      if (!row) throw notFound();
+      return row;
+    }
+    case 'booking_payment': {
+      // Receipts and files on a recorded payment: owners and managers only.
+      if (user.role === 'staff') throw forbidden('Payment files are limited to owners and property managers.');
+      const { propertyScope } = require('../lib/access');
+      const params = [id];
+      const row = await one(`SELECT bp.payment_id FROM booking_payments bp JOIN bookings b ON b.booking_id = bp.booking_id
+                               JOIN units u ON u.unit_id = b.unit_id JOIN properties p ON p.property_id = u.property_id
+                              WHERE bp.payment_id = $1 AND ${propertyScope(user, params)}`, params);
+      if (!row) throw notFound();
+      return row;
+    }
     default:
       throw new HttpError(400, 'Unsupported attachment type.', { code: 'BAD_REQUEST' });
   }
@@ -112,7 +134,7 @@ router.get('/files/:id', ah(async (req, res) => {
   await checkRecord(req.user, file.related_record_type, file.related_record_id);
   const full = path.resolve(config.storageDir, file.storage_key);
   if (!full.startsWith(path.resolve(config.storageDir))) throw notFound();
-  if (['lease', 'registration'].includes(file.related_record_type)) await audit(null, req.user, 'file.downloaded', file.related_record_type, file.related_record_id, { file_id: id });
+  if (['lease', 'registration', 'payment_proof', 'booking_payment'].includes(file.related_record_type)) await audit(null, req.user, 'file.downloaded', file.related_record_type, file.related_record_id, { file_id: id });
   res.set('Content-Type', file.mime_type);
   res.set('Cache-Control', 'private, no-store');
   res.set('Content-Disposition', `${req.query.download ? 'attachment' : 'inline'}; filename="${file.file_name.replace(/"/g, '')}"`);

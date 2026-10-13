@@ -37,12 +37,15 @@ async function ensurePayToken(bookingId) {
 router.get('/reservations/:id/payment-link', managers, ah(async (req, res) => {
   const params = [uuidParam(req.params.id)];
   const b = await one(
-    `SELECT b.booking_id, b.status, b.kind, ${BALANCE} AS balance, o.paymongo_key_hint
+    `SELECT b.booking_id, b.status, b.kind, ${BALANCE} AS balance, o.paymongo_key_hint, o.manual_payments_enabled
        FROM bookings b JOIN units u ON u.unit_id = b.unit_id JOIN properties p ON p.property_id = u.property_id
        JOIN organizations o ON o.organization_id = b.organization_id
       WHERE b.booking_id = $1 AND b.kind = 'reservation' AND ${propertyScope(req.user, params)}`, params);
   if (!b) throw notFound();
-  if (!b.paymongo_key_hint) return res.json({ available: false, reason: 'Connect PayMongo in Settings → Direct booking page to send payment links.' });
+  // The link also works with only manual payments (GCash, Maya, bank transfer) turned on.
+  if (!b.paymongo_key_hint && !b.manual_payments_enabled) {
+    return res.json({ available: false, reason: 'Connect PayMongo in Settings → Direct booking page, or turn on manual payments in Settings, to send payment links.' });
+  }
   if (b.status !== 'confirmed' || Number(b.balance) <= 0) return res.json({ available: false, reason: 'Nothing left to pay on this reservation.' });
   res.json({ available: true, link: payLink(await ensurePayToken(b.booking_id)), balance: b.balance });
 }));
@@ -59,12 +62,29 @@ function acceptsOnline(b) {
   return Boolean(b.paymongo_key_hint) && !planStatus(b).read_only && !b.is_demo && b.status === 'confirmed' && String(b.check_out) >= manilaToday();
 }
 
+// Why a manual payment (a GCash, Maya or bank transfer proof) can't be sent for this
+// booking right now, or null if it can. Shared by the pay page and the proof upload.
+function manualRefusal(b) {
+  if (b.is_demo) return new HttpError(403, 'This is a demo.', { code: 'DEMO_READ_ONLY' });
+  if (!b.manual_payments_enabled || planStatus(b).read_only) {
+    return new HttpError(409, 'Payment by transfer is not available for this booking. Please contact your host.', { code: 'NOT_ACCEPTING' });
+  }
+  if (b.status !== 'confirmed') return new HttpError(409, 'This booking was cancelled, so no payment can be sent for it.', { code: 'CANCELLED' });
+  if (Number(b.balance) <= 0) return new HttpError(409, 'This booking is already fully paid. Thank you!', { code: 'PAID' });
+  if (String(b.check_out) < manilaToday()) {
+    return new HttpError(409, 'This payment link has expired because the stay has ended. Please ask your host for a new one.', { code: 'EXPIRED' });
+  }
+  return null;
+}
+
 async function loadByToken(token) {
   if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{20,40}$/.test(token)) throw notFound('This payment link is not valid. Please ask your host for a new one.');
   const b = await one(
     `SELECT b.booking_id, b.organization_id, b.check_in, b.check_out, b.status, b.total_amount, b.confirmation_code, ${BALANCE} AS balance,
+            b.accommodation_total, b.cleaning_fee, b.other_fees, b.extras_total, (b.check_out - b.check_in)::int AS nights,
             u.unit_name, p.property_name, o.name AS host_name, o.paymongo_key_enc, o.paymongo_key_hint, o.plan, o.trial_ends_at, o.paid_until,
-            o.is_demo, o.deletion_scheduled_at, o.guest_language, COALESCE(g.full_name, b.guest_label) AS guest_name
+            o.is_demo, o.deletion_scheduled_at, o.guest_language, o.manual_payments_enabled, o.manual_payment_instructions,
+            COALESCE(g.full_name, b.guest_label) AS guest_name
        FROM bookings b JOIN units u ON u.unit_id = b.unit_id JOIN properties p ON p.property_id = u.property_id
        JOIN organizations o ON o.organization_id = b.organization_id LEFT JOIN guests g ON g.guest_id = b.guest_id
       WHERE b.pay_token = $1 AND b.kind = 'reservation'`, [token]);
@@ -74,6 +94,26 @@ async function loadByToken(token) {
   return b;
 }
 
+// The itemised bill the guest sees: the stay, fees, extra charges, payments so far.
+// Sums are done in SQL so the centavos are exact.
+async function billFor(b) {
+  const [charges, payments, paid] = await Promise.all([
+    query(`SELECT description, quantity, unit_price, amount FROM booking_charges
+            WHERE booking_id = $1 AND voided_at IS NULL ORDER BY created_at`, [b.booking_id]),
+    query(`SELECT amount, payment_date, payment_method FROM booking_payments
+            WHERE booking_id = $1 AND voided_at IS NULL ORDER BY payment_date, created_at`, [b.booking_id]),
+    one(`SELECT COALESCE(SUM(amount), 0)::numeric(12,2) AS paid FROM booking_payments WHERE booking_id = $1 AND voided_at IS NULL`, [b.booking_id]),
+  ]);
+  return {
+    nights: b.nights, accommodation_total: b.accommodation_total, cleaning_fee: b.cleaning_fee, other_fees: b.other_fees,
+    charges: charges.rows, extras_total: b.extras_total, total: b.total_amount,
+    payments: payments.rows, paid: paid.paid,
+    // Anything else already settled for this stay (e.g. through a booking platform), as one neutral line
+    // so the bill adds up without showing the platform's commission.
+    adjustments: Math.max(0, Number(b.total_amount) - Number(paid.paid) - Number(b.balance)).toFixed(2),
+  };
+}
+
 publicRouter.get('/public/pay/:token', ah(async (req, res) => {
   const b = await loadByToken(req.params.token);
   res.json({
@@ -81,6 +121,9 @@ publicRouter.get('/public/pay/:token', ah(async (req, res) => {
     code: b.confirmation_code, guest_first_name: String(b.guest_name || '').split(' ')[0] || null,
     total: b.total_amount, paid: (Number(b.total_amount) - Number(b.balance)).toFixed(2), balance: Number(b.balance) > 0 ? b.balance : '0.00',
     accepting: b.accepting, test_mode: b.test_mode, cancelled: b.status !== 'confirmed', guest_language: b.guest_language,
+    bill: await billFor(b),
+    // Only when the host turned manual payments on: their instructions, and whether a proof can be sent now.
+    manual_payments: b.manual_payments_enabled ? { instructions: b.manual_payment_instructions, accepting: !manualRefusal(b) } : null,
   });
 }));
 
@@ -285,4 +328,7 @@ async function alertHost(c, reason) {
   }
 }
 
-module.exports = { router, publicRouter, ensurePayToken, payLink, reconcileBalance, refresh, closeOpenCheckouts, acceptsOnline };
+module.exports = {
+  router, publicRouter, ensurePayToken, payLink, reconcileBalance, refresh, closeOpenCheckouts, acceptsOnline,
+  BALANCE, loadByToken, manualRefusal,
+};

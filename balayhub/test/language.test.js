@@ -15,6 +15,8 @@ test('every text on the guest pages has a Taglish translation', () => {
   const missing = [];
   for (const f of ['book.js', 'pay.js', 'checkin.js', 'review.js']) {
     const src = fs.readFileSync(path.join(__dirname, '../public/js/views', f), 'utf8');
+    // A page may add its own Taglish wording with extendTranslations({ ... }).
+    for (const m of src.matchAll(/^\s*(?:'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)"):\s*'/gm)) keys.add((m[1] ?? m[2]).replace(/\\'/g, "'"));
     for (const m of src.matchAll(/\bt\((?:'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)")/g)) {
       const k = (m[1] ?? m[2]).replace(/\\'/g, "'");
       if (!keys.has(k)) missing.push(`${f}: ${k}`);

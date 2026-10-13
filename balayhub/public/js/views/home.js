@@ -144,10 +144,20 @@ function revenueSection() {
   return section;
 }
 
+// Owners and managers: guest payment screenshots waiting to be checked. Links to the oldest one.
+async function proofsAlert() {
+  if (state.user.role === 'staff') return null;
+  let proofs;
+  try { ({ proofs } = await get('/payment-proofs?status=pending')); } catch { return null; }
+  if (!proofs.length) return null;
+  return h('a', { class: 'alert alert--warn', href: `#/reservations/${proofs[0].booking_id}`, style: { display: 'block' } },
+    `Payments to check (${proofs.length}). Open the oldest one to confirm or reject it.`);
+}
+
 const label = (v) => ({ direct: 'Direct', airbnb: 'Airbnb', booking: 'Booking.com', agoda: 'Agoda', other: 'Other' })[v] || v;
 
 export async function homeView(el, { rerender } = {}) {
-  const [{ listings }, onboard, deposits] = await Promise.all([get('/listings'), launchpadReminder(rerender), depositsDueCard()]);
+  const [{ listings }, onboard, deposits, proofAlert] = await Promise.all([get('/listings'), launchpadReminder(rerender), depositsDueCard(), proofsAlert()]);
   const first = state.user.full_name.split(' ')[0];
   const head = h('div', { class: 'page-head' },
     h('div', { class: 'page-head__title' }, h('h1', null, `Welcome back, ${first}`), h('p', null, `${state.user.organization_name} · ${fmtDate(todayManila())}`)),
@@ -162,5 +172,5 @@ export async function homeView(el, { rerender } = {}) {
     })));
     return;
   }
-  el.replaceChildren(head, h('div', { class: 'stack' }, onboard, overviewCard(), deposits, trendsCard(), revenueSection()));
+  el.replaceChildren(head, h('div', { class: 'stack' }, proofAlert, onboard, overviewCard(), deposits, trendsCard(), revenueSection()));
 }

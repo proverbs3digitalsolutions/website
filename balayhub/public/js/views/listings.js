@@ -50,11 +50,19 @@ function listingFields(u = {}) {
       placeholder: 'e.g. Bright studio with a balcony and city view, fast Wi-Fi, smart TV, kitchenette, pool and gym access. 5 minutes from the mall.' }),
     h('div', { class: 'form-row form-row--2' },
       field({ name: 'payment_option', label: 'Online payment', type: 'select', value: u.payment_option || 'either', placeholderOption: false, options: [
-        ['either', 'Guest chooses: full or 50% deposit'], ['full', 'Full payment only'], ['deposit', '50% deposit, rest before check-in'],
+        ['either', 'Guest chooses: full or deposit'], ['full', 'Full payment only'], ['deposit', 'Deposit only, rest before check-in'],
       ] }),
       field({ name: 'min_nights', label: 'Minimum nights', type: 'number', min: 1, max: 60, value: u.min_nights || 1, inputmode: 'numeric' })),
-    field({ name: 'balance_due_days', label: 'Balance due (days before check-in)', type: 'number', min: 0, max: 60, value: u.balance_due_days ?? 3, inputmode: 'numeric',
-      hint: 'For 50% deposits. Use your payment reminder message to ask for the rest.' }),
+    h('div', { class: 'form-row form-row--2' },
+      field({ name: 'deposit_pct', label: 'Deposit (% of the total)', type: 'number', required: true, min: 10, max: 90, value: u.deposit_pct ?? 50, inputmode: 'numeric',
+        hint: 'What a guest pays now when they choose a deposit. From 10 to 90.' }),
+      field({ name: 'balance_due_days', label: 'Balance due (days before check-in)', type: 'number', min: 0, max: 60, value: u.balance_due_days ?? 3, inputmode: 'numeric',
+        hint: 'For deposits. Use your payment reminder message to ask for the rest.' })),
+    field({ name: 'cancellation_policy', label: 'Cancellation policy', type: 'select', value: u.cancellation_policy || '', placeholderOption: 'Not set (nothing shown to guests)', options: [
+      ['flexible', 'Flexible'], ['moderate', 'Moderate'], ['strict', 'Strict'], ['non_refundable', 'Non-refundable'], ['custom', 'Custom (write your own)'],
+    ] }),
+    field({ name: 'cancellation_policy_text', label: 'Custom policy text', type: 'textarea', value: u.cancellation_policy_text, maxlength: 1000,
+      hint: 'Shown to guests only when the policy is Custom. The presets show their own wording.' }),
   ];
 }
 
