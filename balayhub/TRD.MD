@@ -45,6 +45,8 @@ Caddy (automatic HTTPS, gzip)  ──►  app (Node/Express, port 3000)  ──�
 
 ### 2.1 Server (`src/`)
 
+Cleaner role (D-48): `cleanerGuard` in `src/lib/cleaner.js` is mounted in `src/server.js` and answers 403 `CLEANER_FORBIDDEN` to every API route not on its allow-list. Phase 3 routers: `src/routes/cleanerpay.js`, `damage.js`, `lostfound.js`, `supplies.js`, and the board, calendar, inspection and score routes in `housekeeping.js`. Pay rules: `src/lib/cleanerpay.js`. Recurring jobs: `src/lib/maintschedule.js`.
+
 | Part | File | What it does |
 |---|---|---|
 | Entry | `src/index.js` | Runs database migrations, then starts the HTTP server and the scheduler |
@@ -88,6 +90,7 @@ Jobs run inside the app process. A job never overlaps itself. After 3 failures i
 | `messages` | 1 min | 20 s | Sends scheduled messages (up to 50 per run), then runs stay automations |
 | `inbox` | 2 min | 30 s | Polls IMAP for guest replies (only when `IMAP_URL` is set) |
 | `housekeeping` | 15 min | 40 s | Creates cleaning tasks for today's and tomorrow's departures |
+| `maintenance-schedules` | 60 min | 110 s | Opens one maintenance request for each active recurring schedule that is due (Manila date), skipping a schedule whose last request is still open, then moves its next due date past today. No backfill of missed dates (Phase 3, D-54) |
 | `gate-pass` | 15 min | 55 s | Emails condo gate passes that are due to building admins |
 | `guest-ids` | 6 h | 70 s | Deletes guest ID photos after the retention period (section 5.1) |
 | `billing` | 10 min | 80 s | Re-checks pending platform plan checkouts with PayMongo (20 per run) and expires checkouts older than 2 days |
@@ -214,6 +217,8 @@ Note: `ANTHROPIC_BASE_URL` is only used by the assistant (the drafts code ignore
 ---
 
 ## 4. Environment variables (names and purpose only)
+
+Phase 3 added no environment variables.
 
 Production values live in `deploy/.env` on the server. No values are listed here. Phase 2 (owners, 2026-10-13) added no new variables: it uses `APP_URL` for portal links and the existing mail settings.
 

@@ -336,6 +336,34 @@ Key constraint: **`bookings_no_overlap`** is an `EXCLUDE USING gist (unit_id WIT
 
 Related columns: `units.cleaning_status` and `organizations.cleaning_checklist`.
 
+### 2.7a Phase 3 operations (migration 030, 2026-10-13)
+
+**Column and constraint changes**
+
+| Where | Change |
+|---|---|
+| `users.role`, `invitations.role` | Add `cleaner`. Invitations: manager, staff or cleaner. |
+| `units.cleaning_status` | Add `inspected` (dirty, clean, inspected). |
+| `cleaning_tasks` | Add `pay_amount` (≥ 0), `pay_status` (unpaid or paid, default unpaid), `paid_on`, `paid_method` (cash, gcash, maya, bank_transfer), `paid_reference` (≤ 100), `paid_by` → users, `pay_expense_id` → expenses. |
+| `files.related_record_type` | Add `damage`, `lost_found`, `inspection`. |
+| `maintenance_requests` | Add `cleaning_task_id` → cleaning_tasks and `schedule_id` → maintenance_schedules (both nullable). |
+
+**New tables**
+
+| Table | Key columns and rules |
+|---|---|
+| `cleaner_rates` | `rate_id` PK, `organization_id`, `user_id` → users or `assignee_name` (≤ 120; exactly one set), `rate_type` (per_clean or per_hour), `amount` ≥ 0. Unique per user, and per name (case-insensitive). |
+| `cleaning_inspections` | `inspection_id` PK, `organization_id`, `task_id` → cleaning_tasks, `inspected_by` → users, `items` (jsonb: text and pass per item), `score` 0 to 100, `passed`, `notes` (≤ 1000), `created_at`. |
+| `damage_reports` | `report_id` PK, `organization_id`, `unit_id`, `booking_id` (nullable), `task_id` (nullable), `description` (1 to 1000), `estimated_cost` ≥ 0 (nullable), `status` (open, charged, deducted, waived), `charge_id` → booking_charges (nullable), `resolution_note` (≤ 500), `reported_by`, `resolved_by`, `created_at`, `resolved_at`. |
+| `lost_found_items` | `item_id` PK, `organization_id`, `unit_id`, `booking_id` and `task_id` (nullable), `description` (1 to 300), `found_where` (≤ 200), `found_on`, `status` (held, returned, disposed), `status_note` (≤ 300), `found_by`, `updated_by`, `created_at`, `updated_at`. |
+| `supplies` | `supply_id` PK, `organization_id`, `property_id`, `name` (1 to 80), `unit_label` (≤ 20, default pcs), `par_level` ≥ 0, `on_hand` ≥ 0, `archived_at`, `created_at`, `updated_at`. Unique name per property while not archived. |
+| `supply_movements` | `movement_id` PK, `organization_id`, `supply_id`, `kind` (used, restocked, count), `quantity` (> 0 for used and restocked; ≥ 0 for count, which sets on hand), `task_id` (nullable), `note` (≤ 200), `recorded_by`, `created_at`. |
+| `maintenance_schedules` | `schedule_id` PK, `organization_id`, `property_id`, `unit_id` (nullable), `title` (1 to 150), `description` (≤ 1000), `every_n` 1 to 365, `every_unit` (days or months), `next_due` date, `priority` (low, medium, high, urgent), `active`, `last_created_at`, `created_by`, `created_at`. |
+
+Money in these tables is `numeric(12,2)`. Cleaner pay is recorded on the job (`pay_amount`), and mark-paid writes `expenses` rows with category `cleaning` (one per unit).
+
+---
+
 ### 2.8 Guests and reviews
 
 **guests**: workspace-level guest profiles.
@@ -700,6 +728,39 @@ The workspace export (`exportOrganization`) is not complete. It leaves out `supp
 
 ---
 
+### 6.1 Phase 3 access matrix (with the Cleaner column)
+
+The cleaner role is denied by default in code (`cleanerGuard`, D-48). Any row not listed here is **No** for a cleaner. "Assigned" means the properties in `property_assignments`. Owners see the whole workspace.
+
+| Data area | Owner | Manager | Staff | Cleaner |
+|---|---|---|---|---|
+| Cleaning jobs (list, detail, tick, start, done, reopen) | Full | Assigned; can cancel | Assigned | Own jobs and unassigned jobs in assigned properties. No cancel, no edit, no reassign. Guest first name only |
+| Cleaning board and calendar | Full | Assigned | Assigned | Own and unassigned jobs only |
+| Inspect a finished job | Yes | Yes (assigned) | No | No |
+| Inspection results and cleaner scores | View | View (assigned) | No | Result on own jobs only; no scores |
+| Damage reports: report | Yes | Yes | Yes (jobs and stays they can see) | Yes, on own jobs only |
+| Damage reports: list and resolve (charge, deduct, waive) | Yes, with amounts | Yes (assigned) | No | No. Sees only reports it filed, with no amounts |
+| Suggested deposit deduction | Yes | Yes | No | No |
+| Lost and found: log | Yes | Yes | Yes (stays and jobs they can see) | Yes, on own jobs |
+| Lost and found: list and status | Full | Assigned | No | Own items only |
+| Cleaner rates | View, set, delete | No | No | No |
+| Cleaner pay list and mark paid | View, mark paid, undo | View and mark paid (assigned); no undo | No | No |
+| My pay | Own, as worker | Own, as worker | Own, as worker | Own pay only |
+| Expenses made by mark paid | Yes | Yes (assigned) | No | No |
+| Supplies: list | Full | Assigned | Assigned | Names and counts only (assigned). No costs exist |
+| Supplies: add, edit, archive, count, restock | Yes | Yes (assigned) | No | No |
+| Supplies: record used or restocked on a job | Yes | Yes | Yes (jobs they can see) | Yes, on own and unassigned jobs |
+| Work orders (maintenance requests from a job) | Full | Assigned | As section 6 | Create only. Cannot read the Maintenance page or repair costs. No photos |
+| Maintenance schedules | Full | Create, edit, pause (assigned) | No | No |
+| Files on cleaning records | Full | Assigned | Assigned | Own and unassigned jobs |
+| Files on damage and lost-and-found records | Full | Assigned | Assigned | Only records they filed |
+| Files on inspections | Full | Assigned | No | No |
+| Guest phone, email and notes on lost items | Yes | Yes | No | No |
+| Invite a cleaner (team) | Yes | No | No | No |
+| Account, notifications, help and support | Own | Own | Own | Own |
+
+---
+
 ## 7. Known gaps and risks found while checking
 
 | # | Finding | Where |
@@ -718,3 +779,6 @@ The workspace export (`exportOrganization`) is not complete. It leaves out `supp
 | 12 | Decided 2026-10-13: published statements keep each stay's confirmation code in the stored copy, but screens and emails don't print it (the table is already wide on phones). Owners match stays by dates, unit and guest first name | `src/lib/statements.js`, `public/js/views/ownerportal.js`, `public/js/views/owners.js`, `statementText()` |
 | 13 | ~~Rollback note missing `idempotency_key`~~ Not needed: the rollback drops the whole `owner_payouts` table | `db/migrations/029_phase2_owners.sql` |
 | 14 | ~~D-46 security items~~ Fixed 2026-10-13: an email change or clear ends the owner's portal sessions and cancels unused links (clearing also turns access off); owner blocks are refused while the workspace is view-only (402) or the demo (403); block create and cancel are limited to 20 per hour per owner; the sign-in link is removed from the address bar after use. Covered by tests | `src/routes/ownerportal.js`, `src/routes/owners.js`, `src/lib/auth.js` (`planGuard`) |
+- Paused maintenance schedules are resumed with `PATCH /maintenance-schedules/:id { active: true }` (the Resume button on the Maintenance page).
+- Monthly schedules step from the last due date, so a due date on the 31st can drift to the 28th (`src/lib/maintschedule.js`).
+- Section 6 (the older matrix) has no Cleaner column. Cleaners are denied by default by `cleanerGuard`, and section 6.1 covers the Phase 3 rows.

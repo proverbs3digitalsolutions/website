@@ -132,7 +132,7 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
 
 // ---------------------------------------------------------------- list
 export async function reservationsView(el, { query }) {
-  const canManage = state.user.role !== 'staff';
+  const canManage = !['staff', 'cleaner'].includes(state.user.role);
   const defaults = { view: 'upcoming', q: '', channel: '', property_id: '', unit_id: '', payment: '', guest: '', from: '', to: '', out_from: '', out_to: '', min_nights: '', min_guests: '', checkin_form: '', sort: '' };
   const filters = initFilters('reservations', query, defaults);
   if (!VIEWS.some(([v]) => v === filters.view)) filters.view = 'upcoming';
@@ -209,10 +209,76 @@ export async function reservationsView(el, { query }) {
   if (query.new && canManage) newReservationModal({ onSaved: load });
 }
 
+// ---------------------------------------------------------------- damage and lost-and-found cards (owners and managers)
+const DAMAGE_STATUS = { open: ['overdue', 'Open'], charged: ['paid', 'Charged'], deducted: ['partial', 'Deduct from deposit'], waived: ['voided', 'Waived'] };
+const LOST_STATUS = { held: ['partial', 'Held'], returned: ['paid', 'Returned'], disposed: ['voided', 'Disposed'] };
+const FOUND_NEXT = [['held', 'Held'], ['returned', 'Returned'], ['disposed', 'Disposed']];
+
+async function damageCard(r, rerender) {
+  const d = await get(`/reservations/${r.booking_id}/damage`);
+  const reports = d.reports || [];
+  if (!reports.length) return null;
+  const run = async (path, body, msg) => { try { await post(path, body); toast(msg); rerender(); } catch (err) { toast(err.message, 'error'); } };
+  const charge = (x) => formModal({
+    title: 'Charge the guest for damage', submitText: 'Add charge',
+    fields: [
+      h('p', { class: 'muted small' }, x.description),
+      field({ name: 'amount', label: 'Amount', type: 'money', required: true, value: x.estimated_cost || '' }),
+      field({ name: 'description', label: 'Description on the charge', required: true, maxlength: 200, value: `Damage: ${x.description}`.slice(0, 200) }),
+    ],
+    onSubmit: async (v) => { await post(`/damage-reports/${x.report_id}/charge`, v); toast('Charge added to the booking.'); rerender(); },
+  });
+  const waive = (x) => formModal({
+    title: 'Waive this damage report', submitText: 'Waive',
+    fields: [field({ name: 'note', label: 'Note (optional)', type: 'textarea', maxlength: 500 })],
+    onSubmit: async (v) => { await post(`/damage-reports/${x.report_id}/waive`, v); toast('Damage report waived.'); rerender(); },
+  });
+  const deduct = async (x) => {
+    if (!await confirmDialog({ title: 'Deduct from the deposit?', text: 'The amount is pre-filled when you return the deposit. Nothing is taken until you do.', confirmText: 'Deduct from deposit' })) return;
+    run(`/damage-reports/${x.report_id}/deduct`, {}, 'Marked to deduct from the deposit.');
+  };
+  return h('div', { class: 'card' },
+    h('div', { class: 'card__head' }, h('h2', null, 'Damage reports'), h('span', { class: 'muted small' }, `${reports.length} report${reports.length === 1 ? '' : 's'}`)),
+    h('ul', { class: 'list' }, reports.map((x) => {
+      const [cls, text] = DAMAGE_STATUS[x.status] || ['voided', x.status];
+      return h('li', null, h('div', { class: 'row' },
+        h('div', { class: 'row__main' },
+          h('span', { class: 'row__title' }, x.description),
+          h('span', { class: 'row__sub' }, `${x.estimated_cost ? `Estimated ${peso(x.estimated_cost)} · ` : ''}${fmtDate(String(x.created_at).slice(0, 10))}${x.resolution_note ? ` · ${x.resolution_note}` : ''}`)),
+        h('div', { class: 'row__end' }, badge(cls, text))),
+      x.status === 'open' && h('div', { class: 'chips', style: { margin: '4px 0 10px' } },
+        h('button', { class: 'btn btn--primary btn--sm', type: 'button', onclick: () => charge(x) }, 'Charge the guest'),
+        h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => deduct(x) }, 'Deduct from deposit'),
+        h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => waive(x) }, 'Waive')));
+    })));
+}
+
+async function lostFoundCard(r, rerender) {
+  const d = await get(`/reservations/${r.booking_id}/lost-found`);
+  const items = d.items || [];
+  if (!items.length) return null;
+  const setStatus = async (x, status) => {
+    if (status === x.status) return;
+    try { await patch(`/lost-found/${x.item_id}`, { status }); toast('Updated.'); rerender(); } catch (err) { toast(err.message, 'error'); rerender(); }
+  };
+  return h('div', { class: 'card' },
+    h('div', { class: 'card__head' }, h('h2', null, 'Lost and found')),
+    h('ul', { class: 'list' }, items.map((x) => {
+      const [cls, text] = LOST_STATUS[x.status] || ['voided', x.status];
+      return h('li', null, h('div', { class: 'row' },
+        h('div', { class: 'row__main' },
+          h('span', { class: 'row__title' }, x.description),
+          h('span', { class: 'row__sub' }, `${x.found_where ? `${x.found_where} · ` : ''}Found ${fmtDate(x.found_on)}${x.status_note ? ` · ${x.status_note}` : ''}`)),
+        h('div', { class: 'row__end' }, badge(cls, text),
+          h('select', { class: 'select', 'aria-label': `Status of ${x.description}`, onchange: (e) => setStatus(x, e.target.value) },
+            FOUND_NEXT.map(([v, t]) => h('option', { value: v, selected: v === x.status }, t))))));
+    })));
+}
+
 // ---------------------------------------------------------------- detail
 export async function reservationDetailView(el, { params, rerender }) {
   const { reservation: r, payments } = await get(`/reservations/${params.id}`);
-  const canManage = state.user.role !== 'staff';
+  const canManage = !['staff', 'cleaner'].includes(state.user.role);
   const confirmed = r.status === 'confirmed';
   const today = todayManila();
   const guestName = r.guest_name || r.guest_label || 'Guest';
@@ -292,6 +358,8 @@ export async function reservationDetailView(el, { params, rerender }) {
   const charges = await card(chargesCard);
   const proofs = canManage ? await card(proofsCard) : null;
   const refunds = await card(refundsCard);
+  const damage = canManage ? await card(damageCard) : null;
+  const lostFound = canManage ? await card(lostFoundCard) : null;
   const overpaid = canManage && Number(r.balance) < 0 ? Math.abs(Number(r.balance)) : 0;
   const keep = Number(r.total_amount) - Number(r.channel_fee);
   const feeSaved = r.channel === 'direct' ? Math.round(Number(r.accommodation_total) * 15) / 100 : 0;
@@ -346,7 +414,7 @@ export async function reservationDetailView(el, { params, rerender }) {
           h('div', { class: 'card__head' }, h('h2', null, 'Guest review'), h('span', { class: 'muted small' }, 'Private')),
           h('p', null, stars(r.review.rating), ` ${r.review.rating}/5`, r.review.cleanliness ? h('span', { class: 'muted small' }, ` · cleanliness ${r.review.cleanliness}/5`) : null),
           r.review.comment && h('p', { style: { whiteSpace: 'pre-wrap' } }, `“${r.review.comment}”`)),
-        checkin, gatepass, deposit),
+        checkin, gatepass, deposit, damage, lostFound),
       h('div', { class: 'stack' },
         h('div', { class: 'card', id: 'payment-card' },
           overpaid > 0 && h('div', { class: 'alert alert--warn', role: 'alert', style: { marginBottom: '12px' } },

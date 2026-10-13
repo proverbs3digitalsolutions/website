@@ -34,6 +34,9 @@ import { stayReportsView } from './views/stayreports.js';
 import { reviewsView, discountCodesView } from './views/guestcare.js';
 import { accountView } from './views/account.js';
 import { helpView, helpNewView, helpTicketView, adminSupportView, adminSupportTicketView } from './views/help.js';
+import { cleanerPayView, myPayView } from './views/cleanerpay.js';
+import { suppliesView } from './views/supplies.js';
+import { lostFoundView } from './views/lostfound.js';
 import { registerServiceWorker, forgetThisDevice } from './notifications.js';
 import { themeSwitch } from './themeswitch.js';
 import { assistantButton, resetAssistant } from './assistant.js';
@@ -114,6 +117,10 @@ const routes = [
   ['/inbox-settings', inboxSettingsView, APP],
   ['/housekeeping', housekeepingView, APP],
   ['/housekeeping/:id', housekeepingDetailView, APP],
+  ['/cleaner-pay', cleanerPayView, APP],
+  ['/my-pay', myPayView, APP],
+  ['/supplies', suppliesView, APP],
+  ['/lost-found', lostFoundView, APP],
 ];
 
 const NAV_SHORT = [
@@ -160,11 +167,17 @@ const NAV_BOTH = [
   ['/maintenance', 'Maintenance', 'wrench'],
   ['/settings', 'Settings', 'settings'],
 ];
+// Cleaners see only their jobs, their own pay, Help and their account.
+const CLEANER_NAV = [['/housekeeping', 'Cleaning', 'sparkle'], ['/my-pay', 'My pay', 'wallet'], ['/help', 'Help & support', 'help']];
+const CLEANER_PATHS = ['/housekeeping', '/my-pay', '/account', '/help'];
+const isCleanerPath = (path) => CLEANER_PATHS.some((p) => path === p || path.startsWith(`${p}/`));
+// Operations pages for owners and managers, placed after Housekeeping.
+const OPS_NAV = [['/cleaner-pay', 'Cleaner pay', 'wallet'], ['/supplies', 'Supplies', 'wallet'], ['/lost-found', 'Lost and found', 'file']];
 // Staff don't see guest conversations; the platform admin gets an Admin link.
-const navFor = () => [...({ short_term: NAV_SHORT, both: NAV_BOTH }[state.user?.business_type] || NAV_LONG)
+const navFor = () => state.user?.role === 'cleaner' ? CLEANER_NAV : [...({ short_term: NAV_SHORT, both: NAV_BOTH }[state.user?.business_type] || NAV_LONG)
   .filter(([p]) => (p !== '/inbox' || state.user?.role !== 'staff') && (!['/launchpad', '/owners'].includes(p) || state.user?.role === 'owner') && (!['/stay-reports', '/pnl'].includes(p) || state.user?.role !== 'staff')),
 ['/help', 'Help & support', 'help'],
-...(state.user?.is_platform_admin ? [['/admin', 'Admin', 'shield']] : [])];
+...(state.user?.is_platform_admin ? [['/admin', 'Admin', 'shield']] : [])].flatMap((n) => (n[0] === '/housekeeping' && state.user?.business_type !== 'long_term' && state.user?.role !== 'staff' ? [n, ...OPS_NAV] : [n]));
 
 // Trial / read-only / demo notice at the top of every app page.
 function planBanner() {
@@ -202,7 +215,7 @@ function planBanner() {
 // Phone bottom bar: the first four everyday screens; everything else is under "More".
 const bottomNav = () => navFor().filter(([p]) => p !== '/launchpad').slice(0, 4);
 const moreNav = () => { const b = bottomNav(); return navFor().filter((n) => !b.includes(n)); };
-export const homeRoute = () => (state.user?.business_type === 'long_term' ? '#/dashboard' : '#/home');
+export const homeRoute = () => (state.user?.role === 'cleaner' ? '#/housekeeping' : state.user?.business_type === 'long_term' ? '#/dashboard' : '#/home');
 
 function parseHash() {
   const raw = location.hash.replace(/^#/, '') || '/';
@@ -288,7 +301,7 @@ function buildShell(path) {
       h('div', { class: 'sidebar__foot' },
         h('a', { class: 'sidebar__me', href: '#/account', 'aria-current': isCurrent('/account', path) ? 'page' : null },
           h('span', { class: 'acct-avatar acct-avatar--sm', 'aria-hidden': 'true' }, initials(u.full_name)),
-          h('span', null, h('strong', null, u.full_name), h('span', null, `${u.organization_name} · ${({ owner: 'Owner', manager: 'Manager', staff: 'Staff' })[u.role]}`))),
+          h('span', null, h('strong', null, u.full_name), h('span', null, `${u.organization_name} · ${({ owner: 'Owner', manager: 'Manager', staff: 'Staff', cleaner: 'Cleaner' })[u.role]}`))),
         themeSwitch({ compact: true }),
         h('button', { class: 'btn btn--secondary btn--sm btn--block', onclick: logout }, 'Log out'))),
     h('header', { class: 'topbar' }, brand(homeRoute()),
@@ -297,9 +310,9 @@ function buildShell(path) {
     h('nav', { class: 'bottomnav', 'aria-label': 'Main' },
       bottomKeys.map(([p, t, ic]) => h('a', { href: `#${p}`, 'aria-current': isCurrent(p, path) ? 'page' : null }, icon(ic), t === 'Rent & Expenses' ? 'Rent' : t)),
       h('button', { type: 'button', onclick: () => openMore(path), 'aria-current': moreNav().some(([p]) => isCurrent(p, path)) ? 'page' : null }, icon('more'), 'More')),
-    assistantButton());
+    u.role === 'cleaner' ? null : assistantButton());
   // Unread guest messages badge on the Inbox link.
-  unreadCount().then((n) => {
+  if (u.role !== 'cleaner') unreadCount().then((n) => {
     if (!n) return;
     el.querySelectorAll('a[href="#/inbox"]').forEach((a) => a.append(h('span', { class: 'navbadge', 'aria-label': `${n} unread` }, n > 99 ? '99+' : String(n))));
   });
@@ -322,6 +335,9 @@ export async function render() {
     navigate(setupRedirect(), { replace: true });
     return;
   }
+
+  // A cleaner opening anything that isn't theirs goes to their jobs, not an error page.
+  if (route.access === APP && state.user?.role === 'cleaner' && !isCleanerPath(path)) { navigate('#/housekeeping', { replace: true }); return; }
 
   document.querySelectorAll('dialog.modal, .morenav').forEach((d) => d.remove());
   const ctx = { params: route.params, query, state, navigate, rerender: render };

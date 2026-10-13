@@ -1,9 +1,12 @@
 'use strict';
 
 // Cleaning tasks: one per departing stay, created when the guest checks out
-// or automatically for today's and tomorrow's departures.
+// or automatically for today's and tomorrow's departures. Also the rules for
+// what a cleaner may see of a task.
 
 const { pool, query } = require('../db');
+const { propertyScope } = require('./access');
+const { isCleaner } = require('./cleaner');
 
 const TODAY = `(now() AT TIME ZONE 'Asia/Manila')::date`;
 
@@ -55,4 +58,42 @@ async function createDueTasks() {
   return rows.length;
 }
 
-module.exports = { ensureTaskForBooking, createDueTasks, syncOpenTasks };
+// Tasks a cleaner may see are their own, or not given to anyone yet (no team
+// member and no outside name). For everyone else the condition is always true.
+function cleanerTaskSql(user, params, alias = 't') {
+  if (!isCleaner(user)) return 'true';
+  params.push(user.user_id);
+  return `(${alias}.assigned_to = $${params.length} OR (${alias}.assigned_to IS NULL AND ${alias}.assignee_name IS NULL))`;
+}
+
+// Cleaning tasks `user` may see: the properties they're assigned to, narrowed
+// for cleaners as above. Expects the properties alias `p` and tasks alias `t`.
+function taskScope(user, params, alias = 't') {
+  return `${propertyScope(user, params)} AND ${cleanerTaskSql(user, params, alias)}`;
+}
+
+// A cleaner sees a guest's first name only.
+const firstName = (name) => (name ? name.trim().split(/\s+/)[0] || null : null);
+
+// Who a task is for: a team member by user id, or an outside cleaner by name.
+// Null for an unassigned task. Matches the SQL key used in /cleaner-scores.
+function cleanerKey(assignedTo, assigneeName) {
+  if (assignedTo) return `user:${assignedTo}`;
+  return assigneeName ? `name:${assigneeName.toLowerCase()}` : null;
+}
+
+// The task fields `user` may see. A cleaner gets the guest's first name, and
+// pay only on a clean they finished. The internal completed_by id is never sent.
+function presentTask(user, row) {
+  const { completed_by: doneBy, ...task } = row;
+  if (!isCleaner(user)) return task;
+  const mine = doneBy === user.user_id;
+  return {
+    ...task,
+    departing_guest: firstName(task.departing_guest),
+    pay_amount: mine ? task.pay_amount : null,
+    pay_status: mine ? task.pay_status : null,
+  };
+}
+
+module.exports = { ensureTaskForBooking, createDueTasks, syncOpenTasks, TODAY, taskScope, cleanerTaskSql, presentTask, firstName, cleanerKey };

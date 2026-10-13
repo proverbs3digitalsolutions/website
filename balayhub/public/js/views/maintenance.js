@@ -3,7 +3,7 @@
 import { get, post, patch, qs, uploadFile } from '../api.js';
 import {
   h, icon, peso, fmtDate, fmtDateTime, badge, label, options, field, formModal, emptyState, pageHead, toast,
-  todayManila, filesList, openModal, unitLabel } from '../ui.js';
+  todayManila, filesList, openModal, unitLabel, confirmDialog } from '../ui.js';
 import { state, navigate } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 
@@ -52,6 +52,8 @@ export async function maintenanceView(el, { query }) {
   const filters = initFilters('maintenance', query, defaults);
   if (!['active', 'open', 'in_progress', 'resolved', 'cancelled', 'all'].includes(filters.status)) filters.status = 'active';
   const listCard = h('div', { class: 'card' });
+  const schedulesBox = h('div');
+  const canSchedule = state.user.role !== 'staff';
   const tabs = h('div', { class: 'tabs', role: 'tablist' });
   const barBox = h('div');
   const [{ properties }, { units }] = await Promise.all([get('/properties'), get('/units')]);
@@ -75,7 +77,7 @@ export async function maintenanceView(el, { query }) {
             h('span', { class: 'row__title' }, m.title),
             h('span', { class: 'row__sub' }, `${m.property_name}${m.unit_name ? ` · Unit ${m.unit_name}` : ''} · reported ${fmtDate(m.created_at.slice(0, 10))}${m.assigned_to ? ` · ${m.assigned_to}` : ''}`),
             (Number(m.actual_cost) > 0 || m.estimated_cost) && h('span', { class: 'row__sub' }, Number(m.actual_cost) > 0 ? `Cost ${peso(m.actual_cost)}` : `Est. ${peso(m.estimated_cost)}`)),
-          h('div', { class: 'row__end' }, badge(m.status), badge(m.priority))))))]
+          h('div', { class: 'row__end' }, badge(m.status), badge(m.priority), m.cleaning_task_id && h('span', { class: 'badge badge--ops' }, 'From cleaning task'))))))]
       : (isFiltered()
         ? emptyState({ title: 'No results found', text: 'Nothing matches these filters. Try removing a filter.', action: h('button', { class: 'btn btn--secondary', onclick: () => { Object.assign(filters, defaults, { status: filters.status }); rememberFilters('maintenance', filters); renderBar(); load(); } }, 'Clear filters') })
         : emptyState({ iconName: 'wrench', title: filters.status === 'active' ? 'No open repair requests' : 'No requests here', text: 'Log repairs as they’re reported so nothing gets lost in chat threads.', action: h('button', { class: 'btn btn--primary', onclick: () => newMaintenanceModal() }, icon('plus'), 'New request') })));
@@ -108,11 +110,57 @@ export async function maintenanceView(el, { query }) {
       ],
     }));
   }
+  const EVERY = (x) => `Every ${x.every_n} ${x.every_unit === 'months' ? (Number(x.every_n) === 1 ? 'month' : 'months') : (Number(x.every_n) === 1 ? 'day' : 'days')}`;
+  async function loadSchedules() {
+    if (!canSchedule) return;
+    let schedules;
+    try { ({ schedules } = await get('/maintenance-schedules')); } catch { schedulesBox.replaceChildren(); return; }
+    const form = (x) => formModal({
+      title: x ? 'Edit recurring job' : 'New recurring job', submitText: x ? 'Save changes' : 'Save schedule',
+      fields: [
+        !x && field({ name: 'property_id', label: 'Property', type: 'select', required: true, value: properties.length === 1 ? properties[0].property_id : '', options: properties.map((p) => [p.property_id, p.property_name]) }),
+        !x && field({ name: 'unit_id', label: 'Unit (optional)', type: 'select', placeholderOption: 'Whole property', options: units.map((u) => [u.unit_id, `${unitLabel(u.unit_name)}${properties.length > 1 ? ` · ${u.property_name}` : ''}`]) }),
+        field({ name: 'title', label: 'Job', required: true, value: x?.title, placeholder: 'e.g. Clean the aircon', maxlength: 150 }),
+        field({ name: 'description', label: 'Details', type: 'textarea', value: x?.description, maxlength: 2000 }),
+        h('div', { class: 'form-row form-row--2' },
+          field({ name: 'every_n', label: 'Repeat every', type: 'number', min: 1, max: 365, step: 1, required: true, value: x?.every_n ?? 3 }),
+          field({ name: 'every_unit', label: 'Unit of time', type: 'select', required: true, value: x?.every_unit || 'months', placeholderOption: false, options: [['days', 'Days'], ['months', 'Months']] })),
+        h('div', { class: 'form-row form-row--2' },
+          field({ name: 'next_due', label: 'Next due', type: 'date', required: true, value: x?.next_due ? String(x.next_due).slice(0, 10) : todayManila() }),
+          field({ name: 'priority', label: 'Priority', type: 'select', required: true, value: x?.priority || 'medium', placeholderOption: false, options: options(PRIORITIES) })),
+      ],
+      onSubmit: async (d) => {
+        const body = { title: d.title, description: d.description, every_n: Number(d.every_n), every_unit: d.every_unit, next_due: d.next_due, priority: d.priority };
+        if (x) await patch(`/maintenance-schedules/${x.schedule_id}`, body); else await post('/maintenance-schedules', { ...body, property_id: d.property_id, unit_id: d.unit_id || undefined });
+        toast(x ? 'Schedule updated.' : 'Schedule saved.'); loadSchedules();
+      },
+    });
+    const pause = async (x) => {
+      try {
+        if (x.active) { if (!await confirmDialog({ title: 'Pause this job?', text: 'No new repair requests are created until you resume it.', confirmText: 'Pause' })) return; await post(`/maintenance-schedules/${x.schedule_id}/pause`); toast('Paused.'); } else { await patch(`/maintenance-schedules/${x.schedule_id}`, { active: true }); toast('Resumed.'); }
+        loadSchedules();
+      } catch (err) { toast(err.message, 'error'); }
+    };
+    schedulesBox.replaceChildren(h('div', { class: 'card ops-card' },
+      h('div', { class: 'card__head' }, h('h2', null, 'Recurring maintenance'), h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => form(null) }, icon('plus'), 'Add recurring job')),
+      h('p', { class: 'muted small' }, 'A repair request is created automatically when a job is due, for things like aircon cleaning or pest control.'),
+      schedules.length ? h('ul', { class: 'list' }, schedules.map((x) => h('li', { class: `ops-sched${x.active ? '' : ' is-paused'}` },
+        h('div', { class: 'ops-sched__main' },
+          h('span', { class: 'row__title' }, x.title, !x.active && h('span', { class: 'badge badge--cancelled ops-sched__tag' }, 'Paused')),
+          h('span', { class: 'row__sub' }, `${EVERY(x)} · ${x.property_name}${x.unit_name ? ` · ${unitLabel(x.unit_name)}` : ''}`),
+          h('span', { class: 'row__sub' }, x.active ? `Next due ${fmtDate(String(x.next_due).slice(0, 10))}` : 'Not creating requests')),
+        h('div', { class: 'ops-sched__actions' },
+          badge(x.priority),
+          h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => form(x) }, 'Edit'),
+          h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => pause(x) }, x.active ? 'Pause' : 'Resume')))))
+        : h('p', { class: 'muted' }, 'No recurring jobs yet.')));
+  }
   renderBar();
   await load();
   el.replaceChildren(
     pageHead({ title: 'Maintenance', sub: 'Repair requests from report to resolution', actions: h('button', { class: 'btn btn--primary', onclick: () => newMaintenanceModal() }, icon('plus'), 'New request') }),
-    tabs, barBox, listCard);
+    tabs, barBox, listCard, schedulesBox);
+  loadSchedules();
 }
 
 export async function maintenanceDetailView(el, { params, rerender }) {
@@ -166,7 +214,7 @@ export async function maintenanceDetailView(el, { params, rerender }) {
     h('div', { class: 'grid grid--2' },
       h('div', { class: 'stack' },
         h('div', { class: 'card' },
-          h('div', { class: 'card__head' }, h('h2', null, 'Status'), h('div', { class: 'chips' }, badge(m.status), badge(m.priority))),
+          h('div', { class: 'card__head' }, h('h2', null, 'Status'), h('div', { class: 'chips' }, badge(m.status), badge(m.priority), m.cleaning_task_id && h('span', { class: 'badge badge--ops' }, 'From cleaning task'))),
           h('dl', { class: 'dl' },
             h('dt', null, 'Reported'), h('dd', null, `${fmtDateTime(m.created_at)}${m.reported_by ? ` by ${m.reported_by}` : ''}`),
             h('dt', null, 'Assigned to'), h('dd', null, m.assigned_to || '—'),

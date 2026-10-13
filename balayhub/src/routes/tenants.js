@@ -31,8 +31,8 @@ router.get('/tenants', ah(async (req, res) => {
   if (req.query.q) {
     params.push(`%${String(req.query.q).slice(0, 100)}%`);
     const n = params.length;
-    // Staff can't see contact details, so they can't search by them either.
-    const contact = req.user.role === 'staff' ? '' : ` OR t.email ILIKE $${n} OR t.phone ILIKE $${n}`;
+    // Staff and cleaners can't see contact details, so they can't search by them either.
+    const contact = ['staff', 'cleaner'].includes(req.user.role) ? '' : ` OR t.email ILIKE $${n} OR t.phone ILIKE $${n}`;
     where.push(`(t.full_name ILIKE $${n}${contact} OR u.unit_name ILIKE $${n} OR p.property_name ILIKE $${n})`);
   }
   // Non-owners only see the current lease if it is in a property assigned to them.
@@ -246,7 +246,7 @@ router.get('/leases/:id', ah(async (req, res) => {
     `SELECT file_id, file_name, mime_type, size_bytes, uploaded_at FROM files
       WHERE related_record_type = 'lease' AND related_record_id = $1 AND organization_id = $2 ORDER BY uploaded_at DESC`,
     [lease.lease_id, req.user.organization_id]);
-  res.json({ lease, balance, charges, files: req.user.role === 'staff' ? [] : files });
+  res.json({ lease, balance, charges, files: ['staff', 'cleaner'].includes(req.user.role) ? [] : files });
 }));
 
 // Adjust the remaining terms. Changing rent affects charges not yet generated.

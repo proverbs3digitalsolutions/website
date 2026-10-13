@@ -33,7 +33,8 @@ Last updated: 2026-10-13
 | Owner | The person who created the workspace | Everything in the workspace. Only role for team, billing, data export and deletion, unit owners and their statements and payouts, automations, Launchpad. |
 | Unit owner | A person whose units the workspace manages | Their own units only, through the owner portal (emailed sign-in link). Not a team member: no workspace access. |
 | Property manager | Co-host or manager | Only the properties assigned to them. Can run day-to-day work. Cannot create properties, manage the team or billing. |
-| Staff | Cleaner, front desk, accountant | Only assigned properties. No guest or tenant contact details, no Inbox, no stay reports, no pricing changes, no workspace settings. Can check guests in and out, record payments and deposits, and do cleaning tasks. |
+| Staff | Front desk, accountant | Only assigned properties. No guest or tenant contact details, no Inbox, no stay reports, no pricing changes, no workspace settings. Can check guests in and out, record payments and deposits, and do cleaning tasks. |
+| Cleaner | A team member with the cleaner role (cleaning jobs only) | Only assigned properties. Only their own jobs and unassigned jobs. Their own pay only. No booking money, no guest contact details, no reports or settings. See F33. |
 | Platform admin | BalayHub operator (emails in `PLATFORM_ADMIN_EMAILS`, verified) | Admin page for all workspaces and the support queue. Hidden (404) from everyone else. |
 | Guest | Person booking or staying | Public token pages only. No account. |
 
@@ -260,7 +261,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 ### F11. Housekeeping, cleaning tasks and checklist
 **Status:** MVP (built)
 
-**For:** Owners, managers and staff (cleaners).
+**For:** Owners, managers, staff and cleaners.
 
 **What it does:**
 - Tasks are created automatically for today's and tomorrow's check-outs, and when a guest is checked out. Managers can add extra tasks.
@@ -275,7 +276,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - Staff cannot cancel tasks, assign, add tasks or edit the checklist.
 - Ticking an item moves a task to In progress.
 
-**Out of scope:** Cleaner payroll. Inventory or supplies tracking.
+**Out of scope:** Payroll and tax for cleaners. Inventory purchasing. Cleaner pay, supplies and lost and found were added in Phase 3 (F33 to F39).
 
 ### F12. Guest check-in form with guest IDs
 **Status:** MVP (built)
@@ -408,7 +409,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 **For:** Owners.
 
 **What it does:**
-- **Team & permissions** in Settings: invite by email as Property manager or Staff, choose properties. The link is emailed (if email works) and shown to copy. Links expire in 7 days and work once.
+- **Team & permissions** in Settings: invite by email as Property manager, Staff or Cleaner, choose properties. The link is emailed (if email works) and shown to copy. Links expire in 7 days and work once.
 - Edit a member's role and properties. Remove a member (signed out at once, records kept). Revoke or reissue pending invitations.
 - Audit history: owners see everyone's actions; managers see their own.
 
@@ -628,6 +629,132 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 **Done looks like:**
 - Guest cleaning fees count as unit income here. The owner statement is different (see D-45).
 
+### F33. Cleaner role: cleaning jobs, checklists and their own pay
+**Status:** Phase 3 (built 2026-10-13, D-48)
+
+**For:** Cleaners (a team member with the cleaner role, given at least one property).
+
+**What it does:**
+- A cleaner signs in to Cleaning, My pay, Help and Account. Nothing else.
+- They see only their own cleaning jobs and jobs nobody has been given yet, in their properties.
+- They tick the checklist, start, mark done, add photos, and reopen. They can report damage, log lost items, record supplies used and raise a work order from a job.
+- They see their own pay and nothing else about money.
+- Screens are phone-first and follow the workspace language (English or Taglish).
+
+**Done looks like:**
+- Every route not on the cleaner allow-list returns 403 (CLEANER_FORBIDDEN), including routes added later.
+- A cleaner never sees booking money, payments, guest phone numbers or emails, reports, settings, the inbox, or other cleaners' pay. Guests show by first name only.
+- A cleaner can't cancel a job.
+
+**Out of scope:** Cleaners logging in to see the rest of the workspace. Push notifications for cleaners (not yet).
+
+### F34. Status board, calendar and inspections
+**Status:** Phase 3 (built 2026-10-13, D-49, D-50)
+
+**For:** Owners and managers (inspections, scores); cleaners see their own jobs.
+
+**What it does:**
+- Board: each unit as Dirty, Clean or Inspected, with the current stay, the next arrival, the open job and the last inspection score.
+- Calendar: a week by day. Owners and managers reassign jobs from it.
+- Inspect a finished job: pass or fail per checklist item, notes, and a score (passed items ÷ items × 100, rounded).
+- Pass: the unit becomes Inspected. Fail: the job reopens with failed items unticked, and the unit is Dirty.
+- Scores: per cleaner, for a month: jobs done, jobs inspected, average score, fails.
+
+**Done looks like:**
+- An empty checklist can't be inspected.
+- A failed inspection can't reopen a paid clean (409).
+- A pass marks the unit Inspected only if it is still Clean (a newer check-out stays Dirty).
+
+**Out of scope:** Scoring by photo or by guest review.
+
+### F35. Damage reports: charge, deduct or waive
+**Status:** Phase 3 (built 2026-10-13, D-51)
+
+**For:** Anyone who works a job or a stay (report). Owners and managers (resolve).
+
+**What it does:**
+- Report damage with a description, an optional cost estimate and photos, from a job, a stay or a unit.
+- Owners and managers resolve each report once:
+  - **Charge the guest:** adds a damage extra charge to the stay and updates the total.
+  - **Deduct from deposit:** the deposit settle form is pre-filled with the open and deducted total.
+  - **Waive:** no money, with a note.
+
+**Done looks like:**
+- A report on a unit with no stay can only be waived.
+- Cleaners never see amounts and see only the reports they filed.
+- Staff don't see the suggested deposit deduction.
+
+**Out of scope:** Insurance claims and photo-based cost estimates.
+
+### F36. Cleaner pay: rates, marking paid and expenses
+**Status:** Phase 3 (built 2026-10-13, D-52, D-55)
+
+**For:** Owners (rates, undo) and owners and managers (mark paid). Cleaners see their own pay.
+
+**What it does:**
+- A rate per cleaner (a team member, or an outside cleaner typed by name): per clean, or per hour.
+- When a job is marked done, its pay is set from the rate. Per hour: time from start to finish, rounded up to 15 minutes, capped at 12 hours.
+- Mark paid: several finished cleans at once, with a date, a method (cash, GCash, Maya, bank transfer) and a reference.
+- Optional: record one cleaning expense per unit, so it shows on profit and loss and owner statements.
+- My pay: the cleaner's own finished cleans, amounts, and paid status for the month.
+
+**Done looks like:**
+- Money is exact to the centavo. Zero pay creates no expense. Payment dates can't be in the future.
+- A paid clean is locked: no status change, no pay change, no failed inspection.
+- Rate changes apply to cleans finished after the change.
+- Undo is owners only; it removes an expense only when every clean on it is undone together.
+
+**Out of scope:** Payroll, tax or withholding for cleaners.
+
+### F37. Supplies, par levels and low stock
+**Status:** Phase 3 (built 2026-10-13, D-53)
+
+**For:** Owners and managers (set up, count, restock). Cleaners and staff record use on a job.
+
+**What it does:**
+- Per property: item name, unit label, par level and on-hand count.
+- Movements (count, restock, used) update on hand and are kept in a history.
+- Low stock (on hand below par) shows on Home and on the supplies page.
+- On a job, record what was used or restocked.
+
+**Done looks like:**
+- On hand never goes below zero. If more is used than is on hand, on hand stops at zero and the note keeps the amount asked for.
+- Supplies must belong to the job's property.
+
+**Out of scope:** Costs, purchasing and inventory valuation.
+
+### F38. Lost and found
+**Status:** Phase 3 (built 2026-10-13, D-54)
+
+**For:** Anyone who works a job (log). Owners and managers (manage).
+
+**What it does:**
+- Log an item: description, where found, date, photo. From a job, or on a stay.
+- Status: Held, Returned or Disposed, with a note on change.
+
+**Done looks like:**
+- Owners and managers see the full list. Cleaners see only items they logged.
+- Guest contact for returning an item stays on the reservation, for owners and managers.
+
+**Out of scope:** Automatic guest notification about found items.
+
+### F39. Work orders and recurring maintenance
+**Status:** Phase 3 (built 2026-10-13, D-54)
+
+**For:** Anyone who works a job (work order). Owners and managers (recurring schedules).
+
+**What it does:**
+- Work order: from a job, a cleaner raises a maintenance request (title, details, priority) linked to the job. Owners and managers get a notification.
+- Recurring schedule: per property or unit, every N days or months, with a next due date and priority.
+- Once an hour, a due schedule opens one request and moves its next due date past today.
+
+**Done looks like:**
+- A schedule doesn't open a second request while the last one is still open, and doesn't backfill missed dates.
+- Cleaners can't add photos to a work order (they add photos to the cleaning job) and can't open the Maintenance page or see repair costs.
+- Pause stops a schedule. There is no resume button yet.
+
+**Out of scope:** Recurring expenses and vendor scheduling.
+
 ## Cross-cutting requirements (built)
 
 - **Security:** workspace scoping on every query, 404 for out-of-scope records, CSRF header on writes, strict Content-Security-Policy, text-only rendering, rate limits, scrypt passwords, HttpOnly cookies (7-day absolute, 12-hour idle).
@@ -666,3 +793,6 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - After a **new** Google sign-up the server redirects to `#/`, the landing page. The app does not send the user on to workspace setup from there. Unverified in a browser; worth checking.
 - The Inbox API returns `ai_needs_upgrade` for Starter plans, but the app does not use it. Starter users see no AI button and no upgrade hint.
 - `welcomeView` in `public/js/views/auth.js` is no longer routed (the landing page replaced it).
+- Monthly schedules step from the last due date, so a schedule on the 31st can drift to the 28th after February.
+- Monthly maintenance schedules count from the last due date, so a due date on the 31st can slide to the 28th.
+- Cleaners get no push notifications for cleaning jobs yet (the cleaning topic goes to owners, managers and staff only).

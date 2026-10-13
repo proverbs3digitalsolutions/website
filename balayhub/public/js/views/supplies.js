@@ -1,0 +1,97 @@
+// Supplies per property with par levels. Anything below par is flagged as low.
+
+import { get, post, patch, qs } from '../api.js';
+import { h, field, formModal, confirmDialog, emptyState, pageHead, toast, errorState, skeleton } from '../ui.js';
+import { state } from '../app.js';
+import { initFilters, filterBar, changed } from '../filters.js';
+
+const isLow = (s) => Number(s.on_hand) < Number(s.par_level);
+
+export async function suppliesView(el, { query = {} } = {}) {
+  const defaults = { property_id: '', low: '', q: '' };
+  const filters = initFilters('supplies', query, defaults);
+  const canManage = ['owner', 'manager'].includes(state.user.role);
+  const box = h('div', { 'aria-live': 'polite' }, skeleton(3));
+  const barBox = h('div');
+  let properties = [];
+  try { ({ properties } = await get('/properties')); } catch { /* filter stays hidden */ }
+
+  const addOrEdit = (s) => formModal({
+    title: s ? `Edit ${s.name}` : 'Add a supply', submitText: s ? 'Save changes' : 'Add supply',
+    fields: [
+      !s && field({ name: 'property_id', label: 'Property', type: 'select', required: true, value: filters.property_id || (properties.length === 1 ? properties[0].property_id : ''), options: properties.map((p) => [p.property_id, p.property_name]) }),
+      h('div', { class: 'form-row form-row--2' },
+        field({ name: 'name', label: 'Item', required: true, value: s?.name, placeholder: 'e.g. Toilet paper', maxlength: 80 }),
+        field({ name: 'unit_label', label: 'Counted in', value: s?.unit_label || 'pcs', placeholder: 'pcs, rolls, bottles', maxlength: 20 })),
+      h('div', { class: 'form-row form-row--2' },
+        field({ name: 'par_level', label: 'Keep at least', type: 'number', min: 0, step: 1, required: true, value: s?.par_level ?? 0, hint: 'You get a low-stock warning below this.' }),
+        !s && field({ name: 'on_hand', label: 'On hand now', type: 'number', min: 0, step: 1, required: true, value: 0 })),
+    ],
+    onSubmit: async (d) => {
+      const body = { name: d.name, unit_label: d.unit_label || 'pcs', par_level: Number(d.par_level) };
+      if (s) await patch(`/supplies/${s.supply_id}`, body); else await post('/supplies', { ...body, property_id: d.property_id, on_hand: Number(d.on_hand) });
+      toast(s ? 'Supply updated.' : 'Supply added.'); load();
+    },
+  });
+
+  const move = (s, kind) => formModal({
+    title: { count: 'Count stock', restocked: 'Add stock', used: 'Take stock out' }[kind] + `: ${s.name}`,
+    submitText: 'Save',
+    fields: [
+      h('p', { class: 'muted small' }, `On hand now: ${s.on_hand} ${s.unit_label}. Keep at least ${s.par_level}.`),
+      field({ name: 'quantity', label: kind === 'count' ? `How many ${s.unit_label} are there now?` : `How many ${s.unit_label}?`, type: 'number', min: kind === 'count' ? 0 : 1, step: 1, required: true, value: kind === 'count' ? s.on_hand : '' }),
+      field({ name: 'note', label: 'Note (optional)', maxlength: 200 }),
+    ],
+    onSubmit: async (d) => { await post(`/supplies/${s.supply_id}/movements`, { kind, quantity: Number(d.quantity), note: d.note || undefined }); toast('Stock updated.'); load(); },
+  });
+
+  async function archive(s) {
+    if (!await confirmDialog({ title: `Archive ${s.name}?`, text: 'It disappears from the list and from cleaners. Its history is kept.', confirmText: 'Archive', danger: true })) return;
+    try { await post(`/supplies/${s.supply_id}/archive`); toast('Archived.'); load(); } catch (err) { toast(err.message, 'error'); }
+  }
+
+  async function load() {
+    history.replaceState(null, '', `#/supplies${qs(changed(filters, defaults))}`);
+    let supplies;
+    try { ({ supplies } = await get(`/supplies${qs({ property_id: filters.property_id, low: filters.low })}`)); } catch (err) {
+      box.replaceChildren(errorState(err, load)); return;
+    }
+    const q = filters.q.toLowerCase();
+    if (q) supplies = supplies.filter((s) => s.name.toLowerCase().includes(q));
+    if (!supplies.length) {
+      const hasFilter = Object.keys(changed(filters, defaults)).length > 0;
+      box.replaceChildren(h('div', { class: 'card' }, emptyState({
+        iconName: 'inbox', title: hasFilter ? 'No supplies match' : 'No supplies yet',
+        text: hasFilter ? 'Try removing a filter.' : 'Track things like toilet paper, soap and trash bags. Cleaners record what they use, and you see what is running low.',
+        action: !hasFilter && canManage && h('button', { class: 'btn btn--primary', type: 'button', onclick: () => addOrEdit(null) }, '+ Add supply') })));
+      return;
+    }
+    const groups = new Map();
+    supplies.forEach((s) => { const k = s.property_name || 'Property'; groups.set(k, [...(groups.get(k) || []), s]); });
+    const low = supplies.filter(isLow).length;
+    box.replaceChildren(
+      low > 0 && h('div', { class: 'alert alert--warn', role: 'status' }, `${low} item${low === 1 ? ' is' : 's are'} running low.`),
+      [...groups].map(([name, list]) => h('div', { class: 'card card--flush ops-card' },
+        groups.size > 1 || properties.length > 1 ? h('h2', { class: 'ops-card__title' }, name) : null,
+        h('ul', { class: 'list' }, list.map((s) => h('li', { class: `ops-supply${isLow(s) ? ' is-low' : ''}` },
+          h('div', { class: 'ops-supply__main' },
+            h('span', { class: 'row__title' }, s.name, isLow(s) && h('span', { class: 'ops-low' }, 'Low stock')),
+            h('span', { class: 'row__sub' }, `Keep at least ${s.par_level} ${s.unit_label}`)),
+          h('div', { class: 'ops-supply__count', 'aria-label': `${s.on_hand} ${s.unit_label} on hand` }, h('strong', null, String(s.on_hand)), h('span', { class: 'muted small' }, ` ${s.unit_label}`)),
+          canManage && h('div', { class: 'ops-supply__actions' },
+            h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => move(s, 'restocked') }, 'Add stock'),
+            h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => move(s, 'count') }, 'Count'),
+            h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => addOrEdit(s) }, 'Edit'),
+            h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => archive(s), 'aria-label': `Archive ${s.name}` }, 'Archive'))))))));
+  }
+
+  barBox.replaceChildren(filterBar({
+    key: 'supplies', values: filters, defaults, onChange: load,
+    search: { placeholder: 'Search supplies' },
+    quick: [properties.length > 1 && { name: 'property_id', label: 'Property', all: 'All properties', options: properties.map((p) => [p.property_id, p.property_name]) },
+      { name: 'low', label: 'Stock', all: 'All items', options: [['1', 'Running low']] }].filter(Boolean),
+  }));
+  el.replaceChildren(pageHead({ title: 'Supplies', sub: 'What you keep stocked, and what is running low',
+    actions: canManage && h('button', { class: 'btn btn--primary', type: 'button', onclick: () => addOrEdit(null) }, '+ Add supply') }), barBox, box);
+  await load();
+}

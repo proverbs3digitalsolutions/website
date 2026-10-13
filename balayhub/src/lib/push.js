@@ -15,7 +15,7 @@ const TYPES = {
   guest_message: { label: 'Guest messages', roles: ['owner', 'manager'] },
   checkin_form: { label: 'Guest check-in forms', roles: ['owner', 'manager'] },
   payment: { label: 'Online payments', roles: ['owner', 'manager'] },
-  cleaning: { label: 'Cleaning tasks', roles: ['owner', 'manager', 'staff'] },
+  cleaning: { label: 'Cleaning tasks', roles: ['owner', 'manager', 'staff', 'cleaner'] },
 };
 
 let keys = null;

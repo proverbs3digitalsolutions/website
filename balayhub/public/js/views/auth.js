@@ -157,7 +157,7 @@ export async function signupView(el, { query }) {
   const google = await googleButton('Sign up with Google', query.invite);
   el.append(splitPage(authCard(
     invite ? `Join ${invite.organization_name}` : 'Create your account',
-    invite ? `You were invited as ${invite.role === 'manager' ? 'a property manager' : 'staff'}. Create your login to get started.` : 'Free to start. Set up your first property in a few minutes.',
+    invite ? `You were invited as ${{ cleaner: 'a cleaner', manager: 'a property manager', staff: 'staff' }[invite.role] || 'staff'}. Create your login to get started.` : 'Free to start. Set up your first property in a few minutes.',
     form,
     google, google && h('p', { class: 'small muted', style: { marginTop: '8px', textAlign: 'center' } },
       'By continuing with Google you agree to the ', h('a', { href: '#/terms', target: '_blank' }, 'Terms of Service'), ' and accept the ', h('a', { href: '#/privacy', target: '_blank' }, 'Privacy Notice'), '.'),

@@ -1,6 +1,6 @@
 // Settings: account, team access (owner), audit history and privacy.
 
-import { get, post, patch } from '../api.js';
+import { get, post, patch, ApiError } from '../api.js';
 import { h, icon, label, field, formModal, confirmDialog, emptyState, pageHead, toast, fmtDateTime, openModal } from '../ui.js';
 import { state, refreshUser } from '../app.js';
 import { notificationsCard } from '../notifications.js';
@@ -28,6 +28,10 @@ export const ROLE_TEXT = {
   },
 };
 let ROLE_HELP = ROLE_TEXT.short_term;
+const CLEANER_HINT = 'Cleaner: sees cleaning jobs only, no money or guest details. Needs at least one property.';
+const roleOptions = (u) => [['manager', 'Property manager'], ['staff', 'Staff (cleaner, front desk, accountant)'], ...(u.business_type === 'long_term' ? [] : [['cleaner', 'Cleaner — sees cleaning jobs only, no money or guest details']])];
+const roleName = (r) => (r === 'cleaner' ? 'Cleaner' : label(r));
+const needProperty = (data) => { if (data.role === 'cleaner' && !(data.property_ids || []).length) throw new ApiError('Pick at least one property for a cleaner.', { status: 400 }); };
 
 export async function settingsView(el, { rerender, query = {} }) {
   // Back from PayMongo checkout: confirm the payment with the server.
@@ -53,7 +57,7 @@ export async function settingsView(el, { rerender, query = {} }) {
       h('dt', null, 'Name'), h('dd', null, u.full_name),
       h('dt', null, 'Email'), h('dd', null, u.email),
       h('dt', null, 'Workspace'), h('dd', null, u.organization_name),
-      h('dt', null, 'Role'), h('dd', null, label(u.role))),
+      h('dt', null, 'Role'), h('dd', null, roleName(u.role))),
     h('div', { class: 'chips', style: { marginTop: '12px' } }, h('a', { class: 'btn btn--secondary btn--sm', href: '#/account' }, 'My account'), h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: changePassword }, 'Change password')),
     u.role === 'owner' && h('div', { class: 'form', style: { marginTop: '14px' } },
       field({ name: 'business_type', label: 'Modules for this workspace', type: 'select', value: u.business_type, placeholderOption: false, options: [
@@ -87,10 +91,11 @@ export async function settingsView(el, { rerender, query = {} }) {
       submitText: 'Create invitation',
       fields: [
         field({ name: 'email', label: 'Their email', type: 'email', required: true }),
-        field({ name: 'role', label: 'Role', type: 'select', required: true, value: 'manager', placeholderOption: false, options: [['manager', 'Property manager'], ['staff', 'Staff (cleaner, front desk, accountant)']], hint: `Property manager: ${ROLE_HELP.manager} Staff: ${ROLE_HELP.staff}` }),
+        field({ name: 'role', label: 'Role', type: 'select', required: true, value: 'manager', placeholderOption: false, options: roleOptions(u), hint: `Property manager: ${ROLE_HELP.manager} Staff: ${ROLE_HELP.staff}${u.business_type === 'long_term' ? '' : ` ${CLEANER_HINT}`}` }),
         propertyChecks(properties),
       ],
       onSubmit: async (data) => {
+        needProperty(data);
         const res = await post('/team/invitations', { ...data, property_ids: data.property_ids || [] });
         // Re-render first (it clears open dialogs), then show the link so it stays open.
         await rerender();
@@ -113,10 +118,10 @@ export async function settingsView(el, { rerender, query = {} }) {
       title: `Access for ${m.full_name}`,
       submitText: 'Save access',
       fields: [
-        field({ name: 'role', label: 'Role', type: 'select', value: m.role, placeholderOption: false, options: [['manager', 'Property manager'], ['staff', 'Staff (cleaner, front desk, accountant)']] }),
+        field({ name: 'role', label: 'Role', type: 'select', value: m.role, placeholderOption: false, options: roleOptions(u), hint: u.business_type === 'long_term' ? null : CLEANER_HINT }),
         propertyChecks(properties, m.property_ids),
       ],
-      onSubmit: async (data) => { await patch(`/team/members/${m.user_id}`, { role: data.role, property_ids: data.property_ids || [] }); toast('Access updated.'); rerender(); },
+      onSubmit: async (data) => { needProperty(data); await patch(`/team/members/${m.user_id}`, { role: data.role, property_ids: data.property_ids || [] }); toast('Access updated.'); rerender(); },
     });
 
     const removeMember = async (m) => {
@@ -129,14 +134,14 @@ export async function settingsView(el, { rerender, query = {} }) {
       h('ul', { class: 'list' }, members.map((m) => h('li', null, h('div', { class: 'row' },
         h('div', { class: 'row__main' },
           h('span', { class: 'row__title' }, m.full_name, m.user_id === u.user_id ? ' (you)' : ''),
-          h('span', { class: 'row__sub' }, `${m.email} · ${label(m.role)}`),
+          h('span', { class: 'row__sub' }, `${m.email} · ${roleName(m.role)}`),
           m.role !== 'owner' && h('span', { class: 'row__sub' }, m.property_ids.length ? `Access: ${m.property_ids.map(propName).join(', ')}` : 'No properties assigned yet')),
         m.role !== 'owner' && h('div', { class: 'row__end' }, h('div', { class: 'chips' },
           h('button', { class: 'btn btn--secondary btn--sm', onclick: () => editMember(m) }, 'Edit access'),
           h('button', { class: 'btn btn--ghost btn--sm', onclick: () => removeMember(m) }, 'Remove'))))))),
       invitations.length > 0 && [h('h3', { style: { margin: '16px 0 6px' } }, 'Pending invitations'),
         h('ul', { class: 'list' }, invitations.map((i) => h('li', null, h('div', { class: 'row' },
-          h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, i.email), h('span', { class: 'row__sub' }, `${label(i.role)} · expires ${fmtDateTime(i.expires_at)}`)),
+          h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, i.email), h('span', { class: 'row__sub' }, `${roleName(i.role)} · expires ${fmtDateTime(i.expires_at)}`)),
           h('button', { class: 'btn btn--secondary btn--sm', onclick: async () => {
             // Links are stored hashed, so "copy" means issuing a fresh one (the old one stops working).
             try { const res = await post('/team/invitations', { email: i.email, role: i.role, property_ids: i.property_ids || [] }); await rerender(); showInviteLink(res); } catch (err) { toast(err.message, 'error'); }

@@ -191,3 +191,42 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 *Why:* the security review found that an owner's access must end when the owner changes, and that blocks must follow the same read-only rules as the rest of the workspace.
 
 **D-47 · 2026-10-13 · Confirmation codes on owner statements are stored, not printed.** This updates D-45. The published statement keeps each stay's confirmation code in its stored copy, but screens and emails don't show it, because the stays table is already wide on phones. Owners match stays with channel payouts by dates, unit and guest first name. Host file downloads with emoji or non-Latin names now work (same fix as the owner receipt download).
+
+**D-48 · 2026-10-13 · Cleaner role, denied by default (as built).** Workspace role `cleaner` added to users and invitations. One guard, `cleanerGuard` in `src/lib/cleaner.js`, sits in front of the API. A cleaner reaches only the routes on its allow-list: their own account, notifications, support and help; cleaning jobs, board and calendar; files on cleaning, damage and lost-and-found records; damage, lost-item, supplies and work-order actions on a job; the supply list; and their own pay. Any other route answers 403 `CLEANER_FORBIDDEN`, including routes added later, until someone adds them to the list. A cleaner must have at least one property. A cleaner sees only their own jobs and jobs nobody has been given, in their properties. A cleaner can't cancel a job.
+*Why:* a cleaner must never see booking money, guest contact details or other cleaners' pay. A list that is closed by default stops a new route from leaking to cleaners.
+
+**D-49 · 2026-10-13 · Unit cleaning status gains "inspected" (as built).** A unit is dirty, clean or inspected. Check-out makes it dirty. A finished job makes it clean. A passed inspection makes it inspected. A failed inspection makes it dirty and reopens the job with the failed items unticked. A pass changes the unit only while it is still clean, so a newer check-out stays dirty. Anything that treated "not dirty" as ready keeps working.
+
+**D-50 · 2026-10-13 · Inspections and cleaner scores (as built).** Owners and managers inspect a finished job: pass or fail for each checklist item, with notes up to 1,000 characters. Score = passed items ÷ items × 100, rounded. Pass = no failed items. Results are stored in `cleaning_inspections`. A cleaner's quality score is the average of their inspected jobs in the month, shown on Housekeeping → Scores with fails and jobs done.
+
+**D-51 · 2026-10-13 · Damage reports (as built).** Anyone who can see a job, a stay or a unit can report damage: description, optional estimate, photos. Owners and managers resolve each report once: **charge the guest** (adds a damage extra charge to the stay and updates its total), **deduct from deposit** (the deposit settle form is pre-filled with the total of open and deducted reports), or **waive** (with a note). A report on a unit with no stay can only be waived. Cleaners never see amounts and see only reports they filed.
+
+**D-52 · 2026-10-13 · Cleaner pay (as built).** Each cleaner has a rate, per clean or per hour. The cleaner is a team member, or an outside cleaner typed by name. The payee is the assigned team member, else the outside cleaner's name, else whoever marked the job done. When a job is marked done, its pay is set from the rate. Per hour is the time from start to finish, rounded up to the next 15 minutes, capped at 12 hours. Owners and managers can change the amount until it is paid. Mark paid takes several finished cleans with a date (not in the future), a method (cash, GCash, Maya or bank transfer) and a reference. An optional tick records one `cleaning` expense per unit, naming the cleaners and the count. Owners can undo a payment. Cleaners see only their own pay (`GET /my-pay`).
+
+**D-53 · 2026-10-13 · Supplies with par levels (as built).** Per property: name, unit label, par level and on-hand count. Counts, restocks and uses are logged and update on-hand. Low stock = on hand below par; Home and the supplies page show it. No costs, no purchasing.
+
+**D-54 · 2026-10-13 · Lost and found, work orders and recurring maintenance (as built).** Lost items: description, where found, date, photos, status held → returned or disposed. Guest contact for returning an item stays on the reservation. Work orders: a cleaner raises a maintenance request from a job, which is a normal request with the job linked. Recurring: a schedule per property or unit (title, every N days or months, next due date, priority). An hourly job opens one request when due, does nothing if the last request from that schedule is still open, and then moves the due date past today.
+
+**D-55 · 2026-10-13 · Deviations from the Phase 3 spec, agreed in the build.**
+- A paid clean is locked. Its status can't change, its pay can't change, and a failed inspection can't reopen it (refused with a 409).
+- An inspection of a job with an empty checklist is refused.
+- Passing an inspection marks the unit inspected only if it is still clean.
+- Who gets paid: the assigned team member, then the outside cleaner's name, then whoever marked the job done.
+- Cleans paid together share one expense per unit, and must be undone together.
+- A clean with zero pay creates no expense.
+- Payment dates can't be in the future.
+- A rate change applies to cleans finished after the change only.
+- Supplies used beyond stock stop at zero, and the note keeps the amount asked for.
+- A recurring schedule doesn't stack a second request while one is open, and doesn't backfill missed dates.
+- Cleaners can't add photos to a work order. They add photos to the cleaning job instead. (Spec D-54 allowed photos on work orders.)
+- The suggested deposit deduction is hidden from staff (owners and managers only).
+- Cleaners don't see jobs assigned to an outside cleaner by name.
+- Cleaning push notifications don't go to cleaners yet.
+*Why:* each one closes a gap found while building: money changing after it was paid, empty inspections passing, and cleaners seeing money or other people's work.
+
+**D-56 · 2026-10-13 · Phase 3 security review fixes.** Review verdict PASS. Fixed before release:
+- Cleaners can only move a job forward (to do, in progress, done). They can't reopen a finished job, so one cleaner can't take another's pay. A job nobody was assigned to is assigned to whoever marks it done.
+- Changing the pay or the cleaner on a paid job is refused, and the edit locks the job first so it can't race "Mark paid".
+- Cleaners see the cost estimate and outcome only on damage reports they filed themselves.
+- Cleaners now get the "cleaning assigned to you" notification. Recurring maintenance due dates must be between a year ago and five years ahead, and the next due date is worked out in one step.
+- The browser check also hid the Reopen button from cleaners, stopped the app asking for the inbox count and the help assistant for cleaners, and redrew the cleaning calendar as one row per day.

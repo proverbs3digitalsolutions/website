@@ -2,7 +2,7 @@
 
 const express = require('express');
 const config = require('../config');
-const { query, tx } = require('../db');
+const { query, one, tx } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
 const { validate, uuidParam } = require('../lib/validate');
 const { audit } = require('../lib/audit');
@@ -22,6 +22,9 @@ async function validPropertyIds(orgId, ids) {
   return ids;
 }
 
+// A cleaner only sees the properties they're assigned to, so they need at least one.
+const noPropertyForCleaner = () => new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { property_ids: 'Pick at least one property for a cleaner.' } });
+
 router.get('/team', ownerOnly, ah(async (req, res) => {
   const org = req.user.organization_id;
   const { rows: members } = await query(
@@ -40,11 +43,12 @@ router.get('/team', ownerOnly, ah(async (req, res) => {
 router.post('/team/invitations', ownerOnly, ah(async (req, res) => {
   const body = validate(req.body, {
     email: { type: 'email', required: true, label: 'Email' },
-    role: { type: 'enum', values: ['manager', 'staff'], required: true, label: 'Role' },
+    role: { type: 'enum', values: ['manager', 'staff', 'cleaner'], required: true, label: 'Role' },
     property_ids: { type: 'uuids', label: 'Properties' },
   });
   const org = req.user.organization_id;
   const propertyIds = await validPropertyIds(org, body.property_ids);
+  if (body.role === 'cleaner' && !propertyIds.length) throw noPropertyForCleaner();
   const existing = await query('SELECT organization_id FROM users WHERE lower(email) = $1', [body.email]);
   if (existing.rowCount) {
     throw new HttpError(409, 'This email already has a BalayHub account. Team members must use a separate email for each workspace in this version.', { code: 'EMAIL_TAKEN', fields: { email: 'Already registered.' } });
@@ -94,14 +98,19 @@ async function loadMember(req) {
 router.patch('/team/members/:id', ownerOnly, ah(async (req, res) => {
   const member = await loadMember(req);
   const body = validate(req.body, {
-    role: { type: 'enum', values: ['manager', 'staff'], label: 'Role' },
+    role: { type: 'enum', values: ['manager', 'staff', 'cleaner'], label: 'Role' },
     property_ids: { type: 'uuids', label: 'Properties' },
   }, { partial: true });
   const org = req.user.organization_id;
+  const ids = body.property_ids ? await validPropertyIds(org, body.property_ids) : null;
+  if ((body.role || member.role) === 'cleaner') {
+    // Keeps the properties they already have when this request doesn't change them.
+    const kept = ids ? ids.length : (await one('SELECT COUNT(*)::int AS n FROM property_assignments WHERE user_id = $1', [member.user_id])).n;
+    if (!kept) throw noPropertyForCleaner();
+  }
   await tx(async (db) => {
     if (body.role) await db.query('UPDATE users SET role = $1 WHERE user_id = $2', [body.role, member.user_id]);
-    if (body.property_ids) {
-      const ids = await validPropertyIds(org, body.property_ids);
+    if (ids) {
       await db.query('DELETE FROM property_assignments WHERE user_id = $1', [member.user_id]);
       if (ids.length) {
         await db.query('INSERT INTO property_assignments (user_id, property_id) SELECT $1, unnest($2::uuid[])', [member.user_id, ids]);

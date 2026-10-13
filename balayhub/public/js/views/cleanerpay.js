@@ -1,0 +1,274 @@
+// Cleaner pay: owners and managers see what each cleaner earned in a month, tick the unpaid cleans and
+// mark them paid; owners also set rates. `myPayView` is the cleaner's own phone-first list.
+
+import { get, post, patch, api, qs } from '../api.js';
+import { h, peso, fmtDate, field, formModal, confirmDialog, emptyState, pageHead, toast, todayManila, options, label, errorState, skeleton } from '../ui.js';
+import { state } from '../app.js';
+import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
+import { t, initGuestLang, extendTranslations, fmtDateL } from '../i18n.js';
+
+const METHODS = ['cash', 'gcash', 'maya', 'bank_transfer'];
+const cents = (v) => Math.round(Number(v || 0) * 100);
+const fromCents = (c) => c / 100;
+const monthOk = (m) => /^\d{4}-(0[1-9]|1[0-2])$/.test(m || '');
+const whoOf = (x) => x.cleaner_name || 'Not assigned';
+const unitOf = (x) => `${x.unit_name || 'Unit'}${x.property_name ? ` · ${x.property_name}` : ''}`;
+const doneDay = (x) => String(x.completed_at || x.cleaning_date || x.due_date || '').slice(0, 10);
+
+function stat(lbl, value, sub, cls = '') {
+  return h('div', { class: `stat stat--flat ${cls}` }, h('div', { class: 'stat__value' }, value), h('div', { class: 'stat__label' }, lbl), sub && h('div', { class: 'muted small' }, sub));
+}
+
+// ---------------------------------------------------------------- owners and managers
+export async function cleanerPayView(el, { query = {} } = {}) {
+  const defaults = { month: '', cleaner: '', status: '' };
+  const filters = initFilters('cleaner-pay', query, defaults);
+  const thisMonth = todayManila().slice(0, 7);
+  const isOwner = state.user.role === 'owner';
+  const box = h('div', { 'aria-live': 'polite' }, skeleton(3));
+  const ratesBox = h('div');
+  const barBox = h('div');
+  const selected = new Set();
+  let data = { tasks: [] };
+  let cleanerOpts = [];
+
+  const month = () => (monthOk(filters.month) ? filters.month : thisMonth);
+
+  async function load() {
+    history.replaceState(null, '', `#/cleaner-pay${qs(changed(filters, defaults))}`);
+    selected.clear();
+    try { data = await get(`/cleaner-pay${qs({ month: month() })}`); } catch (err) {
+      box.replaceChildren(errorState(err, () => load()));
+      return;
+    }
+    data.tasks = data.tasks || [];
+    const opts = (data.cleaners || []).map((c) => [c.key, c.name || 'Not assigned']);
+    if (JSON.stringify(opts) !== JSON.stringify(cleanerOpts)) { cleanerOpts = opts; renderBar(); }
+    paint();
+  }
+
+  const shown = () => data.tasks.filter((x) => (!filters.cleaner || x.cleaner_key === filters.cleaner) && (!filters.status || x.pay_status === filters.status));
+
+  function markPaid() {
+    const rows = data.tasks.filter((x) => selected.has(x.task_id));
+    if (!rows.length) return;
+    const total = rows.reduce((s, x) => s + cents(x.pay_amount), 0);
+    formModal({
+      title: `Mark ${rows.length} clean${rows.length === 1 ? '' : 's'} paid`, submitText: `Mark ${peso(fromCents(total))} paid`, idempotent: true,
+      fields: [
+        h('p', { class: 'muted small' }, `${[...new Set(rows.map(whoOf))].join(', ')} · ${peso(fromCents(total))} in total`),
+        h('div', { class: 'form-row form-row--2' },
+          field({ name: 'paid_on', label: 'Date paid', type: 'date', required: true, value: todayManila(), max: todayManila() }),
+          field({ name: 'method', label: 'How you paid', type: 'select', required: true, value: 'cash', placeholderOption: false, options: options(METHODS) })),
+        field({ name: 'reference', label: 'Reference (optional)', placeholder: 'GCash or bank reference number', maxlength: 100 }),
+        field({ name: 'record_expense', label: 'Also record as cleaning expenses', type: 'checkbox', value: false }),
+        h('p', { class: 'hint' }, 'Adds one cleaning expense per unit, so it shows on profit and loss and owner statements.'),
+      ],
+      onSubmit: async (d, { idempotencyKey }) => {
+        await post('/cleaner-pay/mark-paid', { task_ids: [...selected], paid_on: d.paid_on, method: d.method, reference: d.reference || undefined, record_expense: !!d.record_expense }, { idempotencyKey });
+        toast('Marked as paid.');
+        load();
+      },
+    });
+  }
+
+  const editPay = (x) => formModal({
+    title: 'Change pay for this clean', submitText: 'Save',
+    fields: [h('p', { class: 'muted small' }, `${unitOf(x)} · ${whoOf(x)}`), field({ name: 'pay_amount', label: 'Pay', type: 'money', required: true, value: x.pay_amount })],
+    onSubmit: async (d) => { await patch(`/cleaning-tasks/${x.task_id}`, { pay_amount: d.pay_amount }); toast('Pay updated.'); load(); },
+  });
+
+  async function unpay(x) {
+    if (!await confirmDialog({ title: 'Mark as unpaid?', text: `${whoOf(x)}'s ${peso(x.pay_amount)} for ${unitOf(x)} goes back to unpaid. A cleaning expense recorded for it is voided.`, confirmText: 'Mark unpaid', danger: true })) return;
+    try {
+      try { await post(`/cleaner-pay/${x.task_id}/unpay`); } catch (err) {
+        const others = err.code === 'EXPENSE_SHARED' && err.data?.other_task_ids;
+        if (!others) throw err;
+        if (!await confirmDialog({ title: 'Undo all together?', text: `These cleans were paid together and share one expense. Undo all ${others.length + 1}?`, confirmText: `Undo all ${others.length + 1}`, danger: true })) return;
+        await post(`/cleaner-pay/${x.task_id}/unpay`, { task_ids: [x.task_id, ...others] });
+      }
+      toast('Marked unpaid.'); load();
+    } catch (err) { toast(err.message, 'error'); }
+  }
+
+  function paint() {
+    const rows = shown();
+    const totals = data.totals || {};
+    const unpaidC = cents(totals.unpaid); const paidC = cents(totals.paid);
+    const missing = data.tasks.filter((x) => x.pay_amount == null).length;
+    const payable = rows.filter((x) => x.pay_status === 'unpaid' && x.pay_amount != null);
+    const selTotal = data.tasks.filter((x) => selected.has(x.task_id)).reduce((s, x) => s + cents(x.pay_amount), 0);
+    const markBtn = h('button', { class: 'btn btn--primary', type: 'button', disabled: !selected.size, onclick: markPaid }, selected.size ? `Mark ${selected.size} paid · ${peso(fromCents(selTotal))}` : 'Mark paid');
+    const refresh = () => {
+      const n = selected.size;
+      const c = data.tasks.filter((x) => selected.has(x.task_id)).reduce((s, x) => s + cents(x.pay_amount), 0);
+      markBtn.disabled = !n;
+      markBtn.textContent = n ? `Mark ${n} paid · ${peso(fromCents(c))}` : 'Mark paid';
+    };
+    const all = h('input', { type: 'checkbox', 'aria-label': 'Select all unpaid cleans', disabled: !payable.length,
+      onchange: (e) => { payable.forEach((x) => (e.target.checked ? selected.add(x.task_id) : selected.delete(x.task_id))); box.querySelectorAll('input[data-task]').forEach((i) => { i.checked = selected.has(i.dataset.task); }); refresh(); } });
+    const perCleaner = data.cleaners || [];
+
+    box.replaceChildren(
+      h('div', { class: 'grid grid--3 stats' },
+        stat('Still to pay', peso(fromCents(unpaidC)), missing ? `${missing} clean${missing === 1 ? ' has' : 's have'} no rate set` : null, unpaidC ? 'stat--alert' : ''),
+        stat('Paid this month', peso(fromCents(paidC))),
+        stat('Cleans done', String(data.tasks.length), perCleaner.length ? `${perCleaner.length} cleaner${perCleaner.length === 1 ? '' : 's'}` : null)),
+      perCleaner.length > 1 && h('div', { class: 'card ops-card' }, h('h2', null, 'By cleaner'),
+        h('ul', { class: 'list' }, perCleaner.map((c) => h('li', { class: 'ops-line' },
+          h('span', { class: 'ops-line__main' }, h('strong', null, c.name || 'Not assigned'), h('span', { class: 'muted small' }, ` ${c.count} clean${c.count === 1 ? '' : 's'}${c.unpriced ? `, ${c.unpriced} with no rate set` : ''}`)),
+          h('span', { class: 'ops-line__end' }, cents(c.unpaid) ? `${peso(c.unpaid)} to pay` : 'All paid', cents(c.paid) ? h('span', { class: 'muted small' }, ` · ${peso(c.paid)} paid`) : null))))),
+      rows.length
+        ? h('div', { class: 'card card--flush' },
+          h('div', { class: 'ops-bar' }, h('span', { class: 'muted small' }, `${rows.length} clean${rows.length === 1 ? '' : 's'}`), markBtn),
+          h('div', { class: 'table-wrap' }, h('table', { class: 'table ops-stack' },
+            h('caption', { class: 'sr-only' }, `Cleaner pay for ${month()}`),
+            h('thead', null, h('tr', null, h('th', { scope: 'col', class: 'ops-check' }, all), ['Date', 'Unit', 'Cleaner'].map((c) => h('th', { scope: 'col' }, c)), h('th', { scope: 'col', class: 'num' }, 'Pay'), h('th', { scope: 'col' }, 'Status'), h('th', { scope: 'col' }, h('span', { class: 'sr-only' }, 'Actions')))),
+            h('tbody', null, rows.map((x) => {
+              const canPick = x.pay_status === 'unpaid' && x.pay_amount != null;
+              const box1 = h('input', { type: 'checkbox', disabled: !canPick, checked: selected.has(x.task_id), dataset: { task: x.task_id }, 'aria-label': `Select ${unitOf(x)} on ${fmtDate(doneDay(x))}`,
+                onchange: (e) => { if (e.target.checked) selected.add(x.task_id); else selected.delete(x.task_id); refresh(); } });
+              return h('tr', null,
+                h('td', { class: 'ops-check' }, box1),
+                h('td', { dataset: { label: 'Date' } }, fmtDate(doneDay(x))),
+                h('td', { dataset: { label: 'Unit' } }, unitOf(x)),
+                h('td', { dataset: { label: 'Cleaner' } }, whoOf(x)),
+                h('td', { class: 'num', dataset: { label: 'Pay' } }, x.pay_amount == null ? h('span', { class: 'muted' }, 'No rate set') : peso(x.pay_amount)),
+                h('td', { dataset: { label: 'Status' } }, x.pay_status === 'paid'
+                  ? h('span', null, h('span', { class: 'badge badge--paid' }, 'Paid'), h('span', { class: 'muted small ops-note' }, ` ${x.paid_on ? fmtDate(String(x.paid_on).slice(0, 10)) : ''}${x.paid_method ? ` · ${label(x.paid_method)}` : ''}`))
+                  : h('span', { class: 'badge badge--unpaid' }, 'Unpaid')),
+                h('td', { class: 'ops-actions' },
+                  x.pay_status === 'unpaid' && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => editPay(x) }, x.pay_amount == null ? 'Set pay' : 'Edit pay'),
+                  x.pay_status === 'paid' && isOwner && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => unpay(x) }, 'Undo paid')));
+            })))))
+        : h('div', { class: 'card' }, emptyState({ iconName: 'inbox', title: data.tasks.length ? 'No cleans match these filters' : 'No finished cleans this month', text: data.tasks.length ? 'Try removing a filter.' : 'Pay shows up here once a cleaner marks a clean as done. Check the rates below if amounts are missing.' })));
+  }
+
+  function renderBar() {
+    barBox.replaceChildren(filterBar({
+      key: 'cleaner-pay', values: filters, defaults,
+      onChange: () => paint(),
+      extra: h('input', { class: 'input input--sm', type: 'month', value: month(), 'aria-label': 'Month', max: thisMonth,
+        onchange: (e) => { if (e.target.value) { filters.month = e.target.value; rememberFilters('cleaner-pay', filters); load(); } } }),
+      quick: [
+        { name: 'cleaner', label: 'Cleaner', all: 'All cleaners', options: cleanerOpts },
+        { name: 'status', label: 'Status', all: 'Paid and unpaid', options: [['unpaid', 'Unpaid'], ['paid', 'Paid']] },
+      ],
+    }));
+  }
+
+  // ---- rates (owners)
+  async function loadRates() {
+    let rates; let members = [];
+    try {
+      [{ rates }, { members }] = await Promise.all([get('/cleaner-rates'), get('/team').catch(() => ({ members: [] }))]);
+    } catch (err) { ratesBox.replaceChildren(h('div', { class: 'card' }, h('p', { class: 'muted' }, err.message))); return; }
+    const cleaners = members.filter((m) => m.role === 'cleaner');
+    const nameOf = (r) => r.name || 'Cleaner';
+    const rateText = (r) => `${peso(r.amount)} ${r.rate_type === 'per_hour' ? 'per hour' : 'per clean'}`;
+    const edit = (r) => {
+      const outside = r ? !r.user_id : !cleaners.length;
+      const who = field({ name: 'user_id', label: 'Cleaner', type: 'select', value: r?.user_id || '', placeholderOption: 'Someone outside the team', options: cleaners.map((m) => [m.user_id, m.full_name]) });
+      const nameF = field({ name: 'assignee_name', label: 'Name', value: r?.assignee_name || '', maxlength: 120, hint: 'Match the name you type when assigning a clean.' });
+      const sync = () => { nameF.hidden = !!who.querySelector('select').value; };
+      who.querySelector('select').addEventListener('change', sync);
+      formModal({
+        title: r ? `Rate for ${nameOf(r)}` : 'Add a cleaner rate', submitText: 'Save rate',
+        fields: [
+          !r && who, (!r || outside) && nameF,
+          h('div', { class: 'form-row form-row--2' },
+            field({ name: 'rate_type', label: 'Paid', type: 'select', required: true, value: r?.rate_type || 'per_clean', placeholderOption: false, options: [['per_clean', 'Per clean'], ['per_hour', 'Per hour']] }),
+            field({ name: 'amount', label: 'Amount', type: 'money', required: true, value: r?.amount })),
+        ],
+        onSubmit: async (d) => {
+          const body = { rate_type: d.rate_type, amount: d.amount };
+          if (r) { if (r.user_id) body.user_id = r.user_id; else body.assignee_name = r.assignee_name; } else if (d.user_id) body.user_id = d.user_id; else body.assignee_name = d.assignee_name;
+          await api('PUT', '/cleaner-rates', body);
+          toast('Rate saved.'); loadRates(); load();
+        },
+      });
+      if (!r) sync();
+    };
+    const remove = async (r) => {
+      if (!await confirmDialog({ title: 'Remove this rate?', text: `${nameOf(r)} will have no rate. Finished cleans keep the pay already worked out.`, confirmText: 'Remove', danger: true })) return;
+      try { await api('DELETE', `/cleaner-rates/${r.rate_id}`); toast('Rate removed.'); loadRates(); } catch (err) { toast(err.message, 'error'); }
+    };
+    ratesBox.replaceChildren(h('div', { class: 'card ops-card' },
+      h('div', { class: 'card__head' }, h('h2', null, 'Cleaner rates'), h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => edit(null) }, '+ Add rate')),
+      h('p', { class: 'muted small' }, 'Pay for a clean is worked out from the rate when the cleaner marks it done. Per-hour pay rounds up to the next 15 minutes.'),
+      rates.length ? h('ul', { class: 'list' }, rates.map((r) => h('li', { class: 'ops-line' },
+        h('span', { class: 'ops-line__main' }, h('strong', null, nameOf(r)), h('span', { class: 'muted small' }, ` ${rateText(r)}`)),
+        h('span', { class: 'ops-line__end' },
+          h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => edit(r) }, 'Edit'),
+          h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => remove(r), 'aria-label': `Remove rate for ${nameOf(r)}` }, 'Remove')))))
+        : h('p', { class: 'muted' }, 'No rates yet. Add one so cleans are priced when they are done.')));
+  }
+
+  renderBar();
+  el.replaceChildren(pageHead({ title: 'Cleaner pay', sub: 'What your cleaners earned, and what you still owe' }), barBox, box, ratesBox);
+  await load();
+  if (isOwner) loadRates();
+}
+
+// ---------------------------------------------------------------- the cleaner's own pay
+extendTranslations({
+  'My pay': 'Aking sahod',
+  'Your pay for the cleans you finished.': 'Sahod mo sa mga nilinis mo.',
+  'Previous month': 'Nakaraang buwan',
+  'Next month': 'Susunod na buwan',
+  'Total this month': 'Kabuuan ngayong buwan',
+  'Still to be paid': 'Hindi pa nababayaran',
+  'Already paid': 'Bayad na',
+  'Paid': 'Bayad na',
+  'Not paid yet': 'Hindi pa bayad',
+  'Paid on {date}': 'Binayaran noong {date}',
+  'No cleans finished this month': 'Walang natapos na linis ngayong buwan',
+  'When you finish a clean, your pay shows up here.': 'Kapag natapos mo ang isang linis, lalabas dito ang sahod mo.',
+  'Pay will be set soon': 'Itatakda pa ang sahod',
+  "Couldn't load your pay": 'Hindi ma-load ang sahod mo',
+  'Try again': 'Subukan ulit',
+  'Loading…': 'Naglo-load…',
+});
+
+export async function myPayView(el, { query = {} } = {}) {
+  initGuestLang(state.user?.guest_language);
+  const thisMonth = todayManila().slice(0, 7);
+  let month = monthOk(query.month) ? query.month : thisMonth;
+  const box = h('div', { 'aria-live': 'polite', class: 'mypay' });
+  const shift = (m, d) => { const [y, mo] = m.split('-').map(Number); const dt = new Date(Date.UTC(y, mo - 1 + d, 1)); return dt.toISOString().slice(0, 7); };
+  const monthName = (m) => new Date(`${m}-01T00:00:00Z`).toLocaleDateString(state.user?.guest_language === 'tl' ? 'fil-PH' : 'en-PH', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+
+  async function load() {
+    history.replaceState(null, '', `#/my-pay${month === thisMonth ? '' : `?month=${month}`}`);
+    box.replaceChildren(h('p', { class: 'muted' }, t('Loading…')));
+    let d;
+    try { d = await get(`/my-pay${qs({ month })}`); } catch (err) {
+      box.replaceChildren(h('div', { class: 'card' }, h('p', null, t("Couldn't load your pay")), h('p', { class: 'muted small' }, err.message), h('button', { class: 'btn btn--secondary', type: 'button', onclick: load }, t('Try again'))));
+      return;
+    }
+    const tasks = (d.tasks || []).filter((x) => x.pay_visible);
+    const { total = 0, unpaid = 0, paid = 0 } = d.totals || {};
+    box.replaceChildren(
+      h('div', { class: 'card mypay__total' }, h('div', { class: 'stat__label' }, t('Total this month')), h('div', { class: 'mypay__amount' }, peso(total)),
+        h('div', { class: 'mypay__split' }, h('span', null, `${t('Still to be paid')}: `, h('strong', null, peso(unpaid))), h('span', null, `${t('Already paid')}: `, h('strong', null, peso(paid))))),
+      tasks.length
+        ? h('ul', { class: 'list mypay__list' }, tasks.map((x) => h('li', { class: 'mypay__item' },
+          h('div', { class: 'mypay__main' }, h('span', { class: 'row__title' }, unitOf(x)), h('span', { class: 'row__sub' }, fmtDateL(doneDay(x)))),
+          h('div', { class: 'mypay__end' },
+            h('strong', null, x.pay_amount == null ? t('Pay will be set soon') : peso(x.pay_amount)),
+            x.pay_amount != null && (x.pay_status === 'paid'
+              ? h('span', { class: 'badge badge--paid' }, t('Paid'))
+              : h('span', { class: 'badge badge--unpaid' }, t('Not paid yet'))),
+            x.pay_status === 'paid' && x.paid_on && h('span', { class: 'row__sub' }, t('Paid on {date}', { date: fmtDateL(String(x.paid_on).slice(0, 10)) }))))))
+        : h('div', { class: 'card' }, emptyState({ iconName: 'inbox', title: t('No cleans finished this month'), text: t('When you finish a clean, your pay shows up here.') })));
+  }
+
+  const label1 = h('span', { class: 'mypay__month' });
+  const go = (d) => () => { month = shift(month, d); sync(); load(); };
+  const prev = h('button', { class: 'btn btn--secondary mypay__nav', type: 'button', 'aria-label': t('Previous month'), onclick: go(-1) }, '‹');
+  const next = h('button', { class: 'btn btn--secondary mypay__nav', type: 'button', 'aria-label': t('Next month'), onclick: go(1) }, '›');
+  function sync() { label1.textContent = monthName(month); next.disabled = month >= thisMonth; }
+  sync();
+  el.replaceChildren(pageHead({ title: t('My pay'), sub: t('Your pay for the cleans you finished.') }), h('div', { class: 'mypay__bar' }, prev, label1, next), box);
+  await load();
+}

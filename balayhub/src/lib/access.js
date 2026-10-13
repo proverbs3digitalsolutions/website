@@ -77,9 +77,9 @@ async function loadLease(user, leaseId, db) {
   return row;
 }
 
-// Staff get a limited tenant view: no contact details or private notes.
+// Staff and cleaners get a limited tenant view: no contact details or private notes.
 function redactTenant(user, t) {
-  if (user.role !== 'staff' || !t) return t;
+  if (!['staff', 'cleaner'].includes(user.role) || !t) return t;
   const { email, phone, emergency_contact, notes, ...rest } = t;
   return { ...rest, limited: true };
 }

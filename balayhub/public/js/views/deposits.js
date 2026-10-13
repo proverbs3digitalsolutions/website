@@ -13,7 +13,7 @@ export async function depositCard(r, rerender) {
   let d;
   try { d = await get(`/reservations/${r.booking_id}/deposit`); } catch { return null; }
   const dep = d.deposit;
-  const isManager = state.user.role !== 'staff';
+  const isManager = !['staff', 'cleaner'].includes(state.user.role);
   const sent = (res, what) => toast(res.receipt ? (res.receipt.sent ? `${what} Email sent to ${res.receipt.to}.` : `${what} Email not sent: ${res.receipt.error}`) : what);
 
   const record = () => formModal({
@@ -31,7 +31,8 @@ export async function depositCard(r, rerender) {
   });
 
   const settle = () => {
-    const dedInput = field({ name: 'deduction_amount', label: 'Deduction for damage / missing items', type: 'money', value: '0', hint: `Deposit: ${peso(dep.amount)}. Leave 0 to return it all.` });
+    const suggested = Math.min(Number(d.suggested_deduction) || 0, Number(dep.amount));
+    const dedInput = field({ name: 'deduction_amount', label: 'Deduction for damage / missing items', type: 'money', value: suggested > 0 ? String(suggested) : '0', hint: `Deposit: ${peso(dep.amount)}. Leave 0 to return it all.${suggested > 0 ? ' From damage reports: you can change it.' : ''}` });
     const refundLine = h('p', { class: 'small' });
     const update = () => {
       const ded = Math.min(Number(dedInput.querySelector('input').value.replace(/,/g, '')) || 0, Number(dep.amount));

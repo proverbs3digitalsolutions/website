@@ -12,6 +12,7 @@ const { requireRole } = require('../lib/auth');
 const { propertyScope, loadUnit } = require('../lib/access');
 const ical = require('../lib/ical');
 const { ensureTaskForBooking, syncOpenTasks } = require('../lib/housekeeping');
+const { computePay } = require('../lib/cleanerpay');
 const receipts = require('../lib/receipts');
 // The amount owed changed: close the guest's open online-payment checkouts (lazy require: circular-safe).
 const closeOpenCheckouts = (bookingId) => require('./balancepay').closeOpenCheckouts(bookingId);
@@ -29,7 +30,7 @@ const nightsBetween = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.
 const validationError = (fields) => new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields });
 
 function redactGuest(user, g) {
-  if (!g || user.role !== 'staff') return g;
+  if (!g || !['staff', 'cleaner'].includes(user.role)) return g;
   const { email, phone, notes, guest_email: ge, guest_phone: gp, review_token: rt, pay_token: pt, checkin_token: ct, ...rest } = g;
   return { ...rest, limited: true };
 }
@@ -115,13 +116,18 @@ router.get('/listings', ah(async (req, res) => {
 router.post('/units/:id/cleaning', ah(async (req, res) => {
   const unit = await loadUnit(req.user, uuidParam(req.params.id));
   const { status } = validate(req.body, { status: { type: 'enum', values: ['clean', 'dirty'], required: true, label: 'Status' } });
-  await query('UPDATE units SET cleaning_status = $2, cleaning_updated_at = now() WHERE unit_id = $1', [unit.unit_id, status]);
-  if (status === 'clean') {
-    // Marking the listing clean finishes its open cleaning tasks that are due.
-    await query(
-      `UPDATE cleaning_tasks SET status = 'done', completed_at = now(), completed_by = $2, started_at = COALESCE(started_at, now())
-        WHERE unit_id = $1 AND status IN ('todo', 'in_progress') AND due_date <= ${TODAY}`, [unit.unit_id, req.user.user_id]);
-  }
+  await tx(async (db) => {
+    await db.query('UPDATE units SET cleaning_status = $2, cleaning_updated_at = now() WHERE unit_id = $1', [unit.unit_id, status]);
+    if (status === 'clean') {
+      // Marking the listing clean finishes its open cleaning tasks that are due, and sets their pay.
+      // An unassigned one goes to whoever marked it, the same as a status change does.
+      const { rows } = await db.query(
+        `UPDATE cleaning_tasks SET status = 'done', completed_at = now(), completed_by = $2, started_at = COALESCE(started_at, now()),
+                assigned_to = CASE WHEN assigned_to IS NULL AND assignee_name IS NULL THEN $2 ELSE assigned_to END
+          WHERE unit_id = $1 AND status IN ('todo', 'in_progress') AND due_date <= ${TODAY} RETURNING task_id`, [unit.unit_id, req.user.user_id]);
+      for (const { task_id: taskId } of rows) await computePay(db, taskId);
+    }
+  });
   await audit(null, req.user, `cleaning.${status}`, 'unit', unit.unit_id);
   res.json({ ok: true });
 }));
@@ -140,7 +146,7 @@ const guestSpec = {
 // (upcoming | in_house | none_upcoming), channel, property_id, last_from/last_to
 // (latest stay), min_stays, rating (their reviews: 4 = 4★ and up, low = under 3★, none) and
 // sort. Stay counts and amounts only cover the properties this person can see;
-// staff never get amounts or the "total spent" sort.
+// staff and cleaners never get amounts or the "total spent" sort.
 const GUEST_SORTS = {
   name: 'g.full_name',
   stays: 's.stays DESC, g.full_name',
@@ -151,7 +157,7 @@ const GUEST_SORTS = {
 };
 router.get('/guests', ah(async (req, res) => {
   const qp = req.query;
-  const staff = req.user.role === 'staff';
+  const staff = ['staff', 'cleaner'].includes(req.user.role);
   const params = [];
   const where = [guestScope(req.user, params)];
   // Bookings counted for each guest: only in properties this person can see.

@@ -7,6 +7,7 @@ const { validate, uuidParam, isValidDate } = require('../lib/validate');
 const { audit } = require('../lib/audit');
 const { requireRole } = require('../lib/auth');
 const { propertyScope, loadProperty, loadUnit } = require('../lib/access');
+const { taskScope } = require('../lib/housekeeping');
 const { createExpense, expenseSpec } = require('./money');
 
 const router = express.Router();
@@ -167,6 +168,146 @@ router.post('/maintenance/:id/costs', ah(async (req, res) => {
     description: body.description || `Repair: ${request.title}`,
   }, request.request_id);
   res.status(result.duplicate ? 200 : 201).json(result);
+}));
+
+// Work orders: a repair request raised from a cleaning task (D-54). The task must be visible
+// to the user (housekeeping's rule) and not cancelled.
+async function loadWorkableTask(user, id) {
+  const params = [id];
+  const task = await one(
+    `SELECT t.task_id, t.status, t.unit_id, u.unit_name, p.property_id
+       FROM cleaning_tasks t
+       JOIN units u ON u.unit_id = t.unit_id
+       JOIN properties p ON p.property_id = u.property_id
+      WHERE t.task_id = $1 AND ${taskScope(user, params)}`, params);
+  if (!task) throw notFound();
+  if (task.status === 'cancelled') throw new HttpError(409, 'This task was cancelled.', { code: 'CANCELLED' });
+  return task;
+}
+
+const WORK_ORDER_FIELDS = {
+  title: { type: 'string', required: true, max: 150, label: 'Issue' },
+  description: { type: 'text', max: 2000, label: 'Details' },
+  priority: { type: 'enum', values: PRIORITIES, required: true, label: 'Priority' },
+};
+
+router.post('/cleaning-tasks/:id/work-order', ah(async (req, res) => {
+  const task = await loadWorkableTask(req.user, uuidParam(req.params.id));
+  const body = validate(req.body, WORK_ORDER_FIELDS);
+  const request = await tx(async (db) => {
+    const { rows: [m] } = await db.query(
+      `INSERT INTO maintenance_requests (organization_id, property_id, unit_id, reported_by, title, description, priority, cleaning_task_id, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING request_id, status`,
+      [req.user.organization_id, task.property_id, task.unit_id, req.user.full_name, body.title, body.description,
+        body.priority, task.task_id, req.user.user_id]);
+    await audit(db, req.user, 'maintenance.created', 'maintenance', m.request_id,
+      { title: body.title, priority: body.priority, cleaning_task_id: task.task_id });
+    return m;
+  });
+  require('../lib/push').notify(req.user.organization_id, 'cleaning', {
+    title: `Work order: ${task.unit_name}`, body: body.title, url: `/#/maintenance/${request.request_id}`,
+    propertyId: task.property_id, roles: ['owner', 'manager'],
+  }).catch(() => {});
+  // Lean on purpose: cleaners can't open /maintenance, so the reply carries no repair costs.
+  res.status(201).json({
+    request: { request_id: request.request_id, title: body.title, priority: body.priority, status: request.status, cleaning_task_id: task.task_id },
+  });
+}));
+
+// Recurring preventive maintenance (D-54). The hourly job in lib/maintschedule.js opens the requests.
+const SCHEDULE_SELECT = `
+  SELECT s.schedule_id, s.property_id, p.property_name, s.unit_id, u.unit_name, s.title, s.description,
+         s.every_n, s.every_unit, s.next_due, s.priority, s.active, s.last_created_at, s.created_at
+    FROM maintenance_schedules s
+    JOIN properties p ON p.property_id = s.property_id
+    LEFT JOIN units u ON u.unit_id = s.unit_id`;
+
+async function loadSchedule(user, id) {
+  const params = [id];
+  const row = await one(`${SCHEDULE_SELECT} WHERE s.schedule_id = $1 AND ${propertyScope(user, params)}`, params);
+  if (!row) throw notFound();
+  return row;
+}
+
+const SCHEDULE_FIELDS = {
+  title: { type: 'string', required: true, max: 150, label: 'Title' },
+  description: { type: 'text', max: 1000, label: 'Details' },
+  every_n: { type: 'int', required: true, min: 1, max: 365, label: 'Repeat every' },
+  every_unit: { type: 'enum', values: ['days', 'months'], required: true, label: 'Repeat unit' },
+  next_due: { type: 'date', required: true, label: 'Next due' },
+  priority: { type: 'enum', values: PRIORITIES, required: true, label: 'Priority' },
+};
+
+// Next due must be within a year back or five years ahead of today (Manila).
+async function checkNextDue(nextDue) {
+  const { rows: [w] } = await query(
+    `SELECT ((now() AT TIME ZONE 'Asia/Manila')::date - interval '1 year')::date AS earliest,
+            ((now() AT TIME ZONE 'Asia/Manila')::date + interval '5 years')::date AS latest`);
+  if (nextDue < w.earliest || nextDue > w.latest) {
+    throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { next_due: `Next due must be between ${w.earliest} and ${w.latest}.` } });
+  }
+}
+
+router.get('/maintenance-schedules', ah(async (req, res) => {
+  const params = [];
+  const { rows } = await query(
+    `${SCHEDULE_SELECT} WHERE ${propertyScope(req.user, params)} ORDER BY s.active DESC, s.next_due, s.title`, params);
+  res.json({ schedules: rows });
+}));
+
+router.post('/maintenance-schedules', managers, ah(async (req, res) => {
+  const body = validate(req.body, {
+    property_id: { type: 'uuid', required: true, label: 'Property' },
+    unit_id: { type: 'uuid', label: 'Unit' },
+    ...SCHEDULE_FIELDS,
+  });
+  await checkNextDue(body.next_due);
+  await loadProperty(req.user, body.property_id);
+  if (body.unit_id) {
+    const unit = await loadUnit(req.user, body.unit_id);
+    if (unit.property_id !== body.property_id) {
+      throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { unit_id: 'This unit belongs to a different property.' } });
+    }
+  }
+  const id = await tx(async (db) => {
+    const { rows: [s] } = await db.query(
+      `INSERT INTO maintenance_schedules (organization_id, property_id, unit_id, title, description, every_n, every_unit, next_due, priority, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING schedule_id`,
+      [req.user.organization_id, body.property_id, body.unit_id, body.title, body.description, body.every_n,
+        body.every_unit, body.next_due, body.priority, req.user.user_id]);
+    await audit(db, req.user, 'maintenance.schedule_created', 'maintenance_schedule', s.schedule_id,
+      { title: body.title, every_n: body.every_n, every_unit: body.every_unit });
+    return s.schedule_id;
+  });
+  res.status(201).json({ schedule: await loadSchedule(req.user, id) });
+}));
+
+// `active` is the resume (true) and pause (false) switch. Other values are refused, not coerced.
+router.patch('/maintenance-schedules/:id', managers, ah(async (req, res) => {
+  const schedule = await loadSchedule(req.user, uuidParam(req.params.id));
+  if (req.body && 'active' in req.body && typeof req.body.active !== 'boolean') {
+    throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { active: 'Choose active or paused.' } });
+  }
+  const body = validate(req.body, { ...SCHEDULE_FIELDS, active: { type: 'bool', label: 'Active' } }, { partial: true });
+  if ('next_due' in body) await checkNextDue(body.next_due);
+  const keys = Object.keys(body);
+  if (keys.length) {
+    await tx(async (db) => {
+      await db.query(`UPDATE maintenance_schedules SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')} WHERE schedule_id = $1`,
+        [schedule.schedule_id, ...keys.map((k) => body[k])]);
+      await audit(db, req.user, 'maintenance.schedule_updated', 'maintenance_schedule', schedule.schedule_id, { after: body });
+    });
+  }
+  res.json({ schedule: await loadSchedule(req.user, schedule.schedule_id) });
+}));
+
+router.post('/maintenance-schedules/:id/pause', managers, ah(async (req, res) => {
+  const schedule = await loadSchedule(req.user, uuidParam(req.params.id));
+  await tx(async (db) => {
+    await db.query('UPDATE maintenance_schedules SET active = false WHERE schedule_id = $1', [schedule.schedule_id]);
+    await audit(db, req.user, 'maintenance.schedule_paused', 'maintenance_schedule', schedule.schedule_id, { title: schedule.title });
+  });
+  res.json({ schedule: await loadSchedule(req.user, schedule.schedule_id) });
 }));
 
 module.exports = router;

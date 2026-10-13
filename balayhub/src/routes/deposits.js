@@ -41,9 +41,23 @@ async function depositOf(bookingId) {
   return { ...d, files };
 }
 
+// What the stay's damage reports add up to: estimates on open reports and on
+// reports marked to deduct. Managers only; staff never see damage costs.
+async function suggestedDeduction(bookingId) {
+  const row = await one(
+    `SELECT COALESCE(SUM(estimated_cost), 0.00)::text AS total FROM damage_reports
+      WHERE booking_id = $1 AND status IN ('open', 'deducted')`, [bookingId]);
+  return row.total;
+}
+
 router.get('/reservations/:id/deposit', ah(async (req, res) => {
   const b = await loadReservation(req.user, uuidParam(req.params.id));
-  res.json({ deposit: await depositOf(b.booking_id), suggested: b.security_deposit_amount && Number(b.security_deposit_amount) > 0 ? b.security_deposit_amount : null });
+  const canSeeDamage = ['owner', 'manager'].includes(req.user.role);
+  res.json({
+    deposit: await depositOf(b.booking_id),
+    suggested: b.security_deposit_amount && Number(b.security_deposit_amount) > 0 ? b.security_deposit_amount : null,
+    suggested_deduction: canSeeDamage ? await suggestedDeduction(b.booking_id) : null,
+  });
 }));
 
 // Record the deposit received (staff can too: they often collect it at check-in).

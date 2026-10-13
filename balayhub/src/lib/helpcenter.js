@@ -18,6 +18,9 @@ const CATEGORIES = [
 const ALL = ['owner', 'manager', 'staff'];
 const MANAGERS = ['owner', 'manager'];
 const OWNER = ['owner'];
+// CREW: everyone who works a cleaning job (cleaners included). CLEANER: the cleaner role only.
+const CREW = ['owner', 'manager', 'staff', 'cleaner'];
+const CLEANER = ['cleaner'];
 
 const ARTICLES = [
   {
@@ -181,12 +184,121 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'housekeeping', category: 'operations', roles: ALL, title: 'Cleaning tasks and housekeeping',
+    slug: 'housekeeping', category: 'operations', roles: CREW, title: 'Cleaning tasks and housekeeping',
     keywords: 'cleaning housekeeping cleaner checklist task dirty clean turnover photos',
     body: [
       'A cleaning task is created for every check-out, with your checklist. Housekeeping lists today\'s cleanings and the next arrival.',
-      'Cleaners (staff) open the task on their phone, tick the checklist, add photos and press Mark done. Or use "Copy for cleaner" to send it by Messenger/Viber.',
+      'Cleaners open the task on their phone, tick the checklist, add photos and press Mark done. Or use "Copy for cleaner" to send it by Messenger/Viber.',
       'Settings → Housekeeping lets the owner change the checklist.',
+    ],
+  },
+  {
+    slug: 'cleaner-role', category: 'business', roles: OWNER, title: 'Invite a cleaner and what they can see',
+    keywords: 'cleaner invite role team cleaning jobs only no money access outside cleaner name without login',
+    body: [
+      'Settings → Team & permissions → Invite. Choose Cleaner and the buildings they clean. They get an email with a sign-in link, like any team member.',
+      'A cleaner signs in to a short menu: Cleaning, My pay, Help and Account. They see only their own cleaning jobs and jobs nobody has been given yet, in their buildings.',
+      'A cleaner never sees booking money, payments, reports, settings, the inbox, guests\' phone numbers or emails, or other cleaners\' pay. Guests show by first name only.',
+      'A cleaner can start and finish a job and tick its checklist, but can\'t cancel it. They can report damage, log lost items, record supplies used and raise a work order from the job.',
+      'Cleaners who don\'t need a login: don\'t invite them. Type their name on the job ("Or a cleaner without a BalayHub login") and send it with Copy for cleaner. Their pay is set by name.',
+    ],
+  },
+  {
+    slug: 'cleaning-board', category: 'operations', roles: MANAGERS, title: 'Status board, calendar and inspections',
+    keywords: 'board status dirty clean inspected calendar week reassign cleaner inspection pass fail score quality scores',
+    body: [
+      'Housekeeping → Board shows every unit as Dirty, Clean or Inspected, with who is in it now, the next arrival, the open job and the last inspection score.',
+      'Dirty: a guest checked out and nobody has cleaned yet. Clean: the job is marked done. Inspected: an owner or manager checked it and it passed.',
+      'Calendar shows a week by day. Owners and managers can change who a job goes to with the select on each job.',
+      'Inspect: open a finished job, press Inspect, mark each checklist item pass or fail, add notes if needed, and save. Score = passed items ÷ items × 100, rounded.',
+      'All items pass: the unit becomes Inspected. Any item fails: the job reopens with the failed items unticked, and the unit is Dirty again.',
+      'You can\'t inspect a job that has no checklist items, and a failed inspection can\'t reopen a paid clean.',
+      'Housekeeping → Scores shows each cleaner\'s finished and inspected jobs, average score and fails for the month.',
+    ],
+  },
+  {
+    slug: 'damage-reports-resolve', category: 'operations', roles: MANAGERS, title: 'Damage reports: charge the guest, deduct from deposit, or waive',
+    keywords: 'damage report charge guest deduct deposit waive broken repair cost estimate photos found',
+    body: [
+      'Damage reported from a cleaning job or a stay is listed on the reservation and in the damage list. Only owners and managers see the amounts.',
+      'Charge the guest: enter the amount and a description. It becomes an extra charge on the stay (category damage), and the balance goes up.',
+      'Deduct from deposit: marks the report to deduct. When you settle the deposit, the form is filled in with the total of open and deducted reports, so you can change it before you confirm.',
+      'Waive: you decide not to bill it. Add a note saying why.',
+      'Each report can be resolved once. A report on a unit with no stay can only be waived, because there is no bill or deposit to use.',
+      'Charging a report also updates that stay\'s total. Charges can\'t be changed on a cancelled reservation.',
+    ],
+  },
+  {
+    slug: 'damage-report-field', category: 'operations', roles: CREW, title: 'Report damage from a cleaning job',
+    keywords: 'damage broken report photo cleaner found stain crack missing item cleaning job',
+    body: [
+      'Open the cleaning job and press Report damage. Say what you saw, add a cost estimate if you know it, and add photos.',
+      'Owners and managers decide what happens next: charge the guest, take it from the deposit, or waive it. Cleaners don\'t see those amounts.',
+      'Cleaners see only the damage reports they filed.',
+    ],
+  },
+  {
+    slug: 'lost-and-found', category: 'operations', roles: CREW, title: 'Lost and found: log an item and return it',
+    keywords: 'lost found item left behind returned disposed photo held guest left found where cleaner',
+    body: [
+      'From a cleaning job, press Found an item. Describe it, say where you found it, pick the date and add a photo.',
+      'Owners and managers see every item under Lost and found. Each item is Held, Returned or Disposed, and you can add a note when you change it.',
+      'Cleaners see only the items they logged.',
+      'To return an item, use the guest\'s contact details on the reservation. Cleaners never see guest contact details.',
+    ],
+  },
+  {
+    slug: 'cleaner-pay', category: 'business', roles: MANAGERS, title: 'Cleaner pay: rates, marking paid and expenses',
+    keywords: 'cleaner pay rate per clean per hour paid gcash maya cash bank reference mark paid expense cleaning monthly unpaid undo',
+    body: [
+      'Owners set each cleaner\'s rate, per clean or per hour, under Cleaner pay → Rates. A cleaner is either a team member or an outside cleaner typed by name.',
+      'When a job is marked done, its pay is worked out from the rate. Per hour counts the time from start to finish, rounded up to the next 15 minutes, and stops at 12 hours. You can change the amount until it is paid.',
+      'A new rate applies only to cleans finished after you save it. Earlier cleans keep their amount.',
+      'Owners and managers: Cleaner pay → pick a month, tick the finished cleans, then Mark paid. Enter the date, how you paid (cash, GCash, Maya or bank transfer) and a reference.',
+      'Tick Also record as cleaning expenses to add one cleaning expense per unit. It then shows on Profit and loss and owner statements. Cleans paid together share one expense, so undo them together.',
+      'Zero pay adds no expense. The payment date can\'t be in the future. A paid clean is locked: its status and pay can\'t change, and a failed inspection can\'t reopen it.',
+      'Only owners can undo a payment.',
+    ],
+  },
+  {
+    slug: 'my-pay', category: 'account', roles: CLEANER, title: 'See your pay',
+    keywords: 'my pay cleaner pay paid unpaid how much earned month cleaning payment',
+    body: [
+      'My pay lists the cleans you finished this month, the amount for each, and whether it has been paid, with the date and how it was paid.',
+      'You see only your own pay. Booking money and other cleaners\' pay are never shown.',
+      'If an amount looks wrong, tell the owner, or use Help → Contact support.',
+    ],
+  },
+  {
+    slug: 'supplies', category: 'operations', roles: CREW, title: 'Supplies, par levels and low stock',
+    keywords: 'supplies stock par level low stock restock used count inventory cleaner record toilet paper soap',
+    body: [
+      'Owners and managers: Supplies → add an item for a property with its name, unit (pcs, rolls, bottles), par level (how many you want on hand) and an opening count.',
+      'Record a count, a restock or a use. On hand changes with each record, and the history is kept.',
+      'Low stock means on hand is below par. Supplies shows it, and Home shows how many items are low.',
+      'Cleaners: on a cleaning job, press Supplies used and enter what you used or restocked. Items must belong to that property.',
+      'If more is recorded as used than is on hand, the count stops at zero and the note keeps the amount that was asked for.',
+      'BalayHub doesn\'t track costs or buying.',
+    ],
+  },
+  {
+    slug: 'work-orders', category: 'operations', roles: CREW, title: 'Raise a work order from a cleaning job',
+    keywords: 'work order repair broken aircon leak fix maintenance request cleaner from job priority',
+    body: [
+      'From a cleaning job, press Something broken? Give the issue, details and priority.',
+      'It becomes a repair request for that unit, linked to the job. Owners and managers get a notification.',
+      'Cleaners can\'t add photos to a work order. Add photos to the cleaning job instead.',
+      'Cleaners can\'t open the Maintenance page or see repair costs.',
+    ],
+  },
+  {
+    slug: 'recurring-maintenance', category: 'operations', roles: MANAGERS, title: 'Recurring maintenance, such as aircon cleaning every 3 months',
+    keywords: 'recurring schedule preventive maintenance aircon every months days repeat due next pause request automatic',
+    body: [
+      'Maintenance → Schedules → Add: title, details, repeat every N days or months, the next due date, priority, and the property or unit.',
+      'Once an hour BalayHub checks for due schedules. When one is due, it opens a maintenance request and moves the next due date forward.',
+      'If the last request from a schedule is still open, no new one is opened. Missed dates aren\'t filled in: after a pause or a late check, you get one request, not a backlog.',
+      'Pause stops a schedule. There is no button to turn a paused schedule back on yet, so add a new one instead.',
     ],
   },
   {
@@ -275,9 +387,9 @@ const ARTICLES = [
     slug: 'team-roles', category: 'business', roles: OWNER, title: 'Invite your team and set roles',
     keywords: 'team invite co-host manager staff cleaner role access permissions',
     body: [
-      'Settings → Team & permissions → Invite. Choose Property manager (co-host) or Staff (cleaner, front desk, accountant) and which buildings they can access.',
+      'Settings → Team & permissions → Invite. Choose Property manager (co-host), Staff (front desk, accountant) or Cleaner (cleaning jobs only), and which buildings they can access.',
       'Share the invite link if the email doesn\'t arrive; pending invites have a New link button.',
-      'Staff don\'t see guest phone numbers/emails, the inbox or reports.',
+      'Staff don\'t see guest phone numbers/emails, the inbox or reports. Cleaners see even less; see the cleaner article.',
     ],
   },
   {
@@ -311,7 +423,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'phone-app', category: 'account', roles: ALL, title: 'Use BalayHub on your phone and get notifications',
+    slug: 'phone-app', category: 'account', roles: CREW, title: 'Use BalayHub on your phone and get notifications',
     keywords: 'phone app install home screen notifications push iphone android',
     body: [
       'Android: open BalayHub in Chrome → Settings → App & notifications → Install, then Turn on notifications.',
@@ -320,7 +432,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'appearance-language', category: 'account', roles: ALL, title: 'Dark mode and language',
+    slug: 'appearance-language', category: 'account', roles: CREW, title: 'Dark mode and language',
     keywords: 'dark mode light theme language tagalog taglish english',
     body: [
       'Settings → Appearance: Light, Dark or Match device (also in the menu).',
@@ -345,7 +457,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'support', category: 'account', roles: ALL, title: 'Contact support',
+    slug: 'support', category: 'account', roles: CREW, title: 'Contact support',
     keywords: 'help support ticket contact problem bug question',
     body: [
       'Help → Contact support. Describe the problem, add a screenshot if you can, and submit. You get a ticket number and email updates.',

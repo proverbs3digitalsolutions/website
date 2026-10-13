@@ -122,6 +122,32 @@ Note: staff can open Settings, but only see personal sections. Staff can see the
 
 ---
 
+### 4.1 Cleaner role (Phase 3, D-48)
+
+A cleaner is a team member with the cleaner role. They must have at least one property. Their home is Cleaning (`#/housekeeping`). Any other address sends them back there.
+
+**Menu:** Cleaning · My pay · Help & support · Account. Nothing else is shown.
+
+| Area | Cleaner |
+|---|---|
+| Cleaning jobs, board, calendar | Their own jobs and unassigned jobs in their properties. Guests by first name only. |
+| Job detail | Tick checklist items, Start, Mark done, Reopen, add photos, Report damage, Found an item, Supplies used, Something broken? (work order). No cancel, no reassign, no edit, no inspect. |
+| Pay | Their own pay only (`#/my-pay`). |
+| Supplies | Names and counts only (no costs). Record used or restocked on a job. |
+| Files | Photos on cleaning, damage and lost-and-found records they can see. |
+| Account, help, support | Yes. |
+| Everything else | Not shown. The server refuses with 403 CLEANER_FORBIDDEN. |
+
+**Flow: a clean.** Open the job → tick items → Start → Mark done. The unit becomes Clean. Owners and managers get a notification. Pay for the job is worked out from the cleaner's rate.
+
+**Flow: something found.** On the job, use Report damage, Found an item, Supplies used or Something broken?. Each one saves and shows on the job.
+
+**Flow: my pay.** My pay lists this month's finished cleans, the amount for each, and whether it is paid.
+
+Cleaning push notifications do not go to cleaners yet.
+
+---
+
 ## 5. Visitor flows (signed out)
 
 ### 5.1 Landing `#/`
@@ -317,6 +343,11 @@ Printable acknowledgement receipt. **Print / save as PDF**. Voided receipts show
 ### 7.10 Housekeeping `#/housekeeping`
 - Tabs with counts. Filter bar. **Add task** (listing, date, assignee or outside cleaner, notes). **Edit checklist** (owner).
 - **Click a task** → `#/housekeeping/<id>`: tick checklist items, **Start**, **Mark done** (asks if items are unticked) → listing clean, **Reopen**, **Copy for cleaner**, **Cancel task**, assign, upload photos.
+- **Board** tab: each unit as Dirty, Clean or Inspected, with the current stay, next arrival, open job and last inspection score.
+- **Calendar** tab: week by day. Owners and managers reassign a job with the select on it.
+- **Scores** tab (owners and managers): per cleaner, jobs done, jobs inspected, average score, fails.
+- **Inspect** (owners and managers, finished jobs): pass or fail per checklist item and notes. Pass → unit Inspected. Fail → job reopens with failed items unticked, unit Dirty.
+- Job detail also has **Report damage**, **Found an item**, **Supplies used** and **Something broken?** (work order), and pay for the job (owners and managers can edit it until paid).
 - Empty: "Nothing to clean ✨ — Cleaning tasks appear automatically for today's and tomorrow's check-outs."
 
 ### 7.11 Listings `#/listings`
@@ -397,6 +428,16 @@ Cards top to bottom (owner):
 - **Download CSV**. Empty state when there are no units in scope. On a phone the table becomes stacked cards.
 - Staff don't see the menu item and get the server's 403 if they open the page directly.
 
+### 7.24 Phase 3 pages (owners and managers)
+- **Cleaner pay `#/cleaner-pay`:** pick a month and filters, tick finished cleans, **Mark paid** (date, method, reference, optional expense). **Rates** editor is owners only. **Undo paid** is owners only.
+- **Supplies `#/supplies`:** per property, low stock highlighted. Add, archive, record count, restock or use.
+- **Lost and found `#/lost-found`:** filter by status; mark Held, Returned or Disposed with a note.
+- **Maintenance → Schedules:** add, pause. Requests from a cleaning job show a "From cleaning task" badge.
+- **Damage reports** (on a stay): Charge the guest, Deduct from deposit, or Waive.
+- **Home:** "Supplies running low (n)" for owners and managers.
+
+---
+
 ## 8. Property manager differences
 
 - Sees only assigned properties everywhere. No assigned properties → empty states such as "No listings assigned to you yet" and "Ask the workspace owner to assign you".
@@ -448,6 +489,8 @@ No assigned properties → lists are empty with "assigned to you" wording.
 ---
 
 ## 11. Background flows users notice
+
+- **Recurring maintenance:** once an hour a due schedule opens one maintenance request and moves its next due date on (section 7.24).
 
 | Every | Job | What the user sees |
 |---|---|---|

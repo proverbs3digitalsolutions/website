@@ -12,15 +12,35 @@ const { one } = require('../db');
 const { HttpError, ah, notFound, forbidden } = require('../lib/http');
 const { uuidParam } = require('../lib/validate');
 const { audit } = require('../lib/audit');
-const { loadLease } = require('../lib/access');
+const { loadLease, propertyScope } = require('../lib/access');
+const { isCleaner } = require('../lib/cleaner');
 const { loadPayment, loadExpense } = require('./money');
 
 const router = express.Router();
 
 const { ALLOWED } = require('../lib/storage');
 
+// Cleaners only ever attach or read files on these record types.
+const CLEANER_RECORD_TYPES = ['cleaning', 'damage', 'lost_found'];
+function requireCleanerRecord(user, type) {
+  if (isCleaner(user) && !CLEANER_RECORD_TYPES.includes(type)) {
+    throw forbidden('Cleaners can only use files on cleaning, damage and lost-and-found records.');
+  }
+}
+
+// A cleaner may use a damage or lost-and-found record only if they logged it
+// themselves, on a task they can see (assigned to them or to nobody).
+function cleanerOwnsRecord(user, params, alias, byColumn) {
+  params.push(user.user_id);
+  const i = params.length;
+  return ` AND ${alias}.${byColumn} = $${i} AND ${alias}.task_id IS NOT NULL
+    AND EXISTS (SELECT 1 FROM cleaning_tasks t WHERE t.task_id = ${alias}.task_id
+                 AND (t.assigned_to = $${i} OR (t.assigned_to IS NULL AND t.assignee_name IS NULL)))`;
+}
+
 // Confirm the user may attach to / read files of this record.
 async function checkRecord(user, type, id) {
+  requireCleanerRecord(user, type);
   switch (type) {
     case 'lease':
       if (user.role === 'staff') throw forbidden('Lease documents are limited to owners and property managers.');
@@ -40,10 +60,15 @@ async function checkRecord(user, type, id) {
       return loadUnit(user, id);
     }
     case 'cleaning': {
-      const { propertyScope } = require('../lib/access');
+      // A cleaner only sees tasks assigned to them or to nobody (the same rule as the task list).
       const params = [id];
-      const row = await one(`SELECT t.task_id FROM cleaning_tasks t JOIN units u ON u.unit_id = t.unit_id JOIN properties p ON p.property_id = u.property_id
-                              WHERE t.task_id = $1 AND ${propertyScope(user, params)}`, params);
+      let sql = `SELECT t.task_id FROM cleaning_tasks t JOIN units u ON u.unit_id = t.unit_id JOIN properties p ON p.property_id = u.property_id
+                  WHERE t.task_id = $1 AND ${propertyScope(user, params)}`;
+      if (isCleaner(user)) {
+        params.push(user.user_id);
+        sql += ` AND (t.assigned_to = $${params.length} OR (t.assigned_to IS NULL AND t.assignee_name IS NULL))`;
+      }
+      const row = await one(sql, params);
       if (!row) throw notFound();
       return row;
     }
@@ -69,6 +94,37 @@ async function checkRecord(user, type, id) {
       const row = await one(`SELECT r.registration_id FROM guest_registrations r JOIN bookings b USING (booking_id)
                                JOIN units u ON u.unit_id = b.unit_id JOIN properties p ON p.property_id = u.property_id
                               WHERE r.registration_id = $1 AND ${propertyScope(user, params)}`, params);
+      if (!row) throw notFound();
+      return row;
+    }
+    case 'damage': {
+      // Anyone who can see the unit. A cleaner only sees a report they filed.
+      const params = [id];
+      let sql = `SELECT r.report_id FROM damage_reports r JOIN units u ON u.unit_id = r.unit_id JOIN properties p ON p.property_id = u.property_id
+                  WHERE r.report_id = $1 AND ${propertyScope(user, params)}`;
+      if (isCleaner(user)) sql += cleanerOwnsRecord(user, params, 'r', 'reported_by');
+      const row = await one(sql, params);
+      if (!row) throw notFound();
+      return row;
+    }
+    case 'lost_found': {
+      // Anyone who can see the unit. A cleaner only sees an item they logged.
+      const params = [id];
+      let sql = `SELECT li.item_id FROM lost_found_items li JOIN units u ON u.unit_id = li.unit_id JOIN properties p ON p.property_id = u.property_id
+                  WHERE li.item_id = $1 AND ${propertyScope(user, params)}`;
+      if (isCleaner(user)) sql += cleanerOwnsRecord(user, params, 'li', 'found_by');
+      const row = await one(sql, params);
+      if (!row) throw notFound();
+      return row;
+    }
+    case 'inspection': {
+      // Inspection photos: owners and managers only.
+      if (!['owner', 'manager'].includes(user.role)) throw forbidden('Inspection photos are limited to owners and property managers.');
+      const params = [id];
+      const row = await one(
+        `SELECT i.inspection_id FROM cleaning_inspections i JOIN cleaning_tasks t ON t.task_id = i.task_id
+           JOIN units u ON u.unit_id = t.unit_id JOIN properties p ON p.property_id = u.property_id
+          WHERE i.inspection_id = $1 AND ${propertyScope(user, params)}`, params);
       if (!row) throw notFound();
       return row;
     }
@@ -103,6 +159,7 @@ router.post('/files',
   express.raw({ type: Object.keys(ALLOWED), limit: config.maxUploadBytes }),
   ah(async (req, res) => {
     const type = String(req.query.record_type || '');
+    requireCleanerRecord(req.user, type);
     // Guest ID photos come only from the guest's own check-in form.
     if (type === 'registration' || type === 'listing') throw new HttpError(400, 'Unsupported attachment type.', { code: 'BAD_REQUEST' });
     const recordId = uuidParam(req.query.record_id);

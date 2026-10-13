@@ -39,6 +39,8 @@ function startScheduler() {
   every(2 * 60 * 1000, 'inbox', pollInbox, 30 * 1000);
   // Cleaning tasks for today's and tomorrow's departures.
   every(15 * 60 * 1000, 'housekeeping', housekeeping.createDueTasks, 40 * 1000);
+  // Recurring preventive maintenance: open a request when a schedule falls due.
+  every(60 * 60 * 1000, 'maintenance-schedules', require('./maintschedule').runSchedules, 110 * 1000);
   // Condo gate passes due to building admins.
   every(15 * 60 * 1000, 'gate-pass', require('../routes/gatepass').sendDuePasses, 55 * 1000);
   // Delete guest ID photos after the retention period.

@@ -140,7 +140,7 @@ export const LABELS = {
   low: 'Low', medium: 'Medium', high: 'High', urgent: 'Urgent',
   vacant: 'Vacant', occupied: 'Occupied', unavailable: 'Unavailable', archived: 'Archived',
   active: 'Active', ended: 'Ended', terminated: 'Terminated',
-  owner: 'Owner', manager: 'Property manager', staff: 'Staff',
+  owner: 'Owner', manager: 'Property manager', staff: 'Staff', cleaner: 'Cleaner',
 };
 export const label = (k) => LABELS[k] || k;
 // "Unit 3B", but not "Unit Unit 1" when the name already says it.

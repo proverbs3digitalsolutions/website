@@ -154,10 +154,19 @@ async function proofsAlert() {
     `Payments to check (${proofs.length}). Open the oldest one to confirm or reject it.`);
 }
 
+// Owners and managers: supplies at or below their par level.
+async function suppliesAlert() {
+  if (['staff', 'cleaner'].includes(state.user.role)) return null;
+  let low;
+  try { low = await get('/supplies/low-count'); } catch { return null; }
+  if (!Number(low.count)) return null;
+  return h('a', { class: 'alert alert--warn', href: '#/supplies', style: { display: 'block' } }, `Supplies running low (${low.count})`);
+}
+
 const label = (v) => ({ direct: 'Direct', airbnb: 'Airbnb', booking: 'Booking.com', agoda: 'Agoda', other: 'Other' })[v] || v;
 
 export async function homeView(el, { rerender } = {}) {
-  const [{ listings }, onboard, deposits, proofAlert] = await Promise.all([get('/listings'), launchpadReminder(rerender), depositsDueCard(), proofsAlert()]);
+  const [{ listings }, onboard, deposits, proofAlert, lowAlert] = await Promise.all([get('/listings'), launchpadReminder(rerender), depositsDueCard(), proofsAlert(), suppliesAlert()]);
   const first = state.user.full_name.split(' ')[0];
   const head = h('div', { class: 'page-head' },
     h('div', { class: 'page-head__title' }, h('h1', null, `Welcome back, ${first}`), h('p', null, `${state.user.organization_name} · ${fmtDate(todayManila())}`)),
@@ -172,5 +181,5 @@ export async function homeView(el, { rerender } = {}) {
     })));
     return;
   }
-  el.replaceChildren(head, h('div', { class: 'stack' }, proofAlert, onboard, overviewCard(), deposits, trendsCard(), revenueSection()));
+  el.replaceChildren(head, h('div', { class: 'stack' }, proofAlert, lowAlert, onboard, overviewCard(), deposits, trendsCard(), revenueSection()));
 }

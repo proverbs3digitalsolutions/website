@@ -135,7 +135,8 @@ test('housekeeping: status, property, listing, assignee, due dates, overdue, tur
   assert.deepEqual(await ids(`?view=all&unit_id=${unit.unit_id}`), want('late', 'done'));
   assert.deepEqual(await ids(`?view=all&assignee=${staffUser.user_id}`), want('late'));
   assert.deepEqual(await ids('?view=all&assignee=outside'), want('today'));
-  assert.deepEqual(await ids('?view=all&assignee=unassigned'), want('soon', 'done'));
+  // The owner finished 'done', and a finished unassigned clean goes to whoever finished it.
+  assert.deepEqual(await ids('?view=all&assignee=unassigned'), want('soon'));
   assert.deepEqual(await ids(`?view=all&from=${d(-3)}&to=${d(0)}`), want('late', 'today'));
   assert.deepEqual(await ids('?view=all&late=1'), want('late'));
   assert.deepEqual(await ids('?view=all&q=oven'), want('late'));
