@@ -54,3 +54,4 @@
 - R3 candidates: pricing all-listings clash text says a listing season 'wins the shared nights' when a third overlapping season takes some of them (rvC, SEV3, public/js/views/pricing.js clashText).
 - R3 candidates: two different reset links used at the same instant can deadlock (500 instead of 400); take the per-user advisory lock first in the reset transaction (security re-check, Low, auth.js:258-267).
 - 2026-10-14: Round 2 COMMITTED af38514 and pushed. Full suite 951/951, security PASS, 7 re-verify lanes held (3 new findings fixed). local_clean_streak stays 0 (round 2 had findings). Next: round 3 local sweep from restored dev DB.
+- R3 notes: public lane created local test user qa2-public-1@balayhub.test (unverified, no workspace) — cleared by the next DB restore. BLOCKERS needs a founder question: sign-up with an existing email says 'An account with this email already exists' (reveals the account) — keep or make generic?
