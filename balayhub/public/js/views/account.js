@@ -167,7 +167,7 @@ export async function accountView(el, { rerender }) {
               h('span', { class: 'row__sub' }, `Signed in ${fmtDateTime(s.created_at)} · last active ${fmtDateTime(s.last_seen_at)}`)),
             h('div', { class: 'row__end' }, s.current
               ? h('button', { class: 'btn btn--secondary btn--sm', onclick: logout }, 'Log out')
-              : h('button', { class: 'btn btn--secondary btn--sm', onclick: signOutDevice(s) }, 'Sign out')))))),
+              : h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `Sign out ${s.device}, signed in ${fmtDateTime(s.created_at)}`, onclick: signOutDevice(s) }, 'Sign out')))))),
           d.sessions.length > 5 && h('button', { class: 'flt__clear', style: { marginTop: '6px' }, onclick: (e) => { e.currentTarget.closest('.card').querySelectorAll('.acct-more').forEach((li) => { li.hidden = false; }); e.currentTarget.remove(); } }, `Show ${d.sessions.length - 5} more`),
           others.length > 1 && h('button', { class: 'btn btn--secondary btn--sm', style: { marginTop: '10px' }, onclick: signOutOthers }, 'Sign out all other devices'),
           h('p', { class: 'muted small', style: { marginTop: '10px' } }, 'Don’t recognise a device? Sign it out and change your password.')),

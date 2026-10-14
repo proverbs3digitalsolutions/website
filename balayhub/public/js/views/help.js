@@ -34,6 +34,7 @@ const TICKETS_KEY = 'help-tickets';
 const TICKET_DEFAULTS = { view: 'open', tq: '' };
 export async function helpView(el, { query }) {
   const filters = { q: query.q || '' };
+  const longTerm = state.user.business_type === 'long_term';
   const ticketFilters = initFilters(TICKETS_KEY, query, TICKET_DEFAULTS);
   const { categories, articles } = await get('/help/articles');
   const articlesBox = h('div', { class: 'stack' });
@@ -71,16 +72,25 @@ export async function helpView(el, { query }) {
   }
 
   const sync = () => history.replaceState(null, '', `#/help${qs({ q: filters.q, ...changed(ticketFilters, TICKET_DEFAULTS) })}`);
-  const articleSearch = searchBox({ value: filters.q, placeholder: 'Search help — e.g. connect Airbnb, refund, gate pass', onSearch: (q) => { filters.q = q; sync(); drawArticles(); } });
+  const articleSearch = searchBox({ value: filters.q, placeholder: longTerm ? 'Search help, e.g. rent reminders, receipts, maintenance' : 'Search help — e.g. connect Airbnb, refund, gate pass', onSearch: (q) => { filters.q = q; sync(); drawArticles(); } });
   articleSearch.classList.add('search--wide');
   // The status tabs ride inside the bar; Clear all resets only the search (same as the rent page).
   const ticketBar = filterBar({ key: TICKETS_KEY, values: ticketFilters, defaults: { tq: '' }, extra: tabs, onChange: drawTickets,
     search: { name: 'tq', placeholder: 'Search ticket subject or number' } });
   const [aiOn] = await Promise.all([assistantEnabled(), drawArticles(), drawTickets()]);
-  const askInput = h('input', { class: 'input', maxlength: 2000, placeholder: 'e.g. Paano i-connect ang Airbnb calendar ko?', 'aria-label': 'Ask the assistant' });
-  const askCard = aiOn && h('form', { class: 'card help-ask', onsubmit: (e) => { e.preventDefault(); openAssistant(askInput.value.trim() || undefined); askInput.value = ''; } },
+  const askInput = h('input', { class: 'input', maxlength: 2000, placeholder: longTerm ? 'e.g. Paano mag-record ng bayad sa upa?' : 'e.g. Paano i-connect ang Airbnb calendar ko?', 'aria-label': 'Ask the assistant' });
+  const askError = h('div', { class: 'error', role: 'alert' });
+  askInput.addEventListener('input', () => { askError.textContent = ''; });
+  const askCard = aiOn && h('form', { class: 'card help-ask', onsubmit: (e) => {
+    e.preventDefault();
+    const question = askInput.value.trim();
+    if (!question) { askError.textContent = 'Type a question first.'; askInput.focus(); return; }
+    openAssistant(question); askInput.value = '';
+  } },
     h('div', { class: 'help-ask__title' }, icon('chat'), h('div', null, h('h2', null, 'Ask the BalayHub assistant'), h('p', { class: 'muted small' }, 'Instant answers in English, Tagalog or Taglish, any time.'))),
-    h('div', { class: 'help-ask__row' }, askInput, h('button', { class: 'btn btn--primary', type: 'submit' }, 'Ask')));
+    h('div', { class: 'field' },
+      h('div', { class: 'help-ask__row' }, askInput, h('button', { class: 'btn btn--primary', type: 'submit' }, 'Ask')),
+      askError));
 
   el.replaceChildren(
     pageHead({ title: 'Help & support', sub: 'Guides for every part of BalayHub, and a direct line to our team', actions: h('a', { class: 'btn btn--primary', href: '#/help/new' }, icon('plus'), 'Contact support') }),
@@ -107,6 +117,7 @@ export async function helpView(el, { query }) {
 
 // ---------------------------------------------------------------- new ticket
 export async function helpNewView(el, { query }) {
+  const longTerm = state.user.business_type === 'long_term';
   const suggestBox = h('div', { class: 'help-suggest', 'aria-live': 'polite' });
   let t;
   const suggest = (text) => {
@@ -123,7 +134,7 @@ export async function helpNewView(el, { query }) {
   };
 
   const screenshot = h('input', { type: 'file', class: 'input', accept: 'image/jpeg,image/png,image/webp,application/pdf', 'aria-label': 'Screenshot or file' });
-  const subject = field({ name: 'subject', label: 'Subject', required: true, maxlength: 150, placeholder: 'e.g. Airbnb bookings not showing on my calendar', value: query.subject || '' });
+  const subject = field({ name: 'subject', label: 'Subject', required: true, maxlength: 150, placeholder: longTerm ? 'e.g. Rent reminder not sent to my tenant' : 'e.g. Airbnb bookings not showing on my calendar', value: query.subject || '' });
   subject.querySelector('input').addEventListener('input', (e) => suggest(e.target.value));
 
   const form = makeForm({
@@ -203,7 +214,7 @@ function timeline(messages, events) {
 
 function stars(onPick) {
   return h('div', { class: 'stars', role: 'radiogroup', 'aria-label': 'Rating' }, [1, 2, 3, 4, 5].map((n) =>
-    h('button', { type: 'button', class: 'star', role: 'radio', 'aria-label': `${n} out of 5`, onclick: (e) => {
+    h('button', { type: 'button', class: 'star', role: 'radio', 'aria-label': `${n} out of 5`, 'aria-checked': 'false', onclick: (e) => {
       e.currentTarget.parentNode.querySelectorAll('.star').forEach((s, i) => { s.classList.toggle('is-on', i < n); s.setAttribute('aria-checked', String(i + 1 === n)); });
       onPick(n);
     } }, '★')));

@@ -79,7 +79,7 @@ test('long-term workspace, device off: monthly note replaces the list and the st
   assert.ok(texts(root).includes(MONTHLY));
   assert.equal(elements(root, 'fieldset').length, 0);
   assert.ok(!texts(root).includes(STAY_INTRO));
-  assert.ok(button(root, 'Turn on notifications'), 'the turn-on control still shows');
+  assert.equal(button(root, 'Turn on notifications'), undefined, 'nothing to turn on in a monthly-rental workspace');
 });
 
 test('long-term workspace, device on: device line and controls still work, no list', async () => {
@@ -87,7 +87,7 @@ test('long-term workspace, device on: device line and controls still work, no li
   assert.ok(texts(root).includes(ON));
   assert.ok(texts(root).includes(MONTHLY));
   assert.equal(elements(root, 'fieldset').length, 0);
-  assert.ok(button(root, 'Send a test'));
+  assert.equal(button(root, 'Send a test'), undefined, 'nothing to test in a monthly-rental workspace');
   await button(root, 'Turn off on this device').props.onclick();
   assert.equal(rerenders, 1);
   assert.deepEqual(api.state.calls[0], ['post', '/push/unsubscribe', { endpoint: ENDPOINT }]);

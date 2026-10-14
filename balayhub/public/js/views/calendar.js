@@ -11,6 +11,9 @@ const dayName = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { 
 const dayNum = (d) => Number(d.slice(8, 10));
 const monthName = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 const shortPeso = (v) => (v === null || v === undefined ? '' : `₱${Math.round(Number(v)).toLocaleString('en-PH')}`);
+// Cells are narrow: from ₱100,000 up a price reads as ₱100K or ₱1.2M. The full amount stays in the cell's title and aria-label.
+const compactPeso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', notation: 'compact', minimumFractionDigits: 0, maximumFractionDigits: 1 });
+const cellPeso = (v) => (Number(v) >= 100000 ? compactPeso.format(Number(v)) : shortPeso(v));
 // One sync problem as a line: its channel and link host, so two links on one listing read differently.
 const problemLine = (p) => `${CHANNEL_LABEL[p.channel] || 'Calendar'}${p.host ? ` (${p.host})` : ''}: ${p.message}`;
 
@@ -108,9 +111,9 @@ export async function calendarView(el, { query }) {
         const why = p?.label ? ` (${p.label})` : '';
         return h('button', {
           class: `cal-cell${d < data.today ? ' is-past' : ''}${d === data.today ? ' is-today' : ''}${rates.has(`${l.unit_id}|${d}`) ? ' has-override' : ''}${p && ['holiday', 'season', 'weekend'].includes(p.kind) ? ` is-${p.kind}` : ''}`,
-          type: 'button', 'aria-label': `${l.unit_name}, ${fmtDate(d)}, ${shortPeso(price) || 'no rate'}${why}`, title: p?.label || null,
+          type: 'button', 'aria-label': `${l.unit_name}, ${fmtDate(d)}, ${shortPeso(price) || 'no rate'}${why}`, title: price ? `${shortPeso(price)}${why}` : null,
           onclick: () => cellMenu(l, d, price, p, rates.has(`${l.unit_id}|${d}`)),
-        }, shortPeso(price));
+        }, cellPeso(price));
       });
       const bars = data.bookings.filter((b) => b.unit_id === l.unit_id).map((b) => {
         const startIdx = (Date.parse(b.check_in) - Date.parse(data.start)) / 86400000;
@@ -212,7 +215,7 @@ export async function calendarView(el, { query }) {
         }
         const res = await api('PUT', '/rates', { ...d, unit_id: listing.unit_id });
         // A blank price clears any set prices in the range; the server says how many it removed.
-        if (d.price.trim() === '') toast(res.cleared > 0 ? 'Set prices cleared. These nights use your usual rates again.' : 'No set prices to clear. These nights already use your usual rates.');
+        if (d.price.trim() === '') toast(res.cleared > 0 ? (res.cleared === 1 ? 'Set prices cleared for 1 night. This night uses your usual rates again.' : `Set prices cleared for ${res.cleared} nights. These nights use your usual rates again.`) : 'No set prices to clear. These nights already use your usual rates.');
         else toast('Price saved.');
         load();
       },

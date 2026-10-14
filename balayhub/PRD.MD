@@ -2,7 +2,7 @@
 
 BalayHub is a web app that helps Filipino hosts run 1 to 10 rental units from one place. It covers condo staycations listed on Airbnb, Booking.com and Agoda, and long-term monthly rentals such as apartments, boarding houses, dorms and bedspaces. Hosts get one calendar for every channel, a direct booking page with GCash, Maya and card payments, a guest inbox, cleaning tasks, condo gate passes, deposits, reports and owner statements. Long-term landlords get properties, tenants, leases, rent, expenses and repairs. This document describes what is **actually built** today, feature by feature, and lists what is planned. It was written from the code (`src/routes`, `src/lib`, `public/js`, `db/migrations`) and the existing docs.
 
-Last updated: 2026-10-13
+Last updated: 2026-10-14 (QA round 5)
 
 ---
 
@@ -611,7 +611,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - Statements show receipts for expenses. The review list shows each owner's status, payout, paid amount and sent date.
 - Payouts: record and void (with a reason). Methods: GCash, Maya, bank transfer, cash, other.
 - Repairs reserve: target and monthly top-up per owner. Top-ups come out of the payout on publish. Withdrawals are recorded by hand with a note.
-- A payout that would take a month's payouts above the statement's payout asks the host to confirm first (never blocked); the statement then shows "Overpaid by". The owner portal's profit and loss for a published month shows the frozen statement numbers, labelled (D-76).
+- A payout that would take a month's payouts above the statement's payout asks the host to confirm first (never blocked, except that a payout is refused when the owner owes the workspace for that month; round 5, D-81); the statement then shows "Overpaid by". The owner portal's profit and loss for a published month shows the frozen statement numbers, labelled (D-76).
 - Reminder: on the 3rd of each month (Manila time), each workspace owner is emailed "n statements ready to review". Once per workspace per month. Nothing is published or sent by the reminder.
 
 **Done looks like:**
@@ -697,7 +697,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - When a job is marked done, its pay is set from the rate. Per hour: time from start to finish, rounded up to 15 minutes, capped at 12 hours.
 - Mark paid: several finished cleans at once, with a date, a method (cash, GCash, Maya, bank transfer) and a reference.
 - Optional: record one cleaning expense per unit, so it shows on profit and loss and owner statements.
-- My pay: the cleaner's own finished cleans, amounts, and paid status for the month.
+- My pay: the cleaner's own finished cleans, amounts, and paid status for the month. The page is for cleaners only (round 5).
 
 **Done looks like:**
 - Money is exact to the centavo. Zero pay creates no expense. Payment dates can't be in the future.
@@ -900,7 +900,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 **Status:** Phase 5 (built 2026-10-13, D-70, D-71)
 
 **What it does:**
-- **Group booking:** one lead guest, a name, and 2 to 20 rooms. Each room is a normal reservation in its own listing, chosen by listing, or by room type (the first free listing of that type is taken). Each room has its own dates, guests, accommodation total and cleaning fee.
+- **Group booking:** one lead guest, a name, and 2 to 20 rooms. Each room is a normal reservation in its own listing, chosen by listing, or by room type (the first free listing of that type is taken). Each room has its own dates, guests, accommodation total and cleaning fee. For a room type, the price boxes stay empty unless the host types a price, and each room takes its own listing's rates (round 5, D-81).
 - **All or nothing:** if any room is taken, nothing is saved and the taken rooms are named.
 - **Group page:** rooms, amounts, paid and balance per room and in total. Actions: add a room, remove a room (a reason is required and that reservation is cancelled), cancel the whole group, change the name and notes.
 - Payments stay per room. Group bookings send no automatic confirmation email. Channel-imported bookings can't join a group.
@@ -994,10 +994,16 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - QA round 3: a channel fee exists only on channel bookings (D-78). Older direct bookings may still hold a stored fee; it is ignored for what the guest owes and still counted as a cost in reports until the founder decides.
 - QA round 3: the guidebook link shows "Your guidebook opens on <date>" before its 14-day window (D-57, D-78).
 - QA round 4: there are no notification types for monthly rentals yet. The Notifications card says so, and the founder question is in BLOCKERS.
-- QA round 4: a monthly-rental owner can still see a "Turn on notifications" button with no alert types to turn on. Carried to round 5.
+- QA round 4: a monthly-rental owner can still see a "Turn on notifications" button with no alert types to turn on. Carried to round 5. Fixed in round 5.
 - QA round 4: staff browsers still receive rent, deposit, admin email and gate-pass notes with a property, although the staff screen hides them (founder question in BLOCKERS).
 - QA round 4: add-on descriptions are single-language. Guests reading in Taglish see the description as typed (founder question in BLOCKERS).
-- QA round 4: on phones, wide tables and the calendar show a subtle edge fade rather than a clear cue. The founder is asked whether to add a swipe hint or show stacked cards instead (BLOCKERS).
+- QA round 4: on phones, wide tables and the calendar show a subtle edge fade rather than a clear cue. The founder is asked whether to add a swipe hint or show stacked cards instead (BLOCKERS). Built in round 5: tables with four or more columns stack into cards on phones (D-80, D-81). The calendar keeps its fade.
 - QA round 4: the Taglish template-language switch can create a second template with the same name as a custom one. This is rare and accepted for now (D-79).
 - QA round 4: a proof screenshot can be left on disk after a rare database failure. Nothing can reach the file without its record, so the fix is left for a tidy-up sprint (D-79).
 - QA round 4: some choices are allowed with no warning until the founder answers in BLOCKERS: prices and groups on past dates, two cleaning tasks on one day, and staff invited with no property.
+- QA round 5: `GET /api/my-pay` answers any signed-in person, with only that person's own cleans. The page is for cleaners only. BLOCKERS question 13 asks whether the API should match the page.
+- QA round 5: reopening an older clean while a newer clean of the same unit is done still marks the unit dirty. Carried to round 6.
+- QA round 5: the daily close lists payments only (D-72). Founder question 5 in BLOCKERS.
+- QA round 5: duplicate add-ons made before the name rule are archived in the local copy only. Guest lists show each name once. The live database check is BLOCKERS question 10.
+- QA round 5: the balance after refunding an overpayment stays as D-34 and D-77 define it. Founder question 1 in BLOCKERS.
+- QA round 5: add-on descriptions are still English only (round 4 question, still open).

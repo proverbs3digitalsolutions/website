@@ -41,13 +41,14 @@ extendTranslations({
   'Qty': 'Dami', 'Used': 'Nagamit', 'Restocked': 'Nadagdag', 'Used or restocked': 'Nagamit o nadagdag', 'Save': 'I-save', 'Cancel': 'Kanselahin',
   'No supplies are set up for this property yet.': 'Wala pang supplies na naka-set up para sa property na ito.',
   'Enter a quantity for at least one item.': 'Maglagay ng dami sa kahit isang gamit.', 'Supplies saved.': 'Na-save ang supplies.',
-  'Quantity must be a whole number.': 'Dapat buong bilang ang dami.',
+  'Quantity must be a whole number.': 'Dapat buong bilang ang dami.', 'Quantity can\'t be negative.': 'Hindi puwedeng negatibo ang dami.',
   '{name} was out of stock, so it wasn\'t recorded.': 'Ubos na ang {name}, kaya hindi ito na-record.', 'Tell your manager.': 'Sabihan ang manager mo.',
   'Title': 'Pamagat', 'What needs fixing?': 'Ano ang kailangang ayusin?', 'Priority': 'Prayoridad',
   'Low': 'Mababa', 'Medium': 'Katamtaman', 'High': 'Mataas', 'Urgent': 'Madalian',
   'Send to host': 'Ipadala sa host', 'Sent to the host. Thank you.': 'Naipadala na sa host. Salamat.',
-  'Your pay for this clean': 'Bayad mo sa linis na ito', 'Paid': 'Bayad na', 'Not paid yet': 'Hindi pa bayad',
+  'Your pay for this clean': 'Bayad mo sa linis na ito', 'Paid': 'Bayad na', 'Not paid yet': 'Hindi pa bayad', 'Paid.': 'Bayad na.',
   'Dirty': 'Marumi', 'Clean': 'Malinis', 'Inspected': 'Na-inspect',
+  'Held': 'Hawak pa', 'Returned': 'Naibalik', 'Disposed': 'Itinapon',
   'All properties': 'Lahat ng property', 'Property': 'Property', 'Nothing here yet': 'Wala pa rito',
   'No units to show.': 'Walang unit na ipapakita.', 'Guest now': 'Guest ngayon', 'Next check-in': 'Susunod na check-in',
   'Open task': 'Bukas na gawain', 'No open cleaning task': 'Walang bukas na gawain', 'Last inspection': 'Huling inspection',
@@ -57,6 +58,8 @@ extendTranslations({
 });
 
 const STATUS = { todo: ['unpaid', 'To do'], in_progress: ['partial', 'In progress'], done: ['paid', 'Done'], cancelled: ['voided', 'Cancelled'] };
+// Found-item statuses as the owner's Lost and found page words them.
+const LOST_STATUS = { held: 'Held', returned: 'Returned', disposed: 'Disposed' };
 const isCleaner = () => state.user.role === 'cleaner';
 const canManage = () => !['staff', 'cleaner'].includes(state.user.role);
 const fill = (s, v) => (v ? s.replace(/\{(\w+)\}/g, (m, k) => (k in v ? String(v[k]) : m)) : s);
@@ -199,6 +202,13 @@ async function checklistModal() {
     onSubmit: async (d) => {
       const list = d.items.split('\n').map((x) => x.trim()).filter(Boolean);
       if (!list.length) { const msg = 'Add at least one checklist item.'; throw fieldError('items', msg); }
+      // The same line twice (any capitals) is refused here too, with the wording the server uses.
+      const seen = new Map();
+      for (const x of list) {
+        const key = x.toLowerCase();
+        if (seen.has(key)) { const msg = `This checklist has “${seen.get(key)}” twice.`; throw fieldError('items', msg); }
+        seen.set(key, x);
+      }
       await api('PUT', '/cleaning-checklist', { items: list });
       toast('Checklist saved.');
     },
@@ -230,6 +240,26 @@ export function cleanAssigneeFilter(value) {
 // The "a · b" line under a record; a part the server left out is skipped.
 export function metaLine(...parts) {
   return parts.filter(Boolean).join(' · ');
+}
+
+// Paid is the server's is_paid flag, sent to every role; pay_status is read only from an older response.
+export function isPaidClean(t) {
+  return t.is_paid ?? (t.pay_status === 'paid');
+}
+
+// Only an owner can undo a payment (Undo paid on Cleaner pay), so everyone else is told who can.
+export function undoPaidLead(role) {
+  return role === 'owner' ? 'Paid. To reopen it, undo the payment on ' : 'Paid. To reopen it, an owner needs to undo the payment on ';
+}
+
+// Reopen is for a finished clean that is not paid: the server refuses a paid one (PAID, 409), and cleaners never reopen.
+export function canReopen(t, role) {
+  return t.status === 'done' && role !== 'cleaner' && !isPaidClean(t);
+}
+
+// Cleaner pay opens for owners and managers only: routeaccess.js blocks staff, and cleaners never see it.
+export function canOpenCleanerPay(role) {
+  return role === 'owner' || role === 'manager';
 }
 
 // Attach a photo to a record just created. A failed upload never loses the record.
@@ -510,15 +540,17 @@ async function suppliesModal(task, onSaved) {
         h('div', { class: 'error' }))))
       : h('p', { class: 'muted' }, T('No supplies are set up for this property yet.')),
     onSubmit: async () => {
-      // A decimal is refused on its own row and never rounded: nothing is sent until every quantity is whole.
-      const filled = rows.filter((r) => Number(r.qty.value) > 0);
-      const decimal = filled.filter((r) => !Number.isInteger(Number(r.qty.value)));
-      if (decimal.length) {
-        const msg = T('Quantity must be a whole number.');
-        const err = new ApiError(msg, { status: 400, fields: Object.fromEntries(decimal.map((r) => [r.key, msg])) });
+      // A negative or decimal quantity is refused on its own row, never rounded or dropped: nothing is sent until every quantity is a whole, non-negative number.
+      const refuse = (msg, list) => {
+        const err = new ApiError(msg, { status: 400, fields: Object.fromEntries(list.map((r) => [r.key, msg])) });
         err.onRender = (box) => box.replaceChildren();
         throw err;
-      }
+      };
+      const negative = rows.filter((r) => Number(r.qty.value) < 0);
+      if (negative.length) refuse(T('Quantity can\'t be negative.'), negative);
+      const filled = rows.filter((r) => Number(r.qty.value) > 0);
+      const decimal = filled.filter((r) => !Number.isInteger(Number(r.qty.value)));
+      if (decimal.length) refuse(T('Quantity must be a whole number.'), decimal);
       const items = filled.map((r) => ({ supply_id: r.sp.supply_id, kind: r.kind.value, quantity: Number(r.qty.value) }));
       if (!items.length) throw new ApiError(T('Enter a quantity for at least one item.'), { status: 400 });
       const { skipped } = await post(`/cleaning-tasks/${task.task_id}/supplies`, { items });
@@ -626,6 +658,8 @@ export async function housekeepingDetailView(el, { params, rerender }) {
   const upload = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', class: 'input', capture: 'environment', 'aria-label': T('Upload photo') });
   const actionBtn = (text, fn) => h('button', { class: 'btn btn--secondary hk-action', type: 'button', onclick: () => fn(t, rerender) }, text);
 
+  // The link to Cleaner pay only where the route is open to this role; staff get the same words as plain text.
+  const payLink = canOpenCleanerPay(state.user.role) ? h('a', { href: '#/cleaner-pay' }, 'Cleaner pay') : 'Cleaner pay';
   const payCard = isManager
     ? (t.status === 'done' || t.pay_amount != null) && h('div', { class: 'card' },
       h('div', { class: 'card__head' }, h('h2', null, 'Cleaner pay'), t.pay_status && badge(t.pay_status === 'paid' ? 'paid' : 'unpaid', t.pay_status === 'paid' ? 'Paid' : 'Unpaid')),
@@ -642,7 +676,11 @@ export async function housekeepingDetailView(el, { params, rerender }) {
       h('div', { class: 'page-head__actions' },
         startBtn,
         open && h('button', { class: 'btn btn--primary', onclick: finish }, T('Mark done')),
-        t.status === 'done' && !isCleaner() && h('button', { class: 'btn btn--secondary', onclick: reopen }, T('Reopen')),
+        // A paid clean cannot be reopened (the server refuses it), so say how to undo the payment instead.
+        t.status === 'done' && isPaidClean(t) && (isCleaner()
+          ? h('span', { class: 'small muted' }, T('Paid.'))
+          : h('span', { class: 'small muted' }, undoPaidLead(state.user.role), payLink, ' first.')),
+        canReopen(t, state.user.role) && h('button', { class: 'btn btn--secondary', onclick: reopen }, T('Reopen')),
         isManager && t.status === 'done' && t.checklist.length > 0 && h('button', { class: 'btn btn--primary', onclick: () => inspectModal(t, rerender) }, 'Inspect'),
         isManager && h('button', { class: 'btn btn--secondary', onclick: () => copyText(taskText(t)) }, 'Copy for cleaner'),
         isManager && open && h('button', { class: 'btn btn--ghost', onclick: async () => {
@@ -676,7 +714,7 @@ export async function housekeepingDetailView(el, { params, rerender }) {
         lostFound.length > 0 && h('div', { class: 'card' },
           h('div', { class: 'card__head' }, h('h2', null, T('Found an item'))),
           h('ul', { class: 'hk-history' }, lostFound.map((l) => h('li', null,
-            h('div', { class: 'hk-card__top' }, h('strong', null, l.description), l.status && h('span', { class: 'small muted' }, l.status)),
+            h('div', { class: 'hk-card__top' }, h('strong', null, l.description), LOST_STATUS[l.status] && h('span', { class: 'small muted' }, T(LOST_STATUS[l.status]))),
             h('div', { class: 'small muted' }, metaLine(l.found_where, l.found_on && fmtDate(l.found_on), l.found_by_name)),
             thumbs(l.files))))),
         workOrders.length > 0 && h('div', { class: 'card' },

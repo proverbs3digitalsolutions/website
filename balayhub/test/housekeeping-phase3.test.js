@@ -268,7 +268,7 @@ test('the status board shows each unit for owners, and a cleaner only their own 
     'next_check_in', 'open_task', 'property_id', 'property_name', 'unit_id', 'unit_name']);
 
   const u1201 = byName(owned, '1201');
-  assert.equal(u1201.cleaning_status, 'clean');
+  assert.equal(u1201.cleaning_status, 'dirty');
   assert.equal(u1201.current_stay, null);
   assert.equal(u1201.next_check_in, null);
   assert.deepEqual(u1201.open_task, { task_id: ids.outside, status: 'in_progress', assignee: 'Aling Rosa' });

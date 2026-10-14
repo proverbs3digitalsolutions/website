@@ -109,10 +109,14 @@ async function priceChanges(db, units, body) {
     const nights = await nightlyPrices(u.unit_id, body.from, ical.addDays(body.to, 1), db);
     let unpriced = 0;
     for (const n of nights) {
-      if (body.action === 'set') changes.push({ ...row, date: n.night, from_price: n.price, to_price: body.price });
-      else if (n.price === null) unpriced += 1;
+      // A night already at its new price isn't a change: leave it out, so Apply doesn't write it
+      // (which would freeze a night on its usual rate at that price).
+      if (body.action === 'set') {
+        if (n.price !== body.price) changes.push({ ...row, date: n.night, from_price: n.price, to_price: body.price });
+      } else if (n.price === null) unpriced += 1;
       else {
         const toPrice = changeBy(n.price, body.percent);
+        if (toPrice === n.price) continue;
         changes.push({ ...row, date: n.night, from_price: n.price, to_price: toPrice });
         if (u.min_price !== null && Number(toPrice) < Number(u.min_price)) belowLowest += 1;
       }

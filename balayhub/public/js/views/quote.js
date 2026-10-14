@@ -64,7 +64,7 @@ export async function quoteView(el, { params }) {
       h('span', { class: 'bk__host' }, host || t('Your quote')),
       h('span', { class: 'bk__right' }, langToggle(redraw), h('span', { class: 'bk__powered' }, t('Secure booking by '), brand(null))))),
     h('main', { class: 'bk__wrap bk__main bk-quote', id: 'main' }, children),
-    h('footer', { class: 'bk__wrap bk__foot muted small' }, t('Payments are processed securely by PayMongo. '), h('a', { href: '#/privacy' }, t('Privacy notice'))));
+    h('footer', { class: 'bk__wrap bk__foot muted small' }, q?.status === 'open' && t('Payments are processed securely by PayMongo. '), h('a', { href: '#/privacy' }, t('Privacy notice'))));
   const stateCard = (host, title, body, tick) => el.replaceChildren(shell(host, h('div', { class: 'card bk-done' },
     tick && h('div', { class: 'gc__tick', 'aria-hidden': 'true' }, '✓'), h('h1', null, title), body && h('p', { class: 'muted' }, body))));
 

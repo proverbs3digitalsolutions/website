@@ -3,7 +3,7 @@
 import { get, post, patch, qs, uploadFile, ApiError } from '../api.js';
 import {
   h, icon, peso, fmtDate, fmtDateTime, fmtMonth, badge, label, options, field, formModal, confirmDialog, emptyState,
-  pageHead, toast, todayManila, filesList, openModal, unitLabel } from '../ui.js';
+  pageHead, toast, todayManila, filesList, openModal, unitLabel, parseAmount } from '../ui.js';
 import { state, navigate } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 
@@ -78,7 +78,7 @@ export async function recordPaymentModal({ leaseId, onSaved } = {}) {
       try { res = await post('/payments', data, { idempotencyKey }); } catch (err) {
         if (err.code !== 'PAYMENT_OVER_BALANCE') throw err;
         // More than is owed becomes advance credit, but only if the host confirms it.
-        if (!await confirmDialog({ title: 'Record more than is owed?', text: `Record ${peso(data.amount_paid)}? ${peso(err.data.credit_after)} becomes advance credit.`, confirmText: 'Record anyway' })) throw new ApiError('Payment not saved.', { status: 400 });
+        if (!await confirmDialog({ title: 'Record more than is owed?', text: `Record ${peso(parseAmount(data.amount_paid))}? ${peso(err.data.credit_after)} becomes advance credit.`, confirmText: 'Record anyway' })) throw new ApiError('Payment not saved.', { status: 400 });
         res = await post('/payments', { ...data, confirm_over: true }, { idempotencyKey });
       }
       await attachReceipt(form, 'payment', res.payment.payment_id);
@@ -152,6 +152,9 @@ const TABS = {
 };
 // Filters that don't narrow the list (so an empty list isn't "no results").
 const NOT_NARROWING = ['status', 'sort'];
+// A status chip narrows the list too, except All unpaid, Overdue and All, whose own empty text already fits.
+const STATUS_OWN_EMPTY_TEXT = ['outstanding', 'overdue', 'all'];
+export const statusCountsAsFilter = (status) => !STATUS_OWN_EMPTY_TEXT.includes(status);
 
 // The last 24 months, newest first, for the rent roll's month filter.
 function recentMonths(today) {
@@ -185,8 +188,9 @@ export async function rentView(el, { query }) {
 
   const isFiltered = () => Object.keys(changed(valuesFor(tab), TABS[tab].defaults)).some((k) => !NOT_NARROWING.includes(k));
   const clearFilters = () => {
+    // Also resets the status chip, which can be the only filter in an empty list.
     const f = valuesFor(tab);
-    Object.assign(f, TABS[tab].defaults, tab === 'rent' ? { status: f.status } : {});
+    Object.assign(f, TABS[tab].defaults);
     rememberFilters(TABS[tab].key, f);
     renderBar();
     load();
@@ -227,7 +231,7 @@ export async function rentView(el, { query }) {
             h('span', { class: `amount${c.status === 'overdue' ? ' amount--neg' : ''}` }, peso(c.status === 'paid' ? c.amount_due : c.balance)),
             h('div', { class: 'chips' }, badge(c.status),
               c.status !== 'paid' && h('button', { class: 'btn btn--secondary btn--sm', onclick: () => recordPaymentModal({ leaseId: c.lease_id, onSaved: reload }) }, 'Record')))))))]
-      : (filtered ? noResults() : emptyState({
+      : ((filtered || statusCountsAsFilter(f.status)) ? noResults() : emptyState({
         title: f.status === 'outstanding' || f.status === 'overdue' ? 'No unpaid rent' : 'No rent charges',
         text: 'Rent charges are created monthly from active leases. Assign tenants to units to start tracking.',
       }))));

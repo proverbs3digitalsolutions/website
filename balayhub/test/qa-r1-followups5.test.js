@@ -12,7 +12,11 @@ const read = (f) => fs.readFileSync(path.join(__dirname, '..', 'public', 'js', '
 const IMPORTS_MANILA_DAY = /import \{[^}]*\bmanilaDay\b[^}]*\} from '\.\.\/ui\.js';/;
 
 test('keyboard: a clickable row opens on Enter and on Space, and Space does not scroll the page', () => {
-  for (const f of ['reservations.js', 'help.js', 'groups.js']) {
+  // Reservations (QA r5 #47): rows are no longer tab stops; the Check-in cell holds a real link, which works on Enter.
+  const resRows = read('reservations.js');
+  assert.doesNotMatch(resRows, /class: 'row-link', tabindex: 0/);
+  assert.match(resRows, /h\('a', \{ href: `#\/reservations\/\$\{r\.booking_id\}` \}, fmtDate\(r\.check_in\)\)/);
+  for (const f of ['help.js', 'groups.js']) {
     const rows = read(f).split('\n').filter((line) => line.includes("class: 'row-link', tabindex: 0"));
     assert.ok(rows.length > 0, `${f} has no keyboard row to check`);
     for (const line of rows) {

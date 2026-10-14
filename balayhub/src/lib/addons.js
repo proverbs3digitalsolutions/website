@@ -127,14 +127,17 @@ async function createAddonCharges(db, bookingId, items, user, requestKey = null)
 }
 
 // The add-ons offered for one listing in one context, for the page that shows them.
+// Guests see each name once: the oldest active copy (copies from before the name rule can share a name).
 // With `bookingId`, each add-on also says how many that stay already has (`bought`) and how many more it can take (`left`).
 async function listAddonsForUnit(db, orgId, unitId, context, bookingId = null) {
   const ctx = CONTEXTS[context];
   if (!ctx) throw new Error(`unknown add-on context: ${context}`);
   const { rows } = await db.query(
     `SELECT addon_id, name, name_tl, description, price, pricing, max_quantity
-       FROM listing_addons
-      WHERE organization_id = $1 AND active AND (cardinality(unit_ids) = 0 OR $2::uuid = ANY(unit_ids)) AND ${ctx.sql}
+       FROM (SELECT DISTINCT ON (lower(btrim(name))) addon_id, name, name_tl, description, price, pricing, max_quantity, sort_order, created_at
+               FROM listing_addons
+              WHERE organization_id = $1 AND active AND (cardinality(unit_ids) = 0 OR $2::uuid = ANY(unit_ids)) AND ${ctx.sql}
+              ORDER BY lower(btrim(name)), sort_order, created_at, addon_id) a
       ORDER BY sort_order, created_at, addon_id`,
     [orgId, String(unitId).toLowerCase()]);
   if (!bookingId) return rows;

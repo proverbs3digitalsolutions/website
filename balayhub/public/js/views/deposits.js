@@ -1,7 +1,7 @@
 // Security deposit card on a reservation, and the Home reminder for deposits to return.
 
 import { get, post, uploadFile, qs } from '../api.js';
-import { h, peso, fmtDate, fmtDateTime, field, formModal, confirmDialog, toast, badge, todayManila, emptyState } from '../ui.js';
+import { h, peso, fmtDate, fmtDateTime, field, formModal, confirmDialog, toast, badge, todayManila, emptyState, parseAmount } from '../ui.js';
 import { initFilters, filterBar, changed } from '../filters.js';
 import { state } from '../app.js';
 
@@ -35,7 +35,11 @@ export async function depositCard(r, rerender) {
     const dedInput = field({ name: 'deduction_amount', label: 'Deduction for damage / missing items', type: 'money', value: suggested > 0 ? String(suggested) : '0', hint: `Deposit: ${peso(dep.amount)}. Leave 0 to return it all.${suggested > 0 ? ' From damage reports: you can change it.' : ''}` });
     const refundLine = h('p', { class: 'small' });
     const update = () => {
-      const ded = Math.min(Number(dedInput.querySelector('input').value.replace(/,/g, '')) || 0, Number(dep.amount));
+      const raw = dedInput.querySelector('input').value;
+      const typed = raw.trim() === '' ? 0 : parseAmount(raw);
+      // An amount that can't be read shows no return figure, rather than one built from a guess.
+      if (Number.isNaN(typed)) { refundLine.textContent = ''; return; }
+      const ded = Math.min(typed, Number(dep.amount));
       refundLine.textContent = `Return to guest: ${peso(Number(dep.amount) - ded)}`;
     };
     dedInput.querySelector('input').addEventListener('input', update);

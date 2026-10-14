@@ -2,7 +2,7 @@
 // and workspace setup.
 
 import { get, post, ApiError } from '../api.js';
-import { h, brand, field, makeForm, badge, toast } from '../ui.js';
+import { h, brand, field, makeForm, badge, toast, showErrors } from '../ui.js';
 import { state, navigate, refreshUser, afterLogin } from '../app.js';
 import { tryDemo } from './landing.js';
 
@@ -253,6 +253,7 @@ export async function setupView(el) {
   // Answers from the landing page's "Get started" steps: create the workspace right away.
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem('bh-setup') || 'null'); } catch { /* ignore */ }
+  let autoError = null;
   if (saved?.name) {
     try {
       await post('/workspace', saved);
@@ -260,7 +261,7 @@ export async function setupView(el) {
       await refreshUser();
       navigate(saved.business_type === 'long_term' ? '#/properties?new=1' : '#/launchpad', { replace: true });
       return;
-    } catch { /* fall back to the form below, prefilled */ }
+    } catch (err) { autoError = err; /* fall back to the form below, prefilled */ }
   }
   const form = makeForm({
     submitText: 'Create workspace',
@@ -271,9 +272,11 @@ export async function setupView(el) {
         ['long_term', 'Long-term rentals (monthly tenants, leases)'],
         ['both', 'Both'],
       ], hint: 'You can change this later in Settings.' }),
+      // A saved number the server refused is corrected here; the number typed in this box is what gets sent.
+      field({ name: 'phone', label: 'Mobile number', type: 'tel', inputmode: 'tel', maxlength: 20, placeholder: '0917 123 4567', autocomplete: 'tel', value: saved?.phone }),
     ],
     onSubmit: async (data) => {
-      await post('/workspace', { ...data, units_band: saved?.units_band, phone: saved?.phone });
+      await post('/workspace', { ...data, units_band: saved?.units_band, phone: data.phone || undefined });
       try { localStorage.removeItem('bh-setup'); } catch { /* ignore */ }
       await refreshUser();
       navigate(data.business_type === 'long_term' ? '#/properties?new=1' : '#/launchpad', { replace: true });
@@ -281,4 +284,6 @@ export async function setupView(el) {
   });
   el.append(publicPage(authCard(`Welcome, ${state.user.full_name.split(' ')[0]}!`,
     "Let's set up your rental business. Next, you'll add your first listing or property.", form)));
+  // The automatic create was refused (for example, a saved mobile number the server doesn't accept): show its field messages here.
+  if (autoError) showErrors(form, autoError.fields);
 }

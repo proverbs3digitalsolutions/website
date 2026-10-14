@@ -156,7 +156,7 @@ extendTranslations({
   'How many units do you manage?': 'Ilang unit ang hawak mo?',
   'Tell us about your hosting business': 'Ikuwento ang hosting business mo',
   'We\'ll set up BalayHub for the way you host.': 'Ise-setup namin ang BalayHub ayon sa paraan ng pag-host mo.',
-  'First name': 'Pangalan', 'Last name': 'Apelyido', 'Business name': 'Pangalan ng business', 'e.g. Santos Staycations': 'hal. Santos Staycations',
+  'First name': 'Pangalan', 'Last name': 'Apelyido', 'Business name': 'Pangalan ng negosyo', 'e.g. Santos Staycations': 'hal. Santos Staycations',
   'Mobile number': 'Mobile number', 'What do you rent out?': 'Ano ang pinauupahan mo?',
   'Short-term stays (Airbnb, staycations)': 'Short-term stays (Airbnb, staycations)', 'Long-term rentals (monthly tenants)': 'Long-term rentals (buwanang tenants)', 'Both': 'Pareho',
   'Continue': 'Tuloy', 'Back': 'Bumalik',
@@ -169,6 +169,7 @@ extendTranslations({
   'Please check the highlighted fields.': 'Pakitingnan ang mga naka-highlight.',
   'Please accept the Terms of Service and read the Privacy Notice to continue.': 'Pakisang-ayunan ang Terms of Service at basahin ang Privacy Notice para magpatuloy.',
   'Enter your first name.': 'Ilagay ang first name mo.', 'Enter your last name.': 'Ilagay ang last name mo.', 'Enter your business name.': 'Ilagay ang business name mo.',
+  'Enter a valid phone number.': 'Maglagay ng tamang numero ng telepono.',
   'Password must be at least 8 characters.': 'Dapat hindi bababa sa 8 characters ang password.',
   'More than 10': 'Higit 10',
   'BalayHub is made for 1 to 10 units. For more, we\'ll set up a custom plan with you after your trial.': 'Para sa 1 hanggang 10 unit ang BalayHub. Kung higit pa, gagawa tayo ng custom plan pagkatapos ng trial mo.',
@@ -282,6 +283,8 @@ function langMenu(onChange) {
 
 // ---------------------------------------------------------------- "Get started" (3 steps)
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+// The same pattern the server uses for a phone number (src/lib/validate.js).
+const PHONE_RE = /^[+\d][\d\s()-]{6,19}$/;
 
 export function openGetStarted(preset = {}) {
   const data = { units_band: preset.units_band || null, business_type: 'short_term' };
@@ -325,6 +328,8 @@ export function openGetStarted(preset = {}) {
           if (!data.first_name) errs.first_name = t('Enter your first name.');
           if (!data.last_name) errs.last_name = t('Enter your last name.');
           if (!data.business_name) errs.business_name = t('Enter your business name.');
+          // The number is optional, but one that is typed must be a phone number; the server would refuse it at setup.
+          if (data.phone && !PHONE_RE.test(data.phone)) errs.phone = t('Enter a valid phone number.');
           if (Object.keys(errs).length) { showErrors(errs); return; }
           step = 3; draw();
         } },

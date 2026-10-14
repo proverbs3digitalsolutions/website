@@ -3,8 +3,9 @@
 // Housekeeping: cleaning tasks per departing stay, a checklist, photos, the
 // status board and calendar, inspections, and assignment to a team member or a
 // cleaner without a login. Owners, managers and staff see the properties they
-// are assigned to. Cleaners also see only their own tasks and unassigned ones,
-// with the guest's first name only and no pay except their own.
+// are assigned to. Staff see a cleaner's pay only on a clean paid to them. Cleaners
+// also see only their own tasks and unassigned ones, with the guest's first name
+// only and no pay except their own.
 
 const express = require('express');
 const { query, one, tx } = require('../db');
@@ -275,8 +276,8 @@ const CLEANER_MOVES = { todo: ['in_progress', 'done'], in_progress: ['in_progres
 
 // Start / finish / reopen / cancel. Finishing marks the listing clean and sets
 // the clean's pay, and an unassigned clean goes to whoever finished it. A paid
-// clean can't change status. Reopening an unpaid one clears its pay. Cleaners
-// can't cancel.
+// clean can't change status. Reopening an unpaid one clears its pay and makes
+// the unit dirty again, as a failed inspection does. Cleaners can't cancel.
 router.post('/cleaning-tasks/:id/status', ah(async (req, res) => {
   const task = await loadTaskRow(req.user, uuidParam(req.params.id));
   const { status } = validate(req.body, { status: { type: 'enum', values: STATUSES, required: true, label: 'Status' } });
@@ -302,6 +303,7 @@ router.post('/cleaning-tasks/:id/status', ah(async (req, res) => {
     }[status];
     await db.query(`UPDATE cleaning_tasks SET ${set}${reopen ? ', pay_amount = NULL' : ''} WHERE task_id = $1`,
       status === 'done' ? [task.task_id, req.user.user_id] : [task.task_id]);
+    if (reopen) await db.query(`UPDATE units SET cleaning_status = 'dirty', cleaning_updated_at = now() WHERE unit_id = $1`, [task.unit_id]);
     if (status === 'done') {
       await db.query(`UPDATE units SET cleaning_status = 'clean', cleaning_updated_at = now() WHERE unit_id = $1`, [task.unit_id]);
       const pay = cleanerPay();
@@ -548,6 +550,13 @@ router.put('/cleaning-checklist', owners, ah(async (req, res) => {
   if (items && !items.length) throw validationError({ items: 'Add at least one checklist item.' });
   if (!items || items.length > 40 || items.some((x) => x.length > 120)) {
     throw validationError({ items: 'Enter up to 40 checklist items, each up to 120 characters.' });
+  }
+  // A line repeated in any case would be two rows that tick separately.
+  const seen = new Map();
+  for (const x of items) {
+    const key = x.toLowerCase();
+    if (seen.has(key)) throw validationError({ items: `This checklist has “${seen.get(key)}” twice.` });
+    seen.set(key, x);
   }
   await query('UPDATE organizations SET cleaning_checklist = $2 WHERE organization_id = $1', [req.user.organization_id, JSON.stringify(items)]);
   await audit(null, req.user, 'cleaning.checklist_updated', 'organization', req.user.organization_id, { count: items.length });

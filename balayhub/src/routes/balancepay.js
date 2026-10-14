@@ -119,6 +119,17 @@ async function billFor(b) {
   };
 }
 
+// The proofs this guest sent that the host has not checked yet (D-80 #6): shown again after a reload,
+// and counted against the balance so they can't add up to more than is owed (#7). Only this booking's.
+async function pendingProofs(bookingId) {
+  const { rows } = await query(
+    `SELECT pp.proof_id, pp.amount, pp.method, pp.submitted_at AS sent_at,
+            EXISTS (SELECT 1 FROM files f WHERE f.related_record_type = 'payment_proof' AND f.related_record_id = pp.proof_id) AS has_file
+       FROM payment_proofs pp WHERE pp.booking_id = $1 AND pp.status = 'pending' ORDER BY pp.submitted_at`, [bookingId]);
+  const total = await one(`SELECT COALESCE(SUM(amount), 0)::numeric(12,2) AS total FROM payment_proofs WHERE booking_id = $1 AND status = 'pending'`, [bookingId]);
+  return { pending: rows, pending_total: total.total };
+}
+
 publicRouter.get('/public/pay/:token', ah(async (req, res) => {
   const b = await loadByToken(req.params.token);
   const cancelled = b.status !== 'confirmed';
@@ -130,7 +141,7 @@ publicRouter.get('/public/pay/:token', ah(async (req, res) => {
     accepting: b.accepting, test_mode: b.test_mode, cancelled, guest_language: b.guest_language,
     bill: await billFor(b),
     // Only when the host turned manual payments on: their instructions, and whether a proof can be sent now.
-    manual_payments: b.manual_payments_enabled ? { instructions: b.manual_payment_instructions, accepting: !manualRefusal(b) } : null,
+    manual_payments: b.manual_payments_enabled ? { instructions: b.manual_payment_instructions, accepting: !manualRefusal(b), ...await pendingProofs(b.booking_id) } : null,
   });
 }));
 

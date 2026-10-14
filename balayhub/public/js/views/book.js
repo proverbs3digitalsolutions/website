@@ -225,6 +225,8 @@ export async function bookListingView(el, { params, query }) {
     const sync = () => {
       qtyInput.disabled = !box.checked;
       const q = Math.min(a.max_quantity || 1, Math.max(1, Math.floor(Number(qtyInput.value)) || 1));
+      // The box shows the number that will be charged: an entry over the maximum is clamped and written back.
+      qtyInput.value = String(q);
       if (box.checked) picked.set(a.id || a.addon_id, q); else picked.delete(a.id || a.addon_id);
       amountEl.textContent = box.checked && current ? peso(addonAmount(a, q, current.nights || 1, guestsNow())) : '';
     };

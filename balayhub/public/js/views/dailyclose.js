@@ -28,10 +28,12 @@ function section(s) {
   const { items, count } = s;
   const methods = s.by_method || [];
   const done = count === 0;
+  // Payments recorded is a record of the day, not work left to do, so its count is neutral; open work stays amber.
+  const record = s.key === 'payments_today';
   return h('section', { class: 'card dc-section', 'aria-labelledby': `dc-${s.key}` },
     h('div', { class: 'card__head' },
       h('h2', { id: `dc-${s.key}` }, s.title),
-      h('span', { class: `badge ${done ? 'badge--paid' : 'badge--partial'}` }, done ? 'All clear' : String(count))),
+      h('span', { class: done ? 'badge badge--paid' : record ? 'badge' : 'badge badge--partial' }, done ? 'All clear' : String(count))),
     s.total != null && h('p', { class: 'dc-total' }, 'Total ', h('strong', null, peso(s.total))),
     methods.length > 0 && h('ul', { class: 'list' }, methods.map((m) => h('li', null, h('div', { class: 'row' },
       h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, METHOD[m.method] || m.method), h('span', { class: 'row__sub' }, `${m.count} payment${m.count === 1 ? '' : 's'}`)),

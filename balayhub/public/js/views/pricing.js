@@ -128,14 +128,14 @@ export async function pricingView(el, { rerender }) {
         if (r) await patch(`/pricing/rules/${r.rule_id}`, { days: body.days, adjust_pct: body.adjust_pct });
         else {
           const dup = rules.find((x) => x.kind === body.kind && (x.unit_id || null) === body.unit_id);
-          if (dup) { if (!await replaceRule(dup, body)) return; }
+          if (dup) { if (!await replaceRule(dup, body)) return false; }
           else {
             try { await post('/pricing/rules', body); } catch (err) {
               if (err.status !== 409 || err.code !== 'DUPLICATE') throw err;
               // Someone added the same rule meanwhile: ask, then change that one instead.
               const fresh = (await get('/pricing')).rules.find((x) => x.kind === body.kind && (x.unit_id || null) === body.unit_id);
               if (!fresh) throw err;
-              if (!await replaceRule(fresh, body)) return;
+              if (!await replaceRule(fresh, body)) return false;
             }
           }
         }
@@ -378,13 +378,13 @@ async function bulkModal({ listings, rerender }) {
       const rows = r.changes;
       total = r.count;
       result.replaceChildren(
-        h('p', null, h('strong', null, `${total} night${total === 1 ? '' : 's'} would change.`), total > rows.length ? ` Showing the first ${rows.length}.` : ''),
+        h('p', null, h('strong', null, total ? `${total} night${total === 1 ? '' : 's'} would change.` : 'None of these nights would change.'), total > rows.length ? ` Showing the first ${rows.length}.` : ''),
         r.below_lowest ? h('div', { class: 'alert alert--warn' }, `${r.below_lowest} night${r.below_lowest === 1 ? '' : 's'} will be below their listing's lowest price. Those prices will be used as set.`) : null,
         rows.length ? tableOf(['Listing', 'Night', 'Now', 'New'], rows.map((x) => [x.unit_name, fmtDate(x.date), x.from_price === null ? '—' : peso(x.from_price), x.to_price === null ? 'Usual price' : peso(x.to_price)])) : null,
         skipped(r.skipped));
     }
     applyBtn.disabled = total === 0;
-    if (total === 0) result.append(h('p', { class: 'muted small' }, 'Nothing to change for these choices.'));
+    if (total === 0 && isBlocks()) result.append(h('p', { class: 'muted small' }, 'Nothing to change for these choices.'));
   });
   applyBtn.addEventListener('click', async () => {
     applyBtn.disabled = true; applyBtn.textContent = 'Applying…';
@@ -393,7 +393,10 @@ async function bulkModal({ listings, rerender }) {
     if (!r) { applyBtn.disabled = false; return; }
     const n = r.count;
     const sk = (r.skipped || []).length;
-    toast(`${n} ${isBlocks() ? 'block' : 'night'}${n === 1 ? '' : 's'} ${actSel.value === 'unblock' ? 'cancelled' : actSel.value === 'block' ? 'created' : 'updated'}${sk ? `, ${sk} skipped` : ''}.`);
+    const said = actSel.value === 'clear'
+      ? `Set prices cleared for ${n} night${n === 1 ? '' : 's'}`
+      : `${n} ${isBlocks() ? 'block' : 'night'}${n === 1 ? '' : 's'} ${actSel.value === 'unblock' ? 'cancelled' : actSel.value === 'block' ? 'created' : 'updated'}`;
+    toast(`${said}${sk ? `, ${sk} skipped` : ''}.`);
     m.close(); rerender();
   });
 }

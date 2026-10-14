@@ -301,14 +301,23 @@ export async function logout() {
 }
 
 function openMore(current) {
-  const close = () => sheet.remove();
-  const sheet = h('div', { class: 'morenav', onclick: (e) => { if (e.target === sheet) close(); } },
-    h('div', { class: 'morenav__sheet', role: 'menu' },
-      h('a', { href: '#/account', onclick: close, 'aria-current': isCurrent('/account', current) ? 'page' : null }, icon('users'), 'My account'),
-      moreNav().map(([p, t, ic]) => h('a', { href: `#${p}`, onclick: close, 'aria-current': isCurrent(p, current) ? 'page' : null }, icon(ic), t)),
+  const moreBtn = document.activeElement;
+  const sheet = h('dialog', { class: 'morenav', 'aria-label': 'More', onclick: (e) => { if (e.target === sheet) sheet.close(); }, onkeydown: (e) => {
+      if (e.key !== 'Tab') return;
+      const items = [...sheet.querySelectorAll('a[href], button:not([disabled])')];
+      const first = items[0]; const last = items[items.length - 1];
+      if (!first) return;
+      if (e.shiftKey && (document.activeElement === first || !sheet.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    },
+    onclose: () => { sheet.remove(); if (moreBtn?.isConnected) moreBtn.focus(); } },
+    h('div', { class: 'morenav__sheet' },
+      h('a', { href: '#/account', onclick: () => sheet.close(), 'aria-current': isCurrent('/account', current) ? 'page' : null }, icon('users'), 'My account'),
+      moreNav().map(([p, t, ic]) => h('a', { href: `#${p}`, onclick: () => sheet.close(), 'aria-current': isCurrent(p, current) ? 'page' : null }, icon(ic), t)),
       h('div', { class: 'morenav__theme' }, themeSwitch()),
-      h('button', { onclick: () => { close(); logout(); } }, icon('logout'), 'Log out')));
+      h('button', { onclick: () => { sheet.close(); logout(); } }, icon('logout'), 'Log out')));
   document.body.append(sheet);
+  sheet.showModal();
 }
 
 const initials = (name) => String(name || '').split(/\s+/).filter(Boolean).slice(0, 2).map((x) => x[0].toUpperCase()).join('') || '?';
@@ -329,7 +338,7 @@ function buildShell(path) {
         themeSwitch({ compact: true }),
         h('button', { class: 'btn btn--secondary btn--sm btn--block', onclick: logout }, 'Log out'))),
     h('header', { class: 'topbar' }, brand(homeRoute()), h('span', { class: 'topbar__assist' }),
-      h('a', { class: 'topbar__me', href: '#/account', 'aria-label': 'My account' }, h('span', { class: 'topbar__org' }, u.organization_name), h('span', { class: 'acct-avatar acct-avatar--sm', 'aria-hidden': 'true' }, initials(u.full_name)))),
+      h('a', { class: 'topbar__me', href: '#/account', 'aria-label': `${u.organization_name}, my account` }, h('span', { class: 'topbar__org' }, u.organization_name), h('span', { class: 'acct-avatar acct-avatar--sm', 'aria-hidden': 'true' }, initials(u.full_name)))),
     h('div', { class: 'shell__main' }, planBanner(), content),
     h('nav', { class: 'bottomnav', 'aria-label': 'Main' },
       bottomKeys.map(([p, t, ic]) => h('a', { href: `#${p}`, 'aria-current': isCurrent(p, path) ? 'page' : null }, icon(ic), t === 'Rent & Expenses' ? 'Rent' : t)),
@@ -403,7 +412,7 @@ export async function render() {
 // Keyboard users can only scroll a table box that can take focus.
 function labelTableWraps(root) {
   root.querySelectorAll('.table-wrap:not([role])').forEach((w) => {
-    const heading = w.closest('.card, section, main')?.querySelector('h1, h2, h3');
+    const heading = w.closest('.card, section, main')?.querySelector('h1, h2, h3') || document.querySelector('main h1');
     w.setAttribute('role', 'region');
     w.setAttribute('tabindex', '0');
     w.setAttribute('aria-label', `${heading?.textContent.trim() || 'Table'} (scrollable)`);
@@ -432,9 +441,51 @@ function watchScrollCues(root) {
     updateScrollCue(box);
   });
 }
+// D-80: on phones a wide table becomes one card per row. Copy each column header onto its cells (data-label) and mark the table;
+// the CSS (max-width 559px) does the rest. Tables that already stack themselves, or opt out, are left alone.
+const STACK_SKIP = '.op-stack, .ops-stack, .op-pnl, .table--nostack';
+const stackLabels = new WeakMap(); // table -> its column labels, or false when the table is not stacked
+function stackTables(root) {
+  root.querySelectorAll('table.table').forEach((table) => {
+    let labels = stackLabels.get(table);
+    if (labels === undefined) {
+      const headRow = table.matches(STACK_SKIP) ? null : [...table.querySelectorAll('thead tr')].pop();
+      if (!headRow) { if (table.matches(STACK_SKIP)) stackLabels.set(table, false); return; }
+      labels = [];
+      [...headRow.children].forEach((th) => {
+        const clone = th.cloneNode(true);
+        clone.querySelectorAll('.sr-only').forEach((x) => x.remove());
+        const text = clone.textContent.trim();
+        for (let i = 0; i < (th.colSpan || 1); i++) labels.push(text);
+      });
+      if (labels.length < 4) labels = false;
+      stackLabels.set(table, labels);
+      if (!labels) return;
+      // Explicit roles keep the table meaning for screen readers once the CSS changes how it is drawn.
+      table.classList.add('table--stack');
+      table.setAttribute('role', 'table');
+      table.querySelectorAll('thead, tbody, tfoot').forEach((g) => g.setAttribute('role', 'rowgroup'));
+      table.querySelectorAll('thead th').forEach((c) => c.setAttribute('role', 'columnheader'));
+    }
+    if (!labels) return;
+    // Every pass: rows added later (re-rendered body, filtering, "show more") get labels and roles too.
+    table.querySelectorAll(':scope > tbody, :scope > tfoot').forEach((g) => { if (!g.hasAttribute('role')) g.setAttribute('role', 'rowgroup'); });
+    table.querySelectorAll('tbody tr, tfoot tr').forEach((tr) => {
+      if (!tr.hasAttribute('role')) tr.setAttribute('role', 'row');
+      let col = 0;
+      [...tr.children].forEach((cell) => {
+        const span = cell.colSpan || 1;
+        if (span === 1 && !cell.hasAttribute('data-label')) cell.setAttribute('data-label', labels[col] || '');
+        if (!cell.hasAttribute('role')) cell.setAttribute('role', cell.tagName === 'TH' ? 'rowheader' : 'cell');
+        col += span;
+      });
+    });
+  });
+}
 new MutationObserver(() => {
   const app = document.getElementById('app');
   labelTableWraps(app);
+  stackTables(app);
   watchScrollCues(app);
 }).observe(document.getElementById('app'), { childList: true, subtree: true });
 

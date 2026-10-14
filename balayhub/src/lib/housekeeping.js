@@ -2,7 +2,7 @@
 
 // Cleaning tasks: one per departing stay, created when the guest checks out
 // or automatically for today's and tomorrow's departures. Also the rules for
-// what a cleaner may see of a task.
+// what a cleaner or staff member may see of a task.
 
 const { pool, query } = require('../db');
 const { propertyScope } = require('./access');
@@ -82,20 +82,25 @@ function cleanerKey(assignedTo, assigneeName) {
   return assigneeName ? `name:${assigneeName.toLowerCase()}` : null;
 }
 
-// The task fields `user` may see. A cleaner gets the guest's first name, and
-// pay only on a clean paid to them: the same payee rule as My pay (D-52), i.e. assigned to
-// them, or unassigned and finished by them. The internal completed_by id is never sent.
+// The task fields `user` may see. Owners and managers see all of it. Everyone
+// else gets pay only on a clean paid to them: the same payee rule as My pay (D-52), i.e.
+// assigned to them, or unassigned and finished by them (BACKEND-SCHEMA 6.1). Everyone
+// gets is_paid, yes or no with no amount, so a job page can show that a clean is paid.
+// A cleaner also gets the guest's first name only. The internal completed_by id is never sent.
 function presentTask(user, row) {
   const { completed_by: doneBy, ...task } = row;
-  if (!isCleaner(user)) return task;
+  const is_paid = task.pay_status === 'paid';
+  if (['owner', 'manager'].includes(user.role)) return { ...task, is_paid };
   const mine = task.assigned_to ? task.assigned_to === user.user_id
     : !task.assignee_name && doneBy === user.user_id;
-  return {
+  const shown = {
     ...task,
-    departing_guest: firstName(task.departing_guest),
+    is_paid,
     pay_amount: mine ? task.pay_amount : null,
     pay_status: mine ? task.pay_status : null,
   };
+  if (!isCleaner(user)) return shown;
+  return { ...shown, departing_guest: firstName(task.departing_guest) };
 }
 
 module.exports = { ensureTaskForBooking, createDueTasks, syncOpenTasks, TODAY, taskScope, cleanerTaskSql, presentTask, firstName, cleanerKey };

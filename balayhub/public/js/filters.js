@@ -94,8 +94,8 @@ function control(f, values, emit, defaults = {}) {
     const shownB = typed[b] ?? values[b];
     delete typed[a];
     delete typed[b];
-    const from = h('input', { class: 'input', type: 'date', id, value: shownA || '', 'aria-label': `${f.label} from`, 'aria-describedby': errId });
-    const to = h('input', { class: 'input', type: 'date', value: shownB || '', 'aria-label': `${f.label} to`, 'aria-describedby': errId });
+    const from = h('input', { class: 'input', type: 'date', id, value: shownA || '', 'aria-label': `${f.label}, from`, 'aria-describedby': errId });
+    const to = h('input', { class: 'input', type: 'date', value: shownB || '', 'aria-label': `${f.label}, to`, 'aria-describedby': errId });
     const err = h('div', { id: errId, role: 'alert', style: { color: 'var(--red)', fontSize: '.84rem', fontWeight: '650' } });
     // Dates are YYYY-MM-DD, so string order is calendar order. A backwards range is flagged and applies nothing: the
     // side that was already applied drops back to its default too, so the list reloads without this range.

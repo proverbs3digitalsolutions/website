@@ -44,7 +44,8 @@ test('a blank Save reads the server\'s cleared count; a typed price keeps "Price
   assert.match(body, /const res = await api\('PUT', '\/rates', \{ \.\.\.d, unit_id: listing\.unit_id \}\);/);
   assert.match(body, /if \(d\.price\.trim\(\) === ''\)/, 'the blank case is checked before choosing the message');
   assert.match(body, /res\.cleared > 0/);
-  assert.match(body, /Set prices cleared\. These nights use your usual rates again\./);
+  assert.match(body, /Set prices cleared for 1 night\. This night uses your usual rates again\./);
+  assert.match(body, /Set prices cleared for \$\{res\.cleared\} nights\. These nights use your usual rates again\./);
   assert.match(body, /No set prices to clear\. These nights already use your usual rates\./);
   assert.match(body, /toast\('Price saved\.'\)/);
 });

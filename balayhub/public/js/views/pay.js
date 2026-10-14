@@ -3,7 +3,7 @@
 // the manual payment details with a form to send a proof of payment.
 
 import { get, post, api, ApiError, newIdempotencyKey } from '../api.js';
-import { h, brand, toast, field, readForm, showErrors, clearErrors } from '../ui.js';
+import { h, brand, toast, field, readForm, showErrors, clearErrors, parseAmount } from '../ui.js';
 import { t, tServer, guestLang, tFields, initGuestLang, langToggle, fmtDateL as fmtDate, extendTranslations } from '../i18n.js';
 
 // Same peso format as the booking pages: no centavos when it's a whole amount.
@@ -44,6 +44,16 @@ extendTranslations({
   'Sending…': 'Ipinapadala…',
   'Enter the amount you paid.': 'Ilagay ang halagang binayad mo.',
   'This is more than the balance of {amount}.': 'Mas malaki ito sa balanseng {amount}.',
+  'Sent {amount} by {method} on {date}.': 'Naipadala ang {amount} sa pamamagitan ng {method} noong {date}.',
+  'Waiting for the host to check it.': 'Naghihintay na i-check ng host.',
+  'Sent, but there is no screenshot yet.': 'Naipadala na, pero wala pang screenshot.',
+  'Proofs waiting for the host': 'Mga patunay na naghihintay sa host',
+  'Add the screenshot': 'Idagdag ang screenshot',
+  'Take it back': 'Bawiin ito',
+  'Taking back…': 'Binabawi…',
+  'Could not take it back. Please try again.': 'Hindi nabawi. Pakisubukan ulit.',
+  'Your proofs already cover what you owe. The host will check them soon.': 'Sapat na ang mga patunay mo para sa utang mo. I-check na ito ng host maya-maya.',
+  "You already sent proofs for {sent} that the host hasn't checked yet, so you can send up to {left} more.": 'Nakapadala ka na ng patunay na {sent} na hindi pa na-check ng host, kaya hanggang {left} pa lang ang puwede mong ipadala.',
   'Choose a screenshot or receipt.': 'Pumili ng screenshot o resibo.',
   'Choose a different file and send again.': 'Pumili ng ibang file at ipadala ulit.',
   'Uploading the screenshot…': 'Ina-upload ang screenshot…',
@@ -124,7 +134,7 @@ export async function payBalanceView(el, { params, query }) {
             : d.manual_payments?.accepting ? null
               : h('div', { class: 'alert alert--info' }, t('Online payment is not available for this booking. Please contact your host.'))),
     !d.cancelled && addonsCard(token, () => payBalanceView(el, { params, query: {} })),
-    !d.cancelled && d.manual_payments?.accepting && manualCard(d, token)));
+    !d.cancelled && d.manual_payments?.accepting && manualCard(d, token, () => payBalanceView(el, { params, query: {} }))));
 }
 
 // Pre-arrival extras the host offers (airport pickup, early check-in…). Hidden when there are none or the
@@ -200,8 +210,11 @@ function billSection(d) {
 }
 
 // Pay by GCash, Maya or bank transfer: the host's payment details, then a form to send the proof.
-function manualCard(d, token) {
+function manualCard(d, token, reload) {
   const card = h('div', { class: 'card' });
+  // What the guest can still send: the balance less the proofs the host hasn't checked yet.
+  const pendingTotal = Number(d.manual_payments.pending_total) || 0;
+  const left = Math.max(0, Number(d.balance) - pendingTotal);
   const sent = () => card.replaceChildren(h('div', { class: 'gc__done' },
     h('div', { class: 'gc__tick', 'aria-hidden': 'true' }, '✓'),
     h('h2', null, t('Thank you! Your proof was sent.')),
@@ -210,15 +223,67 @@ function manualCard(d, token) {
     h('h2', null, t('Pay by GCash, Maya or bank transfer')),
     h('div', { class: 'gc__instructions', style: { whiteSpace: 'pre-line' } }, d.manual_payments.instructions || ''),
     h('p', { class: 'muted small' }, t('Pay the amount, then send the proof below. {host} checks each payment and confirms it.', { host: d.host })),
-    proofForm(d, token, sent));
+    pendingList(d.manual_payments.pending || [], token, reload),
+    left > 0 ? proofForm(d, token, sent, left, pendingTotal)
+      : h('div', { class: 'alert alert--info' }, t('Your proofs already cover what you owe. The host will check them soon.')));
   return card;
+}
+
+// The proofs already sent and not yet checked, so a reload doesn't make them vanish (#6). One with no
+// screenshot yet can get it now, or be taken back (the same DELETE the form uses).
+function pendingList(list, token, reload) {
+  if (!list.length) return null;
+  const base = (id) => `/public/pay/${encodeURIComponent(token)}/proofs/${encodeURIComponent(id)}`;
+  return h('div', { class: 'gc__pending' },
+    h('h3', null, t('Proofs waiting for the host')),
+    list.map((p) => {
+      const msg = h('div', { role: 'alert' });
+      const row = h('div', { class: 'alert alert--info' },
+        h('p', null, t('Sent {amount} by {method} on {date}.', { amount: peso(p.amount), method: METHOD_TEXT[p.method] || p.method, date: fmtDate(p.sent_at) }), ' ',
+          p.has_file ? t('Waiting for the host to check it.') : t('Sent, but there is no screenshot yet.')), msg);
+      if (!p.has_file) {
+        const file = h('input', { type: 'file', accept: PROOF_TYPES.join(','), class: 'input', 'aria-label': t('Screenshot or receipt') });
+        const add = h('button', { class: 'btn btn--primary', type: 'button' }, t('Add the screenshot'));
+        const back = h('button', { class: 'btn', type: 'button' }, t('Take it back'));
+        add.addEventListener('click', async () => {
+          const f = file.files[0];
+          msg.replaceChildren();
+          if (!f) { msg.replaceChildren(h('div', { class: 'alert alert--error' }, t('Choose a screenshot or receipt.'))); return; }
+          if (f.size > MAX_PROOF_BYTES || !PROOF_TYPES.includes(f.type)) { msg.replaceChildren(h('div', { class: 'alert alert--error' }, t('Upload a JPG, PNG, WEBP or PDF file up to 10 MB.'))); return; }
+          add.disabled = true; back.disabled = true;
+          add.textContent = t('Uploading the screenshot…');
+          try {
+            await api('POST', `${base(p.proof_id)}/image`, undefined, { rawBody: f, headers: { 'Content-Type': f.type } });
+            reload();
+          } catch (err) {
+            msg.replaceChildren(h('div', { class: 'alert alert--error' }, err.offline ? t("You're offline. Please try again when you're connected.") : tServer(err.message)));
+            add.disabled = false; back.disabled = false;
+            add.textContent = t('Add the screenshot');
+          }
+        });
+        back.addEventListener('click', async () => {
+          add.disabled = true; back.disabled = true;
+          back.textContent = t('Taking back…');
+          try {
+            await api('DELETE', base(p.proof_id));
+            reload();
+          } catch (err) {
+            msg.replaceChildren(h('div', { class: 'alert alert--error' }, err.offline ? t("You're offline. Please try again when you're connected.") : tServer(err.message) || t('Could not take it back. Please try again.')));
+            add.disabled = false; back.disabled = false;
+            back.textContent = t('Take it back');
+          }
+        });
+        row.append(h('div', { class: 'field' }, file), h('div', { class: 'btn-row' }, add, back));
+      }
+      return row;
+    }));
 }
 
 // The proof form: amount, method, reference, payer name and a screenshot. It goes in two steps,
 // the details first and then the screenshot. If the screenshot is refused, the saved proof is taken
 // back so the guest can correct the details and send again. If it can't be taken back, trying again
 // only re-sends the screenshot, so the payment is never recorded twice.
-function proofForm(d, token, onSent) {
+function proofForm(d, token, onSent, left, pendingTotal) {
   let proofId = null;
   const form = h('form', { class: 'form', novalidate: true });
   const formError = h('div', { class: 'form-error' });
@@ -240,7 +305,7 @@ function proofForm(d, token, onSent) {
   };
   form.append(
     formError,
-    field({ name: 'amount', label: t('Amount paid'), type: 'money', required: true, value: Number(d.balance).toFixed(2) }),
+    field({ name: 'amount', label: t('Amount paid'), type: 'money', required: true, value: left.toFixed(2) }),
     field({ name: 'method', label: t('Payment method'), type: 'select', required: true, value: 'gcash', placeholderOption: false, options: PROOF_METHODS.map(([v, l]) => [v, t(l)]) }),
     field({ name: 'reference_number', label: t('Reference number'), maxlength: 100, hint: t('The reference or transaction number from your app or bank.') }),
     field({ name: 'payer_name', label: t('Name of payer'), maxlength: 120, hint: t('The name on the account you paid from.') }),
@@ -256,10 +321,11 @@ function proofForm(d, token, onSent) {
     formError.replaceChildren();
     const v = readForm(form);
     const file = photo.files[0];
-    const amount = Number(String(v.amount || '').replace(/[₱,\s]/g, ''));
+    const amount = parseAmount(v.amount);
     const problems = {};
     if (!(amount > 0)) problems.amount = t('Enter the amount you paid.');
     else if (amount > Number(d.balance)) problems.amount = t('This is more than the balance of {amount}.', { amount: peso(d.balance) });
+    else if (amount > left + 0.001) problems.amount = t("You already sent proofs for {sent} that the host hasn't checked yet, so you can send up to {left} more.", { sent: peso(pendingTotal), left: peso(left) });
     if (Object.keys(problems).length) { showErrors(form, problems); return; }
     if (!file) { formError.replaceChildren(alertBox(t('Choose a screenshot or receipt.'))); return; }
     if (file.size > MAX_PROOF_BYTES) { formError.replaceChildren(alertBox(t('Upload a JPG, PNG, WEBP or PDF file up to 10 MB.'))); return; }

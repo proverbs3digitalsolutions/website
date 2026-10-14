@@ -2,7 +2,7 @@
 
 Every decision made on BalayHub, with the date and the reason. Newest decisions go at the bottom. When a decision changes, add a new entry and mark the old one **Superseded by D-xx**. Never delete history.
 
-Last updated: 2026-10-14 (D-80, founder answers after QA round 4)
+Last updated: 2026-10-14 (D-81, QA round 5 calls)
 
 ---
 
@@ -395,7 +395,7 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 
 *Money*
 - **Per-hour cleaner pay with no start time is "pay not set", not 0.** If Start was never pressed (or start equals finish), the pay stays empty. Mark paid is refused for a clean with no pay until the host sets it. *Why:* a silent 0 looked like a real amount and let someone mark a clean as paid for nothing.
-- **A payout above the amount due asks first.** The server answers `PAYOUT_OVER_DUE` (409) and the screen asks "Pay more than the statement?"; a confirmed retry sends `confirm_over`. The statement shows "Overpaid by ₱…". *Why:* overpaying can be deliberate (an advance), so warn, never block.
+- **A payout above the amount due asks first.** The server answers `PAYOUT_OVER_DUE` (409) and the screen asks "Pay more than the statement?"; a confirmed retry sends `confirm_over`. The statement shows "Overpaid by ₱…". *Why:* overpaying can be deliberate (an advance), so warn, never block. *Narrowed by D-81 (2026-10-14): when the owner owes the workspace for that month, the payout is refused.*
 - **The owner portal profit and loss for a month with a published statement shows the frozen statement numbers, labelled** "From your published statement, <date>. Later changes don't show here." Other months are live and say so. *Why:* the portal and the statement the owner already has must agree.
 - **Refund overpayment is measured after the channel fee** for the statements and the unit profit and loss (amends D-37 and D-44, see the notes there). *Why:* the app's own balance rule is total minus channel fee minus payments, so a refund of that excess isn't lost income.
 - **Failed inspection clears the pay.** The clean reopens, the pay is cleared and the screen says so; it is priced again when the clean is finished. *Why:* the host shouldn't pay for a clean that was sent back.
@@ -531,7 +531,7 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 - **The Record payment dialog says "Guest overpaid by ₱X."** when the guest has paid more than the balance, instead of showing a negative balance.
 - **One night's price has the same ₱1,000,000 cap as bulk changes** (extends D-76). The cap applies to the calendar's price box and to the rates save.
 - **The Set nightly price box starts empty** and shows the current price as a hint. A blank save clears set prices for those nights and says how many. *Why:* a pre-filled save froze the night at today's price without the host choosing it.
-- **Reopening a finished clean asks first when it has pay,** and still clears the pay (priced again when it is finished, as D-76 does for a failed inspection).
+- **Reopening a finished clean asks first when it has pay,** and still clears the pay (priced again when it is finished, as D-76 does for a failed inspection). *Superseded in part by D-81 (2026-10-14): a paid clean can't be reopened at all.*
 - **Adding a rate for a cleaner who already has one asks** "Change it to ...?" before replacing it. Cancel keeps the form open and saves nothing. While the question waits, the button keeps the words "Save rate".
 
 *Messages*
@@ -575,3 +575,49 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 - **Two cleaning tasks for the same unit on the same day are allowed,** with no warning. This is how the app works today, and it stays that way. Each task's pay still shows separately before it is marked paid.
 
 *Why:* the founder chose stacked cards over the two smaller options in the question (keep the fade, or add a "Swipe for more" hint). The same-day answer keeps the current behaviour, so the app does not change for it.
+
+**D-81 · 2026-10-14 · QA round 5 calls (2026-10-14 sweep, fixed the same day).** The fifth QA sweep (12 lanes, 86 entries) found problems that needed a product decision. These are the calls made, with the default we are using until the founder says otherwise. Open questions are in BLOCKERS.MD under "Questions from QA round 5". Each call was checked against the code after the fixes landed.
+
+*Money*
+- **A suggested price never replaces what you typed.** On New reservation and on group rooms, the price from your rates fills a box only while you haven't typed in it. Each money box remembers its own typing, so a typed cleaning fee is kept when the price changes, and the reverse. If you have typed a different amount, the form offers "Use ₱X from your rates" instead. If the rates can't be worked out for the new dates, a box that still holds an old suggestion is emptied, so a stale price is never saved.
+- **A room-type booking is priced from the listing BalayHub picks.** The listing is still the first free one of that type (D-68, D-70). For "Any free room of a type", the price boxes stay empty and the form shows the first listing's price as a guide. Left empty, each room is priced from its own listing; a price typed in the box applies to every room. *Why:* the form used to copy the first listing's price onto whichever listing was free, which saved the wrong price.
+- **Payment proofs are counted together.** A guest can't send proofs that add up to more than is owed. The pay page lists the proofs still waiting for the host, with the amount, the method and when each was sent, and no reference numbers. A proof with no screenshot can get one or be taken back. At most five proofs can wait at once (D-38).
+- **No payout to an owner who owes you.** When a month's statement says the owner owes the workspace, a payout for that month is refused, even when the request asks to confirm. A month with nothing due still asks first, as D-76 says, so an advance is still possible. *This narrows D-76's "warn, never block" for payouts.*
+- **Home's revenue counts extra charges in fees,** the same as stay reports and profit and loss.
+- **The bulk price preview lists only nights whose price changes.** When none would change, it says so and Apply saves nothing.
+- **Amounts are read the same way on screen as on the server:** commas only between thousands. This extends D-79 to the live previews and the confirmations, so an unreadable amount shows no figure instead of "NaN".
+- **The channel-fee saving estimate uses the same amount as "You keep":** the stay's total after any channel fee.
+- **Expense dates can't be in the future,** when adding or correcting, the same as payments.
+- **The Record payment dialog says "Nothing more is owed on this booking."** once a refund has cleared an overpayment, instead of "overpaid by ₱0.00". The balance itself is unchanged (D-34, D-77).
+
+*Access*
+- **Staff and cleaners see pay only on their own jobs.** Owners and managers see every job's pay. Staff and cleaners see the pay on a job assigned to them, or on an unassigned job they finished. This follows BACKEND-SCHEMA 6.1.
+- **My pay is a cleaner page.** Anyone else who opens it is sent home (D-76). The server's pay list also answers other signed-in people, but only with their own cleans (BLOCKERS question 13).
+- **Notification settings accept only the alert types you can receive.** A monthly-rental owner sees a note that alerts aren't available yet, with no Turn on or Send a test button. "Turn off on this device" stays when a device is already on.
+- **Managers may set the pay on a single clean** until it is paid. This was already D-52; it is recorded here because a lane asked.
+
+*Cleaning and operations*
+- **Reopening a finished clean marks the unit dirty,** the same as a failed inspection (D-49).
+- **A paid clean can't be reopened.** The job page says so. An owner sees a link to Cleaner pay, a manager is told that an owner has to undo the payment, and staff and cleaners see "Paid." (D-79's "reopen asks first" now covers only a clean that has pay but is not paid.)
+- **A checklist can't list the same item twice.** The server and the checklist dialog both refuse a repeated line, with the same message.
+- **Quantities are checked before any question:** supplies must be whole numbers and not negative, and "Not enough on hand" comes after that. A cleaner's rate is checked before "Change this rate?".
+- **A recurring job with a past next-due date asks first,** because a request opens at the next hourly check.
+- **Found items show Held, Returned and Disposed,** with Taglish labels, not the raw codes.
+
+*Guests and sign-up*
+- **Get started checks the mobile number** before the account is created. The setup page shows a mobile number box when the saved number is refused, so a new account is never stuck.
+- **Guest add-on lists show each name once,** the oldest active copy. Older duplicate add-ons stay on the owner's Add-ons page so the owner can archive them.
+- **The booking page writes the capped add-on quantity back into the box,** as the pay page does.
+- **A cancelled or expired quote shows no payment footer.** The privacy link stays.
+- **The business name in Taglish is "Pangalan ng negosyo."**
+
+*Phones and accessibility*
+- **Stacked cards (D-80) are built once, in the app shell.** Below 560px, each table with four or more columns becomes one card per row, with each column's header as its label. Tables with three or fewer columns stay tables. The calendar keeps its grid and its edge fade, and tablet and computer keep the table. In the reservations list the cards also show Check-out and Listing; Channel and Code stay hidden on phones.
+- **The More menu on phones is a proper dialog.** It fits the screen and scrolls, takes focus, closes with Escape or a tap outside it, and returns focus to More.
+- **Long words wrap wherever text is shown** (headings, list titles, cards and alerts), so no page scrolls sideways on a phone.
+- **Placeholder text uses the muted colour token** in both themes. Repeated buttons name their row. Date range boxes are named "<label>, from" and "<label>, to". Rating stars say whether they are chosen. The account link's name starts with the workspace name.
+
+*Defaults with no change*
+- The balance after a refunded overpayment stays as D-34 and D-77 define it. Staff keep seeing reservation money while group bookings hide it. The daily close lists payments only (D-72). A lease that starts soon counts as occupied. Unknown ids in API filters are ignored (D-77). Staff may see listing prices (D-76). Add-on descriptions stay in the language they were typed in.
+
+*Why:* each call takes the safest reading of the existing decisions. A price is never applied to something it wasn't worked out for, nothing a person typed is replaced without asking, money only moves the right way, and no one is locked out of a core flow.

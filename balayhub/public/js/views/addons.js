@@ -39,7 +39,8 @@ function addonModal(a, listings, onSaved) {
       a && field({ name: 'active', label: 'Active', type: 'checkbox', value: x.active ?? true }),
     ],
     onSubmit: async (d) => {
-      const body = { ...d, max_quantity: Number(d.max_quantity) || 1, unit_ids: d.unit_ids || [] };
+      // The maximum is sent as typed, so a 0 gets the server's message; a blank box means one.
+      const body = { ...d, max_quantity: d.max_quantity.trim() || 1, unit_ids: d.unit_ids || [] };
       if (a) await patch(`/addons/${a.addon_id}`, body); else await post('/addons', body);
       toast(a ? 'Add-on updated.' : 'Add-on added.');
       onSaved();

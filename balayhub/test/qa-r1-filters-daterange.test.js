@@ -71,7 +71,7 @@ const DEFAULTS = { from: '', to: '' };
 function build(values) {
   const calls = { n: 0 };
   const bar = filters.filterBar({ key: 'reservations', values, defaults: DEFAULTS, more: [RANGE], onChange: () => { calls.n += 1; } });
-  const input = (side) => walk(bar, (el) => el.tagName === 'input' && el.getAttribute('aria-label') === `Check-in between ${side}`)[0];
+  const input = (side) => walk(bar, (el) => el.tagName === 'input' && el.getAttribute('aria-label') === `Check-in between, ${side}`)[0];
   return {
     bar,
     calls,

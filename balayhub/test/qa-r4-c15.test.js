@@ -171,7 +171,7 @@ test('a custom range with both dates runs the report for those dates and offers 
 test('clearing the start date in the bar stops the report until both dates are set again', async () => {
   const el = await openReports({ from: '2024-03-01', to: '2024-03-31' });
   calls = [];
-  const start = walk(el, (n) => n.tagName === 'input' && n.getAttribute('aria-label') === 'Custom dates from')[0];
+  const start = walk(el, (n) => n.tagName === 'input' && n.getAttribute('aria-label') === 'Custom dates, from')[0];
   start.value = '';
   start.dispatch('change');
   await settle();

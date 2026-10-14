@@ -1,17 +1,19 @@
 // Quotes: a price prepared for an inquiry, sent as a private link the guest accepts and pays.
 
 import { get, post, qs, ApiError } from '../api.js';
-import { h, icon, peso, fmtDate, fmtDateTime, badge, field, makeForm, openModal, confirmDialog, emptyState, errorState, pageHead, toast, skeleton, todayManila } from '../ui.js';
+import { h, icon, peso, fmtDate, fmtDateTime, badge, field, makeForm, openModal, confirmDialog, emptyState, errorState, pageHead, toast, skeleton, todayManila, parseAmount } from '../ui.js';
 import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 
 const STATUS = { open: 'Open', paid: 'Paid', expired: 'Expired', cancelled: 'Cancelled' };
 const STATUS_BADGE = { open: 'open', paid: 'paid', expired: 'archived', cancelled: 'voided' };
 const statusBadge = (s) => badge(STATUS_BADGE[s] || 'archived', STATUS[s] || s);
 const quoteUrl = (q) => q.url;
-// An empty box is 0; text that is not an amount is NaN, so it can never pass as a PHP 0 price.
+// An empty box is 0; text that is not an amount (or is negative) is NaN, so it can never pass as a PHP 0 price.
 const money = (v) => {
-  const s = String(v ?? '').replace(/[₱,\s]/g, '');
-  return s === '' ? 0 : /^\d+(\.\d+)?$/.test(s) ? Math.round(Number(s) * 100) / 100 : NaN;
+  const s = String(v ?? '').trim();
+  if (s === '') return 0;
+  const n = parseAmount(s);
+  return n < 0 ? NaN : n;
 };
 const nightsBetween = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
 

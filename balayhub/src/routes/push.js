@@ -62,6 +62,11 @@ router.post('/push/unsubscribe', ah(async (req, res) => {
 router.patch('/push/settings', ah(async (req, res) => {
   const prefs = {};
   for (const key of Object.keys(push.TYPES)) if (typeof req.body?.[key] === 'boolean') prefs[key] = req.body[key];
+  // Refuse a type this person can't receive (the same rule as /account/notify-prefs), saving nothing.
+  const keys = typesFor(req.user.role, req.user.business_type);
+  if (Object.keys(prefs).some((key) => !keys.includes(key))) {
+    throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { types: 'Choose on or off for each notification you can receive.' } });
+  }
   await query(`UPDATE users SET notify_prefs = notify_prefs || $2::jsonb WHERE user_id = $1`, [req.user.user_id, JSON.stringify(prefs)]);
   res.json({ ok: true });
 }));

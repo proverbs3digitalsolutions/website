@@ -74,23 +74,23 @@ test('cancelled alert and refund wording follow the policy (money#12)', () => {
   assert.match(src, /Cancelled: policy suggests refunding/); // kept inside the helper for the suggested case
 });
 
-test('list puts Total and Balance right after the dates and hides Check-out, Listing, Channel and Code on phones', () => {
+test('list puts Total and Balance right after the dates and hides Channel and Code on phones (Check-out and Listing show on the phone cards, D-80)', () => {
   const head = src.slice(src.indexOf("h('thead'"), src.indexOf("h('tbody'"));
   assert.ok(head.indexOf("'Total'") < head.indexOf("'Guest'"), 'Total before Guest');
   assert.ok(head.indexOf("'Balance'") < head.indexOf("'Guest'"), 'Balance before Guest');
   assert.ok(head.indexOf("'Check-out'") < head.indexOf("'Total'"), 'Total after Check-out');
-  // At phone width only Check-in, Total, Balance and Guest show; the other four carry col-sm-hide.
-  for (const shown of ["h('th', null, 'Check-in')", "h('th', { class: 'num' }, 'Total')", "h('th', { class: 'num' }, 'Balance')", "h('th', null, 'Guest')"]) {
+  // Phone rows are cards (D-80): only Channel and Code carry col-sm-hide.
+  for (const shown of ["h('th', null, 'Check-in')", "h('th', null, 'Check-out')", "h('th', { class: 'num' }, 'Total')", "h('th', { class: 'num' }, 'Balance')", "h('th', null, 'Guest')", "h('th', null, 'Listing')"]) {
     assert.ok(head.includes(shown), `visible on phones: ${shown}`);
   }
-  for (const name of ['Check-out', 'Listing', 'Channel', 'Code']) {
+  for (const name of ['Channel', 'Code']) {
     assert.match(head, new RegExp(`class: 'col-sm-hide' \\}, '${name}'`), `hidden on phones: ${name}`);
   }
   const body = src.slice(src.indexOf("h('tbody'"), src.indexOf('viewSelect.addEventListener'));
   assert.ok(body.indexOf('peso(r.total_amount)') < body.indexOf('r.guest_name ||'), 'Total cell before Guest cell');
   assert.ok(body.indexOf('peso(r.balance)') < body.indexOf('r.guest_name ||'), 'Balance cell before Guest cell');
-  assert.match(body, /h\('td', \{ class: 'col-sm-hide' \}, fmtDate\(r\.check_out\)\)/);
-  assert.match(body, /h\('td', \{ class: 'col-sm-hide' \}, r\.unit_name/);
+  assert.match(body, /h\('td', null, fmtDate\(r\.check_out\)\)/);
+  assert.match(body, /h\('td', null, r\.unit_name/);
   assert.match(body, /h\('td', \{ class: 'col-sm-hide' \}, channelBadge/);
   assert.match(body, /h\('td', \{ class: 'small col-sm-hide' \}, r\.confirmation_code\)/);
 });

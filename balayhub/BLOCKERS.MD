@@ -2,7 +2,7 @@
 
 Things only the founder can do or decide before related work can go ahead. Automated runs add items here. The founder clears them by doing the item and ticking it, or by writing the decision in DECISIONS.MD.
 
-Last updated: 2026-10-14 (QA round 4 questions added; two answered by D-80)
+Last updated: 2026-10-14 (QA round 5 questions added; QA round 4 wide-table question answered by D-80 and built in round 5)
 
 ## Security — do first
 
@@ -139,3 +139,29 @@ Each one has the default already applied. None of them stops the work.
 - [ ] **Reopening a finished clean.** Reopening clears the clean's pay, and finishing it again works the pay out from the cleaner's rate, so a special amount you typed would need typing again. The app now asks before reopening. Would you rather keep a typed amount? *Default: ask first, then clear the pay (the same as a failed inspection).*
 - [x] **Wide tables on phones.** On a phone, a wide table or the calendar now fades its cut-off edge to show that more columns are there. The fade is subtle, and it can read as text running off the edge. Keep the fade, add a small "Swipe for more" hint above wide tables on phones, or show those tables as stacked cards on phones? The stacked cards are the biggest change, because each table needs its own layout. The hint is the smallest change that makes the cue clearer. *Default: keep the fade, as it is now.* Answered 2026-10-14 (D-80): stacked cards on phones. Each wide table shows one card per row, with a label and value pair for each column. Tablet and computer keep the table. The calendar is not part of this answer, so it keeps its edge fade as built. Built in QA round 5.
 - [ ] **Taglish check.** These new lines need a Taglish speaker to read them: the guest-limit message on the booking page, the "Quantity must be a whole number" message for cleaners, and the Terms message on the Get started sign-up. *Default: keep the drafts.*
+
+## Questions from QA round 5 (2026-10-14)
+
+Each one has the default already applied. None of them stops the work.
+
+- [ ] **Balance after refunding an overpayment.** When a guest overpays and you refund the extra, the Payment card still shows a negative balance (for example -₱250.00), because refunds are kept as a separate record and don't change the balance. Should the card show ₱0.00 once the extra is refunded? *Default: no change (D-34, D-77). The payment dialog now says "Nothing more is owed on this booking." when nothing is left, instead of "overpaid by ₱0.00".*
+- [ ] **Reopening a finished clean.** Reopening a finished clean now marks the unit as dirty, the same as a failed inspection. OK? One gap is left for the next round: if a newer clean of the same unit is already done, reopening an older one still marks the unit dirty. *Default: dirty.*
+- [ ] **Future dates on expenses.** Adding an expense refused a future date, but correcting one allowed it. Both now refuse a future date, the same as payments. OK, or do you want to log bills ahead of time? *Default: refused on both.*
+- [ ] **Staff and money on reservations versus groups.** Staff can see the total, balance and payments on a reservation, but group bookings hide money from staff. Which do you want for staff: see money on both, or on neither? *Default: as today (reservations show it, groups don't), because both are written that way.*
+- [ ] **Refunds in the daily close.** The daily close counts payments that came in that day, but not refunds you paid out. Should it list refunds paid out too? *Default: payments only, as D-72 says.*
+- [ ] **A lease starting tomorrow.** A unit with a signed lease that starts tomorrow already counts as occupied on the dashboard and property lists. Should it count only from the lease start date? *Default: as today (a signed lease counts as occupied).*
+- [ ] **The channel-fee saving estimate.** On a direct booking the card says how much you saved compared with a 15% channel fee. It now uses the same amount as "You keep", the stay's total after any channel fee. Would you rather it used the room price only? *Default: the same amount as "You keep".*
+- [ ] **Recurring jobs with a past due date.** Saving a recurring maintenance job with a next due date in the past now asks first, because a request opens at the next hourly check. OK? *Default: ask first.*
+- [ ] **Payout to an owner who owes you.** When a month's statement says the owner owes you (for example the flat fee was more than the stays earned), you can no longer record a payout for that month. A month with nothing due still lets you pay an advance after a warning. OK? *Default: refused when the owner owes.*
+- [ ] **Duplicate add-ons in your live workspace.** Before the name rule existed, the same add-on could be created more than once. Guests now see each name once, but the extra copies are still on your Add-ons page. Nothing in the live database was changed in this round. To see whether your live workspace has any, run this read-only check in the Hostinger browser terminal. It only reads:
+
+    ```
+    cd /opt/balayhub-src/balayhub
+    C="docker compose -f docker-compose.prod.yml --env-file deploy/.env"
+    $C exec -T db psql -U balayhub balayhub -c "select organization_id, lower(btrim(name)), count(*) from listing_addons where active group by 1,2 having count(*) > 1;"
+    ```
+
+    If it lists anything, archive the extra copies on the Add-ons page and keep the oldest. *Default: no data change from us.*
+- [ ] **Contact email on the plan card.** The plan card says "contact us" with no link when `SALES_CONTACT_EMAIL` isn't set. Please check it is set in `deploy/.env` on the server. *Default: none; a check only.*
+- [ ] **Taglish check.** These new lines need a Taglish speaker to read them: on Get started, "Maglagay ng tamang numero ng telepono." (the mobile number message) and "Pangalan ng negosyo" (business name); on the pay page, "Mga patunay na naghihintay sa host" (proofs waiting for the host), "Idagdag ang screenshot", "Bawiin ito" (take it back) and the two proof-limit sentences; for cleaners, "Bayad na." (paid), "Hindi puwedeng negatibo ang dami." (quantity can't be negative), and the found-item labels "Hawak pa" (held), "Naibalik" (returned) and "Itinapon" (disposed). The owner's note on a paid clean is in English only. *Default: keep the drafts.*
+- [ ] **The pay list for other roles.** The "My pay" page is for cleaners only, and everyone else is sent home. The data behind that page still answers any signed-in person, but only with that person's own cleans, and it shows pay only on cleans that are theirs. Nobody can read another person's pay that way. Should the data also be closed to everyone except cleaners? *Default: leave it as it is, since nothing leaks. If you say yes, we close it in the next round.*

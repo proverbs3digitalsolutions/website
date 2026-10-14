@@ -2,7 +2,7 @@
 
 import { get, post, patch, qs, api, ApiError } from '../api.js';
 import {
-  h, icon, peso, pesoShort, fmtDate, fmtDateTime, badge, field, formModal, makeForm, openModal, confirmDialog, emptyState, toast, options, todayManila, manilaDay,
+  h, icon, peso, pesoShort, parseAmount, fmtDate, fmtDateTime, badge, field, formModal, makeForm, openModal, confirmDialog, emptyState, toast, options, todayManila, manilaDay,
 } from '../ui.js';
 import { state } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
@@ -53,16 +53,19 @@ function prepUnit(d) {
   return { ...d, tags: d.tags ? d.tags.split(',').filter(Boolean) : [], min_price: d.min_price === '' ? null : d.min_price, room_type: d.room_type?.trim() || null };
 }
 
-// A typed amount as a number ("₱5,000" becomes 5000), read the same way the server reads money.
-const moneyNumber = (v) => Number(String(v ?? '').replace(/[₱,\s]/g, ''));
-
 // A lowest price above the usual nightly rate means every night costs at least that much, so ask first.
 // Resolves true when the save may go ahead; a cancelled question resolves false and nothing is saved.
-async function lowPriceOk(d) {
-  const floor = moneyNumber(d.min_price); const rate = moneyNumber(d.nightly_rate);
-  if (!d.min_price || !(floor > rate)) return true;
-  return Boolean(await confirmDialog({ title: 'Check the lowest price?', confirmText: 'Save anyway',
+// makeForm has set the save button to "Saving…"; it shows the save label again while the question waits.
+async function lowPriceOk(d, form, saveText) {
+  if (!d.min_price) return true;
+  const floor = parseAmount(d.min_price); const rate = parseAmount(d.nightly_rate);
+  if (!(floor > rate)) return true;
+  const submit = form.querySelector('[type=submit]');
+  submit.textContent = saveText;
+  const ok = Boolean(await confirmDialog({ title: 'Check the lowest price?', confirmText: 'Save anyway',
     text: `Your lowest price (${pesoShort(floor)}) is above your usual nightly price (${pesoShort(rate)}), so every night will cost at least ${pesoShort(floor)}. Save anyway?` }));
+  if (ok) submit.textContent = 'Saving…';
+  return ok;
 }
 
 const BUILDING_SAVED = 'The building was saved; fix the listing details and save again.';
@@ -157,9 +160,9 @@ async function addListingModal(onSaved) {
   const modal = openModal({ title: 'Add listing', body: makeForm({
     submitText: 'Save listing', draftKey: 'listing-new', cancel: () => modal.close(),
     fields: [propSelect, newProp, h('hr', { class: 'divider' }), ...listingFields({}, roomTypes)],
-    onSubmit: async (raw) => {
+    onSubmit: async (raw, { form }) => {
       const d = prepUnit(raw);
-      if (!await lowPriceOk(d)) return;
+      if (!await lowPriceOk(d, form, 'Save listing')) return false; // false keeps the saved draft
       let propertyId = d.property_id;
       if (!propertyId || propertyId === '__new') {
         // A building saved by an earlier try in this form is reused, never posted twice.
@@ -519,8 +522,8 @@ export async function listingsView(el, { query }) {
           // Not formModal: a cancelled question must leave the form open with what was typed.
           const modal = openModal({ title: `Edit ${l.unit_name}`, body: makeForm({ submitText: 'Save changes', fields: listingFields({ ...unit, tags: unit.tags }, roomTypes),
             cancel: () => modal.close(),
-            onSubmit: async (d) => {
-              if (!await lowPriceOk(d)) return;
+            onSubmit: async (d, { form }) => {
+              if (!await lowPriceOk(d, form, 'Save changes')) return false;
               await patch(`/units/${l.unit_id}`, prepUnit(d)); toast('Listing updated.'); load(); modal.close();
             } }) });
         } }, 'Edit'),

@@ -45,7 +45,7 @@ const feeText = (o) => (FEE_SHORT[o.fee_model || 'net_pct'] || FEE_SHORT.net_pct
 function ownerForm(units, o = {}) {
   const model = field({ name: 'fee_model', label: 'How you are paid', type: 'select', required: true, value: o.fee_model || 'net_pct', placeholderOption: false, options: FEE_MODELS,
     hint: 'Percent of net is after channel fees, cleaning fees and refunds. Percent of gross is the booking total minus refunds. A flat fee is charged every month, even with no stays.' });
-  const pct = h('div', null, field({ name: 'management_fee_pct', label: 'Management fee %', type: 'money', value: o.management_fee_pct ?? '20' }));
+  const pct = h('div', null, field({ name: 'management_fee_pct', label: 'Management fee (%)', type: 'number', inputmode: 'decimal', step: 0.01, min: 0, max: 100, value: o.management_fee_pct ?? '20' }));
   const flat = h('div', null, field({ name: 'flat_monthly_fee', label: 'Flat fee per month', type: 'money', value: o.flat_monthly_fee ?? '0', hint: 'Charged in any month this owner has a unit, even with no stays.' }));
   const sync = () => {
     const v = model.querySelector('select').value;

@@ -83,3 +83,8 @@
 - R5: owner portal nav check NOT done: minting a local sign-in token was refused by the permission check (creates a usable login credential). Carried to round 6 / founder: allow it, or check the portal on the live site with a real invite.
 - R6 carry: setup page (#/setup) is English-only; after a Taglish Get started the phone message shows in English.
 - R6 carry: pay page money format: list/limit show whole pesos ('₱500'), server limit text shows '₱500.00' (only on a race). Default: keep page convention (whole pesos); align server text if cheap.
+- 2026-10-14: Round 5 D01 docs done (D-81, BLOCKERS round 5 questions 1-13, APP-FLOW 18, BACKEND 11, DESIGN 14).
+- R6 carry: /api/my-pay answers any role (own data only) while the page is cleaners-only (BLOCKERS Q13); reopen guard for newer done clean (housekeeping.js:306).
+- Lessons: (1) every lane uses its own TEST_DATABASE_URL (a lane wiped balayhub_test); (2) planner must check numbers against DECISIONS and code; (3) re-run the full suite after the last test edit; (4) check both client and server guards for role-only pages.
+- R6 carry: stacked-card labels 'Check-in'/'Check-out' wrap at the hyphen at 390 (SEV3 polish).
+- 2026-10-14: Round 5 complete: full suite 1378/1378, layout tests 66/66 after last CSS change, security PASS, re-verify R1-R9 held (owner portal nav unverified: token minting refused). Committing.

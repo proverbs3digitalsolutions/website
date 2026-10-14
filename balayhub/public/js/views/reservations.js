@@ -49,6 +49,17 @@ export function changedFields(orig, d) {
 export function channelFeeToSave(channel, storedFee, typedFee) {
   return channel === 'direct' && Number(storedFee) > 0 ? '0' : typedFee;
 }
+// What a money box should hold after a quote. A box the host typed in keeps their number. An untouched box takes the quote for a
+// specific listing, but stays empty for a room type (the server picks the listing later and prices it itself), and is emptied when
+// there is no quote, so an old suggestion is never sent.
+export function boxValue({ typed, mode, suggestion, current }) {
+  if (typed) return current;
+  return mode === 'type' || suggestion == null ? '' : String(suggestion);
+}
+// Offer "Use ₱X from your rates" when the host's own number differs from the quote for the chosen listing.
+export function offerRate({ typed, mode, suggestion, current }) {
+  return Boolean(typed) && mode !== 'type' && suggestion != null && Number(String(current).replace(/,/g, '')) !== Number(suggestion);
+}
 // Cancelled-booking alert wording. A suggestion comes from the cancellation policy. With no policy, or a Custom one, nothing is suggested, so the text says what is still held.
 export function refundAlertText({ suggestion, refundable, paid, policy }) {
   if (suggestion) {
@@ -112,6 +123,8 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
   const propName = new Map(listings.map((l) => [l.property_id, l.property_name]));
   const quoteBox = h('div', { class: 'alert alert--info', 'aria-live': 'polite' }, 'Choose a listing and dates to see the price.');
   let quoted = null;
+  // Rate-card price on offer when the host typed a different amount.
+  const useRate = h('button', { class: 'btn btn--secondary btn--sm', type: 'button', hidden: true });
   const modal = formModal({
     title: 'New reservation',
     submitText: 'Save reservation',
@@ -173,6 +186,30 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
     form.elements.room_pick.required = t;
   };
   syncMode();
+  // A box counts as typed once the host puts something in it; a refresh then leaves it alone (a draft restored into the form counts too).
+  const MONEY = ['accommodation_total', 'cleaning_fee'];
+  const typed = Object.fromEntries(MONEY.map((n) => [n, form.elements[n].value.trim() !== '']));
+  form.addEventListener('input', (e) => { if (MONEY.includes(e.target.name)) { typed[e.target.name] = e.target.value.trim() !== ''; if (!typed[e.target.name]) refreshQuote(); } });
+  let rate = null;
+  // Writes the quote (or nothing, when q is null) into the boxes that are not the host's, and offers the rate-card price for the rest.
+  const applyQuote = (q) => {
+    const mode = typeMode() ? 'type' : 'unit';
+    rate = q && !q.missing_rates ? q : null;
+    const sugg = { accommodation_total: rate ? rate.accommodation_total : null, cleaning_fee: q ? q.cleaning_fee : null };
+    let offer = false;
+    for (const n of MONEY) {
+      const box = form.elements[n];
+      offer = offer || offerRate({ typed: typed[n], mode, suggestion: sugg[n], current: box.value });
+      box.value = boxValue({ typed: typed[n], mode, suggestion: sugg[n], current: box.value });
+    }
+    useRate.hidden = !offer;
+    if (offer) useRate.textContent = `Use ${peso(sugg.accommodation_total)}${Number(sugg.cleaning_fee) ? ` + ${peso(sugg.cleaning_fee)} cleaning` : ''} from your rates`;
+  };
+  useRate.addEventListener('click', () => {
+    for (const n of MONEY) { form.elements[n].value = rate[n]; typed[n] = false; }
+    useRate.hidden = true;
+  });
+  quoteBox.after(useRate);
   form.addEventListener('change', (e) => { if (e.target.name === 'channel') syncChannelFee(form, true); });
   syncChannelFee(form, false);
   let seq = 0;
@@ -183,20 +220,20 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
     const u = quoteUnit();
     if (e?.target.name === 'check_in' && ci && (!co || co <= ci)) form.elements.check_out.value = addDays(ci, 1);
     const coNow = form.elements.check_out.value;
-    if (!u) { quoteBox.textContent = typeMode() ? 'The price is not suggested for a room type yet. Enter the total yourself.' : 'Choose a listing to see the price.'; return; }
-    if (!ci || !coNow || coNow <= ci) { quoteBox.textContent = 'Check-out must be after check-in.'; return; }
+    if (!u) { applyQuote(null); quoteBox.textContent = typeMode() ? 'The price is not suggested for this room type. Enter the total yourself, or leave it empty to use each listing\'s price.' : 'Choose a listing to see the price.'; return; }
+    if (!ci || !coNow || coNow <= ci) { applyQuote(null); quoteBox.textContent = 'Check-out must be after check-in.'; return; }
     const mySeq = ++seq;
     try {
       const q = await get(`/reservations/quote${qs({ unit_id: u, check_in: ci, check_out: coNow })}`);
       if (mySeq !== seq) return;
       quoted = q;
       const nights = q.nights.length;
-      quoteBox.textContent = q.missing_rates
+      const guide = typeMode() ? ` From about ${peso(q.accommodation_total)}${Number(q.cleaning_fee) ? ` + ${peso(q.cleaning_fee)} cleaning` : ''} (first listing of this type). Each room is priced from the listing BalayHub picks; leave the boxes empty to use that price.` : '';
+      quoteBox.textContent = typeMode() && !q.missing_rates ? `${nights} night${nights > 1 ? 's' : ''}.${guide}` : q.missing_rates
         ? `${nights} night${nights > 1 ? 's' : ''}. This listing has no nightly rate for some nights — enter the total yourself.`
         : `${nights} night${nights > 1 ? 's' : ''} · ${peso(q.accommodation_total)} for the stay${q.discount_pct ? ` (after ${q.discount_label})` : ''}${Number(q.cleaning_fee) ? ` + ${peso(q.cleaning_fee)} cleaning` : ''}${q.max_guests ? ` · up to ${q.max_guests} guests` : ''}${nightsNote(q)}${q.min_nights > nights ? ` · Note: minimum stay is ${q.min_nights} nights${q.min_nights_reason ? ` during ${q.min_nights_reason}` : ''}.` : ''}`;
-      if (!q.missing_rates) form.elements.accommodation_total.value = q.accommodation_total;
-      form.elements.cleaning_fee.value = q.cleaning_fee;
-    } catch (err) { quoteBox.textContent = err.message; }
+      applyQuote(q);
+    } catch (err) { if (mySeq === seq) { applyQuote(null); quoteBox.textContent = err.message; } }
   }
   form.addEventListener('change', refreshQuote);
   refreshQuote();
@@ -238,20 +275,20 @@ export async function reservationsView(el, { query }) {
     listBox.replaceChildren(
       h('p', { class: 'muted small' }, `Showing ${reservations.length} reservation${reservations.length === 1 ? '' : 's'}${canManage ? ` · ${peso(total)} booked · ${peso(due)} still to collect` : ''}`),
       h('div', { class: 'table-wrap res-table' }, h('table', { class: 'table' },
-        // Money sits right after the dates so it stays on screen at phone width. Check-out, Listing, Channel and Code hide below 480px.
+        // Money sits right after the dates. On a phone each row is a card (D-80), so Check-out and Listing show there; Channel and Code hide.
         h('thead', null, h('tr', null,
-          h('th', null, 'Check-in'), h('th', { class: 'col-sm-hide' }, 'Check-out'),
+          h('th', null, 'Check-in'), h('th', null, 'Check-out'),
           h('th', { class: 'num' }, 'Total'), h('th', { class: 'num' }, 'Balance'),
-          h('th', null, 'Guest'), h('th', { class: 'col-sm-hide' }, 'Listing'),
+          h('th', null, 'Guest'), h('th', null, 'Listing'),
           h('th', { class: 'col-sm-hide' }, 'Channel'), h('th', { class: 'col-sm-hide' }, 'Code'))),
-        h('tbody', null, reservations.map((r) => h('tr', { class: 'row-link', tabindex: 0, onclick: () => navigate(`#/reservations/${r.booking_id}`), onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`#/reservations/${r.booking_id}`); } } },
-          h('td', null, fmtDate(r.check_in), h('div', { class: 'muted small' }, `${r.nights} night${r.nights > 1 ? 's' : ''}`)),
-          h('td', { class: 'col-sm-hide' }, fmtDate(r.check_out)),
+        h('tbody', null, reservations.map((r) => h('tr', { class: 'row-link', onclick: () => navigate(`#/reservations/${r.booking_id}`) },
+          h('td', null, h('a', { href: `#/reservations/${r.booking_id}` }, fmtDate(r.check_in)), h('div', { class: 'muted small' }, `${r.nights} night${r.nights > 1 ? 's' : ''}`)),
+          h('td', null, fmtDate(r.check_out)),
           h('td', { class: 'num' }, peso(r.total_amount)),
           h('td', { class: `num${Number(r.balance) > 0 && r.status === 'confirmed' ? ' amount--neg' : ''}` }, r.status === 'confirmed' ? peso(r.balance) : '—'),
           h('td', null, h('strong', null, r.guest_name || r.guest_label || 'Guest'), r.guest_vip ? ' ⭐' : null, r.status === 'cancelled' ? [' ', badge('voided', 'Cancelled')] : null,
             r.num_guests ? h('div', { class: 'muted small' }, `${r.num_guests} guest${r.num_guests > 1 ? 's' : ''}`) : null),
-          h('td', { class: 'col-sm-hide' }, r.unit_name, h('div', { class: 'muted small' }, r.property_name)),
+          h('td', null, r.unit_name, h('div', { class: 'muted small' }, r.property_name)),
           h('td', { class: 'col-sm-hide' }, channelBadge(r.channel)),
           h('td', { class: 'small col-sm-hide' }, r.confirmation_code)))))));
   }
@@ -414,7 +451,7 @@ export async function reservationDetailView(el, { params, rerender }) {
     fields: [
       // Below 0 the guest overpaid: the same figure, and wording, as the page (net of refunds already recorded).
       h('div', { class: 'alert alert--info' }, Number(r.balance) < 0
-        ? `Guest overpaid by ${peso(overpaidAfterRefunds(r.balance, heldInfo?.refunded))}.`
+        ? (overpaidAfterRefunds(r.balance, heldInfo?.refunded) > 0 ? `Guest overpaid by ${peso(overpaidAfterRefunds(r.balance, heldInfo?.refunded))}.` : 'Nothing more is owed on this booking.')
         : `Balance: ${peso(r.balance)} of ${peso(r.total_amount)}${Number(r.channel_fee) > 0 && !r.channel_fee_ignored ? ` (after the ${peso(r.channel_fee)} channel fee)` : ''}`),
       field({ name: 'amount', label: 'Amount received', type: 'money', required: true, value: Number(r.balance) > 0 ? r.balance : '' }),
       h('div', { class: 'form-row form-row--2' },
@@ -500,7 +537,7 @@ export async function reservationDetailView(el, { params, rerender }) {
   const nonRefundable = heldInfo && !confirmed && Number(heldInfo.refundable) > 0 && sug && !(Number(sug.amount) > 0);
   // A stored fee on a direct booking is ignored here too, so "You keep" matches the balance.
   const keep = Number(r.total_amount) - (r.channel_fee_ignored ? 0 : Number(r.channel_fee));
-  const feeSaved = r.channel === 'direct' ? Math.round(Number(r.accommodation_total) * 15) / 100 : 0;
+  const feeSaved = r.channel === 'direct' ? Math.round(keep * 15) / 100 : 0;
 
   // Scrolls to the Refunds card; the links keep the #refunds-card anchor.
   const goRefunds = (e) => { e.preventDefault(); document.getElementById('refunds-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
@@ -593,7 +630,7 @@ export async function reservationDetailView(el, { params, rerender }) {
               : [h('dt', null, 'Balance'), h('dd', { class: 'muted' }, 'Cancelled — not owed')]),
           canManage && confirmed && h('div', { class: 'keep-line' },
             h('div', null, 'You keep ', h('strong', null, peso(keep))),
-            feeSaved > 0 && h('div', { class: 'keep-line__save' }, `No channel fee — about ${peso(feeSaved)} saved vs a 15% channel fee`),
+            feeSaved > 0 && h('div', { class: 'keep-line__save' }, `No channel fee — about ${peso(feeSaved)} saved vs a 15% channel fee on this stay's total`),
             r.channel !== 'direct' && Number(r.channel_fee) === 0 && h('div', { class: 'muted small' }, 'Enter the channel fee (Edit) to see what you keep.')),
           h('h3', { class: 'subhead', style: { marginTop: '16px' } }, 'Payments'),
           payments.length ? h('ul', { class: 'list' }, payments.map((p) => h('li', null, h('div', { class: 'row' },

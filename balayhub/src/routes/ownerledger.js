@@ -23,6 +23,8 @@ const centavos = (s) => Math.round(Number(s) * 100);
 const money = (c) => (c / 100).toFixed(2);
 // ₱1,234.00 for messages (centavos in).
 const peso = (c) => `₱${(c / 100).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+// "August 2026" for a YYYY-MM month, the way the owner pages write it.
+const monthName = (ym) => new Date(`${ym}-01T00:00:00Z`).toLocaleDateString('en-PH', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
 function monthParam(v) {
   if (typeof v !== 'string' || !MONTH_RE.test(v)) throw validationError({ month: 'Choose a month.' });
@@ -93,20 +95,27 @@ router.post('/unit-owners/:id/payouts', ownersOnly, ah(async (req, res) => {
         const again = await replay(db);
         if (again) return again;
       }
-      // Paying more than the month's statement is allowed, but only when the request says it was meant.
-      if (body.month && !body.confirm_over) {
+      if (body.month) {
         const { rows: [saved] } = await db.query(
           "SELECT snapshot FROM owner_statements WHERE owner_id = $1 AND month = $2 AND status = 'published'", [o.owner_id, body.month]);
         // Due = the published copy's payout, or the live payout for a draft (skipped when the owner has no units to report on).
         const stmt = saved ? saved.snapshot : await ownerStatement(org, o.owner_id, body.month, db);
         if (stmt && (saved || stmt.units.length)) {
-          const { rows: [{ paid }] } = await db.query(
-            'SELECT COALESCE(SUM(amount), 0) AS paid FROM owner_payouts WHERE owner_id = $1 AND month = $2 AND voided_at IS NULL', [o.owner_id, body.month]);
           const due = centavos(stmt.totals.payout);
-          const total = centavos(paid) + centavos(body.amount);
-          if (total > due) {
-            throw new HttpError(409, `This takes the ${body.month} payouts to ${peso(total)}, more than the ${peso(due)} due. Confirm to record it anyway.`,
-              { code: 'PAYOUT_OVER_DUE', due: money(due), paid: money(centavos(paid)) });
+          // The owner owes the workspace this month, so there is nothing to pay out. Refused even when the request confirms it.
+          if (due < 0) {
+            throw new HttpError(409, `Nothing is due to ${o.full_name} for ${monthName(body.month)}: they owe you ${peso(-due)}. A payout can't be recorded for this month.`,
+              { code: 'NOTHING_DUE', due: money(due) });
+          }
+          // Paying more than the month's statement is allowed, but only when the request says it was meant.
+          if (!body.confirm_over) {
+            const { rows: [{ paid }] } = await db.query(
+              'SELECT COALESCE(SUM(amount), 0) AS paid FROM owner_payouts WHERE owner_id = $1 AND month = $2 AND voided_at IS NULL', [o.owner_id, body.month]);
+            const total = centavos(paid) + centavos(body.amount);
+            if (total > due) {
+              throw new HttpError(409, `This takes the ${monthName(body.month)} payouts to ${peso(total)}, more than the ${peso(due)} due. Confirm to record it anyway.`,
+                { code: 'PAYOUT_OVER_DUE', due: money(due), paid: money(centavos(paid)) });
+            }
           }
         }
       }

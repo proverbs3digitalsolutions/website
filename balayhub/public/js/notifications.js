@@ -69,8 +69,10 @@ export async function notificationsCard(rerender) {
   const test = async () => {
     try { const r = await post('/push/test'); toast(r.sent ? 'Test sent. It should appear in a few seconds.' : 'Could not reach your devices. Turn notifications off and on again.'); } catch (err) { toast(err.message, 'error'); }
   };
-  const toggle = async (key, value) => {
-    try { await patch('/push/settings', { [key]: value }); toast('Saved.'); } catch (err) { toast(err.message, 'error'); }
+  // A switch whose save fails goes back to where it was.
+  const toggle = async (input, key) => {
+    const value = input.checked;
+    try { await patch('/push/settings', { [key]: value }); toast('Saved.'); } catch (err) { input.checked = !value; toast(err.message, 'error'); }
   };
 
   // A long-term workspace has no alert types. Its card says so, and it gets no stay-only sentence.
@@ -84,11 +86,14 @@ export async function notificationsCard(rerender) {
     const intro = on ? 'Notifications are on for this device.'
       : noTypes ? null
         : 'Get a notification on this device for new bookings, guest messages and payments, even when BalayHub is closed.';
+    // With no alert types there is nothing to turn on or test. A device that is already on can still be turned off.
+    const main = noTypes ? null
+      : on ? h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: test }, 'Send a test')
+        : h('button', { class: 'btn btn--primary btn--sm', type: 'button', onclick: enable }, 'Turn on notifications');
     status = h('div', null,
       intro && h('p', { class: 'muted' }, intro),
-      h('div', { class: 'chips' },
-        on ? h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: test }, 'Send a test')
-          : h('button', { class: 'btn btn--primary btn--sm', type: 'button', onclick: enable }, 'Turn on notifications'),
+      (main || on) && h('div', { class: 'chips' },
+        main,
         on && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: disable }, 'Turn off on this device')));
   }
 
@@ -109,6 +114,6 @@ export async function notificationsCard(rerender) {
       : h('fieldset', { class: 'checks', style: { border: 0, padding: 0, margin: '12px 0 0' } },
         h('legend', { class: 'small' }, 'Notify me about'),
         s.types.map((t) => h('label', { class: 'check' },
-          h('input', { type: 'checkbox', checked: t.on, onchange: (e) => toggle(t.key, e.target.checked) }),
+          h('input', { type: 'checkbox', checked: t.on, onchange: (e) => toggle(e.target, t.key) }),
           h('span', null, t.label)))));
 }

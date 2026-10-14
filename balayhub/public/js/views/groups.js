@@ -4,7 +4,7 @@ import { get, post, patch, qs, ApiError } from '../api.js';
 import { h, icon, peso, fmtDate, field, formModal, openModal, makeForm, confirmDialog, emptyState, toast, todayManila } from '../ui.js';
 import { state, navigate } from '../app.js';
 import { initFilters, filterBar, changed } from '../filters.js';
-import { addDays } from './reservations.js';
+import { addDays, boxValue } from './reservations.js';
 
 const canManageNow = () => !['staff', 'cleaner'].includes(state.user.role);
 const nightsOf = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
@@ -31,8 +31,10 @@ function roomRow({ listings, roomTypes, defaults, onRemove }) {
   const price = h('input', { class: 'input', id: `gr-price-${uid}`, type: 'text', inputmode: 'decimal', placeholder: 'Per room' });
   const cleaning = h('input', { class: 'input', id: `gr-clean-${uid}`, type: 'text', inputmode: 'decimal', placeholder: '0' });
   const note = h('p', { class: 'hint', 'aria-live': 'polite' });
-  let priceEdited = false;
-  price.addEventListener('input', () => { priceEdited = true; });
+  // Each money box has its own flag: a box the host typed in is never overwritten by a suggestion, and a blank box is open to one again.
+  let priceEdited = false; let cleaningEdited = false;
+  price.addEventListener('input', () => { priceEdited = price.value.trim() !== ''; });
+  cleaning.addEventListener('input', () => { cleaningEdited = cleaning.value.trim() !== ''; });
 
   const typeBox = mk('type', 'Room type', type);
   const countBox = mk('count', 'How many', count);
@@ -49,15 +51,23 @@ function roomRow({ listings, roomTypes, defaults, onRemove }) {
       const [pid, ...rt] = type.value.split('|');
       uId = listings.find((l) => l.property_id === pid && l.room_type === rt.join('|'))?.unit_id || '';
     }
-    if (!uId || !ci.value || !co.value || co.value <= ci.value) { note.textContent = ''; return; }
+    // Without a quote, a box the host did not type in must not keep an old suggestion.
+    const fill = (q) => {
+      const m = mode.value === 'type' ? 'type' : 'unit';
+      price.value = boxValue({ typed: priceEdited, mode: m, suggestion: q && !q.missing_rates ? q.accommodation_total : null, current: price.value });
+      cleaning.value = boxValue({ typed: cleaningEdited, mode: m, suggestion: q ? q.cleaning_fee : null, current: cleaning.value });
+    };
+    if (!uId || !ci.value || !co.value || co.value <= ci.value) { fill(null); note.textContent = ''; return; }
     const mine = ++seq;
     try {
       const q = await get(`/reservations/quote${qs({ unit_id: uId, check_in: ci.value, check_out: co.value })}`);
       if (mine !== seq) return;
-      if (!priceEdited && !q.missing_rates) price.value = q.accommodation_total;
-      if (!cleaning.value || !priceEdited) cleaning.value = q.cleaning_fee;
-      note.textContent = q.missing_rates ? 'No nightly rate for some nights. Enter the price yourself.' : `Suggested ${peso(q.accommodation_total)} for ${q.nights.length} night${q.nights.length === 1 ? '' : 's'}. You can change it.`;
-    } catch (err) { if (mine === seq) note.textContent = err.message; }
+      fill(q);
+      const nights = `${q.nights.length} night${q.nights.length === 1 ? '' : 's'}`;
+      note.textContent = q.missing_rates ? 'No nightly rate for some nights. Enter the price yourself.'
+        : mode.value === 'type' ? `From about ${peso(q.accommodation_total)}${Number(q.cleaning_fee) ? ` + ${peso(q.cleaning_fee)} cleaning` : ''} for ${nights} (first listing of this type). Each room is priced from the listing BalayHub picks; leave the boxes empty to use that price.`
+          : `Suggested ${peso(q.accommodation_total)} for ${nights}. You can change it.`;
+    } catch (err) { if (mine === seq) { fill(null); note.textContent = err.message; } }
   }
   mode.addEventListener('change', () => { sync(); suggest(); });
   for (const el of [unit, type, ci, co]) el.addEventListener('change', suggest);
@@ -88,7 +98,7 @@ function roomRow({ listings, roomTypes, defaults, onRemove }) {
         const [property_id, ...rt] = type.value.split('|');
         // Never adjusted into range: a count the owner did not mean would book real rooms.
         const n = Number(count.value);
-        if (!Number.isInteger(n) || n < 1 || n > 20) throw new Error('Count must be between 1 and 20.');
+        if (!Number.isInteger(n) || n < 1 || n > 20) throw new Error('Count must be a whole number from 1 to 20.');
         return Array.from({ length: n }, () => ({ ...base, property_id, room_type: rt.join('|') }));
       }
       if (!unit.value) throw new Error('Choose a listing for each room row.');

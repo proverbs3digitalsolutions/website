@@ -108,6 +108,18 @@ export const pesoShort = (v) => {
   const n = Number(v || 0);
   return Number.isInteger(n) ? `₱${n.toLocaleString('en-PH')}` : peso(n);
 };
+// Reads an amount typed into a money box exactly as the server does (validate.js parseMoney): ₱, spaces and a
+// leading PHP are ignored, a comma must sit between thousands ("1,5" is refused, not read as 15), else NaN.
+const MONEY_RE = /^-?\d+(\.\d{1,2})?$/;
+const MONEY_COMMA_RE = /^-?\d{1,3}(,\d{3})+(\.\d{1,2})?$/;
+export function parseAmount(text) {
+  let s = String(text ?? '').replace(/[₱\s]/g, '').replace(/^PHP/i, '');
+  if (s.includes(',')) {
+    if (!MONEY_COMMA_RE.test(s)) return NaN;
+    s = s.replace(/,/g, '');
+  }
+  return MONEY_RE.test(s) ? Number(s) : NaN;
+}
 
 // Manila calendar day (YYYY-MM-DD) of a timestamp; plain dates pass through unchanged.
 export function manilaDay(ts) {
@@ -335,6 +347,18 @@ export function makeForm({ fields, submitText = 'Save', onSubmit, cancel, draftK
     h('div', { class: 'form-actions' },
       cancel && h('button', { class: 'btn btn--secondary', type: 'button', onclick: cancel }, 'Cancel'),
       submitBtn));
+  // A field's message clears as soon as the person changes that field; the summary goes with the last marked field.
+  const clearFieldError = (e) => {
+    const wrap = e.target.closest?.('[data-field]');
+    if (!wrap?.classList.contains('field--invalid')) return;
+    wrap.classList.remove('field--invalid');
+    wrap.querySelectorAll('[aria-invalid]').forEach((f) => f.removeAttribute('aria-invalid'));
+    const err = wrap.querySelector('.error');
+    if (err) err.textContent = '';
+    if (!form.querySelector('.field--invalid')) formError.querySelector('[data-field-note]')?.remove();
+  };
+  form.addEventListener('input', clearFieldError);
+  form.addEventListener('change', clearFieldError);
   const clearDraft = draftKey ? persistDraft(form, draftKey) : () => {};
   // One key per form instance: a retried or double-clicked save is recorded once.
   let idemKey = idempotent ? newIdempotencyKey() : null;
@@ -354,7 +378,7 @@ export function makeForm({ fields, submitText = 'Save', onSubmit, cancel, draftK
       }
     }
     if (Object.keys(missing).length) {
-      formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, 'Please fill in the highlighted fields.'));
+      formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert', dataset: { fieldNote: '' } }, 'Please fill in the highlighted fields.'));
       showErrors(form, missing);
       busy = false;
       return;
@@ -363,8 +387,9 @@ export function makeForm({ fields, submitText = 'Save', onSubmit, cancel, draftK
     const original = submitBtn.textContent;
     submitBtn.textContent = 'Saving…';
     try {
-      await onSubmit(readForm(form), { idempotencyKey: idemKey, form });
-      clearDraft();
+      const result = await onSubmit(readForm(form), { idempotencyKey: idemKey, form });
+      // onSubmit returns false when nothing was saved (the person backed out of a question): the draft stays.
+      if (result !== false) clearDraft();
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.offline) {
@@ -374,7 +399,9 @@ export function makeForm({ fields, submitText = 'Save', onSubmit, cancel, draftK
           const unplaced = showErrors(form, err.fields);
           // Validation: show only the server messages that have no field on this form (else the generic summary).
           const text = err.summary ? (unplaced.length ? [...new Set(unplaced)].join(' ') : err.summary) : err.message;
-          formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, text));
+          // The summary names the highlighted fields only when it is not an unplaced server message.
+          const fieldNote = Boolean(err.summary) && !unplaced.length;
+          formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert', dataset: fieldNote ? { fieldNote: '' } : undefined }, text));
           if (err.onRender) err.onRender(formError);
         }
       } else {
@@ -393,7 +420,12 @@ export function makeForm({ fields, submitText = 'Save', onSubmit, cancel, draftK
 
 export function formModal({ title, ...formOpts }) {
   let modal;
-  const form = makeForm({ ...formOpts, cancel: () => modal.close(), onSubmit: async (data, ctx) => { await formOpts.onSubmit(data, ctx); modal.close(); } });
+  const form = makeForm({
+    ...formOpts,
+    cancel: () => modal.close(),
+    // false means nothing was saved, so the dialog stays open.
+    onSubmit: async (data, ctx) => { const result = await formOpts.onSubmit(data, ctx); if (result !== false) modal.close(); },
+  });
   modal = openModal({ title, body: form });
   return modal;
 }

@@ -3,7 +3,7 @@
 // managers add and void charges; staff can see them.
 
 import { get, post } from '../api.js';
-import { h, peso, fmtDateTime, field, makeForm, openModal, confirmDialog, toast } from '../ui.js';
+import { h, peso, fmtDateTime, field, makeForm, openModal, confirmDialog, toast, parseAmount } from '../ui.js';
 import { state } from '../app.js';
 import { copyText } from './quotes.js';
 
@@ -45,8 +45,9 @@ function addCharge(reservationId, rerender) {
   const qtyIn = inputOf(qty);
   const priceIn = inputOf(price);
   const showTotal = () => {
-    const sum = (Number(qtyIn.value) || 0) * (Number(priceIn.value.replace(/[₱,\s]/g, '')) || 0);
-    total.textContent = `Charge total: ${peso(sum)}`;
+    // A blank price counts as 0; a price that can't be read shows no total rather than a made-up one.
+    const unit = priceIn.value.trim() === '' ? 0 : parseAmount(priceIn.value);
+    total.textContent = Number.isNaN(unit) ? '' : `Charge total: ${peso((Number(qtyIn.value) || 0) * unit)}`;
   };
   catIn.addEventListener('change', () => {
     // Only replace the description if it's empty or still a preset, never a custom one.

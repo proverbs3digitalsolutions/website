@@ -1,7 +1,7 @@
 // Supplies per property with par levels. Anything below par is flagged as low.
 
 import { get, post, patch, qs } from '../api.js';
-import { h, field, formModal, makeForm, confirmDialog, emptyState, pageHead, toast, errorState, skeleton, openModal, fmtDate, manilaDay } from '../ui.js';
+import { h, field, formModal, makeForm, confirmDialog, emptyState, pageHead, toast, errorState, skeleton, openModal, fmtDate, manilaDay, showErrors } from '../ui.js';
 import { state } from '../app.js';
 import { initFilters, filterBar, changed } from '../filters.js';
 
@@ -58,6 +58,8 @@ export async function suppliesView(el, { query = {} } = {}) {
       ],
       onSubmit: async (d) => {
         const quantity = Number(d.quantity);
+        // The server takes whole numbers only, so say so before asking about stock (#31).
+        if (!Number.isInteger(quantity)) { showErrors(form, { quantity: 'Quantity must be a whole number.' }); return; }
         if (kind === 'used' && s.on_hand > 0 && quantity > s.on_hand && !await confirmDialog({
           title: 'Not enough on hand',
           text: `You asked to record ${qtyLabel(quantity, s.unit_label)} used. On hand is ${qtyLabel(s.on_hand, s.unit_label)}, so only that much is logged as used, and on hand goes to 0.`,

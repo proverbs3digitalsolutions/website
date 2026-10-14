@@ -139,8 +139,7 @@ export async function inboxView(el, { params, query, rerender }) {
       { name: 'unit_id', label: 'Listing', all: 'All listings', options: stUnits.map((u) => [u.unit_id, `${u.unit_name}${properties.length > 1 ? ` · ${u.property_name || ''}` : ''}`]) },
       assignees.length > 1 && { name: 'assigned', label: 'Assigned to', all: 'Anyone', options: [['unassigned', 'Not assigned'], ...assignees.map((a) => [a.user_id, a.full_name])] },
       { name: 'attention', label: 'Needs attention', all: 'Any', options: [['awaiting_reply', 'Guest wrote last'], ['failed', 'Message not sent'], ['scheduled', 'Has scheduled messages']] },
-      { name: 'msg_from', label: 'Last message from', type: 'date' },
-      { name: 'msg_to', label: 'Last message to', type: 'date' },
+      { name: 'msg', keys: ['msg_from', 'msg_to'], label: 'Last message between', type: 'daterange' },
       { name: 'sort', label: 'Sort by', all: 'Unread first', options: [['recent', 'Latest message'], ['oldest', 'Oldest message'], ['check_in', 'Check-in date']] },
     ].filter(Boolean),
   });
@@ -651,9 +650,9 @@ export async function inboxSettingsView(el, { rerender }) {
         h('div', { class: 'row__end' },
           a.enabled ? badge('active', 'On') : badge('archived', 'Off'),
           canEdit && h('div', { class: 'chips' },
-            h('button', { class: 'btn btn--secondary btn--sm', onclick: () => toggle(a, !a.enabled) }, a.enabled ? 'Turn off' : 'Turn on'),
-            h('button', { class: 'btn btn--ghost btn--sm', onclick: () => editAutomation(a) }, 'Edit'),
-            h('button', { class: 'btn btn--ghost btn--sm', onclick: () => removeAutomation(a) }, 'Delete')))))))
+            h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `${a.enabled ? 'Turn off' : 'Turn on'} automatic message: ${a.name}`, onclick: () => toggle(a, !a.enabled) }, a.enabled ? 'Turn off' : 'Turn on'),
+            h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Edit automatic message: ${a.name}`, onclick: () => editAutomation(a) }, 'Edit'),
+            h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Delete automatic message: ${a.name}`, onclick: () => removeAutomation(a) }, 'Delete')))))))
         : h('p', { class: 'muted small' }, 'No automatic messages yet.')),
     h('div', { class: 'card' },
       h('div', { class: 'card__head' }, h('h2', null, 'Message templates'),
@@ -664,6 +663,6 @@ export async function inboxSettingsView(el, { rerender }) {
           h('span', { class: 'row__title' }, t.name),
           h('span', { class: 'row__sub' }, t.subject)),
         canEditTemplates && h('div', { class: 'row__end chips' },
-          h('button', { class: 'btn btn--ghost btn--sm', onclick: () => editTemplate(t) }, 'Edit'),
-          !t.system_key && h('button', { class: 'btn btn--ghost btn--sm', onclick: () => archiveTemplate(t) }, 'Delete'))))))));
+          h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Edit template: ${t.name}`, onclick: () => editTemplate(t) }, 'Edit'),
+          !t.system_key && h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Delete template: ${t.name}`, onclick: () => archiveTemplate(t) }, 'Delete'))))))));
 }

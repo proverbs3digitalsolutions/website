@@ -204,6 +204,9 @@ const SERVER_TL = [
   [/^Sorry, those dates were just booked\. Please choose other dates\.$/, () => 'Pasensya na, kaka-book lang ng mga petsang iyon. Pumili ng ibang petsa.'],
   [/^Couldn't reach the payment service\. Please try again in a moment\.$/, () => 'Hindi maabot ang payment service. Pakisubukan ulit mamaya.'],
   [/^This booking is already fully paid\. Thank you!$/, () => 'Bayad na nang buo ang booking na ito. Salamat!'],
+  [/^You already sent proofs for (₱[\d,]+\.\d{2}) that the host hasn't checked yet, so you can send up to (₱[\d,]+\.\d{2}) more\.$/, (m) => `Nakapadala ka na ng patunay na ${m[1]} na hindi pa na-check ng host, kaya hanggang ${m[2]} pa lang ang puwede mong ipadala.`],
+  [/^Your proofs already cover what you owe\. The host will check them soon\.$/, () => 'Sapat na ang mga patunay mo para sa utang mo. I-check na ito ng host maya-maya.'],
+  [/^This is more than the (₱[\d,]+\.\d{2}) still owed\.$/, (m) => `Mas malaki ito sa balanseng ${m[1]}.`],
 ];
 export function tServer(msg) {
   if (current !== 'tl' || !msg) return msg;

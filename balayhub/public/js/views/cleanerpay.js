@@ -21,6 +21,13 @@ export const existingRate = (rates, body) => rates.find((r) => (body.user_id
   ? r.user_id === body.user_id
   : !r.user_id && norm(body.assignee_name) && norm(r.assignee_name) === norm(body.assignee_name)));
 
+// A typed rate amount as the server reads it ("1,000", "₱1,250.50"), or NaN when it can't be read.
+export const readRate = (text) => {
+  const plain = String(text).replace(/[₱\s]/g, '').replace(/^PHP/i, '');
+  if (!/^(\d{1,3}(,\d{3})+|\d+)(\.\d{1,2})?$/.test(plain)) return NaN;
+  return Number(plain.replace(/,/g, ''));
+};
+
 // One cleaner's status in the By cleaner card. A clean with no pay set is never "All paid".
 export const cleanerStatus = (c) => {
   const parts = [];
@@ -200,16 +207,14 @@ export async function cleanerPayView(el, { query = {} } = {}) {
         onSubmit: async (d, { form: dialogForm }) => {
           const body = { rate_type: d.rate_type, amount: d.amount };
           if (r) { if (r.user_id) body.user_id = r.user_id; else body.assignee_name = r.assignee_name; } else if (d.user_id) body.user_id = d.user_id; else body.assignee_name = d.assignee_name;
-          // Adding a rate for a cleaner who already has one replaces it, so ask first.
+          // Adding a rate for a cleaner who already has one replaces it, so ask first. Only a readable positive
+          // amount is asked about; anything else is sent so the server's message shows at the field (#35).
           const prior = !r && existingRate(rates, body);
-          if (prior) {
-            // The amount as the server reads it ("1,000", "₱1,250.50"); what was typed when it can't be read.
-            const plain = String(d.amount).replace(/[₱\s]/g, '').replace(/^PHP/i, '');
-            const shown = /^(\d{1,3}(,\d{3})+|\d+)(\.\d{1,2})?$/.test(plain) ? rateText({ amount: Number(plain.replace(/,/g, '')), rate_type: d.rate_type }) : String(d.amount).trim();
+          if (prior && readRate(d.amount) > 0) {
             // makeForm has set the button to "Saving…" already; put "Save rate" back while the question waits.
             const submit = dialogForm.querySelector('[type=submit]');
             submit.textContent = 'Save rate';
-            if (!await confirmDialog({ title: 'Change this rate?', text: `${nameOf(prior)} already has ${rateText(prior)}. Change it to ${shown}?`, confirmText: 'Change rate' })) return;
+            if (!await confirmDialog({ title: 'Change this rate?', text: `${nameOf(prior)} already has ${rateText(prior)}. Change it to ${rateText({ amount: readRate(d.amount), rate_type: d.rate_type })}?`, confirmText: 'Change rate' })) return false;
             submit.textContent = 'Saving…';
           }
           await api('PUT', '/cleaner-rates', body);

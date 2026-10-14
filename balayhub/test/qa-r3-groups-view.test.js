@@ -60,7 +60,7 @@ test.before(async () => {
   for (const f of ['api.js', 'ui.js', 'filters.js']) fs.copyFileSync(path.join(SRC, f), path.join(dir, f));
   fs.writeFileSync(path.join(dir, 'app.js'), "export const state = { user: { role: 'owner' } };\nexport const navigate = () => {};\n");
   fs.mkdirSync(path.join(dir, 'views'));
-  fs.writeFileSync(path.join(dir, 'views', 'reservations.js'), 'export function addDays(d, n) { const x = new Date(`${d}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); }\n');
+  fs.writeFileSync(path.join(dir, 'views', 'reservations.js'), 'export function addDays(d, n) { const x = new Date(`${d}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); }\nexport function boxValue({ typed, mode, suggestion, current }) { if (typed) return current; return mode === "type" || suggestion == null ? "" : String(suggestion); }\n');
   fs.writeFileSync(path.join(dir, 'views', 'groups.js'), `${groupsSrc}\nexport { roomRow };\n`);
   groups = await import(pathToFileURL(path.join(dir, 'views', 'groups.js')));
 });
@@ -81,7 +81,7 @@ function roomWith(values = {}) {
 // ---------------------------------------------------------------- calendar#1: the room-type count
 test('a room-type count that is not a whole number from 1 to 20 is refused, and no rooms are returned', () => {
   for (const count of ['0', '-1', '21', '', '1.5', 'abc']) {
-    assert.throws(() => roomWith({ count }).rooms(), { message: 'Count must be between 1 and 20.' }, `count "${count}"`);
+    assert.throws(() => roomWith({ count }).rooms(), { message: 'Count must be a whole number from 1 to 20.' }, `count "${count}"`);
   }
 });
 

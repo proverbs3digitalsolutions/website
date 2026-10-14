@@ -107,7 +107,7 @@ test('the pay page shows the itemised bill, and the manual details only when tur
   assert.equal(bill.total, '4800.00');
   assert.equal(bill.paid, '2000.00');
   assert.deepEqual(bill.payments.map((p) => [p.amount, p.payment_method]), [['2000.00', 'gcash']]);
-  assert.deepEqual(pg.data.manual_payments, { instructions: INSTR, accepting: true });
+  assert.deepEqual(pg.data.manual_payments, { instructions: INSTR, accepting: true, pending: [], pending_total: '0.00' });
 
   await owner.patch('/api/workspace/manual-payments', { enabled: false, instructions: INSTR });
   const off = await guest.get(`/api/public/pay/${tok1}`);
@@ -336,7 +336,9 @@ test('two proofs for the full balance: the second is refused once the first is c
   const tok = await payToken(b);
   const full = (await guest.get(`/api/public/pay/${tok}`)).data.balance;
   const p1 = (await guest.post(`/api/public/pay/${tok}/proofs`, { amount: full, method: 'gcash', reference_number: 'GR-1' })).data.proof_id;
-  const p2 = (await guest.post(`/api/public/pay/${tok}/proofs`, { amount: full, method: 'maya', reference_number: 'GR-2' })).data.proof_id;
+  // The pay page now refuses a second full-balance proof while the first is pending (QA r5 #7), so the second is inserted directly.
+  const [{ organization_id: orgId }] = await sql('SELECT organization_id FROM bookings WHERE booking_id = $1', [b.booking_id]);
+  const [{ proof_id: p2 }] = await sql(`INSERT INTO payment_proofs (organization_id, booking_id, amount, method, reference_number) VALUES ($1,$2,$3,'maya','GR-2') RETURNING proof_id`, [orgId, b.booking_id, full]);
   assert.equal((await owner.post(`/api/payment-proofs/${p1}/confirm`, {})).status, 201);
   assert.equal((await guest.get(`/api/public/pay/${tok}`)).data.balance, '0.00');
   const refused = await owner.post(`/api/payment-proofs/${p2}/confirm`, {});

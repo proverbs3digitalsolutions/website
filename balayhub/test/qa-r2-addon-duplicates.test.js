@@ -18,7 +18,6 @@ let airportA; let airportB; let bedA; let bedB;
 
 const buy = (id, quantity = 1) => client(srv.base).post(`/api/public/pay/${token}/addons`, { selections: [{ addon_id: id, quantity }] });
 const listed = async () => (await client(srv.base).get(`/api/public/pay/${token}/addons`)).data.addons;
-const byId = (list, id) => list.find((a) => a.addon_id === id);
 
 test.before(async () => {
   srv = await startServer();
@@ -42,7 +41,7 @@ test.before(async () => {
 });
 test.after(async () => { await srv.close(); });
 
-test('a second active copy of an add-on is refused for a stay that already has the first: 409, and both copies show left 0', async () => {
+test('a second active copy of an add-on is refused for a stay that already has the first: 409, and the copy shown has left 0', async () => {
   assert.equal((await buy(airportA)).status, 200);
   const second = await buy(airportB);
   assert.equal(second.status, 409, JSON.stringify(second.data));
@@ -51,11 +50,11 @@ test('a second active copy of an add-on is refused for a stay that already has t
   const lines = (await sql(`SELECT COUNT(*)::int AS n FROM booking_charges WHERE booking_id = $1 AND addon_id IS NOT NULL AND voided_at IS NULL`, [booking.booking_id]))[0].n;
   assert.equal(lines, 1, 'the refused copy adds no bill line');
 
-  const list = await listed();
-  for (const id of [airportA, airportB]) {
-    assert.equal(byId(list, id).bought, 1);
-    assert.equal(byId(list, id).left, 0);
-  }
+  // The guest list shows one row per name: the oldest copy, which carries the purchase.
+  const airports = (await listed()).filter((a) => a.name.trim().toLowerCase() === 'airport pickup');
+  assert.deepEqual(airports.map((a) => a.addon_id), [airportA]);
+  assert.equal(airports[0].bought, 1);
+  assert.equal(airports[0].left, 0);
 });
 
 test('the count is by name, ignoring case and spaces at the ends', async () => {
@@ -63,9 +62,9 @@ test('the count is by name, ignoring case and spaces at the ends', async () => {
   const second = await buy(bedB);
   assert.equal(second.status, 409, JSON.stringify(second.data));
   assert.equal(second.data.code, 'ADDON_LIMIT');
-  const list = await listed();
-  assert.equal(byId(list, bedA).left, 0);
-  assert.equal(byId(list, bedB).left, 0);
+  const extras = (await listed()).filter((a) => a.name.trim().toLowerCase() === 'extra bed');
+  assert.deepEqual(extras.map((a) => a.addon_id), [bedA]);
+  assert.equal(extras[0].left, 0);
 });
 
 test('creating an add-on whose name matches an active one is refused, and the message names the one on file', async () => {

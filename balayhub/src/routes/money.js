@@ -306,12 +306,17 @@ async function checkExpenseTargets(user, body) {
   }
 }
 
+// Adding and correcting an expense both refuse a future date, the same as payments.
+async function refuseFutureExpenseDate(expenseDate) {
+  if (expenseDate > await todayManila()) {
+    throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { expense_date: 'Expense date cannot be in the future.' } });
+  }
+}
+
 async function createExpense(req, body, maintenanceRequestId = null) {
   const key = idempotencyKey(req);
   const org = req.user.organization_id;
-  if (body.expense_date > await todayManila()) {
-    throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { expense_date: 'Expense date cannot be in the future.' } });
-  }
+  await refuseFutureExpenseDate(body.expense_date);
   if (key) {
     const existing = await one('SELECT expense_id FROM expenses WHERE organization_id = $1 AND idempotency_key = $2', [org, key]);
     if (existing) return { expense: await loadExpense(req.user, existing.expense_id), duplicate: true };
@@ -397,6 +402,7 @@ router.patch('/expenses/:id', managers, ah(async (req, res) => {
   const body = validate(req.body, expenseSpec, { partial: true });
   const merged = { ...expense, ...body };
   await checkExpenseTargets(req.user, merged);
+  if (body.expense_date) await refuseFutureExpenseDate(body.expense_date);
   const keys = Object.keys(body);
   if (!keys.length) return res.json({ expense });
   await tx(async (db) => {

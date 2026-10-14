@@ -9,6 +9,8 @@ import { initFilters, filterBar, rememberFilters, changed } from '../filters.js'
 
 const PRIORITIES = ['low', 'medium', 'high', 'urgent'];
 const STATUSES = ['open', 'in_progress', 'resolved', 'cancelled'];
+// The status buttons a request offers. A resolved request can be reopened or cancelled, a cancelled one only reopened.
+export const nextStatuses = (status) => ({ resolved: ['open', 'cancelled'], cancelled: ['open'] })[status] || STATUSES.filter((s) => s !== status);
 
 // "From cleaning task" badge, linking to the job. Inside a list row (already a link) it navigates by click.
 const taskBadge = (m, inRow) => h('a', {
@@ -136,6 +138,8 @@ export async function maintenanceView(el, { query }) {
           field({ name: 'priority', label: 'Priority', type: 'select', required: true, value: x?.priority || 'medium', placeholderOption: false, options: options(PRIORITIES) })),
       ],
       onSubmit: async (d) => {
+        // The hourly check opens a request as soon as a job is due, so a date already past opens one at once. Ask first (Q9).
+        if (d.next_due < todayManila() && !await confirmDialog({ title: 'Next due date is in the past', text: 'A request opens at the next hourly check. Save anyway?', confirmText: 'Save anyway' })) return false;
         const body = { title: d.title, description: d.description, every_n: Number(d.every_n), every_unit: d.every_unit, next_due: d.next_due, priority: d.priority };
         if (x) await patch(`/maintenance-schedules/${x.schedule_id}`, body); else await post('/maintenance-schedules', { ...body, property_id: d.property_id, unit_id: d.unit_id || undefined });
         toast(x ? 'Schedule updated.' : 'Schedule saved.'); loadSchedules();
@@ -174,7 +178,7 @@ export async function maintenanceDetailView(el, { params, rerender }) {
   const canManage = state.user.role !== 'staff';
   const closed = ['resolved', 'cancelled'].includes(m.status);
 
-  const statusButtons = canManage && STATUSES.filter((s) => s !== m.status).map((s) => h('button', {
+  const statusButtons = canManage && nextStatuses(m.status).map((s) => h('button', {
     class: `btn btn--sm ${s === 'resolved' ? 'btn--primary' : 'btn--secondary'}`,
     onclick: async (e) => {
       if (s === 'cancelled' && !await confirmDialog({ title: 'Cancel this request?', text: 'Recorded costs stay on the books.', confirmText: 'Cancel request', cancelText: 'Keep request' })) return;

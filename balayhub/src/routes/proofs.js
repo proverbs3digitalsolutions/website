@@ -229,6 +229,15 @@ publicRouter.post('/public/pay/:token/proofs', proofLimiter, express.json({ limi
       `SELECT ${BALANCE} AS balance, $2::numeric <= ${BALANCE} AS within FROM bookings b WHERE b.booking_id = $1`,
       [b.booking_id, body.amount]);
     if (!now.within) throw validationError({ amount: `This is more than the ${messaging.fmtPeso(now.balance)} still owed.` });
+    // Proofs the host has not checked yet count as paid for this limit, so they can't add up to more than is owed.
+    const { rows: [{ pending }] } = await db.query(
+      `SELECT COALESCE(SUM(amount), 0)::numeric(12,2) AS pending FROM payment_proofs WHERE booking_id = $1 AND status = 'pending'`, [b.booking_id]);
+    const left = Number(now.balance) - Number(pending);
+    if (Number(body.amount) > left + 0.001) {
+      throw validationError({ amount: left <= 0
+        ? 'Your proofs already cover what you owe. The host will check them soon.'
+        : `You already sent proofs for ${messaging.fmtPeso(pending)} that the host hasn't checked yet, so you can send up to ${messaging.fmtPeso(left)} more.` });
+    }
     const { rows: [{ waiting }] } = await db.query(
       `SELECT COUNT(*)::int AS waiting FROM payment_proofs WHERE booking_id = $1 AND status = 'pending'`, [b.booking_id]);
     if (waiting >= MAX_PENDING_PROOFS) {

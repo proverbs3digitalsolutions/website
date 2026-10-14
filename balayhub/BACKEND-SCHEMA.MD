@@ -2,7 +2,7 @@
 
 This document describes BalayHub's PostgreSQL schema as it stands after migrations `001`–`026` in `db/migrations/`, where uploaded files are stored, and who can see or change each kind of data. It was checked against the migrations and the route code in `src/routes/*.js` and `src/lib/*.js`. Anything not confirmed in the code is marked **unverified**.
 
-Last updated: 2026-10-13
+Last updated: 2026-10-14 (QA round 5, section 11)
 
 ---
 
@@ -801,7 +801,7 @@ The cleaner role is denied by default in code (`cleanerGuard`, D-48). Any row no
 | Lost and found: list and status | Full | Assigned | No (page). On a job they see only items they logged, with no status note | Own items only |
 | Cleaner rates | View, set, delete | No | No | No |
 | Cleaner pay list and mark paid | View, mark paid, undo | View and mark paid (assigned); no undo | No | No |
-| My pay | Own, as worker | Own, as worker | Own, as worker | Own pay only |
+| My pay (page `#/my-pay`) | Not shown. The API answers only with their own cleans | Not shown. The API answers only with their own cleans | Not shown. The API answers only with their own cleans | Own pay only (page and API). The page is cleaners only (round 5) |
 | Expenses made by mark paid | Yes | Yes (assigned) | No | No |
 | Supplies: list | Full | Assigned | Assigned; the Supplies page opens read-only (no add, edit, count or restock buttons) | Names and counts only (assigned). No costs exist |
 | Supplies: add, edit, archive, count, restock | Yes | Yes (assigned) | No | No |
@@ -821,6 +821,7 @@ The cleaner role is denied by default in code (`cleanerGuard`, D-48). Any row no
 **Job detail (`GET /api/cleaning-tasks/:id`) per role.**
 - **Owner and manager (assigned):** the whole record: checklist files, inspections, every damage report with `estimated_cost`, `status`, `charge_id`, `resolution_note`, `resolved_at` and `resolved_by_name`, every lost item with `status_note`, and the work orders (`request_id`, `title`, `status`).
 - **Staff (assigned properties):** checklist files, and only the damage reports and lost items they filed. Damage reports carry `report_id`, `description`, `created_at`, `reported_by_name` and their photos under `files`; lost items carry `item_id`, `description`, `found_where`, `found_on`, `status`, `created_at`, `found_by_name` and photos. No amounts, charge, resolution, status note or inspections. Work orders as in section 6.
+- **Pay fields (dated 2026-10-14, QA round 5):** until round 5 the cleaning-task list and detail routes sent `pay_amount` and `pay_status` to staff on every job. Now staff and cleaners get them only on a job assigned to them, or on an unassigned job they completed. Owners and managers get them on every job (section 11).
 - **Cleaner (own and unassigned jobs):** the same filed-by-them damage and lost-item fields as staff. Inspections appear only when the job is assigned to that cleaner. `work_orders` is always empty. No estimate, no damage status, no charge, no resolution, no status note.
 
 **Staff pages.** Staff may open Group bookings (rooms and stays, without money, only when every room is in their properties; section 6.3) and the Supplies page (read-only). The screen route block (`public/js/routeaccess.js`) and the menu no longer hide them. Housekeeping is a stay-only page; cleaners keep it.
@@ -923,6 +924,8 @@ Cleaners are denied by `cleanerGuard` on every Phase 5 route. "Assigned" means t
 | 14 | ~~D-46 security items~~ Fixed 2026-10-13: an email change or clear ends the owner's portal sessions and cancels unused links (clearing also turns access off); owner blocks are refused while the workspace is view-only (402) or the demo (403); block create and cancel are limited to 20 per hour per owner; the sign-in link is removed from the address bar after use. Covered by tests | `src/routes/ownerportal.js`, `src/routes/owners.js`, `src/lib/auth.js` (`planGuard`) |
 | 15 | ~~Daily close by a manager with no properties~~ Fixed 2026-10-13: such a manager gets 403 on the daily close (D-75) | `src/routes/dailyclose.js` (`POST /daily-close`) |
 | 16 | New 2026-10-13 (QA round 1, D-76): add-on names are unique among active add-ons only in the app (`assertNameFree` in `src/routes/addons.js`); there is no database index, because live data may already hold duplicates. Two creates at the same instant could both pass | `src/routes/addons.js` |
+| 17 | `GET /api/my-pay` answers any signed-in person, with only that person's own cleans and pay. The page `#/my-pay` is for cleaners only, but the API is not limited to cleaners. Founder question in BLOCKERS (question 13). | `src/routes/cleanerpay.js` (`GET /my-pay`), `public/js/routeaccess.js` |
+| 18 | Reopening an older clean while a newer clean of the same unit is done still marks the unit dirty. Carried to round 6. | `src/routes/housekeeping.js` (the status route, the reopen update) |
 - Paused maintenance schedules are resumed with `PATCH /maintenance-schedules/:id { active: true }` (the Resume button on the Maintenance page).
 - Monthly schedules step from the last due date, so a due date on the 31st can drift to the 28th (`src/lib/maintschedule.js`).
 - Section 6 (the older matrix) has no Cleaner column. Cleaners are denied by default by `cleanerGuard`, and section 6.1 covers the Phase 3 rows.
@@ -965,6 +968,25 @@ Cleaners are denied by `cleanerGuard` on every Phase 5 route. "Assigned" means t
 - **Automatic messages (`/api/automations`):** `offset_days` is required when the trigger is `before_check_in`, `before_check_out` or `after_check_out`. The check runs after merging with the stored trigger on a PATCH. A blank value is refused with 400 on `offset_days` ("Enter the number of days."). `booking_created` and `check_in_day` store 0 days. A blank send time is stored as 10:00.
 - **`GET /public/book/:slug/units/:unitId/quote`:** `guests` above the listing's `max_guests` is refused with 400 on `guests` ("This place allows up to N guests."), the same rule the checkout applies. A listing with no `max_guests` set has no limit here.
 - **Notification types (`GET` and `PATCH /api/account/notify-prefs`, `GET /api/push/settings`):** a long-term workspace gets no stay types. The list of types depends on the workspace type: the account route refuses a stay type for a long-term owner with 400 on `types`. Short-term and both-type workspaces are unchanged. Push delivery is not gated by this list.
-- **Known gap:** `PATCH /api/push/settings` does not check the workspace type, so a long-term owner who calls it directly can still store a stay type. The settings screen shows none, and delivery is not gated. Carried to round 5 (see IMPLEMENTATION-PLAN Session notes).
+- **Known gap:** `PATCH /api/push/settings` does not check the workspace type, so a long-term owner who calls it directly can still store a stay type. The settings screen shows none, and delivery is not gated. Carried to round 5 (see IMPLEMENTATION-PLAN Session notes). Fixed in round 5 (section 11).
 - **Sign-up (`POST /auth/signup`):** no server change this round. The browser now checks the Terms box first, so an unticked box never reaches the server. The server still counts every attempt toward the sign-up cap (`signupLimiter`), as its comment explains.
 - **Browser-only changes this round (no API change):** the Reopen confirmation, the Add rate confirmation, the whole-number check for supplies on the cleaner screen, the name on the copy box, the report date handling, the booking page's guest-count re-price, the order of invite errors, and the calendar's price hint. The access matrix in section 6 is unchanged.
+
+## 11. API notes from QA round 5 (2026-10-14)
+
+- **Pay on cleaning jobs (`GET /api/cleaning-tasks` and `GET /api/cleaning-tasks/:id`).** Owners and managers get the whole record. Staff and cleaners get `pay_amount` and `pay_status` only on a job assigned to them, or on an unassigned job they completed; on every other job both are `null`. The guest first-name rule stays for cleaners only. The rule is in `presentTask` in `src/lib/housekeeping.js`. Sections 6.1 and 6.1a say the same.
+- **`GET /api/public/pay/:token`:** `manual_payments.pending` lists this booking's proofs that the host has not checked yet, oldest first, with `proof_id`, `amount`, `method`, `sent_at` and `has_file`. `pending_total` is their sum as a two-decimal string. No reference number, payer name, host note or other booking's proof is sent. `manual_payments` is `null` when manual payments are off.
+- **`POST /api/public/pay/:token/proofs`:** after the booking is locked, the amount must not be more than the balance less the proofs still waiting. A larger amount is refused with 400 on `amount`: "You already sent proofs for ₱X that the host hasn't checked yet, so you can send up to ₱Y more." When nothing is left, the message is "Your proofs already cover what you owe. The host will check them soon." At five waiting proofs the answer is 409 `TOO_MANY_PENDING` (D-38).
+- **`POST /api/unit-owners/:id/payouts`:** when the month's due is below zero, the answer is 409 `NOTHING_DUE` with `due`, and nothing is recorded, even when `confirm_over` is sent. A due of exactly zero keeps the D-76 confirm. The `PAYOUT_OVER_DUE` message names the month, for example "September 2026".
+- **`GET /api/stays/revenue`:** the fees figure is the cleaning fee plus the other fees plus the extras total (the stored sum of the stay's live extra charges), for stays that check in that month. It is the same definition `GET /api/stay-reports` uses.
+- **Bulk prices, `set` preview and apply:** a night already at the new price is left out of the change list, so Apply does not write it. An empty list shows "None of these nights would change." on the screen and writes nothing.
+- **`PATCH /api/expenses/:id`:** a future `expense_date` is refused with 400 on `expense_date` ("Expense date cannot be in the future."), the same as on create.
+- **`PATCH /api/push/settings`:** a notification type the caller can't receive (the list from `typesFor`, by role and workspace type) is refused with 400 on `types`, and nothing is saved. This closes the round 4 known gap.
+- **`PUT /api/cleaning-checklist`:** a repeated item (trimmed, any capitals) is refused with 400 on `items`: "This checklist has “Change towels” twice."
+- **Reopening a finished clean:** changing a done job back to to-do or in progress sets the unit's `cleaning_status` to `dirty` in the same transaction. A paid clean can't be reopened; the server refuses it, as before. Known gap, carried to round 6 (section 7, row 18).
+- **Guest add-on lists** (every list that uses `listAddonsForUnit`): one row per name, with the name trimmed and capitals ignored, showing the oldest active copy. Owner endpoints are unchanged, so the owner's Add-ons page still lists every copy.
+- **Add-on maximum quantity:** the browser sends the number as typed. The server's existing minimum of 1 refuses 0 with 400 on `max_quantity`.
+- **Room-type and group rooms:** when the accommodation total is left blank, the server prices the booking from the listing it books (`src/routes/stays.js`, about lines 527 to 537). A typed total is used as it is.
+- **`GET /api/my-pay`:** answers any signed-in person with that person's own finished or assigned cleans. Each clean carries `pay_visible`, which is true only for the caller's own pay. The `#/my-pay` page is for cleaners only (section 6.1). Known gap: section 7, row 17.
+- **Get started, mobile number:** the browser check uses the same pattern as the server's phone check (`src/lib/validate.js`), so no server change was needed.
+- **Browser-side changes this round that need no API change:** the paid clean note and the reopen wording, the proof list on the pay page, the phone number check, the "Use ₱X from your rates" button, the stacked-card layout for wide tables, the More dialog, the notification card and the names on controls.

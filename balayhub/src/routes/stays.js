@@ -1200,7 +1200,8 @@ router.get('/stays/trends', ah(async (req, res) => {
 }));
 
 // Revenue for a month vs the previous month. Accommodation is spread evenly
-// across the nights of each stay; cleaning and other fees count on check-in.
+// across the nights of each stay; cleaning, other fees and extra charges count on check-in
+// (the same definition as stay reports).
 async function monthRevenue(user, monthStart) {
   const params = [monthStart];
   const scope = propertyScope(user, params);
@@ -1217,7 +1218,7 @@ async function monthRevenue(user, monthStart) {
                   FROM res r, bounds, generate_series(GREATEST(r.check_in, bounds.s), LEAST(r.check_out, bounds.e) - 1, interval '1 day') n)
      SELECT (SELECT COALESCE(SUM(rate), 0) FROM nights) AS accommodation,
             (SELECT COUNT(*) FROM nights) AS booked_nights,
-            (SELECT COALESCE(SUM(cleaning_fee + other_fees), 0) FROM res, bounds WHERE check_in >= bounds.s AND check_in < bounds.e) AS fees,
+            (SELECT COALESCE(SUM(cleaning_fee + other_fees + extras_total), 0) FROM res, bounds WHERE check_in >= bounds.s AND check_in < bounds.e) AS fees,
             GREATEST(0, (SELECT COUNT(*) FROM listing WHERE active) * (SELECT e - s FROM bounds) - (SELECT n FROM blocked)) AS capacity_nights,
             (SELECT e - s FROM bounds) AS days_in_month,
             (SELECT json_agg(json_build_object('day', EXTRACT(DAY FROM night)::int, 'adr', round(avg_rate, 2)) ORDER BY night)

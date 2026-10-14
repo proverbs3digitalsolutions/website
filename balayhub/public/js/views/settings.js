@@ -74,8 +74,8 @@ export async function settingsView(el, { rerender, query = {} }) {
     h('div', { class: 'chips', style: { marginTop: '12px' } }, h('a', { class: 'btn btn--secondary btn--sm', href: '#/account' }, 'My account'), h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: changePassword }, 'Change password')),
     u.role === 'owner' && h('div', { class: 'form', style: { marginTop: '14px' } },
       field({ name: 'business_type', label: 'Modules for this workspace', type: 'select', value: u.business_type, placeholderOption: false, options: [
-        ['short_term', 'Short-term stays (Airbnb, staycations)'], ['long_term', 'Long-term rentals (leases, monthly rent)'], ['both', 'Both'],
-      ] }),
+        ['short_term', 'Short-term stays'], ['long_term', 'Long-term rentals'], ['both', 'Both'],
+      ], hint: 'Short-term means per-night stays (Airbnb, staycations). Long-term means monthly tenants and leases.' }),
       h('div', null, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: async (e) => {
         const v = e.target.closest('.form').querySelector('select').value;
         await patch('/workspace', { business_type: v });
@@ -152,16 +152,16 @@ export async function settingsView(el, { rerender, query = {} }) {
           h('span', { class: 'row__sub' }, `${m.email} · ${roleName(m.role)}`),
           m.role !== 'owner' && h('span', { class: 'row__sub' }, m.property_ids.length ? `Access: ${m.property_ids.map(propName).join(', ')}` : 'No properties assigned yet')),
         m.role !== 'owner' && h('div', { class: 'row__end' }, h('div', { class: 'chips' },
-          h('button', { class: 'btn btn--secondary btn--sm', onclick: () => editMember(m) }, 'Edit access'),
-          h('button', { class: 'btn btn--ghost btn--sm', onclick: () => removeMember(m) }, 'Remove'))))))),
+          h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `Edit access for ${m.full_name}`, onclick: () => editMember(m) }, 'Edit access'),
+          h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Remove ${m.full_name}`, onclick: () => removeMember(m) }, 'Remove'))))))),
       invitations.length > 0 && [h('h3', { style: { margin: '16px 0 6px' } }, 'Pending invitations'),
         h('ul', { class: 'list' }, invitations.map((i) => h('li', null, h('div', { class: 'row' },
           h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, i.email), h('span', { class: 'row__sub' }, `${roleName(i.role)} · expires ${fmtDateTime(i.expires_at)}`)),
-          h('button', { class: 'btn btn--secondary btn--sm', onclick: async () => {
+          h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `New link for ${i.email}`, onclick: async () => {
             // Links are stored hashed, so "copy" means issuing a fresh one (the old one stops working).
             try { const res = await post('/team/invitations', { email: i.email, role: i.role, property_ids: i.property_ids || [] }); await rerender(); showInviteLink(res); } catch (err) { toast(err.message, 'error'); }
           } }, 'New link'),
-          h('button', { class: 'btn btn--ghost btn--sm', onclick: async () => { await post(`/team/invitations/${i.invitation_id}/revoke`); toast('Invitation revoked.'); rerender(); } }, 'Revoke')))))],
+          h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Revoke invitation for ${i.email}`, onclick: async () => { await post(`/team/invitations/${i.invitation_id}/revoke`); toast('Invitation revoked.'); rerender(); } }, 'Revoke')))))],
       h('p', { class: 'muted small', style: { marginTop: '12px' } }, `Property managers: ${ROLE_HELP.manager} Staff: ${ROLE_HELP.staff}`)));
   }
 

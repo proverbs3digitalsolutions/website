@@ -11,6 +11,7 @@
 @font-face { font-family: "Inter"; src: url("/fonts/inter-latin-ext-wght-normal.woff2") format("woff2"); font-weight: 100 900; font-display: swap; unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
 
 :root {
+  --scrim: rgba(10, 20, 35, .4);
   /* BalayHub brand: Forest Green, Sage Green, Sand Beige, Soft Off-White, Charcoal Navy */
   --forest: #0f5132;
   --sage: #7fb069;
@@ -154,7 +155,7 @@ body {
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
 }
-h1, h2, h3, h4 { line-height: 1.25; margin: 0; letter-spacing: -0.01em; font-family: var(--font-head); color: var(--navy); }
+h1, h2, h3, h4 { overflow-wrap: anywhere; line-height: 1.25; margin: 0; letter-spacing: -0.01em; font-family: var(--font-head); color: var(--navy); }
 h1 { font-size: 1.5rem; font-weight: 700; }
 h2 { font-size: 1.12rem; font-weight: 600; }
 h3 { font-size: 1rem; font-weight: 600; }
@@ -256,8 +257,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* Phone: keyboard focus scrolls to clear of the fixed bottom tab bar (WCAG 2.4.11). */
 @media (max-width: 959px) { html { scroll-padding-bottom: calc(var(--bottomnav-h) + 16px + env(safe-area-inset-bottom)); } }
 
-.morenav { position: fixed; inset: 0; z-index: 50; background: rgba(10, 20, 35, .4); display: flex; align-items: flex-end; }
-.morenav__sheet { background: var(--surface); width: 100%; border-radius: 18px 18px 0 0; padding: 12px 12px calc(16px + env(safe-area-inset-bottom)); }
+/* The More sheet is a native <dialog>: fills the screen, sheet sits at the bottom and scrolls inside when taller than the screen. */
+dialog.morenav { position: fixed; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: transparent; color: inherit; z-index: 50; }
+dialog.morenav[open] { display: flex; align-items: flex-end; }
+dialog.morenav::backdrop { background: var(--scrim); }
+.morenav__sheet { background: var(--surface); width: 100%; max-height: calc(100dvh - 16px); overflow-y: auto; overscroll-behavior: contain; border-radius: 18px 18px 0 0; padding: 12px 12px calc(16px + env(safe-area-inset-bottom)); }
 .morenav__sheet a, .morenav__sheet button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 12px; border-radius: 12px; color: var(--text); text-decoration: none; font-weight: 700; background: none; border: 0; cursor: pointer; text-align: left; }
 .morenav__sheet a:hover, .morenav__sheet button:hover { background: var(--gray-soft); }
 .morenav__sheet svg { width: 22px; height: 22px; color: var(--navy); }
@@ -287,7 +291,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 /* ---------------------------------------------------------------- page structure */
 .page-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
-.page-head__title { display: grid; gap: 2px; }
+.page-head__title { display: grid; gap: 2px; min-width: 0; }
+dd { overflow-wrap: anywhere; }
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .page-head__title p { color: var(--muted); font-size: .93rem; }
 .page-head__actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .back { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-weight: 700; text-decoration: none; font-size: .9rem; margin-bottom: 6px; }
@@ -332,7 +338,7 @@ a.stat:hover { border-color: var(--line-2); }
 }
 a.row:hover .row__title { color: var(--accent); }
 .row__main { min-width: 0; display: grid; gap: 2px; }
-.row__title { font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
+.row__title { font-weight: 700; overflow: hidden; text-overflow: ellipsis; overflow-wrap: anywhere; }
 .row__sub { font-size: .85rem; color: var(--muted); overflow-wrap: anywhere; }
 .row__end { text-align: right; display: grid; gap: 4px; justify-items: end; flex: none; }
 /* Phone: a row with actions puts them on their own line instead of squeezing the text. */
@@ -390,9 +396,10 @@ table.table { width: 100%; border-collapse: collapse; font-size: .92rem; }
 .dl dd { margin: 0; font-weight: 650; word-break: break-word; }
 
 /* ---------------------------------------------------------------- forms */
-.form { display: grid; gap: 14px; }
-.form-row { display: grid; gap: 14px; }
-@media (min-width: 560px) { .form-row--2 { grid-template-columns: 1fr 1fr; } }
+.form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.form .btn { white-space: normal; }
+.form-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+@media (min-width: 560px) { .form-row--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .field { display: grid; gap: 6px; }
 .field label, .field legend { font-weight: 700; font-size: .9rem; }
 .field .req { color: var(--red); }
@@ -580,6 +587,7 @@ dialog.modal::backdrop { background: rgba(10, 20, 35, .45); }
 
 /* listings */
 .listing-grid { display: grid; gap: 16px; }
+@media (max-width: 759px) { .listing-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (min-width: 760px) { .listing-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (min-width: 1200px) { .listing-grid { grid-template-columns: repeat(3, 1fr); } }
 .listing-grid .card + .card { margin-top: 0; }
@@ -878,9 +886,9 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 
 /* ================================================================ launchpad */
 .lpad-hero { display: flex; gap: 20px; align-items: center; justify-content: space-between; background: linear-gradient(135deg, var(--teal-soft), var(--sand-soft)); border: 1px solid var(--line); }
-.lpad-hero__text { display: grid; gap: 10px; max-width: 640px; }
+.lpad-hero__text { display: grid; gap: 10px; max-width: 640px; min-width: 0; }
 .lpad-hero h1 { font-size: clamp(1.4rem, 4vw, 1.9rem); }
-.lpad-hero .btn { justify-self: start; }
+.lpad-hero .btn { justify-self: start; white-space: normal; text-align: center; }
 .lpad-eyebrow { color: var(--accent); font-weight: 700; font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; }
 .lpad-hero__art { flex: none; width: 120px; height: 120px; border-radius: 50%; background: var(--surface); display: grid; place-items: center; color: var(--accent); box-shadow: var(--shadow); }
 .lpad-hero__art svg { width: 60px; height: 60px; }
@@ -1019,15 +1027,18 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 
 /* ================================================================ theme switch */
 .themeswitch { display: inline-flex; border: 1px solid var(--line-2); border-radius: 99px; padding: 3px; gap: 2px; background: var(--surface); }
-.themeswitch button { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--muted); border-radius: 99px; padding: 6px 12px; font: inherit; font-size: .88rem; font-weight: 650; cursor: pointer; }
+.themeswitch button { white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--muted); border-radius: 99px; padding: 6px 12px; font: inherit; font-size: .88rem; font-weight: 650; cursor: pointer; }
 .themeswitch button[aria-checked="true"] { background: var(--forest); color: #fff; }
-.themeswitch button > [aria-hidden] { font-size: 1.1rem; line-height: 1; }
+.themeswitch button > [aria-hidden] { display: inline-flex; font-size: 1.1rem; line-height: 1; }
+.themeswitch button > [aria-hidden] svg { width: 18px; height: 18px; flex: none; }
 .themeswitch button[aria-checked="false"] > [aria-hidden] { color: var(--text); }
 /* Beats `.sidebar__foot span { color: var(--muted) }`, which would otherwise grey the selected icon on green. */
 .themeswitch button[aria-checked="true"] > [aria-hidden] { color: inherit; }
 .sidebar__foot .themeswitch button[aria-checked="true"] > [aria-hidden] { color: inherit; }
 .themeswitch--compact button { padding: 4px 9px; }
 .morenav__theme { padding: 10px 12px; }
+.morenav__theme .themeswitch { display: flex; width: 100%; }
+.morenav__theme .themeswitch button { flex: 1 1 0; width: auto; justify-content: center; padding: 6px 8px; font-size: .85rem; }
 .sidebar__foot .themeswitch { margin: 8px 0; }
 .chart-grid { stroke: var(--line); }
 .chart-axis { fill: var(--muted); }
@@ -1434,7 +1445,7 @@ a.op__row:hover { background: var(--surface-2); }
 @media (prefers-reduced-motion: reduce) { .bk-rules__text { scroll-behavior: auto; } }
 
 /* Phase 4: host */
-.form-row--3 { grid-template-columns: 1fr; }
+.form-row--3 { grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 640px) { .form-row--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .hp-fieldset { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px 14px; margin: 0; min-width: 0; }
 .hp-fieldset legend { font-weight: 700; padding: 0 6px; }
@@ -1538,3 +1549,28 @@ a.op__row:hover { background: var(--surface-2); }
 @media (prefers-reduced-motion: reduce) { .cal-row.is-drop { transition: none; } }
 .listing .sync-alert { margin: 12px 0 0; }
 .listing .sync-alert .btn { margin-top: 8px; }
+
+/* ================================================================ stacked cards on phones (D-80)
+   app.js (stackTables) copies each column header onto its cells as data-label and adds .table--stack to tables with 4+ columns.
+   Tablet and computer keep the table; screen only, so printed statements stay tables. */
+@media screen and (max-width: 559px) {
+  .table--stack thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .table--stack, .table--stack tbody, .table--stack tfoot, .table--stack tr, .table--stack td, .table--stack th[scope="row"] { display: block; }
+  .card--flush:has(.table--stack) { padding: 8px; overflow: visible; }
+  .table--stack tr { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 8px 12px; margin: 0 0 10px; }
+  .table--stack td, .table--stack th[scope="row"] { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 4px 0; border: 0; text-align: right; white-space: normal; overflow-wrap: anywhere; min-width: 0; }
+  .table--stack td.num { white-space: normal; }
+  .table--stack td[data-label]:not([data-label=""])::before { content: attr(data-label); color: var(--muted); font-weight: 600; font-size: .8rem; text-align: left; flex: none; max-width: 45%; }
+  .table--stack td:first-child { font-weight: 700; }
+  /* Labelled cell: label on the left, the value (all of the cell's own parts, stacked) in one right-aligned column. */
+  .table--stack td[data-label]:not([data-label=""]) { display: grid; grid-template-columns: fit-content(45%) minmax(0, 1fr); column-gap: 12px; align-items: baseline; }
+  .table--stack td[data-label]:not([data-label=""])::before { grid-column: 1; grid-row: 1; align-self: start; overflow-wrap: normal; word-break: normal; }
+  .table--stack td[data-label]:not([data-label=""]) > * { grid-column: 2; justify-self: end; max-width: 100%; }
+  .table--stack td[data-label=""] { justify-content: flex-end; flex-wrap: wrap; }
+  .table--stack tfoot tr, .table--stack tr.is-total { background: var(--sand-soft); font-weight: 800; }
+  .table--stack tfoot td { font-weight: 800; }
+  .table--stack tr.row-link { cursor: pointer; }
+  .table--stack tr.row-link:focus-within { outline: 2px solid var(--teal); }
+  .table--stack .col-sm-hide { display: none; }
+  .table--stack.table--compact td { padding: 4px 0; }
+}

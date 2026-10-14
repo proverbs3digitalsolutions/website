@@ -118,7 +118,7 @@ export async function ownerLinkView(el, { query }) {
   const fail = (msg) => el.replaceChildren(authCard(
     h('h1', null, "This link doesn't work"),
     h('p', { class: 'muted' }, msg),
-    h('a', { class: 'btn btn--primary', href: '#/owner' }, 'Get a new link')));
+    h('a', { class: 'btn btn--primary', href: '#/owner' }, 'Request a new link')));
   if (!query.token) { fail('The sign-in link is incomplete. Request a new one.'); return; }
   el.replaceChildren(authCard(h('h1', null, 'Signing you in…'), skeleton(1)));
   const token = query.token;
@@ -128,7 +128,7 @@ export async function ownerLinkView(el, { query }) {
     meCache = null;
     navigate('#/owner/home', { replace: true });
   } catch (err) {
-    fail(err.offline ? err.message : 'It may have expired or already been used. Links work once and last 30 minutes.');
+    fail(err.offline ? err.message : 'This sign-in link is invalid or has expired. Ask for a new link.');
   }
 }
 

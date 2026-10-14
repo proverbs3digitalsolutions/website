@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-13
+Last updated: 2026-10-14 (QA round 5, section 18)
 
 ---
 
@@ -300,7 +300,7 @@ Managers follow the same flows unless section 8 says otherwise.
 - Saved views (side list on desktop, a dropdown on phone). Filter bar: search, channel, property, More filters (listing, check-in/out dates, payment, guest type, check-in form, nights, guests, sort).
 - **New reservation** → form with live quote ("2 nights · ₱… · includes 1 weekend night"). **Save reservation** → toast with the code → reservation page. If the email failed: "Reservation saved, but the confirmation was not emailed: …". "Do not rebook" → warning toast.
 - **Export CSV** downloads the current view.
-- **Click a row** (or Enter or Space on it) → `#/reservations/<id>`.
+- **Click a row** to open `#/reservations/<id>`. From the keyboard, Tab to the check-in date (it is a link) and press Enter; rows are not Tab stops (round 5, section 18).
 - On a cancelled booking that still holds money, the page shows "Cancelled: ₱… still to refund" with a link to the Refunds card (the "Overpaid" and "You keep" lines are for live bookings only). The Unpaid and Partial payment filters list confirmed bookings only.
 - Empty: "Nothing here yet" + **New reservation**. Filtered: "No results found".
 
@@ -742,7 +742,7 @@ Spec: `docs/specs/PHASE-5-PRICING-TEAM.md`. Decisions D-66 to D-74. Staff and cl
 - **Inbox, opening an unread conversation:** the row loses its unread look, and the header count and the menu badge update at once.
 - **Inbox, template names:** saving a template with the same name as another active template (case and end spaces ignored) is refused: "You already have a template called ..." on the name box. Archived templates don't count.
 - **Inbox, automatic messages:** for "Before check-in", "Before check-out" and "After check-out", "Number of days" is required ("Enter the number of days."). A blank "Send at" time means 10:00, and the form says "Leave blank for 10:00." With 0 days the list reads "On check-in day at 10:00" or "On check-out day at 10:00". Check-in day and booking-created messages store 0 days, so a blank days box is fine for them.
-- **Housekeeping, Reopen a finished clean:** when the clean has pay set, Reopen asks "Reopen this clean?" and says the pay is cleared and worked out again from the rate when the clean is finished. Confirm with Reopen, or Cancel to keep the clean as it is. With no pay set, it reopens straight away.
+- **Housekeeping, Reopen a finished clean:** when the clean has pay set, Reopen asks "Reopen this clean?" and says the pay is cleared and worked out again from the rate when the clean is finished. Confirm with Reopen, or Cancel to keep the clean as it is. With no pay set, it reopens straight away. From round 5 a paid clean has no Reopen button (section 18).
 - **Housekeeping, supplies used:** a decimal quantity (for example 2.5) is refused on its own row with "Quantity must be a whole number." Nothing is sent, and nothing is rounded.
 - **Cleaner pay, Add rate:** if the cleaner (or outside name) already has a rate, Save asks first: "Nena already has ₱75.00 per hour. Change it to ₱95.00 per hour?" with the button "Change rate". Cancel keeps the form open and saves nothing. While the question waits, the Save button keeps the words "Save rate".
 - **Properties list, short-term workspace:** the cards show the unit count only, with no occupied or vacant badge. The filter bar has no Occupancy filter, and the sort has no "Most vacant units" choice. A link with an occupancy or vacant value ignores it. Long-term and both-type workspaces are unchanged.
@@ -753,5 +753,46 @@ Spec: `docs/specs/PHASE-5-PRICING-TEAM.md`. Decisions D-66 to D-74. Staff and cl
 - **Sign-up page `#/signup`:** the same Terms check happens in the browser before sending. The page is English only, as it has no Taglish text.
 - **Booking page, guest count:** when the number of guests changes after dates are picked, the price is worked out again straight away, so "This place allows up to N guests." shows at once (in Taglish, "Hanggang N guests lang ang puwede sa lugar na ito."). The public quote refuses more guests than the listing allows, the same as checkout.
 - **Settings, Audit details:** labels read in words, for example "Pricing: Per night" and "Price change: -10%". No raw codes such as underscores show.
-- **Phones:** a wide table or the calendar fades the edge where more columns are hidden, and the fade goes once you reach the end. The calendar fades on the right only. The fade is subtle; a question on a swipe hint or stacked cards is open in BLOCKERS. Below 560px every dialog is a full-width sheet, including wide ones. Long words wrap in cleaning-task history and work-order lists, so the page does not scroll sideways at 390px.
+- **Phones:** a wide table or the calendar fades the edge where more columns are hidden, and the fade goes once you reach the end. The calendar fades on the right only. The fade is subtle; stacked cards were chosen in round 5 and are built (section 18). Below 560px every dialog is a full-width sheet, including wide ones. Long words wrap in cleaning-task history and work-order lists, so the page does not scroll sideways at 390px.
 - **Accessibility:** the selected theme icon in the sidebar is white on green, so it can be read in both themes. The guest star rating uses a darker amber in light mode. "Share link for" opens its box when clicked. "Default language" is linked to its box. The last column of the owner statements table has a hidden name, "Actions", for screen readers. The cleaner's copy box has a name.
+
+## 18. QA round 5 flow changes (2026-10-14)
+
+- **Get started, step 2:** the mobile number is checked before step 3. A number that isn't a phone number stops here with "Enter a valid phone number." (Taglish: "Maglagay ng tamang numero ng telepono."). A blank number is allowed. In Taglish the business name label is "Pangalan ng negosyo".
+- **Workspace setup `#/setup`:** when the server refuses the answers saved from Get started, the page opens a form with a "Mobile number" box, filled from the saved number, and the server's message shows at that box. A correct number creates the workspace and clears the saved answers.
+- **New reservation and group rooms, prices:** the price from your rates fills a box only while you haven't typed in it. If you have typed a different amount, a "Use ₱X from your rates" button appears next to the quote. If the rates can't be worked out for the new dates, a box that still holds an old suggestion is emptied.
+- **Room type ("Any free room of a type"):** the price boxes stay empty. The note gives the first listing's price as a guide and says each room is priced from the listing BalayHub picks. Leave the boxes empty to use each listing's own price, or type one price for every room.
+- **Group rooms, count:** a count that is not a whole number from 1 to 20 gets "Count must be a whole number from 1 to 20."
+- **Reservation, Record payment:** "Guest overpaid by ₱X." shows when the guest has paid more than the balance. Once a refund has cleared the overpayment, the dialog says "Nothing more is owed on this booking." instead of "overpaid by ₱0.00".
+- **Reservation detail, "You keep":** the saving line is worked out on the same amount as "You keep", so the two lines agree.
+- **Reservations list:** each booking's check-in date is a link. Rows are not Tab stops; from the keyboard, Tab to the check-in date and press Enter. On a phone each booking is a card showing Check-in, Check-out, Total, Balance, Guest and Listing. Channel and Code stay hidden on phones.
+- **Calendar, cleared prices:** "Set prices cleared for 3 nights. These nights use your usual rates again." For one night: "Set prices cleared for 1 night. This night uses your usual rates again."
+- **Calendar, prices in cells:** prices of ₱100,000 and up show in short form, for example ₱1M. The full amount is in the cell's label and tooltip.
+- **Bulk price change:** the preview lists only nights whose price would change. When none would change it says "None of these nights would change." and Apply saves nothing.
+- **Daily close:** the count of payments recorded uses a neutral badge. Sections that are open work keep the amber badge.
+- **Home:** October revenue includes extra charges in fees, so it matches Stay reports and Profit and loss.
+- **Guest pay page `#/pay/<token>`, when manual payments are on:** a "Proofs waiting for the host" list shows each proof's amount, method and the day it was sent. A proof with no screenshot offers "Add the screenshot" (adds it) and "Take it back" (withdraws it). The form refuses an amount above the balance less the proofs waiting: "You already sent proofs for ₱X that the host hasn't checked yet, so you can send up to ₱Y more." When nothing is left, the form is replaced by "Your proofs already cover what you owe. The host will check them soon." At most five proofs can wait at once. Reference numbers are not shown on this list.
+- **Booking page, add-ons:** a quantity above the maximum is written back into the box, so the box shows the number that is charged (3 becomes 2 when the maximum is 2). Each add-on name is listed once, the oldest active copy. The owner's Add-ons page still lists every copy so duplicates can be archived.
+- **Quote page `#/quote/<token>`:** the PayMongo line in the footer shows only on an open quote. Cancelled and expired quotes keep the privacy link.
+- **Housekeeping, job detail:** a paid clean has no Reopen button. The owner sees "Paid. To reopen it, undo the payment on Cleaner pay first.", with a link to Cleaner pay. A manager sees "Paid. To reopen it, an owner needs to undo the payment on Cleaner pay first." Staff and cleaners see "Paid." An unpaid finished clean can still be reopened, and reopening it marks the unit dirty.
+- **Housekeeping, pay on jobs:** owners and managers see the pay on every job. Staff and cleaners see the pay only on a job assigned to them, or on an unassigned job they finished.
+- **Housekeeping, found items:** status shows Held, Returned or Disposed (Taglish: Hawak pa, Naibalik, Itinapon).
+- **Housekeeping, checklist:** a repeated item is refused in the dialog and on save: "This checklist has “Change towels” twice."
+- **Housekeeping, supplies used (cleaner):** a negative quantity is refused on its own row with "Quantity can't be negative." (Taglish: Hindi puwedeng negatibo ang dami.) Nothing is sent.
+- **Supplies (owner):** the whole-number check comes before the "Not enough on hand" question. A quantity such as 2.5 gets "Quantity must be a whole number." and no question.
+- **Maintenance:** a resolved request offers Reopen and Cancel request. A cancelled request offers Reopen only. A recurring job with a next due date in the past asks "Next due date is in the past." with "A request opens at the next hourly check. Save anyway?" Cancel saves nothing.
+- **Cleaner pay, rates:** an amount that isn't a valid positive amount goes straight to the field's message, with no question. A valid rate asks first, and Cancel keeps the form open.
+- **Inbox, Last message:** one "Last message between" date range. A range that ends before it starts shows a message instead of being dropped without a word. Date boxes on filter bars are named "<label>, from" and "<label>, to". Template and automatic message buttons name their row, for example "Edit template: Booking confirmation".
+- **Owners, payouts:** a payout for a month in which the owner owes the workspace is refused: "Nothing is due to <owner> for <month>: they owe you ₱X. A payout can't be recorded for this month." A month with nothing due still asks first. The over-due question names the month, for example "September 2026".
+- **Owners, management fee:** a number from 0 to 100, labelled "Management fee (%)", not a money box.
+- **Owner portal sign-in:** an invalid or used link shows the message in section 12, with a "Request a new link" button that goes to the owner sign-in page.
+- **Notifications (My account and Settings), monthly rentals:** the owner sees only "Alerts for monthly rentals aren't available yet.", with no Turn on or Send a test button. When a device already has notifications on, "Turn off on this device" stays. A switch whose save fails goes back to its old setting and shows the error.
+- **Long-term, rent payments:** the confirmation reads the amount you typed, so "1,000.50" confirms as ₱1,000.50. A status filter with no matches shows "No results found" with Clear filters.
+- **Help:** the search and assistant examples follow the workspace type (long-term workspaces get rent reminders, receipts and maintenance). Each rating star is announced as not chosen until one is picked. A blank question shows "Type a question first."
+- **My pay `#/my-pay`:** cleaners only. Anyone else is sent home.
+- **Settings, Modules for this workspace:** the choices are "Short-term stays", "Long-term rentals" and "Both", with the explanation in the hint.
+- **My account, devices:** each device's Sign out button is named for that device and its sign-in time.
+- **Phones, More:** the More menu is a dialog that fits the screen and scrolls, so every item can be reached at 390px. Escape or a tap outside closes it, and focus goes back to More. The theme buttons in the sheet stay on one line with three equal icons.
+- **Phones, wide tables:** a table with four or more columns shows one card per row below 560px (see DESIGN-BRIEF section 14). Tables with three or fewer columns stay tables. The calendar keeps its grid and its edge fade.
+- **Phones, long names:** long words wrap in headings, listing names, the launchpad and reservation names, so no page scrolls sideways at 390px.
+- **Accessibility:** the account link at the top of the app is named "<workspace name>, my account".

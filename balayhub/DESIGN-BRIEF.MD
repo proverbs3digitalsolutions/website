@@ -1,6 +1,6 @@
 # BalayHub design brief
 
-Last updated: 2026-10-14 (phone tables, D-80)
+Last updated: 2026-10-14 (QA round 5: stacked cards, More dialog, theme icons; D-81 and section 14)
 
 **Summary.** BalayHub is a phone-first web app (also an installable PWA) for Filipino rental and staycation hosts. It is built with plain CSS, one stylesheet (`public/css/app.css`), and small JavaScript helpers (`public/js/ui.js`). There is no framework and no CSS preprocessor. The look is calm and practical: Forest Green on soft off-white, Sand and Sun as warm accents, Poppins for headings, Inter for text, rounded cards, and large touch targets. Colours come from CSS custom properties on `:root`. A dark theme redefines the same tokens, so any component that uses tokens gets dark mode automatically. This brief records what is **actually built**. Every value below comes from the code. Where the code doesn't define a token (spacing, type sizes), the brief lists the values in use and says so.
 
@@ -187,7 +187,7 @@ Weights in use: 600, 650, 700, 750 and 800 (Inter is variable, so 650 and 750 re
 |---|---|
 | Storage | The `localStorage` key `bh-theme` holds `light`, `dark` or `system` (the default). |
 | No-flash boot | `theme.js` runs before the CSS loads. It sets `<html data-theme="light|dark">` when a theme is forced and leaves the attribute off for `system`. |
-| Switch | `themeSwitch({ compact })` in `themeswitch.js` is a `role="radiogroup"` named "Colour theme". It has three `role="radio"` buttons with `aria-checked`: ☀︎ Light, ☾ Dark, ◐ Match device. The compact version shows icons only. The selected option is filled `--forest` with white text. |
+| Switch | `themeSwitch({ compact })` in `themeswitch.js` is a `role="radiogroup"` named "Colour theme". It has three `role="radio"` buttons with `aria-checked`: a sun icon for Light, a moon icon for Dark and a half-filled circle for Match device. The three icons are the same size and are inline SVG (round 5; they were text characters before). The compact version shows icons only. The selected option is filled `--forest` with white text. |
 | Where it appears | Sidebar footer (compact), the phone More sheet (full) and the landing footer (compact). |
 | CSS | `:root[data-theme="dark"]` forces dark. With no attribute, `prefers-color-scheme: dark` applies dark. With `data-theme="light"`, the page stays light. |
 
@@ -200,7 +200,7 @@ Weights in use: 600, 650, 700, 750 and 800 (Inter is variable, so 650 and 750 re
 | Viewport | Structure |
 |---|---|
 | **Phone and tablet (< 960px)** | A sticky **topbar** (z 30, safe-area aware) with the brand, organisation name and avatar. The `main.content` area is max 1180px wide, with 16px padding and 96px plus the safe area at the bottom. A fixed **bottom nav** (z 40) has 5 equal columns: the first 4 nav items (excluding Launchpad, and with "Rent & Expenses" shortened to "Rent") plus a **More** button. Icons are 24px and labels `.72rem`. The active item is `--accent`. |
-| **More sheet** | `.morenav` is a full-screen scrim (`rgba(10,20,35,.4)`, z 50) with a bottom sheet (radius `18px 18px 0 0`). It lists My account, the remaining nav items, the theme switch and Log out. The rows are 14px-padded links with 22px icons. Tapping the scrim closes it. |
+| **More sheet** | `.morenav` is a native `<dialog>` opened with `showModal()`, labelled "More". It has a scrim (`--scrim`) and a bottom sheet no taller than the screen less 16px, which scrolls inside. It lists My account, the remaining nav items, the theme switch and Log out. The rows are 14px-padded links with 22px icons. Escape closes it, a tap on the scrim closes it, and focus goes back to the More button (round 5; it was a plain box with menu roles before). |
 | **Desktop (≥ 960px)** | A two-column grid: a sticky full-height **sidebar** (`--sidebar` 248px) and the content. The topbar and bottom nav are hidden. Sidebar links are 20px icon + label, radius 10. Hover is `--teal-soft`, and the current page is filled `--forest` with white text. The footer holds the account link (avatar, name, organisation and role), the compact theme switch and a Log out button. Content padding is `28px 32px 48px`. |
 | Plan banner | `.planbar` sits above the content: `--blue-soft` by default, `--warn` amber, `--bad` red, `--demo` ink. Hidden in print. |
 | Nav sets | `NAV_SHORT` (staycation), `NAV_LONG` (long-term rental), `NAV_BOTH`, filtered by role. Help & support is always shown, and Admin for platform admins. |
@@ -215,7 +215,7 @@ The CSS is mobile-first. There are no breakpoint tokens. These are the values in
 
 | Breakpoint | What changes |
 |---|---|
-| **560px** (`max 559` / `min 560`) | Two-column form rows. Below it: modals become bottom sheets, form-action buttons stretch, and the assistant goes full width. |
+| **560px** (`max 559` / `min 560`) | Two-column form rows. Below it: modals become bottom sheets, form-action buttons stretch, and the assistant goes full width. Wide tables with four or more columns show one card per row below this width (section 14). |
 | 640px | Calendar column widths, booking calendar shows 2 months, Launchpad art hidden below it, landing nav items hidden |
 | **760px** | `.grid--2` and `.grid--3`, 4-column stats and quick actions, 2-column listings |
 | 880 / 920px | Welcome and landing hero go two-column; booking layout gets a 380px side panel |
@@ -265,7 +265,7 @@ A flex row with `.row__main` (bold title that ellipsises, muted `.row__sub`) and
 
 ### Tables
 
-Wrap tables in `.table-wrap` (horizontal scroll). In `.table`, cells have 10px/8px padding and `--line` bottom rules, and headers are uppercase muted `.76rem`. Use `.num` to right-align numbers. `tfoot` and `tr.is-total` (`--sand-soft`) mark totals. `.row-link` makes a whole row clickable: hover is `--surface-2` and focus shows a 2px `--teal` outline. `.table--compact` reduces the padding.
+Wrap tables in `.table-wrap` (horizontal scroll). In `.table`, cells have 10px/8px padding and `--line` bottom rules, and headers are uppercase muted `.76rem`. Use `.num` to right-align numbers. `tfoot` and `tr.is-total` (`--sand-soft`) mark totals. `.row-link` makes a whole row clickable: hover is `--surface-2` and focus shows a 2px `--teal` outline. `.table--compact` reduces the padding. Below 560px, a table with four or more columns becomes one card per row (section 14); tablet and computer keep the table and its edge fade.
 
 ### Badges
 
@@ -448,7 +448,7 @@ Printable views are built from `.receipt` (with a 2px `--navy` rule under the he
 | 11 | `offline.html` / `offline.css` have no dark mode and use `system-ui` rather than Inter. | `public/offline.html` |
 | 12 | Small tap targets: theme-switch buttons (about 30px), `.langtoggle` buttons (about 26px), `.flt__chip` (about 26px), assistant icon buttons (34px) and `.tabs--compact`. | `app.css` |
 | 13 | No spacing, type-size or breakpoint tokens. Radius values of 12, 16, 18 and 20px are hard-coded alongside `--radius` and `--radius-sm`. `--navy-2` is unused. `--teal` and `--forest` are duplicate aliases. | `app.css` |
-| 14 | There is no "skip to content" link, even though `main#main` exists. The More sheet uses `role="menu"` without menu keyboard handling and has no Esc-to-close or focus management. | `app.js` |
+| 14 | There is no "skip to content" link, even though `main#main` exists. The More sheet uses `role="menu"` without menu keyboard handling and has no Esc-to-close or focus management. The More sheet part was fixed in round 5 (section 14: a dialog with Escape and focus handling, and no menu role). | `app.js` |
 | 15 | The `theme-color` meta follows the device theme, not a forced `bh-theme` choice. The nav label "Rent & Expenses" breaks sentence case. | `index.html`, `app.js` |
 
 ---
@@ -475,10 +475,27 @@ Printable views are built from `.receipt` (with a 2px `--navy` rule under the he
 
 ## 13. Patterns added in QA round 4 (2026-10-14)
 
-- **Clipped-edge fade for wide tables and the calendar.** `app.js` sets `is-more-right` or `is-more-left` on a `.table-wrap` or `.cal-scroll` while columns are hidden on that side. CSS then fades the clipped 32px of the content itself with `mask-image`, so the fade shows over any cell colour in either theme. The calendar (`.cal-scroll`) fades the right edge only, because its first column is sticky. The fade is removed when printing. Use the same class pair on any new wide scroll box. Do not use a background gradient for this: it does not show over content. *Round 4 answer (D-80, 2026-10-14): on phones, wide tables become stacked cards. The fade remains for tablet and computer widths, and for the calendar if it stays a grid. The round 5 fix adds the stacked-card pattern.*
+- **Clipped-edge fade for wide tables and the calendar.** `app.js` sets `is-more-right` or `is-more-left` on a `.table-wrap` or `.cal-scroll` while columns are hidden on that side. CSS then fades the clipped 32px of the content itself with `mask-image`, so the fade shows over any cell colour in either theme. The calendar (`.cal-scroll`) fades the right edge only, because its first column is sticky. The fade is removed when printing. Use the same class pair on any new wide scroll box. Do not use a background gradient for this: it does not show over content. *Round 4 answer (D-80, 2026-10-14): on phones, wide tables become stacked cards. The fade remains for tablet and computer widths, and for the calendar if it stays a grid. The round 5 fix adds the stacked-card pattern.* *Round 5: on phones, tables with four or more columns now stack into cards instead (section 14). The fade stays for tablet, computer and the calendar; do not remove it.*
 - **Wide dialogs use a class, not an inline width.** `openModal` with `wide` adds `modal--wide` (760px on a desktop, full width minus 24px). Below 560px every dialog is a full-width sheet, wide or not. Do not set a dialog's width in the style attribute.
 - **Theme switch.** The selected icon takes the text colour of the selected button (`color: inherit`), so it reads on the green selected state in both themes.
 - **Star rating uses the amber token** (`--amber`), not a fixed colour. It is about 5:1 on white in light mode.
 - **Long words in user text wrap.** Lists that show user text, such as the cleaning task history (`.hk-history`) and the work-order and found-item titles, use `overflow-wrap: anywhere` and `min-width: 0`.
 - **Names for controls.** Every visible label is tied to its control (`for` and `id`), and a control's spoken name starts with the words on screen. A table header that has no title uses a screen-reader-only word (`.sr-only`, for example "Actions"), never an empty cell. Any text box a person copies from has a name.
 - **Round 4 supersedes sections 11 and 12 for the wide-table edge cue** (section 11 and 12 bullets are kept, marked as superseded).
+
+## 14. Patterns added in QA round 5 (2026-10-14)
+
+- **Stacked cards on phones (D-80, D-81).** Below 560px, a table with four or more columns shows one card per row. The helper `stackTables` in `public/js/app.js` runs whenever the page changes, so rows added later (a search, "show more", a re-render) get their labels too. It copies each column header onto that column's cells as a label. No view needs code to stack. Tables with three or fewer columns stay tables.
+  - **Opting out:** tables that already stack themselves (`op-stack`, `ops-stack` and `op-pnl`) are left alone. A view adds `table--nostack` to keep a wide table as a table on phones.
+  - **The card:** each row is a bordered card on the surface colour, with 12px rounded corners. Each cell is one line: its label on the left (small and muted) and its value on the right. The first cell is the card's bold title. Action buttons sit at the right. Total rows keep the sand total background.
+  - **Screen readers:** the header row is hidden on screen but is still read out. Explicit table, row, cell and column header roles keep the table meaning when the layout changes.
+  - **Where it does not apply:** the calendar (a grid with its own edge fade), printed statements (the card layout is for screens only), and tablet and computer (the table and its fade stay).
+  - **Check:** at 390px, one card per row with no sideways scroll. At 768px and 1280px, the same table is a table.
+- **Money boxes.** A suggested price fills a box only while the person hasn't typed in it, and each box remembers its own typing. When a typed amount differs from the suggestion, a button reads "Use ₱X from your rates" next to the quote. When a rate can't be worked out, a box that still holds an old suggestion is emptied. A box for a room type (any free room of a type) stays empty unless it is typed in, and the note under it says each room is priced from its own listing.
+- **Amounts in boxes.** Every preview and confirmation reads a typed amount the way the server does (`parseAmount` in `public/js/ui.js`): commas only between thousands. An amount that can't be read shows no figure instead of "NaN".
+- **Forms.** A field's message clears when the person changes that field, and the summary clears with the last one. A save that answers "nothing saved" (for example Cancel on a question) keeps the typed draft and leaves the dialog open. While a question waits, the button keeps its own words. "Saving…" shows only while a save is running.
+- **The More menu** is a native dialog (section 4.1). Escape and a tap outside it close it, and focus returns to the More button.
+- **Placeholder text** uses the muted colour token at full opacity, in both themes.
+- **Long words wrap.** Headings, table and list titles, alerts and definition values use `overflow-wrap: anywhere`. Grid and flex children that hold text can shrink (`min-width: 0`), so no page scrolls sideways at 390px.
+- **Names for controls.** A repeated button names its row, for example "Edit template: Booking confirmation". The two boxes of a date range are named "<label>, from" and "<label>, to". A rating star is a radio with a checked state. The account link at the top starts with the workspace name. The theme switch uses three equal-size inline SVG icons.
+- **Taglish.** New guest-facing and cleaner-facing lines go through the file's own translation table (`t()` or `T()`). BLOCKERS question 12 lists this round's new lines for a Taglish check.
