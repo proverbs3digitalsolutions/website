@@ -62,3 +62,4 @@
 - R4 check: owner-portal nav now wraps (C07) — not browser-checked yet; tab rows wrap at all widths.
 - R4 candidates: property LIST page in short-term still shows 'N occupied · N vacant' badge and 'Has vacant units/Fully occupied' filter (C17 note).
 - 2026-10-14: Round 3 fixes done. Full suite 1107/1107, security PASS, 4 re-verify lanes held (3 follow-ups fixed). Committing.
+- 2026-10-14: Round 4 started (local sweep, DB restored from snapshot).
