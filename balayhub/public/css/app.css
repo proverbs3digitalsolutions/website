@@ -266,6 +266,8 @@ dialog.morenav::backdrop { background: var(--scrim); }
 .morenav__sheet a:hover, .morenav__sheet button:hover { background: var(--gray-soft); }
 .morenav__sheet .morenav__close { min-height: 44px; justify-content: center; background: var(--gray-soft); margin-bottom: 4px; }
 .morenav__sheet svg { width: 22px; height: 22px; color: var(--navy); }
+/* A group heading in the More sheet, styled like the sidebar group titles (QA round 9). */
+.morenav__group-title { margin: 14px 12px 4px; font-family: inherit; font-size: .78rem; font-weight: 600; line-height: 1.3; color: var(--muted); }
 
 @media (min-width: 960px) {
   .shell { display: grid; grid-template-columns: var(--sidebar) 1fr; }
@@ -283,11 +285,22 @@ dialog.morenav::backdrop { background: var(--scrim); }
   .sidebar nav a svg { width: 20px; height: 20px; }
   .sidebar nav a:hover { background: var(--teal-soft); color: var(--accent); }
   .sidebar nav a[aria-current="page"] { background: var(--forest); color: #fff; }
+  /* Sidebar groups (QA round 9): Every day, Money, More tools (folds), Setup. Titles are small muted labels, not headings. */
+  .nav__group { display: grid; gap: 2px; }
+  .nav__group + .nav__group { margin-top: 14px; }
+  .nav__group-title { margin: 0; padding: 0 12px 4px; font-family: inherit; font-size: .78rem; font-weight: 600; line-height: 1.3; color: var(--muted); }
+  details.nav__group--more { display: block; }
+  details.nav__group--more > a + a { margin-top: 2px; }
+  details.nav__group--more > summary.nav__group-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; list-style: none; border-radius: 8px; }
+  details.nav__group--more > summary.nav__group-title::-webkit-details-marker { display: none; }
+  details.nav__group--more > summary.nav__group-title::after { content: ""; flex: none; width: 6px; height: 6px; margin: 0 4px 2px 0; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); transition: transform .15s ease; }
+  details.nav__group--more[open] > summary.nav__group-title::after { transform: rotate(45deg); }
   .sidebar__foot { flex: none; border-top: 1px solid var(--line); padding: 12px 8px 0; font-size: .85rem; }
   .sidebar__foot strong { display: block; }
   .sidebar__foot span { color: var(--muted); }
   .sidebar__foot button { margin-top: 10px; }
-  .content { padding: 28px 32px 48px; }
+  /* The floating Ask button (20px from the bottom, about 48px tall) plus a 16px gap, so the last row scrolls clear of it. */
+  .content { padding: 28px 32px calc(20px + 48px + 16px); }
 }
 
 /* ---------------------------------------------------------------- page structure */
@@ -426,6 +439,13 @@ textarea.input { min-height: 96px; resize: vertical; }
 .check input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--teal); flex: none; }
 .checks { display: grid; gap: 8px; max-height: 220px; overflow: auto; padding: 4px; }
 .form-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; margin-top: 4px; }
+/* Collapsed form sections (QA round 9): the basics stay open, the rest folds. Open fields keep the same 14px gap as .form. */
+details.form-section { border-top: 1px solid var(--line); }
+details.form-section > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 10px 0; font-weight: 700; color: var(--text); cursor: pointer; list-style: none; }
+details.form-section > summary::-webkit-details-marker { display: none; }
+details.form-section > summary::after { content: ""; flex: none; width: 8px; height: 8px; margin-right: 4px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); transition: transform .15s ease; }
+details.form-section[open] > summary::after { transform: rotate(45deg); }
+details.form-section > :not(summary) { margin-top: 14px; }
 @media (max-width: 559px) { .form-actions .btn { flex: 1 1 auto; } }
 
 /* ---------------------------------------------------------------- dialog */
@@ -456,6 +476,8 @@ dialog.modal::backdrop { background: rgba(10, 20, 35, .45); }
 .divider { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
 .files { display: grid; gap: 8px; }
 .file-link { display: inline-flex; gap: 6px; align-items: center; font-weight: 650; font-size: .9rem; }
+/* A photo's preview in a file link: a 96px square at most, cropped; the link's 6px gap sets the space before the name (QA round 9). */
+img.file-thumb { display: block; flex: none; width: 96px; max-width: 96px; aspect-ratio: 1; height: auto; object-fit: cover; border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--surface-2); }
 .skeleton { height: 120px; border-radius: var(--radius); background: linear-gradient(90deg, var(--surface-3), var(--surface-2), var(--surface-3)); background-size: 200% 100%; animation: shimmer 1.2s infinite; }
 @keyframes shimmer { to { background-position: -200% 0; } }
 .prose { max-width: 760px; }
@@ -1188,7 +1210,8 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .sidebar__me > span:last-child { display: grid; min-width: 0; }
 .sidebar__me strong, .sidebar__me span span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar__me:hover, .sidebar__me[aria-current="page"] { background: var(--teal-soft); }
-.topbar__me { display: flex; align-items: center; gap: 8px; text-decoration: none; color: var(--text); }
+/* min-width 0 lets the account link shrink on a phone, so the workspace name truncates and the avatar stays put (QA round 9). */
+.topbar__me { display: flex; align-items: center; gap: 8px; min-width: 0; text-decoration: none; color: var(--text); }
 .sidebar__foot .acct-avatar { color: #fff; }
 
 /* ---------------------------------------------------------------- phase 1 money: proofs, policy, manual payments */

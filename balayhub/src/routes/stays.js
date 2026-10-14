@@ -19,6 +19,7 @@ const { leasedListings } = require('../lib/leases');
 const { ensureTaskForBooking, syncOpenTasks } = require('../lib/housekeeping');
 const { computePay } = require('../lib/cleanerpay');
 const receipts = require('../lib/receipts');
+const { FEE, PAID, REFUNDED, BALANCE } = require('../lib/balance');
 // The amount owed changed: close the guest's open online-payment checkouts (lazy require: circular-safe).
 const closeOpenCheckouts = (bookingId) => require('./balancepay').closeOpenCheckouts(bookingId);
 
@@ -83,7 +84,8 @@ const BOOKING_SELECT = `
          (SELECT row_to_json(r) FROM (SELECT rating, cleanliness, comment, created_at FROM guest_reviews WHERE booking_id = b.booking_id) r) AS review,
          (b.check_out - b.check_in) AS nights,
          COALESCE((SELECT SUM(bp.amount) FROM booking_payments bp WHERE bp.booking_id = b.booking_id AND bp.voided_at IS NULL), 0)::numeric(12,2) AS amount_paid,
-         (b.total_amount - CASE WHEN b.channel = 'direct' THEN 0 ELSE b.channel_fee END - COALESCE((SELECT SUM(bp.amount) FROM booking_payments bp WHERE bp.booking_id = b.booking_id AND bp.voided_at IS NULL), 0))::numeric(12,2) AS balance,
+         ${REFUNDED}::numeric(12,2) AS amount_refunded,
+         ${BALANCE} AS balance,
          (b.channel = 'direct' AND b.channel_fee > 0) AS channel_fee_ignored
     FROM bookings b
     JOIN units u ON u.unit_id = b.unit_id
@@ -293,7 +295,7 @@ const VIEWS = {
   arrivals_tomorrow: { where: `b.status = 'confirmed' AND b.check_in = ${TODAY} + 1`, order: 'u.unit_name' },
   departures_today: { where: `b.status = 'confirmed' AND b.check_out = ${TODAY}`, order: 'u.unit_name' },
   departures_tomorrow: { where: `b.status = 'confirmed' AND b.check_out = ${TODAY} + 1`, order: 'u.unit_name' },
-  unpaid: { where: `b.status = 'confirmed' AND b.check_out >= ${TODAY} AND b.total_amount - CASE WHEN b.channel = 'direct' THEN 0 ELSE b.channel_fee END > COALESCE((SELECT SUM(bp.amount) FROM booking_payments bp WHERE bp.booking_id = b.booking_id AND bp.voided_at IS NULL), 0)`, order: 'b.check_in' },
+  unpaid: { where: `b.status = 'confirmed' AND b.check_out >= ${TODAY} AND ${BALANCE} > 0`, order: 'b.check_in' },
   past: { where: `b.status = 'confirmed' AND b.check_out < ${TODAY}`, order: 'b.check_out DESC' },
   cancelled: { where: `b.status = 'cancelled'`, order: 'b.cancelled_at DESC NULLS LAST' },
   recent: { where: 'true', order: 'b.created_at DESC' },
@@ -316,11 +318,9 @@ function reservationQuery(req) {
   if (isValidDate(req.query.out_from)) { params.push(req.query.out_from); where.push(`b.check_out >= $${params.length}`); }
   if (isValidDate(req.query.out_to)) { params.push(req.query.out_to); where.push(`b.check_out <= $${params.length}`); }
   if (req.query.property_id) { params.push(uuidParam(req.query.property_id)); where.push(`p.property_id = $${params.length}`); }
-  const paid = `COALESCE((SELECT SUM(bp.amount) FROM booking_payments bp WHERE bp.booking_id = b.booking_id AND bp.voided_at IS NULL), 0)`;
-  const fee = `CASE WHEN b.channel = 'direct' THEN 0 ELSE b.channel_fee END`;
-  if (req.query.payment === 'paid') where.push(`b.total_amount - ${fee} <= ${paid}`);
-  if (req.query.payment === 'unpaid') where.push(`b.status = 'confirmed' AND ${paid} = 0 AND b.total_amount - ${fee} > 0`);
-  if (req.query.payment === 'partial') where.push(`b.status = 'confirmed' AND ${paid} > 0 AND b.total_amount - ${fee} > ${paid}`);
+  if (req.query.payment === 'paid') where.push(`${BALANCE} <= 0`);
+  if (req.query.payment === 'unpaid') where.push(`b.status = 'confirmed' AND ${PAID} = 0 AND b.total_amount - ${FEE} > 0`);
+  if (req.query.payment === 'partial') where.push(`b.status = 'confirmed' AND ${PAID} > 0 AND ${BALANCE} > 0`);
   // These reveal flags and stay history, which staff don't see.
   const guestFilter = ['staff', 'cleaner'].includes(req.user.role) ? null : req.query.guest;
   if (guestFilter === 'vip') where.push('g.vip');
@@ -330,7 +330,7 @@ function reservationQuery(req) {
   if (/^\d{1,2}$/.test(String(req.query.min_guests || ''))) { params.push(Number(req.query.min_guests)); where.push(`b.num_guests >= $${params.length}`); }
   if (req.query.checkin_form === 'missing') where.push(`NOT EXISTS (SELECT 1 FROM guest_registrations r WHERE r.booking_id = b.booking_id AND r.submitted_at IS NOT NULL)`);
   if (req.query.checkin_form === 'done') where.push(`EXISTS (SELECT 1 FROM guest_registrations r WHERE r.booking_id = b.booking_id AND r.submitted_at IS NOT NULL)`);
-  const SORTS = { checkin: 'b.check_in, b.created_at', checkin_desc: 'b.check_in DESC, b.created_at DESC', checkout: 'b.check_out', created: 'b.created_at DESC', total: 'b.total_amount DESC', balance: `(b.total_amount - ${fee} - ${paid}) DESC` };
+  const SORTS = { checkin: 'b.check_in, b.created_at', checkin_desc: 'b.check_in DESC, b.created_at DESC', checkout: 'b.check_out', created: 'b.created_at DESC', total: 'b.total_amount DESC', balance: `${BALANCE} DESC` };
   const order = own(SORTS, req.query.sort) || VIEWS[view].order;
   return { view, sql: `${BOOKING_SELECT} WHERE ${where.join(' AND ')} ORDER BY ${order} LIMIT 1000`, params };
 }
@@ -350,9 +350,9 @@ function csvCell(v) {
 router.get('/reservations/export', ah(async (req, res) => {
   const { view, sql, params } = reservationQuery(req);
   const { rows } = await query(sql, params);
-  const head = ['Confirmation code', 'Check-in', 'Check-out', 'Nights', 'Listing', 'Property', 'Guest', 'Guests', 'Channel', 'Status', 'Total', 'Paid', 'Balance'];
+  const head = ['Confirmation code', 'Check-in', 'Check-out', 'Nights', 'Listing', 'Property', 'Guest', 'Guests', 'Channel', 'Status', 'Total', 'Paid', 'Refunded', 'Balance'];
   const lines = [head, ...rows.map((r) => [r.confirmation_code, r.check_in, r.check_out, r.nights, r.unit_name, r.property_name,
-    r.guest_name || r.guest_label, r.num_guests, r.channel, r.status, r.total_amount, r.amount_paid, r.status === 'cancelled' ? '' : r.balance])];
+    r.guest_name || r.guest_label, r.num_guests, r.channel, r.status, r.total_amount, r.amount_paid, r.amount_refunded, r.status === 'cancelled' ? '' : r.balance])];
   res.set('Content-Type', 'text/csv; charset=utf-8');
   res.set('Content-Disposition', `attachment; filename="balayhub-reservations-${view}.csv"`);
   res.send(`﻿${lines.map((l) => l.map(csvCell).join(',')).join('\r\n')}\r\n`);
@@ -402,6 +402,7 @@ const reservationSpec = {
   other_fees: { type: 'money', label: 'Other fees' },
   channel_fee: { type: 'money', label: 'Channel fee' },
   notes: { type: 'text', max: 1000, label: 'Notes' },
+  source: { type: 'string', max: 20, label: 'Source' },
   send_confirmation: { type: 'bool', label: 'Email confirmation' },
 };
 
@@ -426,6 +427,14 @@ function checkChannelFee(b, extras = 0) {
   if (c(b.channel_fee) > c(b.accommodation_total) + c(b.cleaning_fee) + c(b.other_fees) + c(extras)) {
     throw validationError({ channel_fee: 'Channel fee can\'t be more than the stay total.' });
   }
+}
+
+// Where a hand-made booking came from (the D-61 list, migration 031, minus 'quote' which only quotes set). Direct bookings only.
+const SOURCES = ['facebook', 'instagram', 'messenger', 'viber', 'tiktok', 'google', 'whatsapp', 'email', 'referral', 'other'];
+function checkSource(channel, source) {
+  if (!source) return;
+  if (channel && channel !== 'direct') throw validationError({ source: 'Only direct bookings have a source.' });
+  if (!SOURCES.includes(source)) throw validationError({ source: 'Choose where they booked from the list.' });
 }
 
 // A channel fee is what a platform or agent keeps, so it only exists on a booking that came through a channel.
@@ -527,11 +536,11 @@ async function resolveGuest(db, user, g) {
 async function insertReservation(db, user, unit, body, { guestId, accommodation, groupId = null, action = 'reservation.created' }) {
   const { rows: [b] } = await db.query(
     `INSERT INTO bookings (organization_id, unit_id, kind, guest_id, channel, check_in, check_out, num_guests,
-                           accommodation_total, cleaning_fee, other_fees, channel_fee, confirmation_code, notes, created_by, group_id)
-     VALUES ($1,$2,'reservation',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING booking_id, confirmation_code`,
+                           accommodation_total, cleaning_fee, other_fees, channel_fee, confirmation_code, notes, created_by, group_id, source)
+     VALUES ($1,$2,'reservation',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING booking_id, confirmation_code`,
     [user.organization_id, unit.unit_id, guestId, body.channel || 'direct', body.check_in, body.check_out, body.num_guests,
       accommodation, body.cleaning_fee ?? unit.cleaning_fee ?? '0.00', body.other_fees || '0.00', body.channel_fee || '0.00',
-      ical.randomCode('BH'), body.notes ?? null, user.user_id, groupId]);
+      ical.randomCode('BH'), body.notes ?? null, user.user_id, groupId, body.source ?? null]);
   await audit(db, user, action, 'booking', b.booking_id, { code: b.confirmation_code, check_in: body.check_in, check_out: body.check_out, booking_id: b.booking_id, group_id: groupId });
   return b;
 }
@@ -567,6 +576,7 @@ router.post('/reservations', managers, ah(async (req, res) => {
     accommodation = q.accommodation_total;
   }
   checkDirectFee(body.channel || 'direct', body.channel_fee);
+  checkSource(body.channel || 'direct', body.source);
   checkChannelFee({ ...body, accommodation_total: accommodation, cleaning_fee: body.cleaning_fee ?? unit.cleaning_fee });
   try {
     const id = await tx(async (db) => {
@@ -592,6 +602,7 @@ router.patch('/reservations/:id', managers, ah(async (req, res) => {
     unit_id: { ...reservationSpec.unit_id, required: true }, check_in: reservationSpec.check_in, check_out: reservationSpec.check_out,
     num_guests: reservationSpec.num_guests, channel: reservationSpec.channel, accommodation_total: reservationSpec.accommodation_total,
     cleaning_fee: reservationSpec.cleaning_fee, other_fees: reservationSpec.other_fees, channel_fee: reservationSpec.channel_fee, notes: reservationSpec.notes,
+    source: reservationSpec.source,
   }, { partial: true });
   // A blank fee means 0, the same as unit edits. A blank accommodation total is refused: a blank there is more likely a slip than a free stay.
   if ('accommodation_total' in body && body.accommodation_total === null) {
@@ -620,6 +631,7 @@ router.patch('/reservations/:id', managers, ah(async (req, res) => {
   if (keys.some((k) => MONEY.includes(k))) checkChannelFee(merged, booking.extras_total);
   // A fee set, or a stay moved to direct while it carries one, is refused. An old fee on a direct stay is left alone until the host clears it.
   if (keys.includes('channel') || keys.includes('channel_fee')) checkDirectFee(merged.channel, merged.channel_fee);
+  if (keys.includes('source') || keys.includes('channel')) checkSource(merged.channel, merged.source);
   try {
     await tx(async (db) => {
       await db.query(`UPDATE bookings SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')}, updated_at = now() WHERE booking_id = $1`,
@@ -809,13 +821,15 @@ const GROUP_ROWS = `
          gu.full_name AS guest_name, COUNT(b.booking_id) FILTER (WHERE b.status = 'confirmed')::int AS rooms, MIN(b.check_in) AS check_in, MAX(b.check_out) AS check_out,
          COALESCE(SUM(b.total_amount) FILTER (WHERE b.status = 'confirmed'), 0)::numeric(12,2) AS total,
          COALESCE(SUM(paid.amount) FILTER (WHERE b.status = 'confirmed'), 0)::numeric(12,2) AS amount_paid,
-         COALESCE(SUM(b.total_amount - CASE WHEN b.channel = 'direct' THEN 0 ELSE b.channel_fee END - paid.amount) FILTER (WHERE b.status = 'confirmed'), 0)::numeric(12,2) AS balance,
+         COALESCE(SUM(b.total_amount - ${FEE} - paid.amount + refd.amount) FILTER (WHERE b.status = 'confirmed'), 0)::numeric(12,2) AS balance,
          COALESCE(SUM(paid.amount) FILTER (WHERE b.status <> 'confirmed'), 0)::numeric(12,2) AS held
     FROM booking_groups g
     LEFT JOIN guests gu ON gu.guest_id = g.guest_id
     LEFT JOIN bookings b ON b.group_id = g.group_id
     LEFT JOIN LATERAL (SELECT COALESCE(SUM(bp.amount), 0) AS amount FROM booking_payments bp
-                        WHERE bp.booking_id = b.booking_id AND bp.voided_at IS NULL) paid ON true`;
+                        WHERE bp.booking_id = b.booking_id AND bp.voided_at IS NULL) paid ON true
+    LEFT JOIN LATERAL (SELECT COALESCE(SUM(br.amount), 0) AS amount FROM booking_refunds br
+                        WHERE br.booking_id = b.booking_id AND br.voided_at IS NULL) refd ON true`;
 
 async function groupRows(where, params) {
   const { rows } = await query(`${GROUP_ROWS} WHERE ${where.join(' AND ')}
@@ -1012,10 +1026,8 @@ router.patch('/booking-groups/:id', managers, ah(async (req, res) => {
     await tx(async (db) => {
       await db.query(`UPDATE booking_groups SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')} WHERE group_id = $1`,
         [group.group_id, ...keys.map((k) => body[k])]);
-      const { rows: rooms } = await db.query('SELECT booking_id FROM bookings WHERE group_id = $1', [group.group_id]);
-      for (const { booking_id: bookingId } of rooms) {
-        await audit(db, req.user, 'booking_group.updated', 'booking', bookingId, { booking_id: bookingId, group_id: group.group_id, fields: keys });
-      }
+      // The name and notes belong to the group, so one row; each room's timeline picks it up through its group id.
+      await audit(db, req.user, 'booking_group.updated', 'booking_group', group.group_id, { group_id: group.group_id, fields: keys });
     });
   }
   res.json({ group: (await groupRows(['g.group_id = $1'], [group.group_id]))[0] });

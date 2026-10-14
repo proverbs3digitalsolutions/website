@@ -24,6 +24,8 @@ const lastMonth = () => {
 
 // A statement can be published only once its month has ended (the server applies the same rule).
 const monthHasEnded = (month, today) => month < today.slice(0, 7);
+// The last day of a month (YYYY-MM to YYYY-MM-DD). A statement can be published from the day after it.
+const lastDayOf = (month) => { const [y, m] = month.split('-').map(Number); return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10); };
 // Drafts that can be published now. The list is for one month, so its drafts are all ready or none are.
 const readyCount = (rows, month, today) => (monthHasEnded(month, today) ? rows.filter((r) => r.status !== 'published').length : 0);
 
@@ -44,9 +46,10 @@ const FEE_SHORT = { net_pct: (o) => `${Number(o.management_fee_pct)}% of net`, g
 const feeText = (o) => (FEE_SHORT[o.fee_model || 'net_pct'] || FEE_SHORT.net_pct)(o);
 
 function ownerForm(units, o = {}) {
-  const model = field({ name: 'fee_model', label: 'How you are paid', type: 'select', required: true, value: o.fee_model || 'net_pct', placeholderOption: false, options: FEE_MODELS,
+  const model = field({ name: 'fee_model', label: 'How the management fee is worked out', type: 'select', required: true, value: o.fee_model || 'net_pct', placeholderOption: false, options: FEE_MODELS,
     hint: 'Percent of net is after channel fees, cleaning fees and refunds. Percent of gross is the booking total minus refunds. A flat fee is charged every month, even with no stays.' });
-  const pct = h('div', null, field({ name: 'management_fee_pct', label: 'Management fee (%)', type: 'number', inputmode: 'decimal', step: 0.01, min: 0, max: 100, required: true, value: o.management_fee_pct ?? '20' }));
+  // A new owner's percentage starts empty: the host types it (the server refuses a blank one on a percentage model).
+  const pct = h('div', null, field({ name: 'management_fee_pct', label: 'Management fee (%)', type: 'number', inputmode: 'decimal', step: 0.01, min: 0, max: 100, required: true, value: o.management_fee_pct ?? '' }));
   const flat = h('div', null, field({ name: 'flat_monthly_fee', label: 'Flat fee per month', type: 'money', value: o.flat_monthly_fee ?? '0', hint: 'Charged in any month this owner has a unit, even with no stays.' }));
   const sync = () => {
     const v = model.querySelector('select').value;
@@ -78,6 +81,19 @@ function portalChip(o) {
   return badge('paid', `Portal active · seen ${manilaDay(o.portal_last_seen_at)}`);
 }
 
+// A unit that belongs to another owner moves only when the host agrees: the server refuses the save (409 UNIT_HAS_OWNER) and
+// writes nothing until it is sent again with move_units. Cancel returns false, so the form stays open with nothing posted.
+const moveConfirmed = (err, owner) => {
+  if (err.code !== 'UNIT_HAS_OWNER') throw err;
+  const moving = err.data.units.map((u) => `${u.unit_name} from ${u.owner_name}`).join(', ');
+  const one = err.data.units.length === 1;
+  return confirmDialog({
+    title: one ? 'Move this unit?' : 'Move these units?',
+    text: `Move ${moving} to ${owner}? ${one ? 'Its' : 'Their'} stays and expenses show on ${owner}'s statements from now on.`,
+    confirmText: 'Move',
+  });
+};
+
 export async function ownersView(el, { rerender, query = {} }) {
   const defaults = { q: '', has_units: '', unit_id: '', sort: '' };
   const filters = initFilters('owners', query, defaults);
@@ -85,11 +101,25 @@ export async function ownersView(el, { rerender, query = {} }) {
   const unitName = (id) => units.find((u) => u.unit_id === id)?.unit_name;
   const add = () => formModal({
     title: 'Add a unit owner', submitText: 'Save owner', fields: ownerForm(units),
-    onSubmit: async (d) => { await post('/unit-owners', { ...d, unit_ids: d.unit_ids || [] }); toast('Owner saved.'); rerender(); },
+    onSubmit: async (d) => {
+      const body = { ...d, unit_ids: d.unit_ids || [] };
+      try { await post('/unit-owners', body); } catch (err) {
+        if (!await moveConfirmed(err, d.full_name)) return false;
+        await post('/unit-owners', { ...body, move_units: true });
+      }
+      toast('Owner saved.'); rerender();
+    },
   });
   const edit = (o) => formModal({
     title: `Edit ${o.full_name}`, submitText: 'Save', fields: ownerForm(units, o),
-    onSubmit: async (d) => { await patch(`/unit-owners/${o.owner_id}`, { ...d, unit_ids: d.unit_ids || [] }); toast('Saved.'); rerender(); },
+    onSubmit: async (d) => {
+      const body = { ...d, unit_ids: d.unit_ids || [] };
+      try { await patch(`/unit-owners/${o.owner_id}`, body); } catch (err) {
+        if (!await moveConfirmed(err, d.full_name)) return false;
+        await patch(`/unit-owners/${o.owner_id}`, { ...body, move_units: true });
+      }
+      toast('Saved.'); rerender();
+    },
   });
   const archive = async (o) => {
     if (!await confirmDialog({ title: `Remove ${o.full_name}?`, text: 'Their units will no longer have an owner. Past reservations and expenses are not changed.', confirmText: 'Remove owner' })) return;
@@ -120,7 +150,7 @@ export async function ownersView(el, { rerender, query = {} }) {
         ? emptyState({ iconName: 'file', title: 'No results found', text: 'No owner matches these filters. Try removing a filter.' })
         : emptyState({
           iconName: 'file', title: 'No unit owners yet',
-          text: 'If you manage units for other owners, add them here and assign their units. BalayHub then prepares a monthly statement: bookings, channel fees, your management fee, expenses and their payout.',
+          text: 'If you manage units for other owners, add them here and assign their units. BalayHub then prepares a monthly statement: bookings, channel fees, your management fee, expenses and their payout. Own these units yourself? You don\'t need this page. Profit and loss shows each unit.',
           action: h('button', { class: 'btn btn--primary', type: 'button', onclick: add }, '+ Add owner'),
         })));
       return;
@@ -152,9 +182,8 @@ export async function ownersView(el, { rerender, query = {} }) {
     ({ owners, units, total } = await get(`/unit-owners${qs(changed(filters, defaults))}`));
     draw();
   }
-  // No filter bar for a single owner (unless a filter is still on from before).
-  const showBar = total > 1 || Object.keys(changed(filters, defaults)).length > 0;
-  const bar = showBar && filterBar({
+  // Built first: the bar drops a filter value that is not an option, so the page decides whether to show it after that.
+  const bar = filterBar({
     key: 'owners', values: filters, defaults, onChange: load,
     search: { placeholder: 'Search name, email or mobile' },
     quick: [{ name: 'has_units', label: 'Units', all: 'Any number of units', options: [['yes', 'Has units'], ['no', 'No units yet']] }],
@@ -163,6 +192,8 @@ export async function ownersView(el, { rerender, query = {} }) {
       { name: 'sort', label: 'Sort by', all: 'Name (A–Z)', options: [['units', 'Most units'], ['fee', 'Highest management fee'], ['newest', 'Newest first']] },
     ].filter(Boolean),
   });
+  // No filter bar for a single owner (unless a filter is still on from before).
+  const showBar = total > 1 || Object.keys(changed(filters, defaults)).length > 0;
   // Drawn after the bar: the bar drops a filter value that is not an option, and the count line must not count it.
   draw();
 
@@ -171,7 +202,7 @@ export async function ownersView(el, { rerender, query = {} }) {
       title: 'Unit owners', sub: 'Monthly statements for owners whose units you manage',
       actions: [h('a', { class: 'btn btn--secondary', href: `#/owners/statements?month=${lastMonth()}` }, 'Review statements'), h('button', { class: 'btn btn--primary', type: 'button', onclick: add }, '+ Add owner')],
     }),
-    bar || '', listBox);
+    showBar ? bar : '', listBox);
 }
 
 export async function ownerStatementsView(el, { query = {} }) {
@@ -355,6 +386,8 @@ export async function ownerStatementView(el, { params, query = {}, rerender }) {
       h('div', { class: 'page-head__title' }, h('h1', null, `Statement · ${s.owner.full_name}`)),
       h('div', { class: 'page-head__actions' }, monthInput)),
     statusBar,
+    // The Publish reason is printed here too, not only in the button's tooltip.
+    !published && !monthEnded && h('p', { class: 'muted small no-print' }, `You can publish this statement after ${fmtDate(lastDayOf(month))}.`),
     drift && h('div', { class: 'alert alert--warn no-print' }, `Numbers have changed since you published. The owner still sees the published copy (payout ${peso(published.totals.payout)}); today's live payout is ${peso(live.totals.payout)}. Unpublish to correct, then publish again.`),
     s.missing_amounts > 0 && h('div', { class: 'alert alert--warn no-print' },
       `${s.missing_amounts} stay${s.missing_amounts > 1 ? 's have' : ' has'} no amount yet (usually stays synced from a channel calendar). Open each reservation and enter what the guest paid and the channel fee, so the statement is complete.`),

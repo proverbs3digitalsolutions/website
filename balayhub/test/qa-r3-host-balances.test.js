@@ -102,6 +102,8 @@ test('the three host views no longer subtract the stored fee from a direct booki
   for (const file of ['src/routes/inbox.js', 'src/lib/ai.js', 'src/routes/dailyclose.js']) {
     const src = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
     assert.doesNotMatch(src, /total_amount - b\.channel_fee/, `${file} still subtracts the stored channel fee`);
-    assert.match(src, /CASE WHEN b\.channel = 'direct' THEN 0 ELSE b\.channel_fee END/, `${file} does not use the effective fee`);
+    assert.match(src, /BALANCE/, `${file} does not use the shared balance`);
   }
+  // The effective fee (a direct booking has none) now lives in the one shared fragment (D-85).
+  assert.match(fs.readFileSync(path.join(__dirname, '..', 'src/lib/balance.js'), 'utf8'), /CASE WHEN b\.channel = 'direct' THEN 0 ELSE b\.channel_fee END/);
 });

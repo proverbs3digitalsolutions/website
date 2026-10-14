@@ -61,7 +61,7 @@ test('host page: escaped name and intro, bookable listings only, lower-case look
   assert.ok(r.text.includes('<meta property="og:image" content="' + `${config.appUrl}/api/public/listing-photos/${photos[0]}` + '">'));
   assert.ok(r.text.includes(`href="/stay/${slug}/${VILLA_SLUG}"`));
   assert.ok(r.text.includes(`href="/stay/${slug}/paris-1208"`));
-  assert.ok(r.text.includes('From ₱2,500 / night'));
+  assert.ok(r.text.includes('From ₱2,500.00 / night'));
   assert.ok(!r.text.includes('Hidden 1'), 'a listing not on the booking page is not shown');
   assert.ok(!r.text.includes('<script'), 'no script tags');
   assert.ok(!/\sstyle=/.test(r.text), 'no inline styles');
@@ -91,7 +91,7 @@ test('listing page: title, meta, Open Graph, escaped name, photos, price, policy
   assert.ok(r.text.includes('No parties &amp; no smoking.'));
   assert.ok(r.text.includes('<strong>Moderate</strong>'));
   assert.ok(r.text.includes('Full refund if you cancel at least 5 days before check-in.'));
-  assert.ok(r.text.includes('From ₱2,500 / night'));
+  assert.ok(r.text.includes('From ₱2,500.00 / night'));
   assert.ok(r.text.includes('Up to 4 guests') && r.text.includes('2-night minimum') && r.text.includes('Check-in 3:00 PM · Check-out 11:00 AM'));
   assert.ok(r.text.includes(`href="/#/book/${slug}/${villa.unit_id}"`));
   assert.ok(r.text.includes('Check dates and book'));
@@ -154,7 +154,7 @@ test('a Taglish host gets Taglish labels and policy text', async () => {
   try {
     const r = await get(`/stay/${slug}/${VILLA_SLUG}`);
     assert.ok(r.text.includes('<html lang="tl">'));
-    assert.ok(r.text.includes('Mula ₱2,500 / gabi'));
+    assert.ok(r.text.includes('Mula ₱2,500.00 / gabi'));
     assert.ok(r.text.includes('Hanggang 4 guests') && r.text.includes('Minimum 2 gabi'));
     assert.ok(r.text.includes('Buong refund kung mag-cancel ka ng at least 5 araw'));
     assert.ok(r.text.includes('Tingnan ang petsa at mag-book'));

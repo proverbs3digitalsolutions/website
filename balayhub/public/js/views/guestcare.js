@@ -60,7 +60,7 @@ export async function discountCodesView(el, { rerender, query = {} }) {
     title: 'New discount code', submitText: 'Create code',
     fields: [
       h('div', { class: 'form-row form-row--2' },
-        field({ name: 'code', label: 'Code', required: true, maxlength: 20, placeholder: 'e.g. BALIK10', hint: 'Letters, numbers and dashes.' }),
+        field({ name: 'code', label: 'Code', required: true, maxlength: 20, placeholder: 'e.g. BALIK10', hint: 'Letters, numbers and dashes. No spaces.' }),
         field({ name: 'description', label: 'Note for you (optional)', maxlength: 120, placeholder: 'e.g. Returning guests 2026' })),
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'percent_off', label: 'Percent off', type: 'number', min: 1, max: 90, inputmode: 'numeric', hint: 'Fill in this or the amount.' }),

@@ -253,12 +253,19 @@ export async function calendarView(el, { query }) {
 
   // An emptied box shows the date the grid is on again, so the box and the grid never disagree. A year still being typed
   // reaches here (0002-12-20 on the way to 2026-12-20): only a complete date from 2000 to 2100 (D-84) moves the grid, and
-  // anything else is left in the box as typed.
-  dateInput.addEventListener('change', () => {
-    const year = Number(dateInput.value.slice(0, 4));
-    if (/^\d{4}-\d{2}-\d{2}$/.test(dateInput.value) && year >= 2000 && year <= 2100) { view.start = dateInput.value; load(); }
-    else if (!dateInput.value && lastData) dateInput.value = lastData.start;
-  });
+  // anything else is left in the box as typed. Each change restarts a 400 ms wait (K12), so a year typed digit by digit
+  // loads the grid once, for the date the box has settled on.
+  dateInput.addEventListener('change', (() => {
+    let wait = null;
+    return () => {
+      clearTimeout(wait);
+      wait = setTimeout(() => {
+        const year = Number(dateInput.value.slice(0, 4));
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dateInput.value) && year >= 2000 && year <= 2100) { view.start = dateInput.value; load(); }
+        else if (!dateInput.value && lastData) dateInput.value = lastData.start;
+      }, 400);
+    };
+  })());
   const legend = h('div', { class: 'chips cal-legend' },
     ['direct', 'airbnb', 'booking', 'agoda', 'vrbo', 'expedia', 'tripcom'].map((c) => h('span', { class: 'cal-legend__item' }, h('span', { class: `cal-swatch cal-bar--${c}` }), CHANNEL_LABEL[c])),
     h('span', { class: 'cal-legend__item' }, h('span', { class: 'cal-swatch cal-bar--block' }), 'Blocked'),

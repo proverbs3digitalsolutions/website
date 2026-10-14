@@ -63,7 +63,7 @@ test('N27 booking group rename: same name writes no rows; a note change writes o
   assert.equal((await owner.patch(`/api/booking-groups/${group.group_id}`, { name: 'Wedding' })).status, 200);
   assert.equal(await rows(), 0);
   assert.equal((await owner.patch(`/api/booking-groups/${group.group_id}`, { name: 'Wedding', notes: 'Bride party' })).status, 200);
-  assert.equal(await rows(), 2);
+  assert.equal(await rows(), 1);
   const [row] = await sql(`SELECT details FROM audit_logs WHERE action = 'booking_group.updated' AND details->>'group_id' = $1 LIMIT 1`, [group.group_id]);
   assert.deepEqual(row.details.fields, ['notes']);
 });

@@ -172,10 +172,15 @@ export const options = (keys) => keys.map((k) => [k, label(k)]);
 export function toast(message, kind = 'info') {
   const el = h('div', { class: `toast${kind === 'error' ? ' toast--error' : ''}`, role: 'status' }, message);
   const box = document.getElementById('toasts');
+  // The same message replaces the one on screen instead of stacking beside it.
+  for (const old of [...box.children]) if (old.textContent === String(message)) old.remove();
   while (box.children.length >= 2) box.firstChild.remove();
   box.append(el);
   setTimeout(() => el.remove(), 4000);
 }
+
+// A failed save must not sit next to an older "saved" message.
+const clearSuccessToasts = () => document.querySelectorAll('#toasts .toast:not(.toast--error)').forEach((t) => t.remove());
 
 export function emptyState({ title, text, action, iconName = 'inbox' }) {
   return h('div', { class: 'empty' }, icon(iconName), h('h3', null, title), text && h('p', null, text), action);
@@ -191,8 +196,50 @@ export function errorState(err, retry) {
 
 export const skeleton = (n = 2) => h('div', { class: 'stack' }, Array.from({ length: n }, () => h('div', { class: 'skeleton' })));
 
+// ---------------------------------------------------------------- focus after a redraw
+// A page often redraws after a save or click, replacing the button the person used. Find the new control with the
+// same tag and accessible name (aria-label, else its text).
+const accName = (el) => (el.getAttribute?.('aria-label') || el.textContent || '').trim();
+export function sameControl(old, doc = document) {
+  if (!old?.tagName) return null;
+  const name = accName(old);
+  if (!name) return null;
+  return [...doc.querySelectorAll(old.tagName.toLowerCase())].find((el) => el.isConnected !== false && accName(el) === name) || null;
+}
+
+// Polls 0 to 500 ms like the tab fix, because views redraw after their await. Never takes focus the person (or the
+// view) has already put on something else; on the last try falls back to the page heading.
+function settleFocus(old, { refocusOld = true, stop = () => false } = {}) {
+  let done = false;
+  [0, 40, 100, 200, 350, 500].forEach((ms, i, all) => setTimeout(() => {
+    if (done) return;
+    const a = document.activeElement;
+    const free = !a || a === document.body || !a.isConnected;
+    if ((!free && a !== old) || stop()) { done = true; return; }
+    if (old?.isConnected) { done = true; if (refocusOld && free) old.focus(); return; }
+    const next = sameControl(old);
+    if (next) { done = true; next.focus(); return; }
+    if (i === all.length - 1) {
+      const head = document.querySelector('h1');
+      if (head && free) { head.setAttribute('tabindex', '-1'); head.focus(); }
+    }
+  }, ms));
+}
+
+// Any button or link whose click drops focus to the page (its control was redrawn away) gets focus back.
+// Tabs have their own rule in app.js; dialogs restore focus to their opener.
+if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+  document.addEventListener('click', (e) => {
+    const btn = e.target instanceof Element && e.target.closest('button, a[href]');
+    if (!btn || btn.closest('[role="tablist"], dialog')) return;
+    const hash = location.hash;
+    settleFocus(btn, { refocusOld: false, stop: () => location.hash !== hash });
+  }, true);
+}
+
 // ---------------------------------------------------------------- modal
 export function openModal({ title, body, onClose, wide }) {
+  const opener = document.activeElement;
   const dlg = h('dialog', { class: 'modal', 'aria-label': title });
   if (wide) dlg.classList.add('modal--wide');
   const close = () => dlg.close();
@@ -200,7 +247,7 @@ export function openModal({ title, body, onClose, wide }) {
     h('div', { class: 'modal__head' }, h('h2', null, title), h('button', { class: 'modal__close', type: 'button', 'aria-label': 'Close', onclick: close }, '×')),
     h('div', { class: 'modal__body' }, body),
   );
-  dlg.addEventListener('close', () => { dlg.remove(); onClose?.(); });
+  dlg.addEventListener('close', () => { dlg.remove(); onClose?.(); settleFocus(opener); });
   dlg.addEventListener('click', (e) => { if (e.target === dlg) close(); });
   document.body.append(dlg);
   dlg.showModal();
@@ -213,6 +260,9 @@ export function confirmDialog({ title, text, confirmText = 'Confirm', cancelText
     let done = false;
     const reasonInput = reason ? h('textarea', { class: 'input', name: 'reason', required: true, maxlength: 300, placeholder: 'Required — explain why (kept in the audit log)' }) : null;
     const err = h('div', { class: 'error', role: 'alert' });
+    // A form asking this question is not saving yet: its button shows its own label until the answer is yes.
+    const saving = [...document.querySelectorAll('button[data-own-label]')].filter((b) => b.textContent === 'Saving…');
+    for (const b of saving) b.textContent = b.dataset.ownLabel;
     const m = openModal({
       title,
       onClose: () => { if (!done) resolve(null); },
@@ -225,7 +275,9 @@ export function confirmDialog({ title, text, confirmText = 'Confirm', cancelText
             class: `btn ${danger ? 'btn--danger' : 'btn--primary'}`, type: 'button',
             onclick: () => {
               if (reasonInput && !reasonInput.value.trim()) { err.textContent = 'Please enter a reason.'; reasonInput.focus(); return; }
-              done = true; m.close(); resolve(reasonInput ? reasonInput.value.trim() : true);
+              done = true;
+              for (const b of saving) if (b.dataset.ownLabel !== undefined) b.textContent = 'Saving…';
+              m.close(); resolve(reasonInput ? reasonInput.value.trim() : true);
             },
           }, confirmText))),
     });
@@ -302,6 +354,8 @@ export function showErrors(form, fields = {}) {
     const wrap = form.querySelector(`[data-field="${CSS.escape(name)}"]`);
     if (!wrap) { unplaced.push(msg); continue; }
     wrap.classList.add('field--invalid');
+    // A field inside a collapsed section opens it, so the message and focus are visible.
+    for (let d = wrap.closest?.('details'); d; d = d.parentElement?.closest('details')) d.open = true;
     const err = wrap.querySelector('.error');
     if (err) err.textContent = msg;
     const input = wrap.querySelector('input, select, textarea');
@@ -333,6 +387,12 @@ export function persistDraft(form, key) {
     } catch { /* ignore */ }
   });
   return () => { try { sessionStorage.removeItem(storeKey); } catch { /* ignore */ } };
+}
+
+// The server accepts dates from 2000 to 2100 only; a typed year like 0202 or 12345 is out of range.
+export function dateOutOfRange(v) {
+  const m = /^(\d{4,6})-\d{2}-\d{2}$/.exec(String(v ?? ''));
+  return Boolean(m) && (Number(m[1]) < 2000 || Number(m[1]) > 2100);
 }
 
 /**
@@ -371,16 +431,22 @@ export function makeForm({ fields, submitText = 'Save', onSubmit, cancel, draftK
     // Quick required-field check so obvious gaps show instantly (and offline);
     // the server still validates everything.
     const missing = {};
+    let requiredOnly = true;
     const labelOf = (el) => form.querySelector(`label[for="${CSS.escape(el.id)}"]`)?.firstChild?.textContent?.trim() || 'This field';
     for (const el of form.elements) {
       if (el.required && el.name && el.type !== 'checkbox' && !String(el.value).trim()) missing[el.name] = `${labelOf(el)} is required.`;
     }
     // An amount over the server's cap is refused here, before onSubmit can ask any question about it.
     for (const el of form.querySelectorAll('.input-money input')) {
-      if (el.name && !missing[el.name] && parseAmount(el.value) > 99999999.99) missing[el.name] = `${labelOf(el)} is too large.`;
+      if (el.name && !missing[el.name] && parseAmount(el.value) > 99999999.99) { missing[el.name] = `${labelOf(el)} is too large.`; requiredOnly = false; }
+    }
+    // A date outside 2000 to 2100 is refused here too, before onSubmit can ask "Date is in the past?" about it.
+    for (const el of form.querySelectorAll('input[type=date]')) {
+      if (el.name && !missing[el.name] && dateOutOfRange(el.value)) { missing[el.name] = `${labelOf(el)} must be between 2000 and 2100.`; requiredOnly = false; }
     }
     if (Object.keys(missing).length) {
-      formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert', dataset: { fieldNote: '' } }, 'Please fill in the highlighted fields.'));
+      clearSuccessToasts();
+      formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert', dataset: { fieldNote: '' } }, requiredOnly ? 'Please fill in the highlighted fields.' : 'Please check the highlighted fields.'));
       showErrors(form, missing);
       busy = false;
       return;
@@ -389,11 +455,13 @@ export function makeForm({ fields, submitText = 'Save', onSubmit, cancel, draftK
     submitBtn.disabled = true;
     const original = submitBtn.textContent;
     submitBtn.textContent = 'Saving…';
+    submitBtn.dataset.ownLabel = original;
     try {
       const result = await onSubmit(readForm(form), { idempotencyKey: idemKey, form });
       // onSubmit returns false when nothing was saved (the person backed out of a question): the draft stays.
       if (result !== false) clearDraft();
     } catch (err) {
+      clearSuccessToasts();
       if (err instanceof ApiError) {
         if (err.offline) {
           formError.replaceChildren(h('div', { class: 'alert alert--warn' }, "Couldn't reach BalayHub. Nothing was saved yet — your input is kept. Check your connection and press Save again."));
@@ -416,6 +484,7 @@ export function makeForm({ fields, submitText = 'Save', onSubmit, cancel, draftK
       busy = false;
       submitBtn.disabled = false;
       submitBtn.textContent = original;
+      delete submitBtn.dataset.ownLabel;
       // The disabled button lost focus: put it on the first invalid field, else where it was, else the button.
       if (form.isConnected && !form.contains(document.activeElement)) {
         const bad = form.querySelector('.field--invalid input, .field--invalid select, .field--invalid textarea');
@@ -456,7 +525,11 @@ export function pageHead({ title, sub, back, actions }) {
 
 export function filesList(files, canView = true) {
   if (!files?.length) return h('p', { class: 'muted small' }, 'No attachments yet.');
+  // Photos show a small preview (the file name still follows, so the link keeps its name).
+  const lead = (f) => (canView && String(f.mime_type || '').startsWith('image/')
+    ? h('img', { class: 'file-thumb', src: `/api/files/${f.file_id}`, alt: '', loading: 'lazy' })
+    : icon('file'));
   return h('div', { class: 'files' }, files.map((f) => canView
-    ? h('a', { class: 'file-link', href: `/api/files/${f.file_id}`, target: '_blank', rel: 'noopener' }, icon('file'), f.file_name)
+    ? h('a', { class: 'file-link', href: `/api/files/${f.file_id}`, target: '_blank', rel: 'noopener' }, lead(f), f.file_name)
     : h('span', { class: 'file-link muted' }, icon('file'), f.file_name)));
 }

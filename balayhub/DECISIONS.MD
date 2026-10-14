@@ -2,7 +2,7 @@
 
 Every decision made on BalayHub, with the date and the reason. Newest decisions go at the bottom. When a decision changes, add a new entry and mark the old one **Superseded by D-xx**. Never delete history.
 
-Last updated: 2026-10-14 (D-84, QA round 8 calls)
+Last updated: 2026-10-14 (D-85, alpha focus and QA round 9 calls)
 
 ---
 
@@ -87,7 +87,7 @@ Last updated: 2026-10-14 (D-84, QA round 8 calls)
 
 Suggested refunds round half a centavo up. The suggestion uses the listing's *current* policy, not the one in force when the guest booked. Saving the policy at booking time is a possible later improvement.
 
-**D-34 · 2026-10-13 · Refunds are a record, not a balance change.** Refunds are logged separately (amount, date, method, reference, reason) and capped at the amount paid. They don't change the balance formula. Refunds are protected against double saving.
+**D-34 · 2026-10-13 · Refunds are a record, not a balance change.** Refunds are logged separately (amount, date, method, reference, reason) and capped at the amount paid. They don't change the balance formula. *Superseded in part 2026-10-14 by D-85: the balance now counts refunds. The cap (never more than was paid) stands.* Refunds are protected against double saving.
 
 **D-35 · 2026-10-13 · Deposit percentage per listing (10–90%, default 50%).** This replaces the fixed 50% for direct bookings. Existing listings keep 50%.
 
@@ -434,7 +434,7 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 *Money*
 - **Add-on maximum quantity counts per stay** (the sum over the booking), so a guest can't buy the airport pickup twice by accident. The founder may change it.
 - **A cancelled booking owes nothing on screen** (pay page, detail and CSV). Held money points to the Refunds card with the policy suggestion.
-- **The overpaid alert accounts for refunds;** the balance itself is unchanged (D-34 stands).
+- **The overpaid alert accounts for refunds;** the balance itself is unchanged (D-34 stands). *Superseded 2026-10-14 by D-85: the balance now counts refunds.*
 - **Voiding a payment that refunds depend on is refused:** "Void the refund first, then this payment." (`REFUNDS_EXCEED_PAYMENTS`).
 - **The channel fee can't exceed the stay total.** Changing it closes open payment links (extends D-31).
 - **Zero is refused** for the calendar nightly override, quote accommodation price and per-clean pay. This extends D-76; the cleaning fee may still be 0.
@@ -588,7 +588,7 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 - **Amounts are read the same way on screen as on the server:** commas only between thousands. This extends D-79 to the live previews and the confirmations, so an unreadable amount shows no figure instead of "NaN".
 - **The channel-fee saving estimate uses the same amount as "You keep":** the stay's total after any channel fee.
 - **Expense dates can't be in the future,** when adding or correcting, the same as payments.
-- **The Record payment dialog says "Nothing more is owed on this booking."** once a refund has cleared an overpayment, instead of "overpaid by ₱0.00". The balance itself is unchanged (D-34, D-77).
+- **The Record payment dialog says "Nothing more is owed on this booking."** once a refund has cleared an overpayment, instead of "overpaid by ₱0.00". The balance itself is unchanged (D-34, D-77). *Superseded 2026-10-14 by D-85: the balance now counts refunds.*
 
 *Access*
 - **Staff and cleaners see pay only on their own jobs.** Owners and managers see every job's pay. Staff and cleaners see the pay on a job assigned to them, or on an unassigned job they finished. This follows BACKEND-SCHEMA 6.1.
@@ -618,7 +618,7 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 - **Placeholder text uses the muted colour token** in both themes. Repeated buttons name their row. Date range boxes are named "<label>, from" and "<label>, to". Rating stars say whether they are chosen. The account link's name starts with the workspace name.
 
 *Defaults with no change*
-- The balance after a refunded overpayment stays as D-34 and D-77 define it. Staff keep seeing reservation money while group bookings hide it. The daily close lists payments only (D-72). A lease that starts soon counts as occupied. Unknown ids in API filters are ignored (D-77). Staff may see listing prices (D-76). Add-on descriptions stay in the language they were typed in.
+- The balance after a refunded overpayment stays as D-34 and D-77 define it. *Superseded 2026-10-14 by D-85.* Staff keep seeing reservation money while group bookings hide it. The daily close lists payments only (D-72). A lease that starts soon counts as occupied. Unknown ids in API filters are ignored (D-77). Staff may see listing prices (D-76). Add-on descriptions stay in the language they were typed in.
 
 *Why:* each call takes the safest reading of the existing decisions. A price is never applied to something it wasn't worked out for, nothing a person typed is replaced without asking, money only moves the right way, and no one is locked out of a core flow.
 
@@ -701,7 +701,7 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 > *Screens*
 > - **Filter values in a link that aren't real options are dropped** (calendar tag, availability and cleaning; inbox listing and unknown listing or property ids; maintenance priority), so the list and the dropdowns always agree (D-77). The inbox Listing dropdown names the unit, with the property only when two units share a name.
 > - **Guest pages show the "link not valid" and "not available" sentences in Taglish** (check-in, review, guidebook, quote, and two booking page sentences).
-> - **The booking page keeps "At least 1 guest."** at the field (only the server's guest-limit text is cleared when a new quote is requested), and no quote is asked for fewer than 1 guest.
+> - **The booking page keeps "At least 1 guest."** *(Wording changed 2026-10-14, D-85: "Enter a whole number of guests, 1 or more.")* at the field (only the server's guest-limit text is cleared when a new quote is requested), and no quote is asked for fewer than 1 guest.
 > - **The More menu on phones has a Close button, listed first so it takes focus, and keeps focus inside** while open.
 >
 > *Not changed (recorded so later sweeps don't file them):* a long-term owner reaching stay APIs (D-82 modules rule); add-on descriptions in one language (D-81); a manager's all-listings season answering 400 with the message (round 6); past nights' prices and blocks can be edited (founder question 1); staff can still read the Reviews page and booking group notes (open round 6 questions). D-82's "no review card" wording for staff applies to guest profiles and reservations, not to the Reviews page. The cleaner redirect with no toast is on purpose (APP-FLOW route guard).
@@ -756,3 +756,45 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 > *Carried to round 9 (from the lane reports and the security check):* the Google sign-up path should use a one-time token instead of the 30-minute window; several compare-then-write saves are not yet locked (booking page settings `directbooking.js`, workspace edit in `auth.js`, pricing rule edit, cleaning checklist, inbox template and automation edit, stays guest and group edit, maintenance schedule) and should read inside a transaction with `FOR UPDATE`; the router's empty-parameter check covers only the last path segment; focus after a redraw in pricing, rent, refunds and cleaner pay (Mark paid, Undo, rate save); the account page has one unnamed Save; the report and list date filters still accept 1900 to 2200.
 >
 > *Why:* each call follows the access table and the money rules, asks before money or stock moves, acts only on what the person sees, and keeps one account's data away from another.
+
+> **D-85 · 2026-10-14 · Alpha with small hosts, and QA round 9 calls (2026-10-14 sweep, fixed the same day).** Founder direction: "test it in alpha first to check how beneficial it is for the 1-3 property owners." The Guesty feature recommendations (https://claude.ai/artifact/NU1YwskX8n4jyGM8BoX59h) are parked as reference only; nothing from them is being built. From now on, QA puts friction for an owner of 1 to 3 properties first: anything that blocks, confuses or misleads a small host, and anything touching money or guests. Screens that show too much for a small host are grouped or collapsed, never cut. The ninth QA sweep (8 lanes, 94 entries including carried items) was fixed in 18 code lanes (C01 to C18). These are the calls made, with the default in use until the founder says otherwise. Open questions are in BLOCKERS.MD under "Questions from QA round 9". Each call was checked against the code after the fixes landed.
+>
+> *Money*
+> - **One shared balance rule: total, less the channel fee (channel bookings only), less payments, plus refunds** (voided payments and refunds left out). It is written once in `src/lib/balance.js` and used everywhere a balance shows: reservation, list and CSV, pay link, receipts, daily close, owner portal, message templates, the assistant and the inbox. A refund past the overpayment on a live stay now shows the money owed again. *Supersedes the balance clause of D-34 and its repeats in D-77, D-82 and D-83 (each annotated above). The refund cap, never more than was paid, stands.* *Why:* a ₱1,000 refund on a ₱600 stay paid ₱1,000 said "Nothing more is owed" while ₱600 was owed. This was the round's one severe bug.
+> - **A refund that would leave money owed on a live stay asks first** (founder question 1). Default: allowed up to what was paid, after the question.
+> - **Every peso amount the server writes shows two decimals** (₱1,500.50), through one function, `fmtPeso` in `src/lib/messaging.js`. This includes messages, emails, labels, the discount list and the public `/stay` pages ("From ₱2,500.00"). The two-decimal "From" price on `/stay` is a call the founder may want to change (BLOCKERS).
+> - **A rent payment goes to the oldest unpaid month first** (as PRD says). The Record form now says which month gets the money. "Partly paid" counts every month with some money on it, overdue or not. The round 8 question stays open.
+> - **A clean you do yourself, with no pay rate for you, is "Done by you, no pay"** and isn't counted as unpaid. A clean with a rate stays unpaid with its amount. It is a computed label (`pay_status: 'self'`), not a stored status.
+> - **Discount codes can't contain spaces** when an owner creates or edits one; the message suggests dashes ("Try QA-R9-BAD."). Guests typing a code are still forgiven a space.
+> - **A new unit owner's management fee starts empty;** you type it. The Unit owners page tells an owner-operator they don't need one.
+> - **Profit and loss counts finished stays by check-out date;** Reports counts by check-in. Each page says so (D-44 stands).
+> - **A unit that belongs to another owner moves only after you confirm,** naming both owners ("Move this unit?"). Statements and payouts follow the unit from then on.
+>
+> *Guests*
+> - **The check-in form can't be saved with an empty guest row:** "Enter the name of each guest, or remove the empty row." The host note says "booked for N" when fewer names than booked guests were given.
+> - **New automatic messages start turned off,** as the PRD always said; you turn one on when the wording is right. The Add form's "Turned on" box starts empty. Two automatic messages can't share a name.
+> - **The pay page's add-on boxes say "Select";** the button says "Add selected to my bill".
+> - **After a guest picks dates, the booking page price line shows this stay's average nightly price,** before any discount, not the lowest "from" price.
+> - **A payment-provider failure tells the guest "Online payment isn't available right now."** and does not blame the host. The real reason goes to the server log only.
+>
+> *Small-host screens (alpha)*
+> - **The menu is grouped: Every day, Money, More tools, Setup,** on the sidebar and the phone's More sheet. More tools starts folded. Nothing was removed.
+> - **Add and Edit listing show Basics first;** Price extras, Guest info, Booking page and payments, and Booking rules are collapsed sections that open on a tap (and open themselves when an error is inside). The pricing explainer is folded under "How pricing works". The section formerly named "Pricing helpers" is now "Price extras" everywhere. Reservation channel and property filters are under More filters.
+> - **New reservation asks "Where did they book?"** for direct bookings (Facebook, Messenger and the other D-61 sources). There is no Walk-in source: a walk-in is saved as Other, and a source on a channel booking is refused. Editing dates offers a new price from your rates.
+> - **The Unit-count card reads "1–3 units".** The Launchpad can bring back the Home reminder; the calendar step ticks only when a sync worked; the guest-info step counts house rules. **The trial banner shows only in the last 3 days.**
+> - **Cleaning photos show a small preview** instead of a file icon.
+>
+> *Screens and keyboard*
+> - **Focus comes back after every save or redraw:** a dialog returns focus to the button that opened it (or its replacement), and a tab row that is drawn again keeps focus on the same tab (completes D-81's tab rule).
+> - **No question is asked about a save that can't succeed:** dates outside 2000 to 2100 are refused at the field first, and while a question is open the form's button shows its own label, not "Saving…".
+> - **Filter links drop bad values from the address too,** and date filters use 2000 to 2100 like every other date (completes D-84).
+> - **A guest count must be a whole number from 1:** "Enter a whole number of guests, 1 or more." (D-84's "At least 1 guest." is annotated above.)
+>
+> *Decision conflicts settled (the code now behaves as written here)*
+> - **D-34 against live-stay refunds:** D-85 wins; see the balance rule.
+> - **PRD "automatic messages are created off" against the Add form's "Turned on" box:** the PRD wins; the box starts empty.
+> - **PRD "payments go to the oldest charge first" against APP-FLOW "Record starts at that month's amount":** not a real conflict. One is where the money goes, the other is what the box is filled with. The form now names the month that gets the money.
+>
+> *Not changed (recorded so later sweeps don't file them):* the refund cap is what was paid (D-34); rent is applied oldest month first (round 8 question); P&L and Reports keep their different bases (D-44); `reservation.updated` keeps changed amounts (D-84); the admin support reply toast (round 8 question); internal ids on staff deposit answers and the unlocked compare-then-write saves are round 10 items.
+>
+> *Why:* the alpha host has one to three properties and little time. Money must never read as settled when it isn't, guests must never be messaged or registered wrongly, and the first screens must show what a small host needs first.

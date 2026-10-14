@@ -225,7 +225,7 @@ test('renaming a group: name required, every room gets an audit row', async () =
   assert.equal(ok.status, 200, JSON.stringify(ok.data));
   assert.equal(ok.data.group.name, 'Lakeside wedding (moved)');
   assert.equal((await owner.get(`/api/booking-groups/${group.group_id}`)).data.group.name, 'Lakeside wedding (moved)');
-  assert.equal(await count(`SELECT COUNT(*)::int AS n FROM audit_logs WHERE action = 'booking_group.updated' AND details->>'group_id' = $1`, [group.group_id]), 3, 'three rooms, including the removed one');
+  assert.equal(await count(`SELECT COUNT(*)::int AS n FROM audit_logs WHERE action = 'booking_group.updated' AND details->>'group_id' = $1`, [group.group_id]), 1, 'one group-level row (D-85 K1), not one per room');
 });
 
 test('a manager sees and books only rooms in their properties', async () => {

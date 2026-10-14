@@ -34,9 +34,9 @@ test('#42 each check-in date link in the list names its guest, listing and date 
   assert.ok(resSrc.includes("h('a', { href: `#/reservations/${r.booking_id}`, 'aria-label': `${r.guest_name || r.guest_label || 'Guest'}, ${r.unit_name}, check-in ${fmtDate(r.check_in)}` }, fmtDate(r.check_in))"));
 });
 
-test('#48 a guest count must be a whole number from 1; anything else is "At least 1 guest."', () => {
+test('#48 a guest count must be a whole number from 1; anything else is "Enter a whole number of guests, 1 or more."', () => {
   const guestsProblem = new Function(`${grab(resSrc, 'guestsProblem')}\nreturn guestsProblem;`)();
-  for (const bad of ['', ' ', '0', '-3', '1.5', 'abc', '1e2']) assert.equal(guestsProblem(bad), 'At least 1 guest.', `"${bad}"`);
+  for (const bad of ['', ' ', '0', '-3', '1.5', 'abc', '1e2']) assert.equal(guestsProblem(bad), 'Enter a whole number of guests, 1 or more.', `"${bad}"`);
   for (const good of ['1', '2', '50', ' 3 ']) assert.equal(guestsProblem(good), null, `"${good}"`);
 });
 

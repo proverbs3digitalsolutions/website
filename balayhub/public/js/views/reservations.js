@@ -35,9 +35,15 @@ function nightsNote(q) {
 }
 
 // Pure money/edit helpers (no DOM), unit-tested in test/qa-r2-reservations-view.test.js.
-// Overpaid means still owed back: the surplus minus refunds already recorded.
-export function overpaidAfterRefunds(balance, refunded) {
-  return Math.max(0, Math.round((-Number(balance) - Number(refunded || 0)) * 100) / 100);
+// The balance already counts refunds (the server adds them back), so overpaid is just the surplus: never subtract refunds a second time.
+export function overpaid(balance) {
+  return Math.max(0, Math.round(-Number(balance) * 100) / 100);
+}
+// The line at the top of the payment dialog. Exactly 0 is settled; below 0 the guest is still overpaid after any refunds.
+export function paymentInfo(balance, total, feeNote = '') {
+  if (Number(balance) < 0) return `Guest overpaid by ${peso(overpaid(balance))}.`;
+  if (Number(balance) === 0) return 'Nothing more is owed on this booking.';
+  return `Balance: ${peso(balance)} of ${peso(total)}${feeNote}`;
 }
 // What a payment adds over the balance, in pesos (0 when not over). Already overpaid (a balance below 0) owes nothing; an amount that cannot be read ("1,5") counts as 0.
 export function overBalance(amount, balance) {
@@ -48,7 +54,7 @@ export function overBalance(amount, balance) {
 // A guest count is a whole number from 1. Checked before a save, so the message lands at the field and not in the banner.
 export function guestsProblem(value) {
   const n = String(value ?? '').trim();
-  return /^\d+$/.test(n) && Number(n) >= 1 ? null : 'At least 1 guest.';
+  return /^\d+$/.test(n) && Number(n) >= 1 ? null : 'Enter a whole number of guests, 1 or more.';
 }
 // Only the fields the host actually changed, so the activity log isn't noisy.
 export function changedFields(orig, d) {
@@ -91,6 +97,8 @@ export function refundAlertText({ suggestion, refundable, paid, policy }) {
 }
 
 export const CHANNEL_LABEL = { direct: 'Direct', airbnb: 'Airbnb', booking: 'Booking.com', agoda: 'Agoda', vrbo: 'Vrbo', expedia: 'Expedia', tripcom: 'Trip.com', other: 'Other' };
+// "Where did they book?" for a hand-made direct booking. Walk-ins and phone calls are saved as Other (founder question 3).
+const SOURCE_CHOICES = [['', 'Not set'], ['facebook', 'Facebook'], ['messenger', 'Messenger'], ['instagram', 'Instagram'], ['viber', 'Viber'], ['whatsapp', 'WhatsApp'], ['tiktok', 'TikTok'], ['google', 'Google'], ['email', 'Email'], ['referral', 'Referral (friend or past guest)'], ['other', 'Other (walk-in, phone call)']];
 export const SOURCE_LABEL = { facebook: 'Facebook', instagram: 'Instagram', messenger: 'Messenger', viber: 'Viber', tiktok: 'TikTok', google: 'Google', whatsapp: 'WhatsApp', email: 'Email', referral: 'Referral', quote: 'Quote', other: 'Other' };
 const METHOD_LABEL = { cash: 'Cash', bank_transfer: 'Bank transfer', gcash: 'GCash', maya: 'Maya', card: 'Card', channel_payout: 'Channel payout', other: 'Other' };
 // Channel payouts only come from a channel booking, so a direct booking's method list leaves them out.
@@ -124,6 +132,8 @@ function syncChannelFee(form, switched) {
   const direct = form.elements.channel.value === 'direct';
   if (switched && direct) form.elements.channel_fee.value = '';
   form.querySelector('[data-field=channel_fee]').hidden = direct;
+  const src = form.querySelector('[data-field=source]');
+  if (src) src.hidden = !direct;
 }
 
 // ---------------------------------------------------------------- new reservation
@@ -142,7 +152,8 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
   const quoteBox = h('div', { class: 'alert alert--info', 'aria-live': 'polite' }, 'Choose a listing and dates to see the price.');
   let quoted = null;
   // Rate-card price on offer when the host typed a different amount.
-  const useRate = h('button', { class: 'btn btn--secondary btn--sm', type: 'button', hidden: true });
+  // Once a quote is showing the button keeps its space (visibility, not hidden), so showing it never moves Save down between mouse-down and mouse-up.
+  const useRate = h('button', { class: 'btn btn--secondary btn--sm', type: 'button', hidden: true, disabled: true });
   const modal = formModal({
     title: 'New reservation',
     submitText: 'Save reservation',
@@ -161,6 +172,7 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
         field({ name: 'guest_phone', label: 'Guest mobile', type: 'tel', inputmode: 'tel', placeholder: '0917 123 4567' }),
         field({ name: 'guest_email', label: 'Guest email', type: 'email' })),
       field({ name: 'channel', label: 'Booked through', type: 'select', value: 'direct', placeholderOption: false, options: Object.entries(CHANNEL_LABEL) }),
+      field({ name: 'source', label: 'Where did they book?', type: 'select', value: '', placeholderOption: false, options: SOURCE_CHOICES }),
       quoteBox,
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'accommodation_total', label: 'Accommodation total', type: 'money', hint: 'Filled in from your nightly rates. You can change it.' }),
@@ -175,6 +187,7 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
       const problem = guestsProblem(data.num_guests);
       if (problem) throw new ApiError(problem, { status: 400, fields: { num_guests: problem } });
       if (!data.guest_email) data.send_confirmation = false;
+      if (data.channel !== 'direct' || !data.source) delete data.source;
       if (data.pick_mode === 'type') {
         const [property_id, ...rt] = String(data.room_pick || '').split('|');
         if (!property_id) throw new ApiError('Choose a room type.', { status: 400, fields: { room_pick: 'Choose a room type.' } });
@@ -223,18 +236,22 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
     offerNow();
   };
   // The rate offer for the boxes the host typed in, checked against the last quote. It only shows or hides the offer: no box is written and no request is sent.
+  // No quote at all takes the button out of the layout; with a quote its space stays.
   const offerNow = () => {
     const mode = typeMode() ? 'type' : 'unit';
     const offer = MONEY.some((n) => offerRate({ typed: typed[n], mode, suggestion: sugg[n], current: form.elements[n].value }));
-    useRate.hidden = !offer;
+    useRate.hidden = sugg.accommodation_total == null && sugg.cleaning_fee == null;
+    useRate.style.visibility = offer ? '' : 'hidden';
+    useRate.disabled = !offer;
     if (offer) useRate.textContent = rateOfferText(sugg);
   };
   useRate.addEventListener('click', () => {
-    useRate.hidden = true;
     for (const n of MONEY) {
       if (sugg[n] == null) continue;
       form.elements[n].value = sugg[n]; typed[n] = false;
     }
+    offerNow();
+    form.elements.accommodation_total.focus();
   });
   quoteBox.after(useRate);
   // A money box the host finishes typing (Tab or blur) re-checks the offer; the quote itself is not asked again.
@@ -330,11 +347,10 @@ export async function reservationsView(el, { query }) {
     key: 'reservations', values: filters, defaults, onChange: load,
     extra: h('div', { class: 'res-view-select' }, viewSelect),
     search: { placeholder: 'Search guest, code or listing' },
-    quick: [
+    // A host with a few listings only needs the view picker and search up front; channel and property sit under More filters.
+    more: [
       { name: 'channel', label: 'Channel', all: 'All channels', options: Object.entries(CHANNEL_LABEL) },
       properties.length > 1 && { name: 'property_id', label: 'Property', all: 'All properties', options: properties.map((p) => [p.property_id, p.property_name]) },
-    ].filter(Boolean),
-    more: [
       { name: 'unit_id', label: 'Listing', all: 'All listings', options: stUnits.map((u) => [u.unit_id, `${u.unit_name}${properties.length > 1 ? ` · ${u.property_name || ''}` : ''}`]) },
       { name: 'from', keys: ['from', 'to'], label: 'Check-in between', type: 'daterange' },
       { name: 'out', keys: ['out_from', 'out_to'], label: 'Check-out between', type: 'daterange' },
@@ -483,10 +499,8 @@ export async function reservationDetailView(el, { params, rerender }) {
   const recordPayment = () => formModal({
     title: 'Record payment', submitText: 'Save payment', idempotent: true,
     fields: [
-      // Below 0 the guest overpaid: the same figure, and wording, as the page (net of refunds already recorded).
-      h('div', { class: 'alert alert--info' }, Number(r.balance) < 0
-        ? (overpaidAfterRefunds(r.balance, heldInfo?.refunded) > 0 ? `Guest overpaid by ${peso(overpaidAfterRefunds(r.balance, heldInfo?.refunded))}.` : 'Nothing more is owed on this booking.')
-        : `Balance: ${peso(r.balance)} of ${peso(r.total_amount)}${Number(r.channel_fee) > 0 && !r.channel_fee_ignored ? ` (after the ${peso(r.channel_fee)} channel fee)` : ''}`),
+      // The balance already counts refunds: below 0 the guest is still overpaid, exactly 0 is settled.
+      h('div', { class: 'alert alert--info' }, paymentInfo(r.balance, r.total_amount, Number(r.channel_fee) > 0 && !r.channel_fee_ignored ? ` (after the ${peso(r.channel_fee)} channel fee)` : '')),
       field({ name: 'amount', label: 'Amount received', type: 'money', required: true, value: Number(r.balance) > 0 ? r.balance : '' }),
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'payment_date', label: 'Date received', type: 'date', required: true, value: today, max: today }),
@@ -509,6 +523,8 @@ export async function reservationDetailView(el, { params, rerender }) {
   });
 
   const editDetails = () => {
+    // Offer line for a new date range: reserved from the start (hidden, not removed) so showing it never moves Save.
+    const rate = h('button', { class: 'btn btn--secondary btn--sm', type: 'button', disabled: true, style: { visibility: 'hidden' } });
     const modal = formModal({
       title: 'Edit reservation', submitText: 'Save changes',
       fields: [
@@ -523,6 +539,7 @@ export async function reservationDetailView(el, { params, rerender }) {
         h('div', { class: 'form-row form-row--2' },
           field({ name: 'accommodation_total', label: 'Accommodation total', type: 'money', value: r.accommodation_total }),
           field({ name: 'cleaning_fee', label: 'Cleaning fee', type: 'money', value: r.cleaning_fee, hint: 'Leave blank for 0.' })),
+        !r.ical_feed_id && rate,
         h('div', { class: 'form-row form-row--2' },
           field({ name: 'other_fees', label: 'Other fees', type: 'money', value: r.other_fees, hint: 'Leave blank for 0.' }),
           field({ name: 'channel_fee', label: 'Channel fee / commission', type: 'money', value: r.channel_fee, hint: 'What the channel keeps. Used in owner statements. Leave blank for 0.' })),
@@ -544,6 +561,26 @@ export async function reservationDetailView(el, { params, rerender }) {
     const form = modal.el.querySelector('form');
     form.addEventListener('change', (e) => { if (e.target.name === 'channel') syncChannelFee(form, true); });
     syncChannelFee(form, false);
+    // New dates: ask for the price from the rates and offer it. Nothing is written until the click.
+    let suggested = null; let seq = 0;
+    const showRate = () => {
+      const on = suggested != null && parseAmount(form.elements.accommodation_total.value) !== Number(suggested);
+      rate.style.visibility = on ? '' : 'hidden'; rate.disabled = !on;
+      if (on) rate.textContent = rateOfferText({ accommodation_total: suggested, cleaning_fee: null });
+    };
+    rate.addEventListener('click', () => { form.elements.accommodation_total.value = suggested; showRate(); form.elements.accommodation_total.focus(); });
+    form.addEventListener('change', async (e) => {
+      if (e.target.name === 'accommodation_total') return showRate();
+      if (r.ical_feed_id || !['check_in', 'check_out'].includes(e.target.name)) return;
+      const { check_in: ci, check_out: co } = form.elements;
+      const mySeq = ++seq;
+      suggested = null; showRate();
+      if (!ci.value || !co.value || co.value <= ci.value) return;
+      try {
+        const q = await get(`/reservations/quote${qs({ unit_id: r.unit_id, check_in: ci.value, check_out: co.value })}`);
+        if (mySeq === seq && !q.missing_rates) { suggested = q.accommodation_total; showRate(); }
+      } catch { /* the save reports a bad range; the offer just stays away */ }
+    });
   };
 
   const cancel = async () => {
@@ -571,8 +608,8 @@ export async function reservationDetailView(el, { params, rerender }) {
   const activity = canManage ? await activityCard(r).catch(() => null) : null;
   const grp = r.group;
   // Overpaid and "You keep" apply to live bookings only. A cancelled booking that still holds money points to the Refunds card instead.
-  const heldInfo = canManage && (!confirmed || Number(r.balance) < 0) ? await get(`/reservations/${r.booking_id}/refunds`).catch(() => null) : null;
-  const overpaid = canManage && confirmed && heldInfo ? overpaidAfterRefunds(r.balance, heldInfo.refunded) : 0;
+  const heldInfo = canManage && !confirmed ? await get(`/reservations/${r.booking_id}/refunds`).catch(() => null) : null;
+  const overpaidBy = canManage && confirmed ? overpaid(r.balance) : 0;
   // A cancelled booking owes back what the cancellation policy suggests, not everything paid.
   const sug = heldInfo?.suggestion;
   // With no suggestion (no policy, or Custom) the alert still says what is held, so it shows then too.
@@ -628,7 +665,7 @@ export async function reservationDetailView(el, { params, rerender }) {
             h('dt', null, 'Check-in'), h('dd', null, fmtDate(r.check_in), r.checked_in_at ? h('div', { class: 'muted small' }, `Checked in ${fmtDateTime(r.checked_in_at)}`) : null),
             h('dt', null, 'Check-out'), h('dd', null, fmtDate(r.check_out), r.checked_out_at ? h('div', { class: 'muted small' }, `Checked out ${fmtDateTime(r.checked_out_at)}`) : null),
             h('dt', null, 'Guests'), h('dd', null, r.num_guests ? String(r.num_guests) : '—'),
-            r.source && [h('dt', null, 'Source'), h('dd', null, SOURCE_LABEL[r.source] || r.source)],
+            r.source && [h('dt', null, 'Booked via'), h('dd', null, SOURCE_LABEL[r.source] || r.source)],
             canManage && r.rules_accepted_at && [h('dt', null, 'House rules'), h('dd', null, `House rules accepted on ${fmtDateTime(r.rules_accepted_at)}`,
               r.rules_text && h('details', { class: 'hp-rules' }, h('summary', null, 'Show the accepted text'), h('p', null, r.rules_text)))],
             r.notes && [h('dt', null, 'Notes'), h('dd', { style: { whiteSpace: 'pre-wrap' } }, r.notes)])),
@@ -649,8 +686,8 @@ export async function reservationDetailView(el, { params, rerender }) {
         checkin, gatepass, deposit, damage, lostFound, activity),
       h('div', { class: 'stack' },
         h('div', { class: 'card', id: 'payment-card' },
-          overpaid > 0 && h('div', { class: 'alert alert--warn', role: 'alert', style: { marginBottom: '12px' } },
-            `Guest overpaid by ${peso(overpaid)} — `,
+          overpaidBy > 0 && h('div', { class: 'alert alert--warn', role: 'alert', style: { marginBottom: '12px' } },
+            `Guest overpaid by ${peso(overpaidBy)} — `,
             h('a', { href: '#refunds-card', onclick: goRefunds }, 'record a refund')),
           confirmed && r.channel_fee_ignored && h('div', { class: 'alert alert--warn', role: 'alert', style: { marginBottom: '12px' } },
             `This direct booking has a ${peso(r.channel_fee)} channel fee. Direct bookings don't have one, so the guest is asked for the full amount. Edit the booking to clear it, or change Booked through.`),

@@ -61,16 +61,27 @@ const PAY_SELECT = `
               ELSE cu.full_name END AS cleaner_name,
          CASE WHEN t.assigned_to IS NOT NULL THEN t.assigned_to
               WHEN t.assignee_name IS NOT NULL THEN NULL
-              ELSE t.completed_by END AS cleaner_user_id
+              ELSE t.completed_by END AS cleaner_user_id,
+         CASE WHEN t.assigned_to IS NOT NULL THEN au.role
+              WHEN t.assignee_name IS NOT NULL THEN NULL
+              ELSE cu.role END AS cleaner_role,
+         NOT EXISTS (SELECT 1 FROM cleaner_rates cr WHERE cr.organization_id = t.organization_id AND
+              CASE WHEN t.assigned_to IS NOT NULL THEN cr.user_id = t.assigned_to
+                   WHEN t.assignee_name IS NOT NULL THEN lower(cr.assignee_name) = lower(t.assignee_name)
+                   ELSE cr.user_id = t.completed_by END) AS no_rate
     FROM cleaning_tasks t
     JOIN units u ON u.unit_id = t.unit_id
     JOIN properties p ON p.property_id = u.property_id
     LEFT JOIN users au ON au.user_id = t.assigned_to
     LEFT JOIN users cu ON cu.user_id = t.completed_by`;
 
+// An owner's clean with no pay and no rate for them is "self": done by the owner, nothing owed. A clean that already has
+// a pay amount keeps its status, so an amount is never hidden.
+const payStatus = (r) => (r.pay_status === 'unpaid' && r.pay_amount == null && r.cleaner_role === 'owner' && r.no_rate ? 'self' : r.pay_status);
+
 const taskOut = (r) => ({
   task_id: r.task_id, unit_id: r.unit_id, unit_name: r.unit_name, property_id: r.property_id, property_name: r.property_name,
-  completed_at: r.completed_at, pay_amount: r.pay_amount, pay_status: r.pay_status, paid_on: r.paid_on,
+  completed_at: r.completed_at, pay_amount: r.pay_amount, pay_status: payStatus(r), paid_on: r.paid_on,
   paid_method: r.paid_method, paid_reference: r.paid_reference,
   cleaner_key: r.cleaner_key, cleaner_name: r.cleaner_name, cleaner_user_id: r.cleaner_user_id,
 });
@@ -91,7 +102,7 @@ function groupCleaners(tasks) {
   return [...groups.values()]
     .map((g) => ({
       key: g.key, name: g.name, user_id: g.user_id,
-      count: g.rows.length, unpriced: g.rows.filter((t) => t.pay_amount == null).length,
+      count: g.rows.length, unpriced: g.rows.filter((t) => t.pay_amount == null && t.pay_status !== 'self').length,
       ...tally(g.rows),
     }))
     .sort((a, b) => String(a.name).localeCompare(String(b.name)));
@@ -166,7 +177,7 @@ router.get('/cleaner-pay', managers, ah(async (req, res) => {
   const { rows } = await query(`${PAY_SELECT} WHERE ${where.join(' AND ')} ORDER BY t.completed_at, p.property_name, u.unit_name`, params);
   const tasks = rows
     .filter((r) => !q.cleaner || r.cleaner_key === q.cleaner.toLowerCase())
-    .map((r) => ({ ...taskOut(r), pay_expense_id: r.pay_expense_id }));
+    .map((r) => ({ ...taskOut(r), pay_expense_id: r.pay_expense_id, no_rate: r.no_rate }));
   res.json({ month, tasks, cleaners: groupCleaners(tasks), totals: tally(tasks) });
 }));
 

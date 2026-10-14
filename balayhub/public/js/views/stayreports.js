@@ -3,14 +3,13 @@
 // Each tab has its own filters (property, listing, channel, period), remembered per person.
 
 import { get, qs } from '../api.js';
-import { h, peso, pageHead, todayManila, emptyState, toast } from '../ui.js';
+import { h, peso, pageHead, todayManila, emptyState, toast, label } from '../ui.js';
 import { navigate } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 import { depositsPanel } from './deposits.js';
 import { CHANNEL_LABEL, SOURCE_LABEL } from './reservations.js';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const CATEGORY = { repairs: 'Repairs', utilities: 'Utilities', taxes: 'Taxes', insurance: 'Insurance', association_dues: 'Association dues', supplies: 'Supplies', salaries: 'Salaries', cleaning: 'Cleaning', other: 'Other' };
 const pct = (n) => (n === null || n === undefined ? '—' : `${n}%`);
 const monthName = (ym) => new Date(`${ym}-01T00:00:00Z`).toLocaleDateString('en-PH', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 // A real calendar day as YYYY-MM-DD (2026-02-30 is not).
@@ -37,7 +36,7 @@ export async function stayReportsView(el, { query = {} }) {
   const thisYear = Number(todayManila().slice(0, 4));
   const setUrl = (q) => history.replaceState(null, '', `#/stay-reports${qs({ tab: tab === 'performance' ? '' : tab, ...q })}`);
   const tabBtn = (key, text) => h('button', { role: 'tab', 'aria-selected': String(tab === key), class: tab === key ? 'is-active' : '', onclick: () => navigate(key === 'performance' ? '#/stay-reports' : `#/stay-reports?tab=${key}`) }, text);
-  const tabs = h('div', { class: 'tabs', role: 'tablist' }, tabBtn('performance', 'Performance'), tabBtn('tax', 'Income summary (for taxes)'), tabBtn('deposits', 'Deposits'));
+  const tabs = h('div', { class: 'tabs', role: 'tablist', 'aria-label': 'Report type' }, tabBtn('performance', 'Performance'), tabBtn('tax', 'Income summary (for taxes)'), tabBtn('deposits', 'Deposits'));
 
   if (tab === 'deposits') {
     const panel = await depositsPanel({ query, onUrl: setUrl });
@@ -117,6 +116,8 @@ export async function stayReportsView(el, { query = {} }) {
   const setPeriod = (patch) => { Object.assign(filters, patch); rememberFilters('stay-reports', filters); load(); };
 
   function drawPeriod() {
+    // Drawing the controls again drops focus, so the control that had it gets it back (found by its name).
+    const focusName = periodBox.contains(document.activeElement) && document.activeElement.getAttribute('aria-label');
     // Same control size as the Property, Listing and Channel selects, so the whole filter row lines up.
     const sel = h('select', { class: 'input', 'aria-label': 'Period', onchange: (e) => setPeriod({ period: e.target.value }) },
       [['', 'Month'], ['year', 'Whole year'], ['range', 'Custom dates']].map(([v, t]) => h('option', { value: v, selected: filters.period === v }, t)));
@@ -134,6 +135,8 @@ export async function stayReportsView(el, { query = {} }) {
       inputs = h('input', { class: 'input', type: 'month', value: filters.month || todayManila().slice(0, 7), 'aria-label': 'Month', onchange: (e) => e.target.value && setPeriod({ month: e.target.value }) });
     }
     periodBox.replaceChildren(sel, inputs);
+    const again = focusName && periodBox.querySelector(`[aria-label="${focusName}"]`);
+    if (again) again.focus();
   }
 
   async function load() {
@@ -180,10 +183,11 @@ export async function stayReportsView(el, { query = {} }) {
               h('td', { class: 'num' }, peso(c.adr)), h('td', { class: 'num' }, peso(c.channel_fees)))))))),
         h('div', { class: 'card' }, h('h2', null, 'Expenses'),
           r.expenses_excluded ? h('p', { class: 'muted' }, 'Expenses aren\'t split by channel, so they are left out while a channel is chosen.')
-            : r.expenses_by_category.length ? h('dl', { class: 'dl' }, r.expenses_by_category.map((e) => [h('dt', null, CATEGORY[e.category] || e.category), h('dd', null, peso(e.amount))]))
+            : r.expenses_by_category.length ? h('dl', { class: 'dl' }, r.expenses_by_category.map((e) => [h('dt', null, label(e.category)), h('dd', null, peso(e.amount))]))
               : h('p', { class: 'muted' }, 'No expenses recorded for this period.'),
           h('p', { class: 'small' }, h('a', { href: '#/rent?tab=expenses' }, 'Record an expense')))),
       Array.isArray(r.by_source) && r.by_source.length > 0 && h('div', { class: 'card' }, h('h2', null, 'Direct bookings by source'),
+        h('p', { class: 'muted small' }, 'Booked total counts the whole booking from its check-in date. Revenue by channel counts only the nights in this month.'),
         h('div', { class: 'table-wrap' }, h('table', { class: 'table table--compact' },
           h('thead', null, h('tr', null, ['Source', 'Stays', 'Nights', 'Booked total (check-in basis)'].map((x, i) => h('th', { class: i ? 'num' : null }, x)))),
           h('tbody', null, r.by_source.map((s) => h('tr', null, h('td', null, s.source ? (SOURCE_LABEL[s.source] || s.source) : 'Not tagged'),

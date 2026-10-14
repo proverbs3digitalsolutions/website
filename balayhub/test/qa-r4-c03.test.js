@@ -135,9 +135,10 @@ test('a direct booking does not offer channel payout as a payment method (money#
 });
 
 test('Record payment says "Guest overpaid by ..." when the balance is below 0, worded and computed as the page does (re-verify SEV3)', () => {
-  // Below 0 is an overpayment: the same figure the page shows (net of refunds), with the page's wording.
-  assert.match(reservationsSrc, /Number\(r\.balance\) < 0\s+\? \(overpaidAfterRefunds\(r\.balance, heldInfo\?\.refunded\) > 0 \? `Guest overpaid by \$\{peso\(overpaidAfterRefunds\(r\.balance, heldInfo\?\.refunded\)\)\}\.` : '[^']+'\)\s+: `Balance: /);
+  // Round 9: the line comes from paymentInfo(); the balance already counts refunds, so below 0 is overpaid and exactly 0 is settled.
+  assert.match(reservationsSrc, /paymentInfo\(r\.balance, r\.total_amount, Number\(r\.channel_fee\) > 0 && !r\.channel_fee_ignored/);
+  assert.match(reservationsSrc, /Guest overpaid by \$\{peso\(overpaid\(balance\)\)\}\./);
   // Any other balance keeps the old Balance line, with the channel fee note.
-  assert.match(reservationsSrc, /`Balance: \$\{peso\(r\.balance\)\} of \$\{peso\(r\.total_amount\)\}\$\{Number\(r\.channel_fee\) > 0 && !r\.channel_fee_ignored/);
+  assert.match(reservationsSrc, /`Balance: \$\{peso\(balance\)\} of \$\{peso\(total\)\}\$\{feeNote\}`/);
   assert.doesNotMatch(reservationsSrc, /Balance: -/, 'no negative balance shown as a Balance line');
 });

@@ -290,6 +290,7 @@ const ACTION_LABELS = {
   'workspace.updated': { name: 'Workspace name' },
   'member.updated': { property_ids: 'Properties they can access' },
   'pricing_rule.updated': { active: 'Rule on' },
+  'cleaning.checklist_updated': { items: 'Checklist items' },
   'addon.updated': { name_tl: 'Taglish name', description: 'Description', unit_ids: 'Listings' },
   'user.notify_prefs_updated': {
     new_booking: 'New bookings', guest_message: 'Guest messages', checkin_form: 'Guest check-in forms', payment: 'Online payments',

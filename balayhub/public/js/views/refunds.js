@@ -2,7 +2,7 @@
 // the refund log, and (owners and managers) recording and voiding refunds.
 
 import { get, post } from '../api.js';
-import { h, badge, peso, fmtDate, field, formModal, confirmDialog, toast, todayManila } from '../ui.js';
+import { h, badge, peso, fmtDate, field, formModal, confirmDialog, toast, todayManila, parseAmount } from '../ui.js';
 import { state } from '../app.js';
 
 const METHOD_LABEL = { cash: 'Cash', bank_transfer: 'Bank transfer', gcash: 'GCash', maya: 'Maya', card: 'Card', other: 'Other' };
@@ -15,6 +15,13 @@ export function suggestionText(s, cancelled) {
     ? ` ${peso(s.already_refunded)} is already refunded, so ${Number(s.remaining) > 0 ? `${peso(s.remaining)} more` : 'nothing more is suggested'}.`
     : '';
   return `${lead}: ${peso(s.amount)} (${s.percent}%). ${s.rule}.${done}`;
+}
+
+// What the guest would owe again after this refund. The balance already counts refunds, so a refund past the overpayment on a live stay leaves money owed. A cancelled booking owes nothing (D-77).
+export function refundOwedAfter(reservation, amount) {
+  if (reservation.status === 'cancelled') return 0;
+  const typed = Number(amount);
+  return Number.isFinite(typed) ? Math.max(0, Math.round((Number(reservation.balance) + typed) * 100) / 100) : 0;
 }
 
 export async function refundsCard(reservation, rerender) {
@@ -34,7 +41,12 @@ export async function refundsCard(reservation, rerender) {
       field({ name: 'reason', label: 'Reason', type: 'textarea', required: true, maxlength: 300,
         hint: 'Kept in the refund log. For example: cancelled by guest, 6 days before check-in.' }),
     ],
-    onSubmit: async (d, { idempotencyKey }) => { await post(`/reservations/${reservation.booking_id}/refunds`, d, { idempotencyKey }); toast('Refund recorded.'); rerender(); },
+    onSubmit: async (d, { idempotencyKey }) => {
+      // Cancel returns false: nothing is posted and the form stays open with no message.
+      const owed = refundOwedAfter(reservation, parseAmount(d.amount));
+      if (owed > 0 && !await confirmDialog({ title: 'Refund more than the overpayment?', text: `After this refund the guest will owe ${peso(owed)} again. Record it?`, confirmText: 'Record refund' })) return false;
+      await post(`/reservations/${reservation.booking_id}/refunds`, d, { idempotencyKey }); toast('Refund recorded.'); rerender();
+    },
   });
 
   const voidRefund = async (r) => {

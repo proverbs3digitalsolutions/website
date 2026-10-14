@@ -41,9 +41,9 @@ export async function lostFoundView(el, { query = {} } = {}) {
         badge(STATUS_BADGE[it.status] || it.status, STATUS_TEXT[it.status] || it.status),
         it.status === 'held'
           ? h('div', { class: 'ops-lf__actions' },
-            h('button', { class: 'btn btn--primary btn--sm', type: 'button', onclick: () => resolve(it, 'returned') }, 'Returned'),
-            h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => resolve(it, 'disposed') }, 'Disposed'))
-          : h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => reopen(it) }, 'Back to held')))))));
+            h('button', { class: 'btn btn--primary btn--sm', type: 'button', 'aria-label': `Mark returned: ${it.description}`, onclick: () => resolve(it, 'returned') }, 'Returned'),
+            h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'aria-label': `Mark disposed: ${it.description}`, onclick: () => resolve(it, 'disposed') }, 'Disposed'))
+          : h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'aria-label': `Back to held: ${it.description}`, onclick: () => reopen(it) }, 'Back to held')))))));
   }
 
   el.replaceChildren(pageHead({ title: 'Lost and found', sub: 'Items guests left behind' }), tabs,

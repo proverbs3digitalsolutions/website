@@ -11,6 +11,8 @@ const save = (msgs) => { try { sessionStorage.setItem(KEY, JSON.stringify(msgs.s
 
 let enabled = null; // null = not checked yet
 let panel = null;
+// Clears the "Type a question first." message in the open panel; set when the panel is built.
+let clearAskError = () => {};
 
 export async function assistantEnabled() {
   // Cleaners are refused the assistant, so don't ask the server for them (rbac#4).
@@ -51,6 +53,7 @@ export function closeAssistant() {
 
 export function openAssistant(question) {
   if (!panel) panel = buildPanel();
+  clearAskError();
   panel.hidden = false;
   document.querySelector('.assist-fab')?.setAttribute('aria-expanded', 'true');
   const input = panel.querySelector('textarea');
@@ -68,6 +71,7 @@ function buildPanel() {
   const askError = h('div', { class: 'error', role: 'alert' });
   const askNote = h('div', { class: 'field', style: { padding: '0 12px' } }, askError);
   input.addEventListener('input', () => { askError.textContent = ''; });
+  clearAskError = () => { askError.textContent = ''; };
 
   const bubble = (m) => h('div', { class: `assist__msg assist__msg--${m.role}` },
     h('div', { class: 'assist__text' }, m.content),
@@ -120,7 +124,7 @@ function buildPanel() {
     h('header', { class: 'assist__head' },
       h('div', null, h('strong', null, 'BalayHub assistant'), h('div', { class: 'small' }, 'Answers from the BalayHub guides')),
       h('div', { class: 'assist__actions' },
-        h('button', { type: 'button', class: 'assist__icon', title: 'New chat', 'aria-label': 'New chat', onclick: () => { msgs = []; save(msgs); draw(); input.focus(); } }, icon('plus')),
+        h('button', { type: 'button', class: 'assist__icon', title: 'New chat', 'aria-label': 'New chat', onclick: () => { msgs = []; save(msgs); clearAskError(); draw(); input.focus(); } }, icon('plus')),
         h('button', { type: 'button', class: 'assist__icon', title: 'Close', 'aria-label': 'Close', onclick: closeAssistant }, '×'))),
     list,
     askNote,

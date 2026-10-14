@@ -15,6 +15,7 @@ const { audit } = require('../lib/audit');
 const { feedProblem, problemText, STALE_MS } = require('../lib/synchealth');
 const { CHANNEL_LABEL } = require('../lib/ical');
 const { query, tx } = require('../db');
+const { BALANCE } = require('../lib/balance');
 
 const router = express.Router();
 const managers = requireRole('owner', 'manager');
@@ -116,8 +117,7 @@ async function checklist(user, date) {
         JOIN properties p ON p.property_id = u.property_id
         LEFT JOIN guests g ON g.guest_id = b.guest_id
         CROSS JOIN LATERAL (
-          SELECT (b.total_amount - CASE WHEN b.channel = 'direct' THEN 0 ELSE b.channel_fee END - COALESCE((SELECT SUM(bp.amount) FROM booking_payments bp
-                   WHERE bp.booking_id = b.booking_id AND bp.voided_at IS NULL), 0))::numeric(12,2) AS balance
+          SELECT ${BALANCE} AS balance
         ) bal
        WHERE b.kind = 'reservation' AND b.status = 'confirmed'
          AND (b.check_in BETWEEN $1::date AND $1::date + 2 OR (b.checked_in_at IS NOT NULL AND b.checked_out_at IS NULL))

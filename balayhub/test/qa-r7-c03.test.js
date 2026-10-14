@@ -62,7 +62,9 @@ test('#1 a money box that changes re-checks the rate offer from the last quote, 
   assert.doesNotMatch(offer, /\bget\(/, 'no server request');
   assert.doesNotMatch(offer, /\.value = /, 'no money box is written');
   assert.match(offer, /const offer = MONEY\.some\(\(n\) => offerRate\(\{ typed: typed\[n\], mode, suggestion: sugg\[n\], current: form\.elements\[n\]\.value \}\)\);/);
-  assert.match(offer, /useRate\.hidden = !offer;/);
+  // Round 9 (#2): the button keeps its space once a quote shows, so it is toggled by visibility and disabled, not hidden.
+  assert.match(offer, /useRate\.style\.visibility = offer \? '' : 'hidden';/);
+  assert.match(offer, /useRate\.disabled = !offer;/);
   assert.match(offer, /useRate\.textContent = rateOfferText\(sugg\)/);
   assert.match(resSrc, /form\.addEventListener\('change', \(e\) => \{ if \(MONEY\.includes\(e\.target\.name\)\) offerNow\(\); \}\);/);
 });

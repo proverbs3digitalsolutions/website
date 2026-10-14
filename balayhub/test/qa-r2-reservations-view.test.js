@@ -8,14 +8,14 @@ const path = require('node:path');
 const src = fs.readFileSync(path.join(__dirname, '..', 'public/js/views/reservations.js'), 'utf8');
 // The view imports browser modules, so pull the two pure helpers out of the source.
 const grab = (name) => src.match(new RegExp(`export function ${name}[\\s\\S]*?\\n}\\n`))[0].replace('export ', '');
-const { overpaidAfterRefunds, changedFields } = new Function(`${grab('overpaidAfterRefunds')}\n${grab('changedFields')}\nreturn { overpaidAfterRefunds, changedFields };`)();
+const { overpaid, changedFields } = new Function(`${grab('overpaid')}\n${grab('changedFields')}\nreturn { overpaid, changedFields };`)();
 
-test('overpaid only counts what is still owed back', () => {
-  assert.equal(overpaidAfterRefunds('-500.00', '0'), 500);
-  assert.equal(overpaidAfterRefunds('-500.00', '500.00'), 0);
-  assert.equal(overpaidAfterRefunds('-500.00', '200.00'), 300);
-  assert.equal(overpaidAfterRefunds('100.00', '0'), 0);
-  assert.equal(overpaidAfterRefunds('-0.30', '0.10'), 0.2);
+// Round 9 (D-85): the balance the server returns already counts refunds, so overpaid is the surplus and nothing is subtracted again.
+test('overpaid is the surplus in the balance (refunds are already counted by the server)', () => {
+  assert.equal(overpaid('-500.00'), 500);
+  assert.equal(overpaid('0.00'), 0);
+  assert.equal(overpaid('100.00'), 0);
+  assert.equal(overpaid('-0.30'), 0.3);
 });
 
 test('edit sends only changed fields', () => {
@@ -27,7 +27,7 @@ test('edit sends only changed fields', () => {
 });
 
 test('detail card wiring', () => {
-  assert.match(src, /overpaidAfterRefunds\(r\.balance, heldInfo\.refunded\)/);
+  assert.match(src, /overpaid\(r\.balance\)/);
   assert.match(src, /Cancelled — not owed/);
   assert.match(src, /'Extras'/);
   assert.match(src, /policy suggests refunding/);

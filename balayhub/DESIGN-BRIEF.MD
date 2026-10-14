@@ -1,6 +1,6 @@
 # BalayHub design brief
 
-Last updated: 2026-10-14 (QA round 6: patterns in section 15; D-82)
+Last updated: 2026-10-14 (QA round 9: patterns in section 18; D-85)
 
 **Summary.** BalayHub is a phone-first web app (also an installable PWA) for Filipino rental and staycation hosts. It is built with plain CSS, one stylesheet (`public/css/app.css`), and small JavaScript helpers (`public/js/ui.js`). There is no framework and no CSS preprocessor. The look is calm and practical: Forest Green on soft off-white, Sand and Sun as warm accents, Poppins for headings, Inter for text, rounded cards, and large touch targets. Colours come from CSS custom properties on `:root`. A dark theme redefines the same tokens, so any component that uses tokens gets dark mode automatically. This brief records what is **actually built**. Every value below comes from the code. Where the code doesn't define a token (spacing, type sizes), the brief lists the values in use and says so.
 
@@ -527,3 +527,13 @@ Printable views are built from `.receipt` (with a 2px `--navy` rule under the he
 - **Composer mode switches are toggle buttons, not tabs.** Reply, Internal note and similar switches are buttons with `aria-pressed`, one Tab stop each. A true `role="tablist"` answers to arrow keys, Home and End (one shared handler in `app.js`).
 - **Cancel means discard; closing means keep.** An explicit Cancel on a form throws away a saved draft. Escape, clicking away or losing the session keeps it. An over-amount money question's Cancel returns to the form with no message (supersedes the round 7 "Payment not saved." line).
 - **Language switches never clear input.** On guest pages (booking, quote) switching language redraws the words and keeps what the guest typed or picked.
+
+## 18. Patterns added in QA round 9 (2026-10-14)
+
+- **Grouped navigation.** The sidebar and the phone More sheet show headings (Every day, Money, More tools, Setup). More tools is a folded group that opens itself on one of its pages. Nothing is removed, only grouped (D-85).
+- **Collapsed form sections.** Optional groups of fields sit in `details.form-section` (Price extras, Guest info, Booking page and payments, Booking rules on the listing form). Never use one for a required field. A section opens by itself when an error is inside. The section titles are plain sentence-case words; "Price extras" replaces "Pricing helpers".
+- **Image attachments show a thumbnail** (`file-thumb`) instead of a file icon.
+- **An offer inside a form keeps its space.** A line that appears while the person works (a rate offer, a new price) reserves its room so nothing under the pointer moves and a click is never lost.
+- **Focus returns to the opener or its replacement** after a save or redraw: dialogs, buttons whose redraw rebuilds them, and tab rows (completes D-81).
+- **The content area leaves room for the floating Ask button** on desktop, and the top bar's account area can shrink (no sideways scroll at 390 px).
+- **Money text has two decimals** wherever a peso amount appears, in the app and on public pages (₱1,500.50).

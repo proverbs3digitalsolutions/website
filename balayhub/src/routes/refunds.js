@@ -1,7 +1,7 @@
 'use strict';
 
 // Refunds on a reservation, kept apart from payments: money returned to the guest,
-// usually after a cancellation. They don't change the balance. Staff can read the
+// usually after a cancellation. They count in the guest balance (D-85, src/lib/balance.js). Staff can read the
 // refund log and its suggestion; only owners and managers record or void refunds.
 
 const express = require('express');

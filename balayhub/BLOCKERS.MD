@@ -2,7 +2,7 @@
 
 Things only the founder can do or decide before related work can go ahead. Automated runs add items here. The founder clears them by doing the item and ticking it, or by writing the decision in DECISIONS.MD.
 
-Last updated: 2026-10-14 (QA round 8 questions added; round 7 questions unchanged)
+Last updated: 2026-10-14 (QA round 9 questions added; earlier rounds unchanged)
 
 ## Security — do first
 
@@ -240,4 +240,28 @@ Each has the default already applied. Earlier open questions are not repeated he
 - [ ] **"Tell your manager." for staff.** Only cleaners are told to tell their manager when a supply was out of stock; staff are not (they are the manager's team, not a field crew). OK? *Default: cleaners only.*
 - [ ] **Quote that can't be priced.** When the price preview fails, the quote form keeps the sentence "Couldn't price these dates" and hides the rate-card button. Keep, or reword? *Default: keep.*
 - [ ] **Rent payments are used oldest month first.** A payment that covers more than one month is applied to the oldest unpaid month first. Is that how you want it? *Default: oldest first.*
+  - *Round 9: the payment form now says which month the money goes to first.*
 - [ ] **"Settings → Team" arrow.** A few help lines write the path with an arrow ("Settings → Team", "Settings → Plan & billing"). Keep the arrow, or write "Settings, then Team"? *Default: keep the arrow.*
+
+## Questions from QA round 9 (2026-10-14)
+
+Each has the default already applied. Earlier open questions are not repeated here. Background: D-85 (the alpha is for owners of 1 to 3 properties; the Guesty ideas are parked).
+
+- [ ] **Starter plan and the 1 to 3 unit alpha (alpha-relevant).** The Starter plan allows 2 listings, but the alpha target is owners with 1 to 3 properties, so a host with 3 units has to choose Growth. Should Starter allow 3? *Default: no pricing change.*
+- [ ] **Real test-mode payments before the alpha (founder action, blocks the alpha).** We can't reach PayMongo from here, so a paid booking, a paid balance and a paid quote have never been checked end to end. Before inviting alpha hosts, please make one test-mode payment of each kind on the live site with a test key. *Default: blocked until you do it.* This is in addition to the PayMongo item under "Launch setup", and the live-site QA items (including the `QA_TEST_PASSWORD` secret and network access) stay open above.
+- [ ] **Refunds past the overpayment.** If a guest paid ₱1,000 for a ₱600 stay and you refund the whole ₱1,000, BalayHub now asks first and then shows ₱600 owed again (it used to say nothing was owed). Should a refund on a stay that isn't cancelled stop at the overpayment instead? *Default: allowed up to what was paid, after the question.*
+- [ ] **The balance counts refunds everywhere.** The guest's pay link, receipts and messages now show the balance after refunds, so after a refund like the one above the pay link asks for ₱600 again. OK? *Default: yes.* One side effect: a receipt's "balance after" counts every refund on the stay, even one recorded after that payment.
+- [ ] **Rent goes to the oldest month first (kept).** The round 8 question stays open. The Record form now says which month the money goes to. *Default: oldest first.*
+- [ ] **Photo previews on cleaning jobs.** Photos now show a small thumbnail instead of a file icon. OK? *Default: thumbnails shown.*
+- [ ] **Cleans you do yourself.** If you clean a unit yourself and have no pay rate for you, Cleaner pay shows "Done by you, no pay" and does not count it as unpaid. A clean that has a rate stays unpaid with its amount. OK? *Default: yes.* Related: the By cleaner card says "All paid" when a cleaner's only cleans are your own; should it say "Done by you" instead? *Default: leave "All paid".*
+- [ ] **Booking page price line.** After a guest picks dates, the line shows this stay's average nightly price before any discount, instead of the lowest "from" price. Show the price after the discount instead? *Default: before discount.*
+- [ ] **Two decimals on the public stay pages.** Every peso amount now shows two decimals, so the search-result "From" price on the public stay page reads "From ₱2,500.00". Keep, or make an exception for that one line? *Default: keep two decimals.*
+- [ ] **Walk-in bookings.** New reservation now asks where the guest booked (Facebook, Messenger and the others). There is no Walk-in choice; walk-ins are saved as Other. Add Walk-in? *Default: Other.*
+- [ ] **Moving a unit to another owner.** Ticking a unit that already has an owner now asks before it moves, because that owner's statements and payouts follow the unit. OK? *Default: ask first.*
+- [ ] **Automatic messages start off.** A new automatic message is saved turned off so you can check the wording before guests get it. OK? *Default: off.*
+- [ ] **Check-in with empty or missing guests.** The check-in form refuses an empty guest row, and when fewer names than booked guests are given the host sees "booked for N" in the note. OK? *Default: yes.*
+- [ ] **Management fee for a new owner.** The fee box now starts empty instead of 20%, so you type it. OK? *Default: empty.*
+- [ ] **Add listing in sections.** Add listing shows the basics first, with Price extras, Guest info, Booking page and payments, and Booking rules in sections you open. OK? *Default: yes.*
+- [ ] **Spaces in discount codes.** A code typed with spaces is refused with a suggestion using dashes, so guests type exactly what you share. OK? *Default: refuse and suggest.*
+- [ ] **Grouped menu.** The menu is now in groups (Every day, Money, More tools, Setup), with More tools closed until you open it. OK? *Default: yes.*
+- [ ] **Taglish check (needs a native speaker).** New Taglish lines to read: the check-in empty guest row message, "Piliin" (Select), "Idagdag ang napili sa bill ko" (Add selected to my bill), the "1–3 unit" card on Get started, "Unang pangalan" (First name), and the new booking-page price line. *Default: keep the drafts.* The exact strings are in `public/js/views/checkin.js`, `pay.js`, `book.js`, `launchpad.js` and `landing.js`.

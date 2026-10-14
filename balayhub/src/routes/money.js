@@ -58,7 +58,9 @@ router.get('/rent', ah(async (req, res) => {
   const where = [propertyScope(req.user, params)];
   const status = req.query.status;
   if (status === 'outstanding') where.push(`c.status <> 'paid'`);
-  else if (['paid', 'partial', 'unpaid', 'overdue'].includes(status)) { params.push(status); where.push(`c.status = $${params.length}`); }
+  // Partly paid: some money applied and a balance left, overdue or not (the Partial chip and the card agree).
+  else if (status === 'partial') where.push(`c.amount_applied > 0 AND c.balance > 0`);
+  else if (['paid', 'unpaid', 'overdue'].includes(status)) { params.push(status); where.push(`c.status = $${params.length}`); }
   if (req.query.property_id) { params.push(uuidParam(req.query.property_id)); where.push(`p.property_id = $${params.length}`); }
   if (req.query.unit_id) { params.push(uuidParam(req.query.unit_id)); where.push(`u.unit_id = $${params.length}`); }
   if (req.query.month && /^\d{4}-\d{2}$/.test(req.query.month) && isValidDate(`${req.query.month}-01`)) { params.push(`${req.query.month}-01`); where.push(`c.period = $${params.length}::date`); }
@@ -103,7 +105,7 @@ router.get('/rent', ah(async (req, res) => {
      SELECT COALESCE(SUM(c.balance), 0)::numeric(12,2) AS outstanding,
             COALESCE(SUM(c.balance) FILTER (WHERE c.status = 'overdue'), 0)::numeric(12,2) AS overdue,
             COUNT(*) FILTER (WHERE c.status = 'overdue') AS overdue_count,
-            COUNT(*) FILTER (WHERE c.status = 'partial') AS partial_count,
+            COUNT(*) FILTER (WHERE c.amount_applied > 0 AND c.balance > 0) AS partial_count,
             COUNT(*) FILTER (WHERE c.status = 'unpaid') AS unpaid_count
        FROM charges c
        JOIN leases l ON l.lease_id = c.lease_id
@@ -122,7 +124,9 @@ router.get('/rent/leases', ah(async (req, res) => {
   const { rows } = await query(
     `WITH ${LEASE_BALANCE_CTE}
      SELECT l.lease_id, l.lease_status, l.monthly_rent, t.tenant_id, t.full_name AS tenant_name, t.status AS tenant_status, u.unit_name, p.property_name,
-            lb.outstanding, lb.overdue, lb.credit
+            lb.outstanding, lb.overdue, lb.credit,
+            -- The month a payment goes to first: payments are applied oldest charge first (ledger.js).
+            (SELECT MIN(c.period) FROM charges c WHERE c.lease_id = l.lease_id AND c.balance > 0) AS oldest_unpaid_period
        FROM leases l
        JOIN lease_balance lb ON lb.lease_id = l.lease_id
        JOIN tenants t ON t.tenant_id = l.tenant_id

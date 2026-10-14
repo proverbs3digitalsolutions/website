@@ -589,7 +589,7 @@ router.put('/cleaning-checklist', owners, ah(async (req, res) => {
   // The same items in the same order change nothing, so nothing is written or logged.
   if (JSON.stringify(stored) !== JSON.stringify(items)) {
     await query('UPDATE organizations SET cleaning_checklist = $2 WHERE organization_id = $1', [req.user.organization_id, JSON.stringify(items)]);
-    await audit(null, req.user, 'cleaning.checklist_updated', 'organization', req.user.organization_id, { count: items.length });
+    await audit(null, req.user, 'cleaning.checklist_updated', 'organization', req.user.organization_id, { fields: ['items'] });
   }
   res.json({ items });
 }));

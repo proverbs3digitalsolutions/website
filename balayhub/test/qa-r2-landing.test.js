@@ -31,15 +31,16 @@ test('landing: with no contact email, the copy says to create an account and ask
   assert.doesNotMatch(landing, /Ask Help & support when you\\'re ready/);
 });
 
-test('landing: the Starting out card says 1 to 2 units, to match the 2-listing Starter plan', () => {
-  assert.ok(landing.includes("'Starting out', '1–2 units'"));
-  assert.ok(!landing.includes("'Starting out', '1–3 units'"));
-  assert.ok(landing.includes("'1–2 units': '1–2 unit'"), 'Taglish for 1–2 units');
+// QA round 9 (#29, D-85): the 1-3 band says 1 to 3 units; the old 1 to 2 wording was a bug for 3-unit hosts.
+test('landing: the Starting out card says 1 to 3 units (QA round 9, #29)', () => {
+  assert.ok(landing.includes("'Starting out', '1–3 units'"));
+  assert.ok(!landing.includes("'Starting out', '1–2 units'"));
+  assert.ok(landing.includes("'1–3 units': '1–3 unit'"), 'Taglish for 1–3 units');
 });
 
-test('landing: sign-up step 1 shows 1 to 2 units for the smallest band; the saved band key stays 1-3', () => {
-  assert.ok(landing.includes("['1-3', '1–2 units']"));
-  assert.ok(!landing.includes("'1–3 units'"));
+test('landing: sign-up step 1 shows 1 to 3 units for the smallest band; the saved band key stays 1-3', () => {
+  assert.ok(landing.includes("['1-3', '1–3 units']"));
+  assert.ok(!landing.includes("'1–2 units'"));
 });
 
 test('landing: footer links have real Taglish wording, not the English words', () => {

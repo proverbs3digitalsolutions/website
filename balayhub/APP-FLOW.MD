@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-14 (QA round 6, section 19)
+Last updated: 2026-10-14 (QA round 9, section 22; D-85)
 
 ---
 
@@ -846,7 +846,7 @@ Spec: `docs/specs/PHASE-5-PRICING-TEAM.md`. Decisions D-66 to D-74. Staff and cl
 - **Inbox:** From and To show the full year; the Listing dropdown names the unit (the property only when two units share a name); an unknown listing or property id in the link is ignored and shows the full list.
 - **Stay reports:** the average stay line says how many whole stays it counts; a link with the end before the start shows both dates and the end-before-start line; the By listing header reads "Of which cleaning & extras".
 - **Reviews (empty):** owners get a hint to Inbox settings; managers and staff read "Reviews from your guests show here."
-- **Booking page:** "At least 1 guest." stays at the field and no quote is asked for fewer than 1; switching language works on an invalid-link card without a reload.
+- **Booking page:** "At least 1 guest." stays at the field *(wording changed 2026-10-14, D-85: "Enter a whole number of guests, 1 or more." on the reservation form)* and no quote is asked for fewer than 1; switching language works on an invalid-link card without a reload.
 - **Guest pages in Taglish:** the "link not valid" and "not available" sentences (check-in, review, guidebook, quote, booking page).
 - **Get started:** an error moves focus to the first field with a message.
 - **More menu (phones):** a visible Close button, first in the list so it takes focus; Shift+Tab wraps inside the menu.
@@ -861,7 +861,7 @@ Spec: `docs/specs/PHASE-5-PRICING-TEAM.md`. Decisions D-66 to D-74. Staff and cl
 - **Booking and quote pages:** switching language keeps everything the guest typed or picked (dates, guests, name, email, phone, message, code, add-ons) and recalculates the total. Guests below 1 shows "Enter the number of guests to see the total." and no old total. The tab title follows the language and keeps the host's name ("Rio 2210 — Reyes Staycations"). A listing that can't take bookings shows the reason.
 - **Sign-in and reset:** a wrong password keeps focus in the form (also on forgot-password and setup server errors). The green "password reset" banner goes away on the next submit. Sign-up shows every problem at once (no tick, short password, mismatch).
 - **Cancel discards a draft:** pressing Cancel on a form (for example Add unit) throws away what was typed; closing with Escape or by clicking away keeps it for next time. After a form error the focus stays in the form.
-- **Rent:** a month's row Record button starts at that month's remaining amount; the dialog's balance line still shows the whole balance; the tenant's own Record starts at the whole balance. A rent row's Record button is named with the tenant, unit and month.
+- **Rent:** a month's row Record button starts at that month's remaining amount; the dialog's balance line still shows the whole balance; the tenant's own Record starts at the whole balance. A rent row's Record button is named with the tenant, unit and month. *Clarified 2026-10-14 (D-85): the row's Record fills the box with that month's amount; the money itself goes to the oldest unpaid month first, and the form says which month.*
 - **Over-amount questions:** Cancel on "Record more than the balance?" (reservations), "Record more than is owed?" (rent) and the owner payout question returns to the form with no message and posts nothing. An amount above ₱99,999,999.99 is refused at its field ("... is too large.") before any question. Guests below 1 on a reservation show "At least 1 guest." at the field.
 - **Dates:** every typed date must be between 2000 and 2100 and says so at the field; report and list filters still accept 1900 to 2200 for now.
 - **New reservation, any free room of a type:** the guide quotes the listing BalayHub would pick now (free and not on a lease) and names it; the saved booking matches. The same holds for a group's type rooms. With none free the answer is "No free <type> at this property on these dates."
@@ -885,3 +885,28 @@ Spec: `docs/specs/PHASE-5-PRICING-TEAM.md`. Decisions D-66 to D-74. Staff and cl
 - **Check-in form:** mobile "abc" and email "a@" each show one message at their field; the remove-guest button reads "Alisin ang guest {n}" in Taglish.
 - **Cleaner calendar (Taglish):** "Ngayon" and Taglish weekday names.
 - **Activity log:** every edit names only the fields that changed ("Changed: <label>"), and a save that changes nothing adds no row (see BACKEND-SCHEMA section 14).
+
+## 22. QA round 9 flow changes (2026-10-14)
+
+Decision D-85. The alpha is for owners of 1 to 3 properties, so these changes make the first screens shorter and the money rules stricter.
+
+- **Menu (sidebar and phone More sheet):** four groups: **Every day** (Launchpad, Home, Inbox, Calendar, Reservations, Housekeeping, Guests), **Money** (Stay reports, Reports, Profit and loss, Rent, Cleaner pay, Unit owners), **More tools** (folded; opens itself on one of its pages, and remembers being opened), **Setup** (Listings, Settings, Help). Nothing was removed. A page no group lists lands in More tools. Long-term and cleaner menus stay flat. A blank middle part in a link goes to the home page.
+- **Trial banner:** shows only in the last 3 days of the trial.
+- **Balance after refunds:** the guest balance is total, less the channel fee (channel bookings), less payments, plus refunds. Recording a refund bigger than the overpayment on a live stay first asks "Refund more than the overpayment?" ("After this refund the guest will owe ₱X again. Record it?", button Record refund); Cancel keeps the form. Every balance (reservation, list, CSV, pay link, receipts, daily close, owner portal, messages) follows the same rule.
+- **New reservation:** a **Where did they book?** list for direct bookings (Not set, Facebook, Messenger, Instagram, Viber, WhatsApp, TikTok, Google, Email, Referral, Other). There is no Walk-in choice: use Other. A channel booking has no source. Editing the dates offers the new price from your rates ("Use the new price?"). The reservation's rate offer keeps its space, so the Save button doesn't move under the pointer. Guest count: "Enter a whole number of guests, 1 or more." The Reservation channel and property filters are under **More filters**.
+- **Unit owners:** ticking a unit that already has another owner asks "Move this unit?" naming both owners; Yes moves it (statements and payouts follow), Cancel leaves it. The management fee box starts empty; label "How the management fee is worked out". An owner-operator sees a line saying they don't need a fee. The Publish button shows the reason when it can't be used.
+- **Rent:** Record says "This payment goes to September 2026 first (the oldest unpaid month)." when that isn't the row's month. "Partly paid" counts every month with some money on it, overdue or not. **Add tenant** goes on to **Assign unit** (to be confirmed in a browser check).
+- **Check-in form (guest):** an empty guest row is refused at its field: "Enter the name of each guest, or remove the empty row." (Taglish too). The host's note says "(2 guests, booked for 3)" when fewer names than booked guests were given.
+- **Pay page (guest):** add-on boxes say **Select**; the button is **Add selected to my bill**. An online payment failure reads "Online payment isn't available right now. Please try again in a few minutes, or contact the host." with no blame on the host.
+- **Booking page (guest):** after both dates are picked, the price line shows this stay's average nightly price before any discount; before that it shows "from" the lowest open night. Every peso amount shows two decimals, on the public `/stay` pages too.
+- **Automatic messages (inbox settings):** a new automatic message starts **off**; the "Turned on" box starts empty with a hint. Two automatic messages can't share a name (the field says so). Row buttons name the message and its trigger. **Insert template** is hidden in note mode. The assistant message clears when you close it.
+- **Discount codes:** a code typed with spaces is refused at the field: "Codes can't contain spaces. Try QA-R9-BAD." Guests who type a code with a space are still forgiven.
+- **Launchpad:** the calendar step ticks only after a sync worked (otherwise an amber warning); the guest-info step counts house rules; the unit-count card reads "1–3 units"; **Show the reminder on Home** brings back a dismissed reminder; the footer points to Help & support.
+- **Add and Edit listing:** the form opens with **Basics**; four collapsed sections follow: **Price extras**, **Guest info**, **Booking page and payments**, **Booking rules**. A section with an error opens itself. The pricing explainer is folded under "How pricing works". "Create a new link" names the link it makes.
+- **Cleaner pay:** a clean the owner did, with no rate for the owner, reads **Done by you, no pay** and isn't counted as missing pay. A priced clean stays unpaid with its amount. A name with no rate says why ("No rate for this name. Add a rate or pick the team member."). Saving the same rate again shows a toast, not a question. The address changes only after a successful load.
+- **Lost and found, checklists, photos:** row buttons in Lost and found name the item; a checklist edit reads "Changed: Checklist items" in the activity log; photos on a cleaning job show a thumbnail.
+- **Groups:** renaming a booking group writes one activity row, shown on each room's timeline.
+- **Reports and profit and loss:** category labels match the rest of the app; profit and loss reads "October 2026" and says it counts finished stays by check-out date; Reports counts by check-in and shows a "Direct bookings by source" card. The Period box keeps focus after a change; the tab row has the label "Report type".
+- **Calendar:** go-to-date waits 400 ms after typing, so a half-typed date loads once.
+- **Focus and forms everywhere:** after a save or redraw, focus returns to the button that opened the dialog (or its replacement); a tab row drawn again keeps focus on the same tab. A date outside 2000 to 2100 is refused at the field before any question. While a question is open the form's button shows its own label, not "Saving…". Errors inside a closed section open it. One toast per save.
+- **Filter links:** a bad value in a link is also removed from the address; a half-typed year is ignored; date filters use 2000 to 2100.

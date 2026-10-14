@@ -51,6 +51,19 @@ function checkFee(raw, body, model) {
   }
 }
 
+// A unit that belongs to another owner moves its stays and expenses onto that owner's statements, so the move needs the host's
+// yes (move_units: true). Without it the save is refused with every such unit named, and nothing is written.
+async function refuseUnitsOfOthers(db, orgId, ownerId, unitIds, moveUnits) {
+  if (!unitIds || moveUnits) return;
+  const { rows } = await db.query(
+    `SELECT u.unit_id, u.unit_name, u.owner_id, o.full_name AS owner_name
+       FROM units u JOIN properties p USING (property_id) JOIN unit_owners o ON o.owner_id = u.owner_id
+      WHERE p.organization_id = $1 AND u.unit_id = ANY($2) AND u.owner_id IS NOT NULL AND u.owner_id IS DISTINCT FROM $3
+      ORDER BY u.unit_name`, [orgId, unitIds, ownerId]);
+  if (!rows.length) return;
+  throw new HttpError(409, rows.map((u) => `${u.unit_name} belongs to ${u.owner_name}.`).join(' '), { code: 'UNIT_HAS_OWNER', units: rows });
+}
+
 // Point the given units at this owner (and only these).
 async function assignUnits(db, orgId, ownerId, unitIds) {
   if (!unitIds) return;
@@ -108,6 +121,7 @@ router.post('/unit-owners', ownersOnly, ah(async (req, res) => {
   const { n } = await one('SELECT COUNT(*)::int AS n FROM unit_owners WHERE organization_id = $1 AND archived_at IS NULL', [req.user.organization_id]);
   if (n >= 100) throw new HttpError(409, 'You can have up to 100 unit owners.', { code: 'LIMIT' });
   const id = await tx(async (db) => {
+    await refuseUnitsOfOthers(db, req.user.organization_id, null, body.unit_ids, req.body.move_units === true);
     const { rows: [o] } = await db.query(
       `INSERT INTO unit_owners (organization_id, full_name, email, phone, management_fee_pct, cleaning_to_manager, notes,
                                 fee_model, flat_monthly_fee, reserve_target, reserve_monthly)
@@ -134,6 +148,7 @@ router.patch('/unit-owners/:id', ownersOnly, ah(async (req, res) => {
   await tx(async (db) => {
     // Locked first, so the stored row compared below is the one this update replaces.
     const { rows: [before] } = await db.query('SELECT * FROM unit_owners WHERE owner_id = $1 FOR UPDATE', [o.owner_id]);
+    await refuseUnitsOfOthers(db, req.user.organization_id, o.owner_id, body.unit_ids, req.body.move_units === true);
     const { rows: owned } = await db.query(`SELECT unit_id FROM units WHERE owner_id = $1 AND status = 'active'`, [o.owner_id]);
     // Only the fields whose stored value really changes are named (names, never values). A save that changes nothing writes nothing.
     const sent = Object.fromEntries(cols.map((k) => [k, body[k]]));

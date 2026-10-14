@@ -46,7 +46,8 @@ router.get('/reservations/:id/activity', managers, ah(async (req, res) => {
        FROM audit_logs a
        LEFT JOIN users u ON u.user_id = a.actor_user_id
       WHERE a.organization_id = $2
-        AND (a.record_id = $1::text OR a.record_id IN (SELECT id FROM related) OR a.details->>'booking_id' = $1::text)
+        AND (a.record_id = $1::text OR a.record_id IN (SELECT id FROM related) OR a.details->>'booking_id' = $1::text
+             OR a.record_id = (SELECT group_id::text FROM bookings WHERE booking_id = $1::uuid))
       ORDER BY a.created_at DESC, a.audit_id DESC
       LIMIT ${LIMIT}`,
     [bookingId, req.user.organization_id]);

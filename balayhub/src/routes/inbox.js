@@ -16,6 +16,7 @@ const { requireRole, rateLimit } = require('../lib/auth');
 const { propertyScope } = require('../lib/access');
 const { mailEnabled } = require('../lib/mailer');
 const messaging = require('../lib/messaging');
+const { BALANCE } = require('../lib/balance');
 const { inboxStatus } = require('../lib/inbound');
 const config = require('../config');
 const { planStatus } = require('../lib/plans');
@@ -261,7 +262,7 @@ router.get('/inbox/:id', ah(async (req, res) => {
       WHERE m.conversation_id = $1 ORDER BY COALESCE(m.sent_at, m.scheduled_at, m.created_at), m.created_at`, [conv.conversation_id]);
   const booking = await one(
     `SELECT b.num_guests, b.total_amount,
-            (b.total_amount - CASE WHEN b.channel = 'direct' THEN 0 ELSE b.channel_fee END - COALESCE((SELECT SUM(amount) FROM booking_payments bp WHERE bp.booking_id = b.booking_id AND bp.voided_at IS NULL), 0))::numeric(12,2) AS balance,
+            ${BALANCE} AS balance,
             g.phone AS guest_phone
        FROM bookings b LEFT JOIN guests g ON g.guest_id = b.guest_id WHERE b.booking_id = $1`, [conv.booking_id]);
   if (conv.unread) await query('UPDATE conversations SET unread = false WHERE conversation_id = $1', [conv.conversation_id]);
@@ -538,8 +539,18 @@ router.get('/automations', ah(async (req, res) => {
   res.json({ automations: rows, can_edit: req.user.role === 'owner', sending: mailEnabled() });
 }));
 
+// A name another automation in the workspace already uses (case and end spaces ignored), as in checkTemplate.
+// ponytail: check then write, so two saves at the same instant could both pass.
+async function checkAutomationName(orgId, name, id = null) {
+  const dup = await one(
+    `SELECT btrim(name) AS name FROM automations
+      WHERE organization_id = $1 AND lower(btrim(name)) = lower(btrim($2)) AND automation_id IS DISTINCT FROM $3 LIMIT 1`, [orgId, name, id]);
+  if (dup) throw validationError({ name: `You already have an automatic message called "${dup.name}".` });
+}
+
 router.post('/automations', owners, ah(async (req, res) => {
   const body = validate(req.body, automationSpec);
+  await checkAutomationName(req.user.organization_id, body.name);
   if (DAY_TRIGGERS.includes(body.trigger_event) && body.offset_days === null) throw validationError({ offset_days: 'Enter the number of days.' });
   await loadTemplate(req.user, body.template_id);
   const a = await one(
@@ -553,6 +564,7 @@ router.post('/automations', owners, ah(async (req, res) => {
 router.patch('/automations/:id', owners, ah(async (req, res) => {
   const a = await loadAutomation(req.user, uuidParam(req.params.id));
   const body = validate(req.body, automationSpec, { partial: true });
+  if (body.name) await checkAutomationName(req.user.organization_id, body.name, a.automation_id);
   // Checked against the trigger and number of days the automation will have once saved.
   const days = body.offset_days === undefined ? a.offset_days : body.offset_days;
   if (DAY_TRIGGERS.includes(body.trigger_event || a.trigger_event) && days === null) throw validationError({ offset_days: 'Enter the number of days.' });

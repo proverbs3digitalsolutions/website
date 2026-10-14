@@ -94,7 +94,7 @@ test('a unit filter for a unit that is not in this workspace is ignored; a unit 
 });
 
 test('the count line is drawn after the filter bar, so a value the bar drops is not counted as a filter', () => {
-  const bar = src.indexOf('const bar = showBar && filterBar({');
+  const bar = src.indexOf('const bar = filterBar({');
   assert.ok(bar > -1, 'the filter bar is built');
   assert.ok(src.indexOf('\n  draw();\n') > bar, 'the first draw runs after the bar is built');
 });

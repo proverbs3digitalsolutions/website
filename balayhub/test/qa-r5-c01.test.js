@@ -71,7 +71,8 @@ test('#4 a bad group count says whole number', () => {
 });
 
 test('#23 the overpaid sentence shows only while something is still owed back', () => {
-  assert.match(resSrc, /overpaidAfterRefunds\(r\.balance, heldInfo\?\.refunded\) > 0/);
+  assert.match(resSrc, /overpaidBy = canManage && confirmed \? overpaid\(r\.balance\) : 0/);
+  assert.match(resSrc, /overpaidBy > 0 && h\('div', \{ class: 'alert alert--warn'/);
 });
 
 test('#27 the saving estimate uses the same amount as You keep', () => {

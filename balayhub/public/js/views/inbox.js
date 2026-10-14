@@ -452,6 +452,8 @@ function composer(c, templates, status, rerender, assignees = []) {
     composerModes.set(c.conversation_id, k);
     [...modeTabs.children].forEach((b, i) => b.setAttribute('aria-pressed', String(i === (k === 'note' ? 1 : 0))));
     form.classList.toggle('composer--note', mode === 'note');
+    // Guest templates don't belong in a staff note, so the template picker is only offered for a guest message.
+    tplSelect.hidden = mode === 'note';
     sendBtn.textContent = mode === 'note' ? 'Save note' : 'Send';
     if (mode !== 'note') picker.close();
     body.placeholder = mode === 'note' ? 'Only your team sees notes.' : `Write to ${c.guest_name}…`;
@@ -609,7 +611,8 @@ export async function inboxSettingsView(el, { rerender }) {
         h('div', { class: 'form-row form-row--2' },
           field({ name: 'offset_days', label: 'Number of days', type: 'number', min: 0, max: 30, value: a?.offset_days ?? 1, inputmode: 'numeric' }),
           field({ name: 'send_time', label: 'Send at (Philippine time)', type: 'time', value: a?.send_time || '10:00', hint: 'Leave blank for 10:00.' })),
-        field({ name: 'enabled', label: 'Turned on', type: 'checkbox', value: a ? a.enabled : true }),
+        field({ name: 'enabled', label: 'Turned on', type: 'checkbox', value: a ? a.enabled : false }),
+        h('div', { class: 'hint' }, 'Turn it on when the wording is right.'),
         h('p', { class: 'hint' }, 'Only guests with an email address get automatic messages. Turning one on never sends to stays whose time has already passed.'),
       ],
       onSubmit: async (d) => {
@@ -656,9 +659,9 @@ export async function inboxSettingsView(el, { rerender }) {
         h('div', { class: 'row__end' },
           a.enabled ? badge('active', 'On') : badge('archived', 'Off'),
           canEdit && h('div', { class: 'chips' },
-            h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `${a.enabled ? 'Turn off' : 'Turn on'} automatic message: ${a.name}`, onclick: () => toggle(a, !a.enabled) }, a.enabled ? 'Turn off' : 'Turn on'),
-            h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Edit automatic message: ${a.name}`, onclick: () => editAutomation(a) }, 'Edit'),
-            h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Delete automatic message: ${a.name}`, onclick: () => removeAutomation(a) }, 'Delete')))))))
+            h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `${a.enabled ? 'Turn off' : 'Turn on'} automatic message: ${a.name}, ${describeAutomation(a)}`, onclick: () => toggle(a, !a.enabled) }, a.enabled ? 'Turn off' : 'Turn on'),
+            h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Edit automatic message: ${a.name}, ${describeAutomation(a)}`, onclick: () => editAutomation(a) }, 'Edit'),
+            h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Delete automatic message: ${a.name}, ${describeAutomation(a)}`, onclick: () => removeAutomation(a) }, 'Delete')))))))
         : h('p', { class: 'muted small' }, 'No automatic messages yet.')),
     h('div', { class: 'card' },
       h('div', { class: 'card__head' }, h('h2', null, 'Message templates'),

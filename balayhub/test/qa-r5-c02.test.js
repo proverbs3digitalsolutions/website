@@ -45,7 +45,7 @@ test('Get started step 2: the phone message has Taglish wording registered in la
 test('Taglish step 2: Business name reads "Pangalan ng negosyo", not the English word', () => {
   assert.ok(landing.includes("'Business name': 'Pangalan ng negosyo'"));
   assert.ok(!landing.includes("'Business name': 'Pangalan ng business'"));
-  assert.ok(landing.includes("'First name': 'Pangalan'"), 'First name keeps its own word');
+  assert.ok(landing.includes("'First name': 'Unang pangalan'"), 'First name uses Unang pangalan (QA round 9, #36)');
 });
 
 test('workspace setup: the fallback form has a Mobile number box, filled from the saved answer as a tel field', () => {

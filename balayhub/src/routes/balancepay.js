@@ -15,6 +15,8 @@ const { propertyScope } = require('../lib/access');
 const { planStatus } = require('../lib/plans');
 const secretbox = require('../lib/secretbox');
 const paymongo = require('../lib/paymongo');
+const { BALANCE } = require('../lib/balance');
+const { fmtPeso } = require('../lib/messaging');
 const { priceAddons, createAddonCharges, listAddonsForUnit } = require('../lib/addons');
 
 const router = express.Router();
@@ -26,8 +28,6 @@ const METHOD_MAP = { gcash: 'gcash', paymaya: 'maya', maya: 'maya', card: 'card'
 const payLink = (token) => `${config.appUrl}/#/pay/${token}`;
 
 const REUSE_MS = 30 * 60 * 1000;
-// A channel fee counts only on a booking that came through a channel: a direct booking owes its full total (D-78).
-const BALANCE = `(b.total_amount - CASE WHEN b.channel = 'direct' THEN 0 ELSE b.channel_fee END - COALESCE((SELECT SUM(x.amount) FROM booking_payments x WHERE x.booking_id = b.booking_id AND x.voided_at IS NULL), 0))::numeric(12,2)`;
 
 async function ensurePayToken(bookingId) {
   const r = await one(`UPDATE bookings SET pay_token = COALESCE(pay_token, $2) WHERE booking_id = $1 RETURNING pay_token`,
@@ -106,7 +106,9 @@ async function billFor(b) {
             WHERE c.booking_id = $1 AND c.voided_at IS NULL ORDER BY c.created_at`, [b.booking_id]),
     query(`SELECT amount, payment_date, payment_method FROM booking_payments
             WHERE booking_id = $1 AND voided_at IS NULL ORDER BY payment_date, created_at`, [b.booking_id]),
-    one(`SELECT COALESCE(SUM(amount), 0)::numeric(12,2) AS paid FROM booking_payments WHERE booking_id = $1 AND voided_at IS NULL`, [b.booking_id]),
+    one(`SELECT COALESCE(SUM(amount), 0)::numeric(12,2) AS paid,
+                (SELECT COALESCE(SUM(amount), 0) FROM booking_refunds WHERE booking_id = $1 AND voided_at IS NULL)::numeric(12,2) AS refunded
+           FROM booking_payments WHERE booking_id = $1 AND voided_at IS NULL`, [b.booking_id]),
   ]);
   return {
     nights: b.nights, accommodation_total: b.accommodation_total, cleaning_fee: b.cleaning_fee, other_fees: b.other_fees,
@@ -115,7 +117,7 @@ async function billFor(b) {
     payments: payments.rows, paid: paid.paid,
     // Anything else already settled for this stay (e.g. through a booking platform), as one neutral line
     // so the bill adds up without showing the platform's commission.
-    adjustments: Math.max(0, Number(b.total_amount) - Number(paid.paid) - Number(b.balance)).toFixed(2),
+    adjustments: Math.max(0, Number(b.total_amount) - Number(paid.paid) + Number(paid.refunded) - Number(b.balance)).toFixed(2),
   };
 }
 
@@ -301,7 +303,7 @@ async function refresh(ref) {
   if (s.paid) {
     // Money arrived but not the amount asked for: never drop it silently.
     const { rows: [f] } = await query(`UPDATE balance_checkouts SET status = 'failed' WHERE checkout_ref = $1 AND status IN ('pending','expired') RETURNING *`, [ref]);
-    if (f) await alertHost(f, `PayMongo shows ₱${(s.paidAmount / 100).toLocaleString('en-PH')} paid instead of ₱${Number(c.amount).toLocaleString('en-PH')}.`).catch(() => {});
+    if (f) await alertHost(f, `PayMongo shows ${fmtPeso(s.paidAmount / 100)} paid instead of ${fmtPeso(c.amount)}.`).catch(() => {});
     return 'failed';
   }
   if (s.expired) {
@@ -336,7 +338,7 @@ async function markPaid(ref, method) {
 async function afterPaid({ c, paymentId }) {
   const { notify, propertyOfBooking } = require('../lib/push');
   notify(c.organization_id, 'payment', {
-    title: `Balance paid online · ₱${Number(c.amount).toLocaleString('en-PH')}`, body: 'Tap to open the reservation.',
+    title: `Balance paid online · ${fmtPeso(c.amount)}`, body: 'Tap to open the reservation.',
     url: `/#/reservations/${c.booking_id}`, propertyId: await propertyOfBooking(c.booking_id),
   }).catch(() => {});
   const receipts = require('../lib/receipts');
@@ -346,7 +348,7 @@ async function afterPaid({ c, paymentId }) {
   const conv = await messaging.getOrCreateConversation(c.booking_id);
   await query(`INSERT INTO messages (conversation_id, organization_id, direction, from_name, body, status) VALUES ($1,$2,'note','BalayHub',$3,'note')`,
     [conv.conversation_id, conv.organization_id,
-      `The guest paid ₱${Number(c.amount).toLocaleString('en-PH')} online.${Number(bal.balance) > 0 ? ` Remaining balance: ₱${Number(bal.balance).toLocaleString('en-PH')}.` : ' The booking is now fully paid.'}${Number(bal.balance) < 0 ? ' Note: this is more than the balance (another payment was recorded meanwhile); please refund the difference.' : ''}${c.booking_status !== 'confirmed' ? ' ⚠ This reservation is cancelled. Please refund the guest from your PayMongo dashboard or rebook them.' : ''}`]);
+      `The guest paid ${fmtPeso(c.amount)} online.${Number(bal.balance) > 0 ? ` Remaining balance: ${fmtPeso(bal.balance)}.` : ' The booking is now fully paid.'}${Number(bal.balance) < 0 ? ' Note: this is more than the balance (another payment was recorded meanwhile); please refund the difference.' : ''}${c.booking_status !== 'confirmed' ? ' ⚠ This reservation is cancelled. Please refund the guest from your PayMongo dashboard or rebook them.' : ''}`]);
   await query(`UPDATE conversations SET unread = true, status = 'open', last_message_at = now() WHERE conversation_id = $1`, [conv.conversation_id]);
 }
 
@@ -406,7 +408,7 @@ async function alertHost(c, reason) {
     await sendMail({
       to: u.email,
       subject: 'Please check a balance payment in PayMongo',
-      text: `Hi ${u.full_name},\n\nBalayHub could not confirm an online balance payment of ₱${Number(c.amount).toLocaleString('en-PH')} (reference ${c.provider_checkout_id}). Reason: ${reason}\n\nPlease check your PayMongo dashboard. If it was paid, record the payment on the reservation by hand.\n\n— BalayHub`,
+      text: `Hi ${u.full_name},\n\nBalayHub could not confirm an online balance payment of ${fmtPeso(c.amount)} (reference ${c.provider_checkout_id}). Reason: ${reason}\n\nPlease check your PayMongo dashboard. If it was paid, record the payment on the reservation by hand.\n\n— BalayHub`,
     });
   }
 }

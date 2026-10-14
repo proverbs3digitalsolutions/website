@@ -219,7 +219,7 @@ test('the deposit percentage sets the quote and the PayMongo amount, at 50 and a
   assert.equal(p.amount, '1925.00');
 });
 
-test('refund cap: none before anything is paid; refunds total never exceeds what was paid; balance unchanged', async () => {
+test('refund cap: none before anything is paid; refunds total never exceeds what was paid; the balance counts them', async () => {
   const id = res.booking_id;
   assert.equal((await owner.post(`/api/reservations/${id}/refunds`, refundBody())).status, 400, 'nothing paid yet');
   assert.equal((await owner.post(`/api/reservations/${id}/payments`, { amount: '2000.00', payment_date: d(0), payment_method: 'gcash' })).status, 201);
@@ -241,7 +241,7 @@ test('refund cap: none before anything is paid; refunds total never exceeds what
   assert.equal(log.refunded, '2000.00');
   assert.equal(log.refundable, '0.00');
   assert.equal(log.refunds.length, 2);
-  assert.equal((await owner.get(`/api/reservations/${id}`)).data.reservation.balance, balance, 'refunds do not change the balance');
+  assert.equal((await owner.get(`/api/reservations/${id}`)).data.reservation.balance, '5500.00', 'refunds count in the balance (D-85): 3,500 owed + 2,000 refunded');
 });
 
 test('void frees the cap again; voiding twice is refused; a reason is required; a voided payment stops counting as paid', async () => {

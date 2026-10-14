@@ -97,6 +97,19 @@ async function lowPriceOk(d, form, saveText) {
 
 const BUILDING_SAVED = 'The building was saved; fix the listing details and save again.';
 
+// The starting value of each optional field on a new listing. On Edit a closed group opens when one of its fields holds
+// something other than its starting value, so a listing that never used a group keeps it closed.
+const START = {
+  security_deposit_amount: 0, weekend_rate: '', holiday_rate: '', weekly_discount: 0, fortnight_discount: 0, monthly_discount: 0, min_price: '',
+  checkin_time: '14:00', checkout_time: '12:00', wifi_name: '', wifi_password: '', checkin_instructions: '', house_rules: '',
+  bookable_online: false, description: '', payment_option: 'either', balance_due_days: 3, min_nights: 1, cancellation_policy: '', cancellation_policy_text: '',
+};
+function holds(u, keys) {
+  // The database sends a time with seconds (14:00:00), so the seconds are dropped before the comparison.
+  return keys.some((k) => u[k] !== undefined && u[k] !== null && u[k] !== '' && (typeof START[k] === 'number'
+    ? Number(u[k]) !== START[k] : String(u[k]).replace(/:00$/, '') !== String(START[k])));
+}
+
 function listingFields(u = {}, roomTypes = []) {
   return [
     h('div', { class: 'form-row form-row--2' },
@@ -116,53 +129,55 @@ function listingFields(u = {}, roomTypes = []) {
       field({ name: 'cleaning_fee', label: 'Cleaning fee per stay', type: 'money', value: u.cleaning_fee, placeholder: '500' })),
     h('div', { class: 'form-row form-row--2' },
       field({ name: 'max_guests', label: 'Maximum guests', type: 'number', min: 1, max: 50, value: u.max_guests || 2, inputmode: 'numeric' }),
-      field({ name: 'security_deposit_amount', label: 'Security deposit', type: 'money', value: u.security_deposit_amount })),
-    h('div', { class: 'form-row form-row--2' },
-      field({ name: 'checkin_time', label: 'Check-in time', type: 'time', value: u.checkin_time || '14:00' }),
-      field({ name: 'checkout_time', label: 'Check-out time', type: 'time', value: u.checkout_time || '12:00' })),
-    h('hr', { class: 'divider' }),
-    h('h3', { class: 'subhead' }, 'Pricing helpers (optional)'),
-    h('p', { class: 'muted small' }, 'Applied automatically to new quotes and your booking page. For date ranges like summer or Holy Week, add a season in Calendar → Pricing rules.'),
-    h('div', { class: 'form-row form-row--2' },
-      field({ name: 'weekend_rate', label: 'Weekend rate (Fri & Sat nights)', type: 'money', value: u.weekend_rate, placeholder: 'Same as base' }),
-      field({ name: 'holiday_rate', label: 'Holiday rate', type: 'money', value: u.holiday_rate, placeholder: 'Same as base',
-        hint: 'PH holidays and long weekends, e.g. Holy Week, Christmas, New Year.' })),
-    h('div', { class: 'form-row form-row--2' },
-      field({ name: 'weekly_discount', label: 'Weekly discount % (7+ nights)', type: 'number', min: 0, max: 50, value: u.weekly_discount || 0, inputmode: 'numeric' }),
-      field({ name: 'monthly_discount', label: 'Monthly discount % (28+ nights)', type: 'number', min: 0, max: 70, value: u.monthly_discount || 0, inputmode: 'numeric' })),
-    h('div', { class: 'form-row form-row--2' },
-      field({ name: 'fortnight_discount', label: '14+ night discount %', type: 'number', min: 0, max: 90, value: u.fortnight_discount || 0, inputmode: 'numeric',
-        hint: 'Between the weekly and monthly discounts.' }),
-      field({ name: 'min_price', label: 'Lowest price per night (optional)', type: 'money', value: u.min_price, placeholder: 'No floor',
-        hint: 'Rules and discounts never take a night below this.' })),
-    h('hr', { class: 'divider' }),
-    h('h3', { class: 'subhead' }, 'Guest info (used in messages to guests)'),
-    h('div', { class: 'form-row form-row--2' },
-      field({ name: 'wifi_name', label: 'Wi-Fi name', value: u.wifi_name, maxlength: 100 }),
-      field({ name: 'wifi_password', label: 'Wi-Fi password', value: u.wifi_password, maxlength: 100 })),
-    field({ name: 'checkin_instructions', label: 'Check-in instructions', type: 'textarea', value: u.checkin_instructions, maxlength: 3000,
-      placeholder: 'e.g. Show your ID at the lobby, get the key from the guard, unit is on the 12th floor…' }),
-    field({ name: 'house_rules', label: 'House rules', type: 'textarea', value: u.house_rules, maxlength: 3000, placeholder: 'e.g. No smoking. No parties. Quiet hours 10 PM – 7 AM.' }),
-    h('hr', { class: 'divider' }),
-    h('h3', { class: 'subhead' }, 'Direct booking page'),
-    field({ name: 'bookable_online', label: 'Show this listing on my booking page', type: 'checkbox', value: Boolean(u.bookable_online) }),
-    field({ name: 'description', label: 'Description for guests', type: 'textarea', value: u.description, maxlength: 3000,
-      placeholder: 'e.g. Bright studio with a balcony and city view, fast Wi-Fi, smart TV, kitchenette, pool and gym access. 5 minutes from the mall.' }),
-    h('div', { class: 'form-row form-row--2' },
-      field({ name: 'payment_option', label: 'Online payment', type: 'select', value: u.payment_option || 'either', placeholderOption: false, options: [
-        ['either', 'Guest chooses: full or deposit'], ['full', 'Full payment only'], ['deposit', 'Deposit only, rest before check-in'],
-      ] }),
-      field({ name: 'min_nights', label: 'Minimum nights', type: 'number', min: 1, max: 60, value: u.min_nights || 1, inputmode: 'numeric' })),
-    h('div', { class: 'form-row form-row--2' },
       field({ name: 'deposit_pct', label: 'Deposit (% of the total)', type: 'number', required: true, min: 10, max: 90, value: u.deposit_pct ?? 50, inputmode: 'numeric',
-        hint: 'What a guest pays now when they choose a deposit. From 10 to 90.' }),
-      field({ name: 'balance_due_days', label: 'Balance due (days before check-in)', type: 'number', min: 0, max: 60, value: u.balance_due_days ?? 3, inputmode: 'numeric',
-        hint: 'For deposits. Use your payment reminder message to ask for the rest.' })),
-    field({ name: 'cancellation_policy', label: 'Cancellation policy', type: 'select', value: u.cancellation_policy || '', placeholderOption: 'Not set (nothing shown to guests)', options: [
-      ['flexible', 'Flexible'], ['moderate', 'Moderate'], ['strict', 'Strict'], ['non_refundable', 'Non-refundable'], ['custom', 'Custom (write your own)'],
-    ] }),
-    field({ name: 'cancellation_policy_text', label: 'Custom policy text', type: 'textarea', value: u.cancellation_policy_text, maxlength: 1000,
-      hint: 'Shown to guests only when the policy is Custom. The presets show their own wording.' }),
+        hint: 'What a guest pays now when they choose a deposit. From 10 to 90.' })),
+    h('details', { class: 'form-section', open: holds(u, ['weekend_rate', 'holiday_rate', 'weekly_discount', 'fortnight_discount', 'monthly_discount', 'min_price', 'security_deposit_amount']) },
+      h('summary', null, 'Price extras'),
+      h('p', { class: 'muted small' }, 'Applied automatically to new quotes and your booking page. For date ranges like summer or Holy Week, add a season in Calendar → Pricing rules.'),
+      h('div', { class: 'form-row form-row--2' },
+        field({ name: 'weekend_rate', label: 'Weekend rate (Fri & Sat nights)', type: 'money', value: u.weekend_rate, placeholder: 'Same as base' }),
+        field({ name: 'holiday_rate', label: 'Holiday rate', type: 'money', value: u.holiday_rate, placeholder: 'Same as base',
+          hint: 'PH holidays and long weekends, e.g. Holy Week, Christmas, New Year.' })),
+      h('div', { class: 'form-row form-row--2' },
+        field({ name: 'weekly_discount', label: 'Weekly discount % (7+ nights)', type: 'number', min: 0, max: 50, value: u.weekly_discount || 0, inputmode: 'numeric' }),
+        field({ name: 'monthly_discount', label: 'Monthly discount % (28+ nights)', type: 'number', min: 0, max: 70, value: u.monthly_discount || 0, inputmode: 'numeric' })),
+      h('div', { class: 'form-row form-row--2' },
+        field({ name: 'fortnight_discount', label: '14+ night discount %', type: 'number', min: 0, max: 90, value: u.fortnight_discount || 0, inputmode: 'numeric',
+          hint: 'Between the weekly and monthly discounts.' }),
+        field({ name: 'min_price', label: 'Lowest price per night (optional)', type: 'money', value: u.min_price, placeholder: 'No floor',
+          hint: 'Rules and discounts never take a night below this.' })),
+      field({ name: 'security_deposit_amount', label: 'Security deposit', type: 'money', value: u.security_deposit_amount })),
+    h('details', { class: 'form-section', open: holds(u, ['checkin_time', 'checkout_time', 'wifi_name', 'wifi_password', 'checkin_instructions', 'house_rules']) },
+      h('summary', null, 'Guest info'),
+      h('p', { class: 'muted small' }, 'Used in messages to guests.'),
+      h('div', { class: 'form-row form-row--2' },
+        field({ name: 'checkin_time', label: 'Check-in time', type: 'time', value: u.checkin_time || '14:00' }),
+        field({ name: 'checkout_time', label: 'Check-out time', type: 'time', value: u.checkout_time || '12:00' })),
+      h('div', { class: 'form-row form-row--2' },
+        field({ name: 'wifi_name', label: 'Wi-Fi name', value: u.wifi_name, maxlength: 100 }),
+        field({ name: 'wifi_password', label: 'Wi-Fi password', value: u.wifi_password, maxlength: 100 })),
+      field({ name: 'checkin_instructions', label: 'Check-in instructions', type: 'textarea', value: u.checkin_instructions, maxlength: 3000,
+        placeholder: 'e.g. Show your ID at the lobby, get the key from the guard, unit is on the 12th floor…' }),
+      field({ name: 'house_rules', label: 'House rules', type: 'textarea', value: u.house_rules, maxlength: 3000, placeholder: 'e.g. No smoking. No parties. Quiet hours 10 PM – 7 AM.' })),
+    h('details', { class: 'form-section', open: holds(u, ['bookable_online', 'description', 'payment_option', 'balance_due_days']) },
+      h('summary', null, 'Booking page and payments'),
+      field({ name: 'bookable_online', label: 'Show this listing on my booking page', type: 'checkbox', value: Boolean(u.bookable_online) }),
+      field({ name: 'description', label: 'Description for guests', type: 'textarea', value: u.description, maxlength: 3000,
+        placeholder: 'e.g. Bright studio with a balcony and city view, fast Wi-Fi, smart TV, kitchenette, pool and gym access. 5 minutes from the mall.' }),
+      h('div', { class: 'form-row form-row--2' },
+        field({ name: 'payment_option', label: 'Online payment', type: 'select', value: u.payment_option || 'either', placeholderOption: false, options: [
+          ['either', 'Guest chooses: full or deposit'], ['full', 'Full payment only'], ['deposit', 'Deposit only, rest before check-in'],
+        ] }),
+        field({ name: 'balance_due_days', label: 'Balance due (days before check-in)', type: 'number', min: 0, max: 60, value: u.balance_due_days ?? 3, inputmode: 'numeric',
+          hint: 'For deposits. Use your payment reminder message to ask for the rest.' }))),
+    h('details', { class: 'form-section', open: holds(u, ['min_nights', 'cancellation_policy', 'cancellation_policy_text']) },
+      h('summary', null, 'Booking rules'),
+      field({ name: 'min_nights', label: 'Minimum nights', type: 'number', min: 1, max: 60, value: u.min_nights || 1, inputmode: 'numeric' }),
+      field({ name: 'cancellation_policy', label: 'Cancellation policy', type: 'select', value: u.cancellation_policy || '', placeholderOption: 'Not set (nothing shown to guests)', options: [
+        ['flexible', 'Flexible'], ['moderate', 'Moderate'], ['strict', 'Strict'], ['non_refundable', 'Non-refundable'], ['custom', 'Custom (write your own)'],
+      ] }),
+      field({ name: 'cancellation_policy_text', label: 'Custom policy text', type: 'textarea', value: u.cancellation_policy_text, maxlength: 1000,
+        hint: 'Shown to guests only when the policy is Custom. The presets show their own wording.' })),
   ];
 }
 
@@ -335,10 +350,10 @@ async function channelsModal(listing, onChange) {
         h('p', { class: 'muted small' }, 'Paste this link into Airbnb (Calendar → Availability → Connect to another website), Booking.com (Rates & Availability → Sync calendars) or Agoda. They will then block nights booked in BalayHub. Keep the link private.'),
         h('div', { class: 'chips' }, exportInput,
           h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: async () => { exportInput.select(); try { await navigator.clipboard.writeText(data.export_url); toast('Link copied.'); } catch { toast('Select the link and copy it.'); } } }, 'Copy'),
-          h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: async () => {
+          h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Create a new link, ${listing.unit_name}`, onclick: async () => {
             if (!await confirmDialog({ title: 'Create a new link?', text: 'The old link stops working. You will need to paste the new one into each channel.', confirmText: 'Create new link', danger: true })) return;
             await post(`/units/${listing.unit_id}/channels/rotate`); m.close(); channelsModal(listing, onChange);
-          } }, 'Reset link'))),
+          } }, 'Create a new link'))),
       h('section', null,
         h('h3', null, '2. Bring in bookings from your channels'),
         h('p', { class: 'muted small' }, 'Copy the "Export calendar" link from Airbnb, Booking.com or Agoda and paste it here. BalayHub checks it every 30 minutes. Calendar links share dates only — add guest names and amounts on each reservation if you want them in your reports.'),

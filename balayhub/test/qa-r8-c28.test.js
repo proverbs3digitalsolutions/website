@@ -28,28 +28,35 @@ function bind({ box, view, load, lastData }) {
   return new Function('dateInput', 'view', 'load', 'lastData', `return ${changeHandler()};`)(box, view, load, lastData);
 }
 
-test('an emptied Go to date box shows the grid start date again, and the grid is left alone', () => {
+// Round 9 (K12): the handler acts 400 ms after the change, so each test advances mock timers by 400 ms before it asserts.
+test('an emptied Go to date box shows the grid start date again, and the grid is left alone', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   const box = { value: '' };
   const view = { start: '2026-10-20' };
   let loads = 0;
   bind({ box, view, load: () => { loads += 1; }, lastData: { start: '2026-10-20' } })();
+  t.mock.timers.tick(400);
   assert.equal(box.value, '2026-10-20');
   assert.equal(view.start, '2026-10-20');
   assert.equal(loads, 0);
 });
 
-test('the box goes back to the date on the grid, not a date a Later click asked for and has not drawn yet', () => {
+test('the box goes back to the date on the grid, not a date a Later click asked for and has not drawn yet', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   const box = { value: '' };
   const view = { start: '2026-10-27' };
   bind({ box, view, load: () => {}, lastData: { start: '2026-10-20' } })();
+  t.mock.timers.tick(400);
   assert.equal(box.value, '2026-10-20');
 });
 
-test('a picked date still moves the grid to that date and loads it once', () => {
+test('a picked date still moves the grid to that date and loads it once', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   const box = { value: '2026-11-01' };
   const view = { start: '2026-10-20' };
   let loads = 0;
   bind({ box, view, load: () => { loads += 1; }, lastData: { start: '2026-10-20' } })();
+  t.mock.timers.tick(400);
   assert.equal(view.start, '2026-11-01');
   assert.equal(loads, 1);
   assert.equal(box.value, '2026-11-01');

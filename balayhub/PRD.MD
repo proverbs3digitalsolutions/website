@@ -2,7 +2,9 @@
 
 BalayHub is a web app that helps Filipino hosts run 1 to 10 rental units from one place. It covers condo staycations listed on Airbnb, Booking.com and Agoda, and long-term monthly rentals such as apartments, boarding houses, dorms and bedspaces. Hosts get one calendar for every channel, a direct booking page with GCash, Maya and card payments, a guest inbox, cleaning tasks, condo gate passes, deposits, reports and owner statements. Long-term landlords get properties, tenants, leases, rent, expenses and repairs. This document describes what is **actually built** today, feature by feature, and lists what is planned. It was written from the code (`src/routes`, `src/lib`, `public/js`, `db/migrations`) and the existing docs.
 
-Last updated: 2026-10-14 (QA round 6)
+Last updated: 2026-10-14 (QA round 9; D-85)
+
+*2026-10-14 (D-85): the alpha targets owners of 1 to 3 properties; the Guesty-inspired ideas are on hold as reference only. QA puts small-host friction first.*
 
 ---
 
@@ -163,7 +165,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 
 **What it does:**
 - A listing is a unit with a nightly rate. Fields: name, type, base rate, cleaning fee, max guests, security deposit, check-in/out times, Wi-Fi, check-in instructions, house rules, booking-page settings.
-- Pricing helpers per listing: **weekend rate** (Fri and Sat nights), **holiday rate** (nights before and during Philippine holiday long weekends), **weekly discount** (7+ nights) and **monthly discount** (28+ nights).
+- Price extras per listing (a collapsed section of the listing form; was called "Pricing helpers"): **weekend rate** (Fri and Sat nights), **holiday rate** (nights before and during Philippine holiday long weekends), **weekly discount** (7+ nights) and **monthly discount** (28+ nights).
 - **Pricing rules** page: how a night is priced, a rates table, seasons, and the PH holiday list for the next 12 months.
 - **Seasons**: a date range with its own rate and/or minimum nights, for one listing or (owner only) all listings.
 - Priority: calendar price → holiday → season (listing beats all-listings) → weekend → base. Then the long-stay discount.
@@ -247,7 +249,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - Unread badge on the Inbox menu item.
 - Guest replies come in only when the server has `IMAP_URL` set. Otherwise the page explains replies go to the email inbox.
 - Templates: Booking confirmation, Check-in instructions, Thank you after check-out, Payment reminder, plus custom templates. Taglish versions exist.
-- Automatic messages: triggers on booking created, days before check-in, on check-in day, days before check-out, days after check-out, at a set Philippine time. Defaults are created **off**. Only the owner can add, edit, turn on or delete automations.
+- Automatic messages: triggers on booking created, days before check-in, on check-in day, days before check-out, days after check-out, at a set Philippine time. Defaults are created **off**, and so is every automatic message the owner adds: the "Turned on" box starts empty (D-85). Only the owner can add, edit, turn on or delete automations.
 - **✨ Draft reply with AI** writes a draft in the guest's language (English, Tagalog or Taglish) for review. Shown only when `ANTHROPIC_API_KEY` is set and the plan includes AI (trial, Growth, Pro, Complimentary).
 - System notes appear for check-in forms, online payments, reviews and gate pass receipts.
 
@@ -390,7 +392,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - **Dashboard:** properties, occupied and vacant units, rent collected this month, outstanding and overdue rent, this month's rent status, recent payments, and "Needs attention" (overdue, leases ending, open repairs).
 - **Properties and units:** add (owner), edit, archive and restore. Occupancy comes from leases.
 - **Tenants and leases:** profiles with duplicate warning, assign a unit (creates a lease), change terms, end or cancel a lease, lease documents, payment history, owner-only data export.
-- **Rent:** monthly charges generated from each lease. Statuses paid, partial, unpaid, overdue. Payments go to the oldest charge first.
+- **Rent:** monthly charges generated from each lease. Statuses paid, partial, unpaid, overdue. Payments go to the oldest charge first (the Record form names that month; the row's Record box is filled with that month's own amount).
 - **Payments:** full or partial, cash, bank, GCash, Maya, check, reference, receipt file. Never edited or deleted, only voided with a reason.
 - **Expenses:** categories (repairs, utilities, taxes, insurance, association dues, supplies, salaries, cleaning, other), unit, vendor, receipt. Corrections are logged; voids keep history. Short-term workspaces see this page as "Expenses".
 - **Maintenance:** requests by property and unit, priority, status workflow (open, in progress, resolved, cancelled), repair costs saved as Repairs expenses, photos.
@@ -1019,3 +1021,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - QA round 8: a payout to an owner with no units has no statement, so it is not checked against what the owner is owed (founder question 8 in BLOCKERS, default keep).
 - QA round 8: the report and list date filters still accept years 1900 to 2200, while every date typed into a form is limited to 2000 to 2100 (D-84). To be tightened later.
 - QA round 8 scope notes (D-84): a quote can't have more guests than the listing allows (same as reservations and the booking page); owners and managers can edit a cleaning task's notes on the job page; Get started answers are kept only for the email they were typed for, shown for checking and never posted on their own; unit-level damage reports are for owners and managers only; a percentage-model unit owner must have a management fee.
+- QA round 9: the guest balance counts refunds (D-85). A refund on a live stay that leaves money owed asks first; the cap stays at what was paid (founder question 1 in BLOCKERS, default allowed).
+- QA round 9: there is no Walk-in booking source; walk-ins are saved as Other (founder question in BLOCKERS, default Other).
+- QA round 9: the Starter plan allows 2 listings while the alpha targets 1 to 3 units (BLOCKERS, default no pricing change).
+- QA round 9: the automatic-message preview with sample guest details is not built yet (round 10).

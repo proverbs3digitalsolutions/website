@@ -12,6 +12,7 @@ const { ah } = require('../lib/http');
 const { rateLimit } = require('../lib/auth');
 const { planStatus } = require('../lib/plans');
 const { describePolicy } = require('../lib/policies');
+const { fmtPeso } = require('../lib/messaging');
 
 const router = express.Router();
 const CACHE = 'public, max-age=300';
@@ -20,7 +21,6 @@ const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ESC[c]);
 const oneLine = (s) => String(s || '').replace(/\s+/g, ' ').trim();
 // Text cut to n characters, ending in an ellipsis when it was cut.
 const cut = (s, n) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
-const peso = (v) => `₱${Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
 const photoSrc = (id) => `/api/public/listing-photos/${id}`;
 
 // Guest-facing labels. English is the default; a host who sets Taglish gets these.
@@ -91,7 +91,7 @@ const LISTINGS = `
 const hostPath = (host) => `/stay/${encodeURIComponent(host.booking_slug)}`;
 const listingPath = (host, l) => `${hostPath(host)}/${encodeURIComponent(l.public_slug)}`;
 const where = (l) => [l.city, l.province].filter(Boolean).join(', ');
-const fromLine = (l, t) => t.from(peso(l.from_rate));
+const fromLine = (l, t) => t.from(fmtPeso(l.from_rate));
 
 function sendHtml(res, html, status = 200) {
   res.status(status).type('html').set('Cache-Control', CACHE).send(html);

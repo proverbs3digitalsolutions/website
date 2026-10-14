@@ -74,8 +74,12 @@ test('guest fills in the form and uploads IDs without an account', async () => {
   assert.ok(noConsent.data.fields.consent);
   const tooMany = await guest.post(`/api/public/checkin/${token}`, { lead_name: 'R', phone: '09171112222', consent: true, guests: ['a', 'b', 'c', 'd'] });
   assert.equal(tooMany.status, 400);
+  // A blank guest row is refused at its field, not dropped (QA round 9 #7).
+  const blankRow = await guest.post(`/api/public/checkin/${token}`, { lead_name: 'Rafael Diaz', phone: '09171112222', consent: true, guests: ['Ana Diaz', '  '] });
+  assert.equal(blankRow.status, 400);
+  assert.deepEqual(blankRow.data.fields, { guests: 'Enter the name of each guest, or remove the empty row.' });
   const ok = await guest.post(`/api/public/checkin/${token}`, {
-    lead_name: 'Rafael Diaz', phone: '09171112222', email: 'rafael@example.com', guests: ['Ana Diaz', '  ', 'Leo Diaz'],
+    lead_name: 'Rafael Diaz', phone: '09171112222', email: 'rafael@example.com', guests: ['Ana Diaz', 'Leo Diaz'],
     arrival_time: '15:30', vehicle_plate: 'abc 1234', consent: true,
   });
   assert.equal(ok.status, 200, JSON.stringify(ok.data));

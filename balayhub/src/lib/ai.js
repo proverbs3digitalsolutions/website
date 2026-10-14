@@ -7,6 +7,7 @@
 const config = require('../config');
 const { one, query } = require('../db');
 const { fmtDate, fmtPeso } = require('./messaging');
+const { BALANCE } = require('./balance');
 
 const API_URL = 'https://api.anthropic.com/v1/messages';
 
@@ -71,7 +72,7 @@ async function draftReply({ conversation, user, instructions }) {
   const ctx = await one(
     `SELECT b.*, u.unit_name, u.checkin_time, u.checkout_time, u.wifi_name, u.wifi_password, u.checkin_instructions, u.house_rules,
             p.property_name, p.address, p.city, p.province, g.full_name AS guest_name, o.name AS workspace_name,
-            (b.total_amount - CASE WHEN b.channel = 'direct' THEN 0 ELSE b.channel_fee END - COALESCE((SELECT SUM(amount) FROM booking_payments bp WHERE bp.booking_id = b.booking_id AND bp.voided_at IS NULL), 0))::numeric(12,2) AS balance
+            ${BALANCE} AS balance
        FROM bookings b JOIN units u ON u.unit_id = b.unit_id JOIN properties p ON p.property_id = u.property_id
        JOIN organizations o ON o.organization_id = b.organization_id LEFT JOIN guests g ON g.guest_id = b.guest_id
       WHERE b.booking_id = $1`, [conversation.booking_id]);

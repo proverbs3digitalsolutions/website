@@ -24,6 +24,7 @@ const paymongo = require('../lib/paymongo');
 const storage = require('../lib/storage');
 const { describePolicy } = require('../lib/policies');
 const { sendMail } = require('../lib/mailer');
+const { fmtPeso } = require('../lib/messaging');
 
 const router = express.Router();
 const publicRouter = express.Router();
@@ -442,7 +443,7 @@ async function startCheckout({ host, token, ip, label, returnUrls, row: r, befor
 
   const key = secretbox.decrypt(host.paymongo_key_enc);
   try {
-    if (!key) throw Object.assign(new Error('Online payment is not set up correctly for this host.'), { status: 502 });
+    if (!key) throw new Error('Online payment is not set up correctly for this host.');
     const data = await paymongo.request(key, 'POST', '/checkout_sessions', {
       data: {
         attributes: {
@@ -462,12 +463,14 @@ async function startCheckout({ host, token, ip, label, returnUrls, row: r, befor
     });
     const id = data?.data?.id;
     const url = data?.data?.attributes?.checkout_url;
-    if (!id || !url) throw Object.assign(new Error('The payment service returned an unexpected response.'), { status: 502 });
+    if (!id || !url) throw new Error('The payment service returned an unexpected response.');
     await query('UPDATE direct_checkouts SET provider_checkout_id = $2 WHERE checkout_ref = $1', [hold.checkout_ref, id]);
     return url;
   } catch (err) {
     await query(`UPDATE direct_checkouts SET status = 'failed', hold_until = now() WHERE checkout_ref = $1`, [hold.checkout_ref]);
-    throw new HttpError(502, err.status === 502 ? err.message : 'Online payment is not available right now. Please contact the host.', { code: 'PAYMENT_FAILED' });
+    // The host reads the real reason in the server log; the guest only sees a neutral sentence.
+    console.error(`[direct] checkout ${hold.checkout_ref} could not start online payment: ${err.message}`);
+    throw new HttpError(502, "Online payment isn't available right now. Please try again in a few minutes, or contact the host.", { code: 'PAYMENT_FAILED' });
   }
 }
 
@@ -592,7 +595,7 @@ async function finalize(ref, method) {
         [c.organization_id, c.unit_id, g.guest_id, c.check_in, c.check_out, c.num_guests, c.accommodation_total, c.cleaning_fee, code,
           [c.test_mode ? 'TEST MODE booking (PayMongo test key, no real payment).' : null,
             `Booked online (${c.pay_type === 'deposit' ? `${depositPctOf(c)}% deposit paid` : 'paid in full'}).`,
-            promo ? `Discount code ${promo.code}: −₱${Number(c.discount_amount).toLocaleString('en-PH')} (already taken off the accommodation).` : null,
+            promo ? `Discount code ${promo.code}: −${fmtPeso(c.discount_amount)} (already taken off the accommodation).` : null,
             g.do_not_rebook ? '⚠ This guest is marked "Do not rebook" in Guests.' : null,
             c.notes ? `Guest's message: ${c.notes}` : null].filter(Boolean).join('\n'), c.source, c.rules_accepted_at, c.rules_text]);
       // Add-ons become stay charges in this same transaction, so the booking total includes them.
@@ -632,7 +635,7 @@ async function finalize(ref, method) {
 async function afterBooking({ bookingId, ownerId, c, flagged, quoteCancelled }) {
   const { notify, propertyOfBooking } = require('../lib/push');
   notify(c.organization_id, 'new_booking', {
-    title: `New direct booking · ₱${Number(c.amount_due_now).toLocaleString('en-PH')} paid`,
+    title: `New direct booking · ${fmtPeso(c.amount_due_now)} paid`,
     body: `${c.guest_name}, ${c.check_in} – ${c.check_out}`,
     url: `/#/reservations/${bookingId}`, propertyId: await propertyOfBooking(bookingId),
   }).catch(() => {});
@@ -647,7 +650,7 @@ async function afterBooking({ bookingId, ownerId, c, flagged, quoteCancelled }) 
   await query(
     `INSERT INTO messages (conversation_id, organization_id, direction, from_name, body, status) VALUES ($1,$2,'note','BalayHub',$3,'note')`,
     [conv.conversation_id, conv.organization_id,
-      `New direct booking: ${c.guest_name}, ${c.check_in} to ${c.check_out}, ${c.num_guests} guest(s). Paid ₱${Number(c.amount_due_now).toLocaleString('en-PH')} online${c.pay_type === 'deposit' ? ` (${depositPctOf(c)}% deposit; balance ₱${Number(balanceOf(c)).toLocaleString('en-PH')} due before check-in)` : ' (in full)'}.${flagged ? ' ⚠ This guest is marked "Do not rebook" in Guests.' : ''}`]);
+      `New direct booking: ${c.guest_name}, ${c.check_in} to ${c.check_out}, ${c.num_guests} guest(s). Paid ${fmtPeso(c.amount_due_now)} online${c.pay_type === 'deposit' ? ` (${depositPctOf(c)}% deposit; balance ${fmtPeso(balanceOf(c))} due before check-in)` : ' (in full)'}.${flagged ? ' ⚠ This guest is marked "Do not rebook" in Guests.' : ''}`]);
   if (quoteCancelled) {
     await query(`INSERT INTO messages (conversation_id, organization_id, direction, from_name, body, status) VALUES ($1,$2,'note','BalayHub',$3,'note')`,
       [conv.conversation_id, conv.organization_id,
@@ -663,7 +666,7 @@ async function alertConflict(c) {
     await sendMail({
       to: u.email,
       subject: `Action needed: online payment received but the dates are no longer free`,
-      text: `Hi ${u.full_name},\n\n${c.guest_name} (${c.guest_email}, ${c.guest_phone}) paid ₱${Number(c.amount_due_now).toLocaleString('en-PH')} online for ${c.check_in} to ${c.check_out}, but those dates were booked elsewhere before the payment finished (for example a channel booking that synced in).\n\nPlease contact the guest to offer other dates or refund them from your PayMongo dashboard (payment reference: ${c.provider_checkout_id}).\n\n— BalayHub`,
+      text: `Hi ${u.full_name},\n\n${c.guest_name} (${c.guest_email}, ${c.guest_phone}) paid ${fmtPeso(c.amount_due_now)} online for ${c.check_in} to ${c.check_out}, but those dates were booked elsewhere before the payment finished (for example a channel booking that synced in).\n\nPlease contact the guest to offer other dates or refund them from your PayMongo dashboard (payment reference: ${c.provider_checkout_id}).\n\n— BalayHub`,
     });
   }
 }
@@ -717,7 +720,7 @@ async function giveUp(ref, reason) {
     await sendMail({
       to: u.email,
       subject: 'Please check a direct booking payment in PayMongo',
-      text: `Hi ${u.full_name},\n\nBalayHub could not confirm whether ${c.guest_name} (${c.guest_email}, ${c.guest_phone}) paid for ${c.check_in} to ${c.check_out} (₱${Number(c.amount_due_now).toLocaleString('en-PH')}). Reason: ${reason}\n\nPlease look for payment reference ${c.provider_checkout_id} in your PayMongo dashboard. If it was paid, add the reservation in BalayHub by hand.\n\n— BalayHub`,
+      text: `Hi ${u.full_name},\n\nBalayHub could not confirm whether ${c.guest_name} (${c.guest_email}, ${c.guest_phone}) paid for ${c.check_in} to ${c.check_out} (${fmtPeso(c.amount_due_now)}). Reason: ${reason}\n\nPlease look for payment reference ${c.provider_checkout_id} in your PayMongo dashboard. If it was paid, add the reservation in BalayHub by hand.\n\n— BalayHub`,
     }).catch(() => {});
   }
 }

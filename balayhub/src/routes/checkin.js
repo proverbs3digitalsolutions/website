@@ -131,9 +131,11 @@ publicRouter.post('/public/checkin/:token', express.json({ limit: '50kb' }), ah(
     if (!err.extra?.fields) throw err;
     Object.assign(fields, err.extra.fields);
   }
-  if (Object.keys(fields).length) throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields });
+  // A blank guest row is refused at its field rather than dropped silently.
   const raw = Array.isArray(req.body.guests) ? req.body.guests : [];
-  const guests = raw.map((g) => (typeof g === 'string' ? g.trim().slice(0, 120) : '')).filter(Boolean);
+  if (raw.some((g) => typeof g !== 'string' || !g.trim())) fields.guests = 'Enter the name of each guest, or remove the empty row.';
+  if (Object.keys(fields).length) throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields });
+  const guests = raw.map((g) => g.trim().slice(0, 120));
   if (guests.length + 1 > (b.max_guests || 20)) {
     throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { guests: `This unit allows up to ${b.max_guests} guests in total.` } });
   }
@@ -158,7 +160,8 @@ publicRouter.post('/public/checkin/:token', express.json({ limit: '50kb' }), ah(
       url: `/#/reservations/${b.booking_id}`, propertyId: await propertyOfBooking(b.booking_id),
     }).catch(() => {});
   }
-  await noteToHost(b.booking_id, existed ? 'The guest updated their check-in form.' : `The guest completed the check-in form (${guests.length + 1} guest${guests.length ? 's' : ''}${plate ? `, car ${plate}` : ''}${body.arrival_time ? `, arriving ${body.arrival_time}` : ''}).`);
+  const booked = guests.length + 1 < b.num_guests ? `, booked for ${b.num_guests}` : '';
+  await noteToHost(b.booking_id, existed ? 'The guest updated their check-in form.' : `The guest completed the check-in form (${guests.length + 1} guest${guests.length ? 's' : ''}${plate ? `, car ${plate}` : ''}${body.arrival_time ? `, arriving ${body.arrival_time}` : ''}${booked}).`);
   res.json({ ok: true, registration_id: r.registration_id });
 }));
 

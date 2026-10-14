@@ -198,6 +198,8 @@ router.get('/discount-codes', managers, ah(async (req, res) => {
 
 router.post('/discount-codes', owners, ah(async (req, res) => {
   const body = validate(req.body, codeSpec);
+  // Guests typing a code are forgiven a space; the owner's copy is refused so the code is saved exactly as shared.
+  if (/\s/.test(body.code)) throw validationError({ code: `Codes can't contain spaces. Try ${body.code.toUpperCase().replace(/\s+/g, '-')}.` });
   const code = normalize(body.code);
   if (!/^[A-Z0-9-]{3,20}$/.test(code)) throw validationError({ code: 'Use 3–20 letters, numbers or dashes, e.g. BALIK10.' });
   if ((body.percent_off === null) === (body.amount_off === null || Number(body.amount_off) === 0)) {

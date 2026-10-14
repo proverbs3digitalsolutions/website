@@ -199,12 +199,27 @@ const isCleanerPath = (path) => CLEANER_PATHS.some((p) => path === p || path.sta
 const OPS_NAV = [['/cleaner-pay', 'Cleaner pay', 'wallet'], ['/supplies', 'Supplies', 'wallet'], ['/lost-found', 'Lost and found', 'file']];// Staff see Supplies (assigned properties) but not pay or lost-and-found.
 const STAFF_OPS_NAV = OPS_NAV.filter(([p]) => p === '/supplies');
 // Staff don't see guest conversations; the platform admin gets an Admin link.
-const navFor = () => state.user?.role === 'cleaner' ? CLEANER_NAV : [...({ short_term: NAV_SHORT, both: NAV_BOTH }[state.user?.business_type] || NAV_LONG)
-  .filter(([p]) => (p !== '/inbox' || state.user?.role !== 'staff') && (!['/launchpad', '/owners'].includes(p) || state.user?.role === 'owner') && (!['/stay-reports', '/pnl'].includes(p) || state.user?.role !== 'staff') && (!['/quotes', '/addons', '/daily-close'].includes(p) || ['owner', 'manager'].includes(state.user?.role))),
+export const navFor = (user = state.user) => user?.role === 'cleaner' ? CLEANER_NAV : [...({ short_term: NAV_SHORT, both: NAV_BOTH }[user?.business_type] || NAV_LONG)
+  .filter(([p]) => (p !== '/inbox' || user?.role !== 'staff') && (!['/launchpad', '/owners'].includes(p) || user?.role === 'owner') && (!['/stay-reports', '/pnl'].includes(p) || user?.role !== 'staff') && (!['/quotes', '/addons', '/daily-close'].includes(p) || ['owner', 'manager'].includes(user?.role))),
 ['/help', 'Help & support', 'help'],
-...(state.user?.is_platform_admin ? [['/admin', 'Admin', 'shield']] : [])].flatMap((n) => (n[0] === '/housekeeping' && state.user?.business_type !== 'long_term' ? [n, ...(state.user?.role === 'staff' ? STAFF_OPS_NAV : OPS_NAV)] : [n]));
+...(user?.is_platform_admin ? [['/admin', 'Admin', 'shield']] : [])].flatMap((n) => (n[0] === '/housekeeping' && user?.business_type !== 'long_term' ? [n, ...(user?.role === 'staff' ? STAFF_OPS_NAV : OPS_NAV)] : [n]));
+// The menu in four groups (D-85, alpha hosts own 1 to 3 properties): the daily screens first, the rarely used ones under "More tools".
+// Nothing is removed. A path no group lists lands in More tools, so a new menu entry can never go missing. The long-term and cleaner menus stay flat.
+const NAV_GROUPS = [
+  { id: 'day', title: 'Every day', paths: ['/launchpad', '/home', '/inbox', '/calendar', '/reservations', '/housekeeping', '/guests'] },
+  { id: 'money', title: 'Money', paths: ['/stay-reports', '/reports', '/pnl', '/rent?tab=expenses', '/rent', '/cleaner-pay', '/owners'] },
+  { id: 'more', title: 'More tools', paths: ['/groups', '/daily-close', '/quotes', '/addons', '/supplies', '/lost-found', '/maintenance', '/dashboard', '/tenants'] },
+  { id: 'setup', title: 'Setup', paths: ['/listings', '/settings', '/help', '/admin'] },
+];
+export function navGroups(user = state.user, items = navFor(user)) {
+  if (user?.role === 'cleaner' || user?.business_type === 'long_term') return [{ id: 'all', title: null, items }];
+  const placed = new Set(NAV_GROUPS.flatMap((g) => g.paths));
+  return NAV_GROUPS.map((g) => ({ id: g.id, title: g.title,
+    items: [...g.paths.map((p) => items.find((n) => n[0] === p)).filter(Boolean), ...(g.id === 'more' ? items.filter((n) => !placed.has(n[0])) : [])] }))
+    .filter((g) => g.items.length);
+}
 
-// Trial / read-only / demo notice at the top of every app page.
+// Trial / read-only / demo notice at the top of every app page. The trial reminder shows only in the last 3 days.
 function planBanner() {
   const p = state.user?.plan;
   if (!p) return null;
@@ -227,7 +242,7 @@ function planBanner() {
       h('span', null, p.reason === 'trial_ended' ? 'Your free trial has ended. Your data is safe and view-only.' : 'Your plan payment is overdue. Your workspace is view-only.'),
       owner ? h('a', { class: 'btn btn--primary btn--sm', href: '#/settings' }, 'Choose a plan') : h('span', null, 'Ask the workspace owner to renew.'));
   }
-  if (p.plan === 'trial' && p.trial_days_left <= 14) {
+  if (p.plan === 'trial' && p.trial_days_left <= 3) {
     return h('div', { class: 'planbar' },
       h('span', null, `Free trial: ${p.trial_days_left} day${p.trial_days_left === 1 ? '' : 's'} left`),
       owner && h('a', { href: '#/settings' }, 'See plans'));
@@ -262,9 +277,12 @@ function match(path) {
       if (m) {
         let params;
         try { params = Object.fromEntries(names.map((n, i) => [n, decodeURIComponent(m[i + 1])])); } catch { return { view: incomplete, access, params: {} }; }
-        if (Object.values(params).some((v) => !v.trim())) {
-          if (access !== 'open') return { view: incomplete, access, params };
-          params = Object.fromEntries(Object.entries(params).map(([k, v]) => [k, v.trim() ? v : '-']));
+        const blank = Object.keys(params).filter((n) => !params[n].trim());
+        if (blank.length) {
+          if (access === 'open') params = Object.fromEntries(Object.entries(params).map(([k, v]) => [k, v.trim() ? v : '-']));
+          // Only a blank id at the end of the address is an incomplete link; a blank one in the middle (#/owners/%20/statement) is no route.
+          else if (blank.every((n) => pattern.endsWith(`:${n}`))) return { view: incomplete, access, params };
+          else continue;
         }
         return { view, access, params };
       }
@@ -307,6 +325,20 @@ function navLink([path, text, ic], current) {
   return h('a', { href: `#${path}`, 'aria-current': isCurrent(path, current) ? 'page' : null }, icon(ic), h('span', null, text));
 }
 
+// A sidebar group: a heading and its links. "More tools" folds away, open when you are on one of its pages or left it open (remembered in this browser).
+const NAV_MORE_KEY = 'bh-nav-more';
+function navGroup(g, current) {
+  const links = g.items.map((n) => navLink(n, current));
+  if (!g.title) return links;
+  if (g.id !== 'more') return h('div', { class: 'nav__group' }, h('h2', { class: 'nav__group-title' }, g.title), links);
+  let saved = null;
+  try { saved = localStorage.getItem(NAV_MORE_KEY); } catch { /* ignore */ }
+  return h('details', { class: 'nav__group nav__group--more', open: saved === '1' || g.items.some(([p]) => isCurrent(p, current)) },
+    // The click comes before the toggle, so the box still holds the old state.
+    h('summary', { class: 'nav__group-title', onclick: (e) => { try { localStorage.setItem(NAV_MORE_KEY, e.currentTarget.parentNode.open ? '0' : '1'); } catch { /* ignore */ } } }, g.title),
+    links);
+}
+
 // The Get started answers belong to whoever typed them, not to the next person on this browser.
 function forgetSetupAnswers() { try { localStorage.removeItem('bh-setup'); } catch { /* ignore */ } }
 
@@ -336,7 +368,8 @@ function openMore(current) {
     panel = h('div', { class: 'morenav__sheet' },
       h('button', { class: 'morenav__close', type: 'button', 'aria-label': 'Close menu', onclick: () => sheet.close() }, 'Close'),
       h('a', { href: '#/account', onclick: () => sheet.close(), 'aria-current': isCurrent('/account', current) ? 'page' : null }, icon('users'), 'My account'),
-      moreNav().map(([p, t, ic]) => h('a', { href: `#${p}`, onclick: () => sheet.close(), 'aria-current': isCurrent(p, current) ? 'page' : null }, icon(ic), t)),
+      navGroups(state.user, moreNav()).map((g) => [g.title && h('h2', { class: 'morenav__group-title' }, g.title),
+        g.items.map(([p, t, ic]) => h('a', { href: `#${p}`, onclick: () => sheet.close(), 'aria-current': isCurrent(p, current) ? 'page' : null }, icon(ic), t))]),
       h('div', { class: 'morenav__theme' }, themeSwitch()),
       h('button', { onclick: () => { sheet.close(); logout(); } }, icon('logout'), 'Log out')));
   document.body.append(sheet);
@@ -354,7 +387,7 @@ function buildShell(path) {
   const el = h('div', { class: 'shell' },
     h('aside', { class: 'sidebar' },
       brand(homeRoute()),
-      h('nav', { 'aria-label': 'Main' }, NAV.map((n) => navLink(n, path))),
+      h('nav', { 'aria-label': 'Main' }, navGroups(u, NAV).map((g) => navGroup(g, path))),
       h('div', { class: 'sidebar__foot' },
         h('a', { class: 'sidebar__me', href: '#/account', 'aria-current': isCurrent('/account', path) ? 'page' : null },
           h('span', { class: 'acct-avatar acct-avatar--sm', 'aria-hidden': 'true' }, initials(u.full_name)),
@@ -591,13 +624,21 @@ document.addEventListener('keydown', (e) => {
 
 // Most views redraw their tabs when one is opened, which removes the focused button and drops focus to the page (BODY). Remember the tab
 // that was activated and, once the redraw has run (it may be async), put focus on the tab at the same index of the same tablist.
+// A view that builds a whole new tablist (stay reports, listings status) leaves the old one disconnected: the new one with the same
+// aria-label, else the one at the same place in the page (listIndex), takes over.
 // Returns true when it is done: focus restored, the user moved on, or the tablist is gone.
-export function restoreTabFocus(list, index, oldTab, doc = document) {
+export function restoreTabFocus(list, index, oldTab, doc = document, listIndex = -1) {
   const a = doc.activeElement;
   if (a && a !== oldTab && a !== doc.body && a.isConnected) return true; // the user focused something else: never steal it
-  if (!list.isConnected) return true;
   if (a === oldTab && oldTab.isConnected) return false; // not redrawn yet
-  const tab = list.querySelectorAll('[role="tab"]')[index];
+  let target = list;
+  if (!list.isConnected) {
+    const lists = [...(doc.querySelectorAll?.('[role="tablist"]') || [])];
+    const label = list.getAttribute?.('aria-label');
+    target = (label && lists.find((l) => l.getAttribute?.('aria-label') === label)) || lists[listIndex];
+    if (!target) return true;
+  }
+  const tab = target.querySelectorAll('[role="tab"]')[index];
   if (!tab) return true;
   tab.focus();
   return true;
@@ -608,8 +649,9 @@ document.addEventListener('click', (e) => {
   const list = oldTab && oldTab.closest('[role="tablist"]');
   if (!list) return;
   const index = [...list.querySelectorAll('[role="tab"]')].indexOf(oldTab);
+  const listIndex = [...document.querySelectorAll('[role="tablist"]')].indexOf(list);
   let done = false;
-  for (const ms of [0, 40, 100, 200, 350, 500]) setTimeout(() => { if (!done) done = restoreTabFocus(list, index, oldTab); }, ms);
+  for (const ms of [0, 40, 100, 200, 350, 500]) setTimeout(() => { if (!done) done = restoreTabFocus(list, index, oldTab, document, listIndex); }, ms);
 }, true);
 
 (async function boot() {

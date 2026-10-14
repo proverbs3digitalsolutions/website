@@ -108,8 +108,8 @@ test('money#8 the reservations CSV leaves the balance blank for a cancelled stay
   await owner.post(`/api/reservations/${dead.booking_id}/cancel`, { reason: 'Guest cancelled' });
   const csv = (await owner.get('/api/reservations/export?view=all')).data;
   const line = (code) => String(csv).split('\r\n').find((l) => l.includes(code)).split(',');
-  assert.notEqual(line(live.confirmation_code)[12], '');
-  assert.equal(line(dead.confirmation_code)[12], '');
+  assert.notEqual(line(live.confirmation_code)[13], '');
+  assert.equal(line(dead.confirmation_code)[13], '');
 });
 
 test('money#10 % and _ in search are plain characters', async () => {

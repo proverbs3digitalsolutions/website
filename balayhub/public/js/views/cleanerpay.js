@@ -28,6 +28,14 @@ export const readRate = (text) => {
   return Number(plain.replace(/,/g, ''));
 };
 
+export const rateText = (r) => `${peso(r.amount)} ${r.rate_type === 'per_hour' ? 'per hour' : 'per clean'}`;
+
+// The rate a person is adding again is the same basis and amount: nothing would change, so nothing is asked or sent (#42).
+export const sameRate = (prior, rateType, amount) => !!prior && prior.rate_type === rateType && Number(prior.amount) === amount;
+
+// What the Pay column says when a clean has no amount yet: the owner's own clean, a name with no rate, or a clean still to price.
+const noPayText = (x) => (x.pay_status === 'self' ? 'Done by you, no pay' : x.no_rate ? 'No rate for this name. Add a rate or pick the team member.' : 'Pay not set. Use Set pay.');
+
 // One cleaner's status in the By cleaner card. A clean with no pay set is never "All paid".
 export const cleanerStatus = (c) => {
   const parts = [];
@@ -60,7 +68,6 @@ export async function cleanerPayView(el, { query = {} } = {}) {
   const month = () => (monthOk(filters.month) ? filters.month : thisMonth);
 
   async function load() {
-    history.replaceState(null, '', `#/cleaner-pay${qs(changed(filters, defaults))}`);
     selected.clear();
     try { data = await get(`/cleaner-pay${qs({ month: month() })}`); } catch (err) {
       box.replaceChildren(errorState(err, () => load()));
@@ -69,6 +76,8 @@ export async function cleanerPayView(el, { query = {} } = {}) {
     data.tasks = data.tasks || [];
     const opts = (data.cleaners || []).map((c) => [c.key, c.name || 'Not assigned']);
     if (JSON.stringify(opts) !== JSON.stringify(cleanerOpts)) { cleanerOpts = opts; renderBar(); }
+    // Written after the bar has dropped any cleaner the list does not have, so the address never keeps it (K13).
+    history.replaceState(null, '', `#/cleaner-pay${qs(changed(filters, defaults))}`);
     paint();
   }
 
@@ -126,7 +135,7 @@ export async function cleanerPayView(el, { query = {} } = {}) {
     kept.forEach((id) => selected.add(id));
     const totals = data.totals || {};
     const unpaidC = cents(totals.unpaid); const paidC = cents(totals.paid);
-    const missing = data.tasks.filter((x) => x.pay_amount == null).length;
+    const missing = data.tasks.filter((x) => x.pay_amount == null && x.pay_status !== 'self').length;
     const payable = rows.filter((x) => x.pay_status === 'unpaid' && x.pay_amount != null);
     const selTotal = ticked().reduce((s, x) => s + cents(x.pay_amount), 0);
     const markBtn = h('button', { class: 'btn btn--primary', type: 'button', disabled: !selected.size, onclick: markPaid }, selected.size ? `Mark ${selected.size} paid · ${peso(fromCents(selTotal))}` : 'Mark paid');
@@ -164,10 +173,10 @@ export async function cleanerPayView(el, { query = {} } = {}) {
                 h('td', { dataset: { label: 'Date' } }, fmtDate(doneDay(x))),
                 h('td', { dataset: { label: 'Unit' } }, unitOf(x)),
                 h('td', { dataset: { label: 'Cleaner' } }, whoOf(x)),
-                h('td', { class: 'num', dataset: { label: 'Pay' } }, x.pay_amount == null ? h('span', { class: 'muted' }, 'Pay not set. Use Set pay.') : peso(x.pay_amount)),
+                h('td', { class: 'num', dataset: { label: 'Pay' } }, x.pay_amount == null ? h('span', { class: 'muted' }, noPayText(x)) : peso(x.pay_amount)),
                 h('td', { dataset: { label: 'Status' } }, x.pay_status === 'paid'
                   ? h('span', null, h('span', { class: 'badge badge--paid' }, 'Paid'), h('span', { class: 'muted small ops-note' }, ` ${x.paid_on ? fmtDate(manilaDay(x.paid_on)) : ''}${x.paid_method ? ` · ${label(x.paid_method)}` : ''}`))
-                  : h('span', { class: 'badge badge--unpaid' }, 'Unpaid')),
+                  : x.pay_status === 'unpaid' && h('span', { class: 'badge badge--unpaid' }, 'Unpaid')),
                 h('td', { class: 'ops-actions' },
                   x.pay_status === 'unpaid' && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => editPay(x), 'aria-label': `${x.pay_amount == null ? 'Set pay' : 'Edit pay'} for ${unitOf(x)} on ${fmtDate(doneDay(x))}` }, x.pay_amount == null ? 'Set pay' : 'Edit pay'),
                   x.pay_status === 'paid' && isOwner && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => unpay(x), 'aria-label': `Undo paid for ${unitOf(x)} on ${fmtDate(doneDay(x))}` }, 'Undo paid')));
@@ -197,7 +206,6 @@ export async function cleanerPayView(el, { query = {} } = {}) {
     } catch (err) { ratesBox.replaceChildren(h('div', { class: 'card' }, h('p', { class: 'muted' }, err.message))); return; }
     const cleaners = members.filter((m) => m.role === 'cleaner');
     const nameOf = (r) => r.name || 'Cleaner';
-    const rateText = (r) => `${peso(r.amount)} ${r.rate_type === 'per_hour' ? 'per hour' : 'per clean'}`;
     const edit = (r) => {
       const outside = r ? !r.user_id : !cleaners.length;
       const who = field({ name: 'user_id', label: 'Cleaner', type: 'select', value: r?.user_id || '', placeholderOption: 'Someone outside the team', options: cleaners.map((m) => [m.user_id, m.full_name]) });
@@ -223,6 +231,11 @@ export async function cleanerPayView(el, { query = {} } = {}) {
           // Adding a rate for a cleaner who already has one replaces it, so ask first. Only a readable positive
           // amount is asked about; anything else is sent so the server's message shows at the field (#35).
           const prior = !r && existingRate(rates, body);
+          if (sameRate(prior, d.rate_type, readRate(d.amount))) {
+            toast(`${nameOf(prior)} already has ${rateText(prior)}.`);
+            modal.close();
+            return;
+          }
           if (prior && readRate(d.amount) > 0) {
             // makeForm has set the button to "Saving…" already; put "Save rate" back while the question waits.
             const submit = dialogForm.querySelector('[type=submit]');

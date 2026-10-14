@@ -277,6 +277,7 @@ export async function bookListingView(el, { params, query }) {
     if (guestsFromServer) { guestsFromServer = false; setGuestsError(''); }
     if (!checkIn || !checkOut) {
       summary.replaceChildren(h('p', { class: 'muted' }, checkIn ? t('Check-in {date}. Now choose check-out.', { date: fmtDate(checkIn) }) : t('Choose your dates on the calendar to see the price.')));
+      showPrice(null);
       return;
     }
     // A count below 1 is not quoted; its "At least 1 guest." is already in the Guests box.
@@ -289,6 +290,9 @@ export async function bookListingView(el, { params, query }) {
       codeMsg.textContent = tServer(q.code_error) || (q.promo_code ? `${t('Code {code} applied: −{amount}.', { code: q.promo_code, amount: peso(q.promo_discount) })}${q.promo_note ? ` ${tServer(q.promo_note)}` : ''}` : '');
       codeMsg.className = q.code_error ? 'error' : 'muted small';
       current = q;
+      // This stay's price before any discount (the summary's first line), per night.
+      const stayTotal = q.discount_label || q.promo_code ? q.subtotal : q.accommodation_total;
+      showPrice(Number(stayTotal) / q.nights);
       addonRows.forEach((r) => r.sync());
       // Show only the payment choices allowed for these dates.
       const full = payChoice.querySelector('input[value=full]');
@@ -450,6 +454,11 @@ export async function bookListingView(el, { params, query }) {
   // The lowest price on the open nights shown (weekend, holiday and season rates differ).
   const open = [...days.values()].filter((x) => !x.taken && x.price !== null && x.date >= todayManila()).map((x) => Number(x.price));
   const fromPrice = open.length ? Math.min(...open) : Number(l.nightly_rate);
+  const fromMarked = fromPrice < Number(l.nightly_rate) || [...days.values()].some((x) => !x.taken && Number(x.price) !== Number(l.nightly_rate));
+  // The booking card's price: "from" the lowest open night until both dates are picked, then this stay's average night.
+  const priceBox = h('div', { class: 'bk-book__price' });
+  const showPrice = (avgNight) => priceBox.replaceChildren(avgNight === null && fromMarked ? t('from ') : null, h('strong', null, peso(avgNight ?? fromPrice)), t(' / night'));
+  showPrice(null);
   drawCal();
   updateQuote();
 
@@ -468,9 +477,7 @@ export async function bookListingView(el, { params, query }) {
         l.description && h('p', { class: 'bk-desc' }, l.description),
         h('h2', null, t('Availability')),
         calBox),
-      h('aside', { class: 'card bk-book' },
-        h('div', { class: 'bk-book__price' }, fromPrice < Number(l.nightly_rate) || [...days.values()].some((x) => !x.taken && Number(x.price) !== Number(l.nightly_rate)) ? t('from ') : null,
-          h('strong', null, peso(fromPrice)), t(' / night')),
+      h('aside', { class: 'card bk-book' }, priceBox,
         summary,
         form))));
 }

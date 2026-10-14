@@ -38,7 +38,7 @@ This project follows the Proverbs3 toolkit (github.com/proverbs3digitalsolutions
   - Staff never see guest phone/email or private guest links (`redactGuest` in `src/routes/stays.js`).
   - Read-only workspaces are blocked by `planGuard`. Add a path to `PLAN_EXEMPT` only if it must keep working when view-only (support, account, billing).
 - **Validation:** validate every input with `src/lib/validate.js` and keep SQL parameterised. Use allow-lists for enums and sort keys.
-- **Money:** `pg` returns NUMERIC as strings, so never compare money as floats in SQL. The guest balance is `total_amount - channel_fee - payments`.
+- **Money:** `pg` returns NUMERIC as strings, so never compare money as floats in SQL. The guest balance is `total_amount - channel_fee - payments + refunds` (non-voided), written once in `src/lib/balance.js` (D-85); never rewrite the formula. Server peso text goes through `messaging.fmtPeso` (two decimals), the one server peso formatter.
 - **Dates:** DATE values come back as `YYYY-MM-DD`. "Today" means Manila time.
 - **UI:**
   - Sentence-case text.

@@ -88,7 +88,7 @@ test('guest pays the balance: amount from the server, recorded once with a recei
   assert.deepEqual([pays[1].amount, pays[1].payment_method, pays[1].recorded_by], ['2500.00', 'gcash', null]);
   assert.ok(pays[1].receipt_number);
   assert.ok(outbox.some((m) => m.to === 'ana@example.com' && /Receipt/.test(m.subject)));
-  assert.ok((await owner.get('/api/inbox?view=unread')).data.conversations.some((c) => /paid ₱2,500 online/.test(c.last_body)));
+  assert.ok((await owner.get('/api/inbox?view=unread')).data.conversations.some((c) => /paid ₱2,500\.00 online/.test(c.last_body)));
   assert.equal((await g.post(`/api/public/pay/${token}/checkout`)).status, 409, 'nothing left to pay');
   // The host's reservation page shows no balance and no link.
   assert.equal((await owner.get(`/api/reservations/${res.booking_id}/payment-link`)).data.available, false);

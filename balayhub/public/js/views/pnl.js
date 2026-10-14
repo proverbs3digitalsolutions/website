@@ -1,7 +1,7 @@
 // Profit and loss per unit for one month. Owners and managers only (the server answers 403 to staff).
 
 import { get, qs } from '../api.js';
-import { h, peso, pageHead, todayManila, emptyState, toast } from '../ui.js';
+import { h, peso, pageHead, todayManila, emptyState, toast, fmtMonth } from '../ui.js';
 import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 
 const neg = (v) => Number(v) < 0;
@@ -20,6 +20,8 @@ export async function pnlView(el, { query = {} } = {}) {
   const exportLink = h('a', { class: 'btn btn--secondary', download: '' }, 'Download CSV');
   const box = h('div', { 'aria-live': 'polite' }, h('p', { class: 'muted' }, 'Loading…'));
   const notice = h('div');
+  // Says which stays the month counts (the check-out rule), and where the check-in counts are.
+  const basis = h('p', { class: 'muted small' });
   const monthInput = h('input', { class: 'input input--sm', type: 'month', value: filters.month || thisMonth, 'aria-label': 'Month', onchange: (e) => { if (e.target.value) { filters.month = e.target.value; rememberFilters('pnl', filters); load(); } } });
 
   let properties = [];
@@ -33,6 +35,7 @@ export async function pnlView(el, { query = {} } = {}) {
     const bad = filters.month && !MONTH_RE.test(filters.month);
     if (bad) filters.month = '';
     const month = filters.month || thisMonth;
+    basis.textContent = `Counts stays that checked out in ${fmtMonth(month)} (finished stays only). Reports counts stays by check-in date.`;
     notice.replaceChildren(bad ? h('div', { class: 'alert alert--warn', role: 'alert' }, `That month isn't valid. Showing ${monthName(month)}.`) : '');
     monthInput.value = month;
     history.replaceState(null, '', `#/pnl${qs(changed(filters, defaults))}`);
@@ -58,7 +61,7 @@ export async function pnlView(el, { query = {} } = {}) {
         stat('Expenses', peso(t.expenses)),
         h('div', { class: `stat stat--flat${neg(t.net) ? ' stat--alert' : ''}` }, h('div', { class: 'stat__value' }, peso(t.net)), h('div', { class: 'stat__label' }, 'Net'), h('div', { class: 'muted small' }, 'gross − channel fees − refunds − expenses')))),
       h('div', { class: 'card card--flush' }, h('div', { class: 'table-wrap' }, h('table', { class: 'table table--compact' },
-        h('caption', { class: 'sr-only' }, `Profit and loss per unit for ${month}`),
+        h('caption', { class: 'sr-only' }, `Profit and loss per unit for ${fmtMonth(month)}`),
         h('thead', null, h('tr', null, ['Unit', 'Stays', 'Nights', 'Gross', 'Channel fees', 'Refunds', 'Expenses', 'Net'].map((x, i) => h('th', { scope: 'col', class: i ? 'num' : null }, x)))),
         h('tbody', null, r.rows.map((x) => h('tr', null,
           h('td', null, x.unit_id ? x.unit_name : 'Not linked to a unit', x.unit_id && x.property_name && h('div', { class: 'muted small' }, x.property_name)),
@@ -73,5 +76,5 @@ export async function pnlView(el, { query = {} } = {}) {
     quick: properties.length > 1 ? [{ name: 'property_id', label: 'Property', all: 'All properties', options: properties }] : [],
   });
   await load();
-  el.replaceChildren(pageHead({ title: 'Profit and loss', sub: 'Per unit, by month', actions: exportLink }), bar, notice, box);
+  el.replaceChildren(pageHead({ title: 'Profit and loss', sub: 'Per unit, by month', actions: exportLink }), basis, bar, notice, box);
 }

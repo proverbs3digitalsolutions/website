@@ -12,7 +12,7 @@
 // `pattern` (RegExp) and `patternText`: a value that fails it is flagged, not applied, and gets no chip.
 // initFilters() drops text and impossible dates in from/to, and non-UUID ids, before any page fetches.
 // A select field with an `options` list resets a value that is not one of them to its default before the bar draws,
-// so a link with ?rating=9 shows the full list and no chip. A field whose options arrive after the bar is built
+// so a link with ?rating=9 shows the full list and no chip, and the address loses ?rating=9 too. Dates outside 2000 to 2100 are dropped the same way. A field whose options arrive after the bar is built
 // sets `keepUnknown: true` to keep the value.
 
 import { h, fmtDate } from './ui.js';
@@ -23,6 +23,10 @@ const storeKey = (key) => `bh-filters:${state.user?.user_id || 'anon'}:${key}`;
 // Dates typed in a backwards range (from a shared link or a saved filter), kept so the bar can show them once with the message.
 const typedBack = new WeakMap();
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+// Dates the whole app accepts (the same 2000 to 2100 window as every other date box). A half-typed year such as 0202 is outside it.
+const DATE_MIN = '2000-01-01';
+const DATE_MAX = '2100-12-31';
+const outOfWindow = (v) => v !== '' && (v < DATE_MIN || v > DATE_MAX);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // True for a real calendar day. 2026-02-30 and 2026-13-01 are not.
@@ -36,18 +40,33 @@ function realDate(v) {
 // A date shown in a chip: a value that is not a real day is shown as typed, never as "Invalid Date".
 const chipDate = (v) => (DATE_RE.test(v) && realDate(v) ? fmtDate(v) : v);
 
+// Takes dropped keys out of the address bar (#/page?a=1&b=2), so a value the bar refused does not stay in a shared or reloaded link.
+function dropFromAddress(keys) {
+  try {
+    const hash = location.hash || '';
+    const i = hash.indexOf('?');
+    if (!keys.length || i < 0) return;
+    const p = new URLSearchParams(hash.slice(i + 1));
+    const hit = keys.filter((k) => p.has(k));
+    if (!hit.length) return;
+    hit.forEach((k) => p.delete(k));
+    const q = p.toString();
+    history.replaceState(null, '', hash.slice(0, i) + (q ? `?${q}` : ''));
+  } catch { /* no address bar to fix */ }
+}
+
 // Runs before any page fetches, so a bad value never reaches the server. Text or an impossible date in a from/to key,
 // and a non-UUID *_id, are dropped. A date range that runs backwards is not applied; its dates stay in typedBack for
 // the bar to show.
 // ponytail: date keys are found by their from/to names, which every range in the app uses. A range with other key
 // names would need its pair passed in here to be checked.
-function sanitise(out, defaults) {
+function sanitise(out, defaults, dropped = []) {
   const typed = {};
   for (const k of Object.keys(out)) {
     const v = out[k];
-    const badDate = /(^|_)(from|to)$/.test(k) && v !== '' && !(DATE_RE.test(v) && realDate(v));
+    const badDate = /(^|_)(from|to)$/.test(k) && v !== '' && !(DATE_RE.test(v) && realDate(v) && !outOfWindow(v));
     const badId = k.endsWith('_id') && v !== '' && !UUID_RE.test(v);
-    if (badDate || badId) out[k] = defaults[k] ?? '';
+    if (badDate || badId) { out[k] = defaults[k] ?? ''; dropped.push(k); }
   }
   for (const k of Object.keys(out)) {
     if (!/(^|_)from$/.test(k)) continue;
@@ -73,7 +92,10 @@ export function initFilters(key, query, defaults) {
     // Text is trimmed; a value of only spaces is the default, not an empty-quotes chip.
     if (v !== undefined && v !== null) out[k] = String(v).trim() === '' && String(v) !== '' ? defaults[k] : String(v).trim();
   }
-  return sanitise(out, defaults);
+  const dropped = [];
+  sanitise(out, defaults, dropped);
+  if (urlHas) dropFromAddress(dropped);
+  return out;
 }
 
 export function rememberFilters(key, values) {
@@ -133,6 +155,8 @@ function control(f, values, emit, defaults = {}) {
       return bad;
     };
     const apply = () => {
+      // A half-typed year (the box reads 0202 on the way to 2026) is not a filter yet: wait for the rest.
+      if (outOfWindow(from.value) || outOfWindow(to.value)) return;
       if (check()) { values[a] = defaults[a] ?? ''; values[b] = defaults[b] ?? ''; }
       else { values[a] = from.value; values[b] = to.value; }
       emit();
@@ -190,6 +214,7 @@ function control(f, values, emit, defaults = {}) {
       return bad;
     };
     input.addEventListener('change', () => {
+      if (f.type === 'date' && outOfWindow(input.value)) return;
       const bad = show(input.value);
       values[f.name] = bad ? (defaults[f.name] ?? '') : input.value;
       emit();
@@ -236,11 +261,13 @@ function clearField(f, values, defaults) {
  */
 export function filterBar({ key, values, defaults, search, quick = [], more = [], onChange, extra }) {
   const all = [...quick, ...more];
+  const dropped = [];
   for (const f of all) {
     if (!f || (f.type && f.type !== 'select') || !Array.isArray(f.options) || f.keepUnknown) continue;
     const v = String(values[f.name] ?? '');
-    if (v !== '' && v !== String(defaults[f.name] ?? '') && !f.options.some(([k]) => String(k) === v)) values[f.name] = defaults[f.name] ?? '';
+    if (v !== '' && v !== String(defaults[f.name] ?? '') && !f.options.some(([k]) => String(k) === v)) { values[f.name] = defaults[f.name] ?? ''; dropped.push(f.name); }
   }
+  dropFromAddress(dropped);
   const chips = h('div', { class: 'flt__chips', 'aria-live': 'polite' });
   const moreBtn = more.length ? h('button', { type: 'button', class: 'btn btn--secondary flt__more', 'aria-expanded': 'false' }) : null;
   const panel = more.length ? h('div', { class: 'flt__panel card card--soft', hidden: true }) : null;

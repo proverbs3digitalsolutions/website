@@ -67,9 +67,11 @@ router.get('/onboarding', owners, ah(async (req, res) => {
          WHERE p.organization_id = o.organization_id AND u.status = 'active' AND u.nightly_rate IS NOT NULL) AS listings,
        EXISTS (SELECT 1 FROM units u JOIN properties p USING (property_id)
          WHERE p.organization_id = o.organization_id AND u.status = 'active'
-           AND (u.wifi_name IS NOT NULL OR u.checkin_instructions IS NOT NULL)) AS guest_info,
+           AND (u.wifi_name IS NOT NULL OR u.checkin_instructions IS NOT NULL OR u.house_rules IS NOT NULL)) AS guest_info,
        EXISTS (SELECT 1 FROM files f WHERE f.organization_id = o.organization_id AND f.related_record_type = 'listing') AS photos,
-       EXISTS (SELECT 1 FROM ical_feeds f WHERE f.organization_id = o.organization_id) AS channels,
+       EXISTS (SELECT 1 FROM ical_feeds f WHERE f.organization_id = o.organization_id AND f.last_status = 'ok') AS channels,
+       (EXISTS (SELECT 1 FROM ical_feeds f WHERE f.organization_id = o.organization_id)
+         AND NOT EXISTS (SELECT 1 FROM ical_feeds f WHERE f.organization_id = o.organization_id AND f.last_status = 'ok')) AS channels_failing,
        EXISTS (SELECT 1 FROM bookings b WHERE b.organization_id = o.organization_id AND b.kind = 'reservation') AS reservation,
        EXISTS (SELECT 1 FROM automations a WHERE a.organization_id = o.organization_id AND a.enabled) AS messages,
        EXISTS (SELECT 1 FROM guest_registrations r WHERE r.organization_id = o.organization_id) AS checkin_form,
@@ -93,6 +95,7 @@ router.get('/onboarding', owners, ah(async (req, res) => {
     required_total: required.length,
     complete: required.every((x) => x.done) && steps.every((x) => x.done || x.skipped || x.optional),
     dismissed: Boolean(s.onboarding_dismissed_at),
+    channels_failing: s.channels_failing,
   });
 }));
 

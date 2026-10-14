@@ -66,7 +66,9 @@ extendTranslations({
   'Add to your stay': 'Idagdag sa stay mo',
   'Pick extras before you arrive. They are added to your bill.': 'Pumili ng dagdag bago ka dumating. Idadagdag ito sa bill mo.',
   'Quantity for {name}': 'Dami para sa {name}',
-  'Add to my bill': 'Idagdag sa bill ko',
+  'Select': 'Piliin',
+  'Select {name}': 'Piliin ang {name}',
+  'Add selected to my bill': 'Idagdag ang napili sa bill ko',
   'Adding…': 'Idinadagdag…',
   'Choose at least one extra.': 'Pumili ng kahit isang dagdag.',
   'Added to your bill.': 'Naidagdag na sa bill mo.',
@@ -167,9 +169,9 @@ function addonsCard(token, reload) {
         h('div', { class: 'gp-addon__price' }, `${peso(a.price)} `, h('span', { class: 'muted small' }, t(PRICING_TEXT[a.pricing] || ''))),
         left === 0 ? h('div', { class: 'gp-addon__qty muted small' }, t('Already on your bill'))
           : max > 1 ? h('div', { class: 'gp-addon__qty' }, h('label', { for: input.id, class: 'small' }, t('Quantity for {name}', { name })), input)
-          : h('label', { class: 'check gp-addon__qty' }, h('input', { type: 'checkbox', 'aria-label': name, onchange: (e) => { qty[a.addon_id] = e.target.checked ? 1 : 0; } }), h('span', null, t('Add to my bill'))));
+          : h('label', { class: 'check gp-addon__qty' }, h('input', { type: 'checkbox', 'aria-label': t('Select {name}', { name }), onchange: (e) => { qty[a.addon_id] = e.target.checked ? 1 : 0; } }), h('span', null, t('Select'))));
     });
-    const btn = h('button', { class: 'btn btn--primary btn--block', type: 'button' }, t('Add to my bill'));
+    const btn = h('button', { class: 'btn btn--primary btn--block', type: 'button' }, t('Add selected to my bill'));
     btn.addEventListener('click', async () => {
       err.replaceChildren();
       const selections = Object.entries(qty).filter(([, q]) => q > 0).map(([addon_id, quantity]) => ({ addon_id, quantity }));
@@ -183,7 +185,7 @@ function addonsCard(token, reload) {
       } catch (e) {
         err.replaceChildren(h('div', { class: 'alert alert--error' }, e.offline ? t("You're offline. Please try again when you're connected.") : tServer(e.message)));
         btn.disabled = false;
-        btn.textContent = t('Add to my bill');
+        btn.textContent = t('Add selected to my bill');
       }
     });
     card.replaceChildren(h('h2', null, t('Add to your stay')), h('p', { class: 'muted small' }, t('Pick extras before you arrive. They are added to your bill.')), h('div', { class: 'gp-addons' }, rows), err, btn);

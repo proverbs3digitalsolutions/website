@@ -23,6 +23,7 @@ extendTranslations({
   'Please check the highlighted fields.': 'Pakitingnan ang mga naka-highlight.',
   'Please enter your full name, as on your ID.': 'Pakilagay ang buong pangalan mo, gaya ng nasa ID.',
   'Please enter your mobile number.': 'Pakilagay ang mobile number mo.',
+  'Enter the name of each guest, or remove the empty row.': 'Pakilagay ang pangalan ng bawat guest, o alisin ang walang laman na row.',
   'Your ID must be a JPG, PNG or WEBP photo.': 'Dapat JPG, PNG o WEBP na litrato ang ID mo.',
   'Please agree so your host can register you with the building.': 'Paki-agree para ma-register ka ng host sa building.',
   'Remove guest {n}': 'Alisin ang guest {n}',
@@ -162,6 +163,10 @@ export async function guestCheckinView(el, { params }) {
     const problems = {};
     if (!d.lead_name.trim()) problems.lead_name = t('Please enter your full name, as on your ID.');
     if (!d.phone.trim()) problems.phone = t('Please enter your mobile number.');
+    // A blank guest row is marked here, and the server refuses it too: fill it in or remove it.
+    const blankGuests = [...others.querySelectorAll('.gc__guest')].filter((row) => !row.querySelector('input').value.trim());
+    blankGuests.forEach((row) => row.classList.add('field--invalid'));
+    if (blankGuests.length) problems.guests = t('Enter the name of each guest, or remove the empty row.');
     if (picked.some((f) => !ID_PHOTO_TYPE.test(f.type))) problems.id_photos = t('Your ID must be a JPG, PNG or WEBP photo.');
     if (rules && !rulesAt && !form.elements.accept_rules.checked) problems.accept_rules = t('Please accept the house rules to continue.');
     if (!form.elements.consent.checked) problems.consent = t('Please agree so your host can register you with the building.');
@@ -176,7 +181,7 @@ export async function guestCheckinView(el, { params }) {
       lead_name: d.lead_name, phone: d.phone, email: d.email, arrival_time: d.arrival_time, vehicle_plate: d.vehicle_plate,
       notes: d.notes, consent: Boolean(form.elements.consent.checked),
       ...(rules && !rulesAt ? { accept_rules: true } : {}),
-      guests: [...others.querySelectorAll('input')].map((i) => i.value.trim()).filter(Boolean),
+      guests: [...others.querySelectorAll('input')].map((i) => i.value.trim()),
     };
     try {
       submit.textContent = t('Saving…');

@@ -147,7 +147,7 @@ const ARTICLES = [
     slug: 'pricing-rules', category: 'money', roles: MANAGERS, module: 'stay', title: 'Weekend, holiday and season prices, discounts',
     keywords: 'pricing weekend holiday holy week christmas season minimum nights weekly monthly discount rate',
     body: [
-      'Per listing (Listings → Edit → Pricing helpers): weekend rate (Fri & Sat nights), holiday rate, weekly (7+ nights) and monthly (28+ nights) discounts.',
+      'Per listing (Listings → Edit → Price extras): weekend rate (Fri & Sat nights), holiday rate, weekly (7+ nights) and monthly (28+ nights) discounts.',
       'Holiday rates apply automatically on the nights before and during Philippine holiday long weekends (Holy Week, Christmas to New Year, Independence Day, National Heroes Day…).',
       'Seasons (Calendar → Pricing rules → Add season): a date range with its own rate and/or minimum stay, for one listing or all.',
       'Priority: price set on the calendar → holiday → season → weekend → base; then the long-stay discount.',

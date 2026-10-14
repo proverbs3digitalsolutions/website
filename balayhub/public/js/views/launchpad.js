@@ -9,7 +9,7 @@ const GUIDES = [
   ['Check a guest in and out', ['Open Home: today\'s arrivals and departures are listed with Check in / Check out buttons.', 'Checking out marks the unit for cleaning and creates a cleaning task.']],
   ['Record a payment and send a receipt', ['Open the reservation and click Record payment.', 'Choose GCash, Maya, cash or bank transfer and tick "Email a receipt".', 'The balance updates right away.']],
   ['Block dates or change a price', ['Open the Calendar and tap an open night.', 'Choose Block (owner stay, repairs) or Set nightly price for that night.']],
-  ['Charge more on weekends and holidays', ['Edit a listing and fill in Pricing helpers: weekend rate, holiday rate, weekly and monthly discounts.', 'For peak months or a minimum stay over Holy Week or Christmas, open Calendar → Pricing rules → Add season.', 'PH holidays are applied automatically.']],
+  ['Charge more on weekends and holidays', ['Edit a listing and fill in Price extras: weekend rate, holiday rate, weekly and monthly discounts.', 'For peak months or a minimum stay over Holy Week or Christmas, open Calendar → Pricing rules → Add season.', 'PH holidays are applied automatically.']],
   ['Reply to a guest', ['Open Inbox, choose the conversation and type your message, or insert a template.', 'Use ✨ Draft reply with AI if it is turned on. Always read before sending.']],
   ['Send the gate pass to your condo admin', ['Open Listings → Gate pass and enter the building admin\'s email.', 'Turn on automatic sending. BalayHub emails the guests\' names (and IDs from the check-in form) before arrival.', 'The admin clicks "Confirm received" and you see it on the reservation.']],
   ['Handle cleaning', ['Open Housekeeping to see today\'s cleanings and the next guest\'s arrival.', 'Use "Copy for cleaner" to send the checklist by Messenger or Viber.']],
@@ -22,7 +22,9 @@ const skippedNote = (steps) => { const n = steps.filter((x) => x.skipped).length
 export const progressLine = (o) => `${countDone(o.steps)} of ${o.total} steps done${skippedNote(o.steps)}`;
 export const phaseCount = (steps) => `${countDone(steps)}/${steps.length}${skippedNote(steps)}`;
 
-function stepCard(st, isNext, rerender) {
+function stepCard(st, isNext, rerender, syncFailing) {
+  // A calendar that failed its last sync keeps the channels step open, so the reason is not missed.
+  const stuck = syncFailing && st.key === 'channels';
   const status = st.done ? h('span', { class: 'lp-status lp-status--done' }, '✓ Done')
     : st.skipped ? h('span', { class: 'lp-status lp-status--skip' }, 'Skipped')
       : isNext ? h('span', { class: 'lp-status lp-status--next' }, 'Next step')
@@ -30,13 +32,14 @@ function stepCard(st, isNext, rerender) {
   const skip = async (undo) => {
     try { await post('/onboarding/skip', { step: st.key, undo }); rerender(); } catch (err) { toast(err.message, 'error'); }
   };
-  return h('details', { class: `lpad-step${st.done ? ' is-done' : ''}${isNext ? ' is-next' : ''}`, open: isNext ? true : null },
+  return h('details', { class: `lpad-step${st.done ? ' is-done' : ''}${isNext ? ' is-next' : ''}`, open: (isNext || stuck) ? true : null },
     h('summary', null,
       h('span', { class: 'lpad-step__check', 'aria-hidden': 'true' }, st.done ? '✓' : ''),
       h('span', { class: 'lpad-step__title' }, st.title, st.optional && h('span', { class: 'muted small' }, ' · optional')),
       status),
     h('div', { class: 'lpad-step__body' },
       h('p', null, st.why),
+      stuck && h('p', { class: 'alert alert--warn' }, 'Connected, but the calendar isn\'t syncing. Check the link.'),
       h('ol', { class: 'lpad-how' }, st.how.map((x) => h('li', null, x))),
       h('div', { class: 'chips' },
         !st.done && h('a', { class: `btn btn--sm ${isNext ? 'btn--primary' : 'btn--secondary'}`, href: st.href }, st.action),
@@ -54,6 +57,7 @@ export async function launchpadView(el, { rerender }) {
   const next = o.steps.find((x) => !x.done && !x.skipped);
   const pct = Math.round((100 * countDone(o.steps)) / o.total);
   const first = state.user.full_name.split(' ')[0];
+  const showReminder = async () => { try { await post('/onboarding/dismiss', { show: true }); rerender(); } catch (err) { toast(err.message, 'error'); } };
 
   el.replaceChildren(
     h('div', { class: 'lpad-hero card' },
@@ -66,7 +70,8 @@ export async function launchpadView(el, { rerender }) {
         h('div', { class: 'lpad-progress' },
           h('div', { class: 'bar' }, h('span', { style: { width: `${pct}%` } })),
           h('span', { class: 'small' }, progressLine(o))),
-        next && h('a', { class: 'btn btn--primary', href: next.href }, icon('plus'), `Next: ${next.title}`)),
+        next && h('a', { class: 'btn btn--primary', href: next.href }, icon('plus'), `Next: ${next.title}`),
+        o.dismissed && !o.complete && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: showReminder }, 'Show the reminder on Home')),
       h('div', { class: 'lpad-hero__art', 'aria-hidden': 'true' }, icon('rocket'))),
     o.phases.map((ph, i) => {
       const steps = o.steps.filter((x) => x.phase === ph.key);
@@ -77,13 +82,13 @@ export async function launchpadView(el, { rerender }) {
           h('span', { class: `lpad-phase__num${settled ? ' is-done' : ''}` }, settled ? '✓' : String(i + 1)),
           h('div', null, h('h2', null, ph.title), h('p', { class: 'muted small' }, ph.text)),
           h('span', { class: 'muted small lpad-phase__count' }, phaseCount(steps))),
-        h('div', { class: 'lpad-steps' }, steps.map((st) => stepCard(st, st === next, rerender))));
+        h('div', { class: 'lpad-steps' }, steps.map((st) => stepCard(st, st === next, rerender, o.channels_failing))));
     }),
     h('section', { class: 'card' },
       h('div', { class: 'card__head' }, h('h2', null, 'How do I…?')),
       h('div', { class: 'lpad-guides' }, GUIDES.map(([t, lines]) => h('details', { class: 'lpad-guide' },
         h('summary', null, t), h('ol', { class: 'lpad-how' }, lines.map((x) => h('li', null, x))))))),
-    h('p', { class: 'muted small center', style: { marginTop: '16px' } }, 'Need help? Reply to any email from BalayHub, or contact us from Settings → Plan & billing.'));
+    h('p', { class: 'muted small center', style: { marginTop: '16px' } }, 'Need help? Reply to any email from BalayHub, or ', h('a', { href: '#/help' }, 'contact us from Help & support'), '.'));
 }
 
 // Small reminder on Home until setup is finished (owners only).

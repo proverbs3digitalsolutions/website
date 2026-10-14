@@ -109,9 +109,9 @@ payment reminder messages too; if you had edited them, your wording is kept as a
 "(my version)" template. Error messages from the server, receipts and the building admin's gate
 pass stay in English.
 
-## Pricing helpers
+## Price extras
 
-Set them per listing (Listings → Edit → *Pricing helpers*) and in **Calendar → Pricing rules**:
+Set them per listing (Listings → Edit → *Price extras*; the section is closed until you tap it) and in **Calendar → Pricing rules**:
 
 - **Weekend rate** for Friday and Saturday nights.
 - **Holiday rate**, applied automatically on the nights before and during Philippine holiday long

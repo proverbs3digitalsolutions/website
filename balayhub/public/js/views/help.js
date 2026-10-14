@@ -72,10 +72,10 @@ export async function helpView(el, { query }) {
   }
 
   const sync = () => history.replaceState(null, '', `#/help${qs({ q: filters.q, ...changed(ticketFilters, TICKET_DEFAULTS) })}`);
-  const articleSearch = searchBox({ value: filters.q, placeholder: longTerm ? 'Search help, e.g. rent reminders, receipts, maintenance' : 'Search help — e.g. connect Airbnb, refund, gate pass', onSearch: (q) => { filters.q = q; sync(); drawArticles(); } });
+  const articleSearch = searchBox({ value: filters.q, placeholder: longTerm ? 'Search help, e.g. rent reminders, receipts, maintenance' : 'Search help — e.g. connect Airbnb, refund, gate pass', onSearch: (q) => { askError.textContent = ''; filters.q = q; sync(); drawArticles(); } });
   articleSearch.classList.add('search--wide');
   // The status tabs ride inside the bar; Clear all resets only the search (same as the rent page).
-  const ticketBar = filterBar({ key: TICKETS_KEY, values: ticketFilters, defaults: { tq: '' }, extra: tabs, onChange: drawTickets,
+  const ticketBar = filterBar({ key: TICKETS_KEY, values: ticketFilters, defaults: { tq: '' }, extra: tabs, onChange: () => { askError.textContent = ''; drawTickets(); },
     search: { name: 'tq', placeholder: 'Search ticket subject or number' } });
   const [aiOn] = await Promise.all([assistantEnabled(), drawArticles(), drawTickets()]);
   const askInput = h('input', { class: 'input', maxlength: 2000, placeholder: longTerm ? 'e.g. Paano mag-record ng bayad sa upa?' : 'e.g. Paano i-connect ang Airbnb calendar ko?', 'aria-label': 'Ask the assistant' });

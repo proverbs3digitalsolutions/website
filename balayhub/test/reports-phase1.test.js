@@ -134,7 +134,7 @@ test('owner statement: refunds come off the payout on their own line, to the cen
   assert.deepEqual(
     [s.totals.gross, s.totals.channel_fees, s.totals.cleaning_fees, s.totals.net_rental, s.totals.management_fee, s.totals.expenses, s.totals.payout],
     ['3119.39', '123.45', '500.00', '2245.44', '449.09', '0.00', '1796.35']);
-  assert.equal((await host.get(`/api/reservations/${s1.booking_id}`)).data.reservation.balance, '0.00', 'the guest has paid the whole bill, extras included');
+  assert.equal((await host.get(`/api/reservations/${s1.booking_id}`)).data.reservation.balance, '250.50', 'the whole bill is paid, extras included; the 250.50 refund counts in the balance (D-85)');
 
   outbox.length = 0;
   await host.post(`/api/unit-owners/${ownerId}/statement/publish`, { month: '2026-07' });

@@ -114,7 +114,7 @@ extendTranslations({
   'Invite your team': 'I-invite ang team mo', 'Your co-host and cleaners get their own logins with just the access they need.': 'May sariling login ang co-host at cleaners mo, sa access lang na kailangan nila.',
   // who
   'Who BalayHub is for': 'Para kanino ang BalayHub',
-  'Starting out': 'Nagsisimula pa lang', '1–2 units': '1–2 unit', 'One calendar, automatic messages and receipts, so hosting fits around your day job.': 'Iisang calendar, automatic messages at resibo, para kasya ang hosting sa trabaho mo.',
+  'Starting out': 'Nagsisimula pa lang', '1–3 units': '1–3 unit', 'One calendar, automatic messages and receipts, so hosting fits around your day job.': 'Iisang calendar, automatic messages at resibo, para kasya ang hosting sa trabaho mo.',
   'Growing host': 'Lumalaking host', '4–10 units': '4–10 unit', 'A team, cleaning schedule, direct bookings and reports for every unit.': 'Team, cleaning schedule, direct bookings at reports para sa bawat unit.',
   'Managing for owners': 'Nagma-manage para sa owners', 'More than 10 units': 'Higit 10 unit', 'Owner statements with your management fee, and access per building.': 'Owner statements na may management fee mo, at access kada building.',
   // pricing
@@ -156,7 +156,7 @@ extendTranslations({
   'How many units do you manage?': 'Ilang unit ang hawak mo?',
   'Tell us about your hosting business': 'Ikuwento ang hosting business mo',
   'We\'ll set up BalayHub for the way you host.': 'Ise-setup namin ang BalayHub ayon sa paraan ng pag-host mo.',
-  'First name': 'Pangalan', 'Last name': 'Apelyido', 'Business name': 'Pangalan ng negosyo', 'e.g. Santos Staycations': 'hal. Santos Staycations',
+  'First name': 'Unang pangalan', 'Last name': 'Apelyido', 'Business name': 'Pangalan ng negosyo', 'e.g. Santos Staycations': 'hal. Santos Staycations',
   'Mobile number': 'Mobile number', 'What do you rent out?': 'Ano ang pinauupahan mo?',
   'Short-term stays (Airbnb, staycations)': 'Panandaliang stays (Airbnb, staycation)', 'Long-term rentals (monthly tenants)': 'Pangmatagalang upa (buwanan)', 'Both': 'Pareho',
   'Continue': 'Tuloy', 'Back': 'Bumalik',
@@ -262,7 +262,7 @@ const NEWS = [
   ['chat', 'Quotes for Messenger', 'Send a price with a pay link to guests who ask on Facebook or Messenger.'],
 ];
 
-const UNIT_BANDS = [['1-3', '1–2 units'], ['4-10', '4–10 units'], ['10+', 'More than 10']];
+const UNIT_BANDS = [['1-3', '1–3 units'], ['4-10', '4–10 units'], ['10+', 'More than 10']];
 
 // Where a guest sends a question: the team's email when one is set. Until then, visitors sign up first and ask in Help & support.
 const askNodes = (pricing) => (pricing.contact_email
@@ -541,7 +541,7 @@ export async function landingView(el) {
       h('section', { class: 'lp-section lp-section--alt' },
         h('div', { class: 'lp-wrap' },
           h('h2', { class: 'lp-h2' }, t('Who BalayHub is for')),
-          h('div', { class: 'lp-who' }, [['1-3', 'Starting out', '1–2 units', 'One calendar, automatic messages and receipts, so hosting fits around your day job.'],
+          h('div', { class: 'lp-who' }, [['1-3', 'Starting out', '1–3 units', 'One calendar, automatic messages and receipts, so hosting fits around your day job.'],
             ['4-10', 'Growing host', '4–10 units', 'A team, cleaning schedule, direct bookings and reports for every unit.'],
             ['10+', 'Managing for owners', 'More than 10 units', 'Owner statements with your management fee, and access per building.']]
             .map(([band, title, units, text]) => h('div', { class: 'lp-who__card' },

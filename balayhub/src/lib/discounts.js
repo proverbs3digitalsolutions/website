@@ -4,6 +4,7 @@
 // off the accommodation (never the cleaning fee).
 
 const { query } = require('../db');
+const { fmtPeso } = require('./messaging');
 
 const manilaToday = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
 const normalize = (code) => String(code || '').trim().toUpperCase().replace(/\s+/g, '');
@@ -50,7 +51,7 @@ async function applyCode(orgId, rawCode, { nights, accommodation, email, name },
   }
   const acc = Math.round(Number(accommodation) * 100);
   const off = d.percent_off ? Math.round((acc * d.percent_off) / 100) : Math.min(acc, Math.round(Number(d.amount_off) * 100));
-  return { code: d.code, code_id: d.code_id, returning_only: d.returning_only, label: d.percent_off ? `${d.percent_off}% off` : `₱${Number(d.amount_off).toLocaleString('en-PH')} off`, discount: off / 100 };
+  return { code: d.code, code_id: d.code_id, returning_only: d.returning_only, label: d.percent_off ? `${d.percent_off}% off` : `${fmtPeso(d.amount_off)} off`, discount: off / 100 };
 }
 
 module.exports = { applyCode, normalize, USES };

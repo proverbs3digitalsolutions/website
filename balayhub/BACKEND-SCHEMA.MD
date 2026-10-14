@@ -2,7 +2,7 @@
 
 This document describes BalayHub's PostgreSQL schema as it stands after migrations `001`–`026` in `db/migrations/`, where uploaded files are stored, and who can see or change each kind of data. It was checked against the migrations and the route code in `src/routes/*.js` and `src/lib/*.js`. Anything not confirmed in the code is marked **unverified**.
 
-Last updated: 2026-10-14 (QA round 6, section 12)
+Last updated: 2026-10-14 (QA round 9, section 15; D-85)
 
 ---
 
@@ -140,7 +140,7 @@ Last updated: 2026-10-14 (QA round 6, section 12)
 | Identity | unit_id (PK), property_id → properties, unit_name (1–60 characters; unique per property among active units: `units_name_uq` on `(property_id, lower(unit_name)) WHERE status = 'active'`), unit_type (`room`, `studio`, `apartment`, `bedspace`, `house`, `commercial_space`, `other`), status (`active`/`archived`), created_at |
 | Long-term | monthly_rent (≥ 0, default 0), security_deposit_amount (≥ 0), availability (`available`/`unavailable`), availability_date |
 | Short-term | nightly_rate (≥ 0; a non-NULL rate makes the unit count as a listing for plan limits), cleaning_fee, max_guests (1–50), checkin_time, checkout_time, min_nights (1–60), balance_due_days (0–60), bookable_online, payment_option (`full`, `deposit`, `either`), description |
-| Pricing helpers | weekend_rate, holiday_rate (≥ 0), weekly_discount (0–50 %), monthly_discount (0–70 %) |
+| Price extras (shown in the app as "Price extras"; was "Pricing helpers") | weekend_rate, holiday_rate (≥ 0), weekly_discount (0–50 %), monthly_discount (0–70 %) |
 | Guest info | wifi_name, wifi_password (plain text), checkin_instructions, house_rules |
 | Housekeeping | cleaning_status (`clean`/`dirty`), cleaning_updated_at |
 | Channels | ical_token (unique; private export feed token) |
@@ -332,7 +332,7 @@ Key constraint: **`bookings_no_overlap`** is an `EXCLUDE USING gist (unit_id WIT
 |---|---|---|
 | `booking_charges` | booking_id, category (`early_checkin`, `late_checkout`, `extra_guest`, `extra_bed`, `airport_transfer`, `damage`, `extra_cleaning`, `other`), description, quantity (1–99), unit_price (> 0), amount (generated: quantity × unit_price), created_by, voided_at/by/reason | Extra charges on a stay. Their non-voided sum is kept in `bookings.extras_total`. |
 | `bookings.extras_total` | numeric ≥ 0 | Part of the generated `total_amount` (= accommodation + cleaning + other fees + extras). |
-| `booking_refunds` | booking_id, amount (> 0), refund_date, method, reference_number, reason (required), recorded_by, idempotency_key (unique per workspace), voided_at/by/reason | A record of money returned. The total of non-voided refunds can't exceed the non-voided payments. It doesn't change the balance. |
+| `booking_refunds` | booking_id, amount (> 0), refund_date, method, reference_number, reason (required), recorded_by, idempotency_key (unique per workspace), voided_at/by/reason | A record of money returned. The total of non-voided refunds can't exceed the non-voided payments. It doesn't change the balance. *2026-10-14 (D-85): refunds now count in the guest balance; the cap stands.* |
 | `payment_proofs` | booking_id, amount (> 0), method (`gcash`, `maya`, `bank_transfer`, `other`), reference_number, payer_name, note, status (`pending`, `confirmed`, `rejected`), reviewed_by/at, reject_reason, payment_id → booking_payments | Sent by the guest from the pay page. Confirming creates a `booking_payment`. There are at most 5 pending per booking. |
 | `units` | cancellation_policy (`flexible`, `moderate`, `strict`, `non_refundable`, `custom`, or NULL), cancellation_policy_text, deposit_pct (10–90, default 50) | Policy presets live in `src/lib/policies.js`. |
 | `organizations` | manual_payments_enabled, manual_payment_instructions | Owner-only setting. Shown on the guest pay page. |
@@ -1070,3 +1070,21 @@ Decision D-84. Checked against the code after the fixes landed.
 - **Cleaning tasks:** owners and managers can change `notes` with `PATCH /api/cleaning-tasks/:id`; the activity row names the field.
 - **Sign-up, Get started:** nothing server-side changed for the saved answers; they live in the browser (`bh-setup`, with the email and a save time) and the server never receives them until the person presses Create. Signing out, "Use a different account" and opening setup as someone who already has a workspace clear them (client behaviour in `auth.js`).
 - **Not exercised locally (live stage):** PayMongo checkout and return, expired quote, booking-done success, owner portal with a real link, 4-star public review links, door-code card, iCal overlap on daily close, assistant answers, the recurring maintenance scheduler run.
+
+## 15. API notes from QA round 9 (2026-10-14)
+
+- **The guest balance (D-85):** `total_amount - channel_fee - payments + refunds`. The channel fee counts only on a booking whose channel is not `direct`; payments and refunds count only when not voided. It is written once in `src/lib/balance.js` (`FEE`, `PAID`, `REFUNDED`, `BALANCE`, as SQL snippets for a booking aliased `b`) and used by stays, the pay link (`balancepay`), receipts, the daily close, messaging, the assistant, the inbox, money and reports. Do not write the formula again anywhere. A negative balance means the guest is still overpaid after refunds. A receipt's `balance_after` counts every non-voided refund on the stay, including one recorded after that payment (carried to round 10).
+- **Peso text:** all server text with an amount goes through `fmtPeso` in `src/lib/messaging.js` (₱1,500.50, two decimals). `GET /stay` pages use it for the "From" price.
+- **Reservation CSV** has a **Refunded** column.
+- **`source` on `POST /reservations` and `PATCH /reservations/:id`:** direct bookings only; the value must be on the D-61 list without `quote`. A source on a channel booking: 400 "Only direct bookings have a source." An unknown source: 400 "Choose where they booked from the list." There is no `walk_in` value. Staff don't receive `source` (access table).
+- **Automations:** `POST` and `PATCH /inbox/automations` refuse a name already used by another automation in the workspace (case and end spaces ignored): 400 with `fields.name`. The check is not atomic yet (a unique index is a round 10 item). New automations are created with `enabled = false` from the form.
+- **Unit owners:** assigning units that belong to another owner returns 409 `UNIT_HAS_OWNER` with `units` (unit and current owner names). Sending `move_units: true` moves them. The management fee has no default in the form.
+- **Check-in (`POST` and `PATCH` of the guest form):** a blank guest name returns 400 at `fields.guests`: "Enter the name of each guest, or remove the empty row." The host note appends `, booked for N` when `guests.length + 1 < num_guests`.
+- **Rent:** `GET /rent/leases` returns `oldest_unpaid_period` per lease (the month a payment reaches first) and `partial_count` counts every month with some money applied and a balance left (`amount_applied > 0 AND balance > 0`), overdue or not.
+- **Cleaner pay:** `pay_status` is `unpaid`, `paid` or `self`. `self` is computed, never stored: an unpaid clean with no `pay_amount`, done by the owner, with no rate for the owner. `no_rate` is returned on the manager's `GET` only (cleaners and staff don't get it). `mark-paid` on a `self` row is refused (`NO_PAY_AMOUNT`). Known gap: `status=unpaid` still returns `self` rows (round 10).
+- **Onboarding (`GET /onboarding`):** the `channels` step is done only when an iCal feed has `last_status = 'ok'`; `channels_failing` is true when feeds exist but none synced. `guest_info` is done when check-in instructions, Wi-Fi or house rules exist on any listing.
+- **Discount codes:** `POST` and `PATCH /discount-codes` refuse a code containing whitespace (400 at `fields.code`: "Codes can't contain spaces. Try QA-R9-BAD."). The public guest check still forgives a space.
+- **Direct booking and pay link:** a PayMongo failure returns 502 `PAYMENT_FAILED` with the neutral sentence "Online payment isn't available right now. Please try again in a few minutes, or contact the host."; the provider's own reason goes to the server log only.
+- **`booking_group.updated`:** renaming or editing a group writes one activity row (record type `booking_group`), shown on each room's timeline.
+- **Cleaning checklist audit:** an edit records `{ fields: ['items'] }`, shown as "Changed: Checklist items".
+- **Refund suggestion and cap:** unchanged (never more than was paid); the app asks before a refund that would leave money owed on a live stay.

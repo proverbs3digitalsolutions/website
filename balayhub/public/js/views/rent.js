@@ -26,7 +26,8 @@ async function attachReceipt(form, type, id) {
 }
 
 // ---------------------------------------------------------------- record payment
-export async function recordPaymentModal({ leaseId, amount, onSaved } = {}) {
+// period: the month of the rent row the host clicked Record on (absent on a tenant's own Record).
+export async function recordPaymentModal({ leaseId, amount, period, onSaved } = {}) {
   let leases;
   try { ({ leases } = await get('/rent/leases')); } catch (err) { toast(err.message, 'error'); return; }
   if (!leases.length) {
@@ -34,11 +35,14 @@ export async function recordPaymentModal({ leaseId, amount, onSaved } = {}) {
     return;
   }
   const balanceInfo = h('div');
-  const showBalance = (id) => {
+  const showBalance = (id, row) => {
     const l = leases.find((x) => x.lease_id === id);
+    // Payments go to the oldest unpaid month first (PRD). Say so when that is not the month the host clicked.
+    const goesFirst = l?.oldest_unpaid_period && l.oldest_unpaid_period !== row;
     balanceInfo.replaceChildren(l ? h('div', { class: `alert ${Number(l.overdue) > 0 ? 'alert--warn' : 'alert--info'}` },
       `Current balance: ${peso(l.outstanding)}`, Number(l.overdue) > 0 ? ` · ${peso(l.overdue)} overdue` : '', Number(l.credit) > 0 ? ` · ${peso(l.credit)} advance credit` : '',
-      ` · Monthly rent ${peso(l.monthly_rent)}`) : '');
+      ` · Monthly rent ${peso(l.monthly_rent)}`) : '',
+    goesFirst ? h('p', { class: 'hint' }, `This payment goes to ${fmtMonth(l.oldest_unpaid_period)} first (the oldest unpaid month).`) : '');
   };
   const leaseField = field({
     name: 'lease_id', label: 'Tenant', type: 'select', required: true, value: leaseId,
@@ -52,7 +56,7 @@ export async function recordPaymentModal({ leaseId, amount, onSaved } = {}) {
     if (l && !amt.value && Number(l.outstanding) > 0) amt.value = l.outstanding;
   });
   if (leaseId) {
-    showBalance(leaseId);
+    showBalance(leaseId, period);
     const l = leases.find((x) => x.lease_id === leaseId);
     // A rent row passes its own remaining amount; the balance line above still shows the whole balance.
     const suggested = amount ?? l?.outstanding;
@@ -218,8 +222,8 @@ export async function rentView(el, { query }) {
     const filtered = isFiltered();
     summary.replaceChildren(h('div', { class: 'stats' },
       h('div', { class: 'stat' }, h('div', { class: 'stat__label' }, 'Outstanding'), h('div', { class: 'stat__value' }, peso(totals.outstanding))),
-      h('div', { class: `stat${Number(totals.overdue) > 0 ? ' stat--alert' : ''}` }, h('div', { class: 'stat__label' }, 'Overdue'), h('div', { class: 'stat__value' }, peso(totals.overdue)), h('div', { class: 'stat__sub' }, `${totals.overdue_count} month${totals.overdue_count === 1 ? '' : 's'}`)),
-      h('div', { class: 'stat' }, h('div', { class: 'stat__label' }, 'Partially paid'), h('div', { class: 'stat__value' }, totals.partial_count)),
+      h('div', { class: `stat${Number(totals.overdue) > 0 ? ' stat--alert' : ''}` }, h('div', { class: 'stat__label' }, 'Overdue'), h('div', { class: 'stat__value' }, peso(totals.overdue)), h('div', { class: 'stat__sub' }, `${totals.overdue_count} overdue charge${totals.overdue_count === 1 ? '' : 's'}`)),
+      h('div', { class: 'stat' }, h('div', { class: 'stat__label' }, 'Partly paid'), h('div', { class: 'stat__value' }, totals.partial_count)),
       h('div', { class: 'stat' }, h('div', { class: 'stat__label' }, 'Due, not yet paid'), h('div', { class: 'stat__value' }, totals.unpaid_count))));
     const due = charges.reduce((sum, c) => sum + Number(c.balance), 0);
     body.replaceChildren(h('div', { class: 'card' }, charges.length
@@ -232,7 +236,7 @@ export async function rentView(el, { query }) {
           h('div', { class: 'row__end' },
             h('span', { class: `amount${c.status === 'overdue' ? ' amount--neg' : ''}` }, peso(c.status === 'paid' ? c.amount_due : c.balance)),
             h('div', { class: 'chips' }, badge(c.status),
-              c.status !== 'paid' && h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `Record payment for ${c.tenant_name}, ${unitLabel(c.unit_name)}, ${fmtMonth(c.period)}`, onclick: () => recordPaymentModal({ leaseId: c.lease_id, amount: c.balance, onSaved: reload }) }, 'Record')))))))]
+              c.status !== 'paid' && h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `Record payment for ${c.tenant_name}, ${unitLabel(c.unit_name)}, ${fmtMonth(c.period)}`, onclick: () => recordPaymentModal({ leaseId: c.lease_id, amount: c.balance, period: c.period, onSaved: reload }) }, 'Record')))))))]
       : ((filtered || statusCountsAsFilter(f.status)) ? noResults() : emptyState({
         title: f.status === 'outstanding' || f.status === 'overdue' ? 'No unpaid rent' : 'No rent charges',
         text: 'Rent charges are created monthly from active leases. Assign tenants to units to start tracking.',

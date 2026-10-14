@@ -185,12 +185,12 @@ test('#44: repeated Edit, Delete, Turn on and Turn off buttons name the template
   const rowButtons = walk(el, (n) => n.tagName === 'button' && ['Edit', 'Delete', 'Turn on', 'Turn off'].includes(textOf(n)))
     .map((b) => [textOf(b), b.getAttribute('aria-label')]);
   assert.deepEqual(rowButtons, [
-    ['Turn off', 'Turn off automatic message: Check-in reminder'],
-    ['Edit', 'Edit automatic message: Check-in reminder'],
-    ['Delete', 'Delete automatic message: Check-in reminder'],
-    ['Turn on', 'Turn on automatic message: Thank you'],
-    ['Edit', 'Edit automatic message: Thank you'],
-    ['Delete', 'Delete automatic message: Thank you'],
+    ['Turn off', 'Turn off automatic message: Check-in reminder, 1 day before check-in at 10:00'],
+    ['Edit', 'Edit automatic message: Check-in reminder, 1 day before check-in at 10:00'],
+    ['Delete', 'Delete automatic message: Check-in reminder, 1 day before check-in at 10:00'],
+    ['Turn on', 'Turn on automatic message: Thank you, 1 day after check-out at 10:00'],
+    ['Edit', 'Edit automatic message: Thank you, 1 day after check-out at 10:00'],
+    ['Delete', 'Delete automatic message: Thank you, 1 day after check-out at 10:00'],
     ['Edit', 'Edit template: Booking confirmation'],
     ['Edit', 'Edit template: Check-in notes'],
     ['Delete', 'Delete template: Check-in notes'],
