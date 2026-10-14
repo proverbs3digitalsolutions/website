@@ -53,9 +53,9 @@ test('the board line, the inspection badge and the Inspections heading go throug
   assert.match(src, /h\('h2', null, T\('Inspections'\)\)/);
 });
 
-// #18: Copy for cleaner hands over a clean that is still to do, so it is not offered on a cancelled job.
-test('Copy for cleaner is not offered on a cancelled job', () => {
-  assert.match(src, /isManager && t\.status !== 'cancelled' && h\('button', \{ class: 'btn btn--secondary', onclick: \(\) => copyText\(taskText\(t\)\) \}, 'Copy for cleaner'\)/);
+// #18: Copy for cleaner hands over a clean that is still to do, so it is offered only on an open clean (QA round 12, #35: not on a finished or cancelled one).
+test('Copy for cleaner is offered only on an open clean', () => {
+  assert.match(src, /isManager && open && h\('button', \{ class: 'btn btn--secondary', onclick: \(\) => copyText\(taskText\(t\)\) \}, 'Copy for cleaner'\)/);
 });
 
 // N1: Inspect is not offered on a paid clean, the same rule as Reopen (canReopen reads isPaidClean too).

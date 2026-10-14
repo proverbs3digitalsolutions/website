@@ -6,7 +6,7 @@ import {
   h, icon, peso, fmtDate, fmtDateTime, badge, field, formModal, confirmDialog, emptyState, toast, openModal, todayManila,
 } from '../ui.js';
 import { state, navigate } from '../app.js';
-import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
+import { initFilters, filterBar, rememberFilters, changed, apiFilters } from '../filters.js';
 import { CHANNEL_LABEL } from './reservations.js';
 
 const VIEWS = [
@@ -97,7 +97,7 @@ export async function inboxView(el, { params, query, rerender }) {
     el.querySelector('.inbox__back')?.setAttribute('href', href(null));
     let list;
     try {
-      list = await get(`/inbox${qs(changed(filters, { ...defaults, view: '' }))}`);
+      list = await get(`/inbox${qs(apiFilters(filters, defaults))}`);
     } catch (err) {
       // A bad filter in the address must not replace the whole page; the filter bar stays so it can be cleared.
       items.replaceChildren(emptyState({ title: "Couldn't load conversations", text: err.message }));
@@ -476,7 +476,7 @@ function composer(c, templates, status, rerender, assignees = []) {
   const modeTabs = h('div', { class: 'tabs tabs--compact' },
     [['message', 'Message guest'], ['note', 'Internal note']].map(([k, t]) => h('button', {
       type: 'button', 'aria-pressed': String(k === mode),
-      onclick: () => setMode(k),
+      onclick: () => { setMode(k); body.focus(); },
     }, t)));
   const setMode = (k) => {
     mode = k;
@@ -639,7 +639,7 @@ export async function inboxSettingsView(el, { rerender }) {
       submitText: 'Save',
       fields: [
         field({ name: 'name', label: 'Name', required: true, value: a?.name, maxlength: 120 }),
-        field({ name: 'template_id', label: 'Template to send', type: 'select', required: true, value: a?.template_id, options: templates.map((t) => [t.template_id, t.name]) }),
+        field({ name: 'template_id', label: 'Template to send', type: 'select', required: true, value: a?.template_archived ? '' : a?.template_id, options: templates.map((t) => [t.template_id, t.name]) }),
         field({ name: 'trigger_event', label: 'When', type: 'select', required: true, value: a?.trigger_event || 'before_check_in', placeholderOption: false, options: Object.entries(TRIGGER_LABEL) }),
         h('div', { class: 'form-row form-row--2' },
           field({ name: 'offset_days', label: 'Number of days', type: 'number', min: 0, max: 30, value: a?.offset_days ?? 1, inputmode: 'numeric' }),
@@ -684,15 +684,17 @@ export async function inboxSettingsView(el, { rerender }) {
       h('div', { class: 'card__head' }, h('h2', null, 'Automatic messages'),
         canEdit && h('button', { class: 'btn btn--primary btn--sm', onclick: () => editAutomation(null) }, icon('plus'), 'Add')),
       !canEdit && h('p', { class: 'muted small' }, 'Only the workspace owner can change these.'),
+      automations.length > 0 && automations.every((a) => !a.enabled) && h('p', { class: 'muted small' },
+        "These automatic messages are ready but off. Check each one's wording, then turn on the ones you want."),
       automations.length ? h('ul', { class: 'list' }, automations.map((a) => h('li', null, h('div', { class: 'row row--stack-sm' },
         h('div', { class: 'row__main' },
           h('span', { class: 'row__title' }, a.name),
           h('span', { class: 'row__sub' }, `${describeAutomation(a)} · sends "${a.template_name}"`),
           h('span', { class: 'row__sub' }, `${a.sent_count} sent so far`)),
         h('div', { class: 'row__end' },
-          a.enabled ? badge('active', 'On') : badge('archived', 'Off'),
+          a.template_archived ? badge('archived', 'Template deleted, choose another') : a.enabled ? badge('active', 'On') : badge('archived', 'Off'),
           canEdit && h('div', { class: 'chips' },
-            h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `${a.enabled ? 'Turn off' : 'Turn on'} automatic message: ${a.name}, ${describeAutomation(a)}`, onclick: () => toggle(a, !a.enabled) }, a.enabled ? 'Turn off' : 'Turn on'),
+            h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `${a.enabled ? 'Turn off' : 'Turn on'} automatic message: ${a.name}, ${describeAutomation(a)}`, onclick: () => (a.template_archived && !a.enabled ? toast("This automatic message's template was deleted. Choose a template first.", 'error') : toggle(a, !a.enabled)) }, a.enabled ? 'Turn off' : 'Turn on'),
             h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Edit automatic message: ${a.name}, ${describeAutomation(a)}`, onclick: () => editAutomation(a) }, 'Edit'),
             h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Delete automatic message: ${a.name}, ${describeAutomation(a)}`, onclick: () => removeAutomation(a) }, 'Delete')))))))
         : h('p', { class: 'muted small' }, 'No automatic messages yet.')),
@@ -700,6 +702,7 @@ export async function inboxSettingsView(el, { rerender }) {
       h('div', { class: 'card__head' }, h('h2', null, 'Message templates'),
         canEditTemplates && h('button', { class: 'btn btn--primary btn--sm', onclick: () => editTemplate(null) }, icon('plus'), 'New template')),
       !canEditTemplates && h('p', { class: 'muted small' }, 'Only the workspace owner can change these.'),
+      h('p', { class: 'muted small' }, 'Guest messages are in English or Taglish. Change it in ', h('a', { href: '#/settings' }, 'Settings, Language for guests'), '.'),
       h('ul', { class: 'list' }, templates.map((t) => h('li', null, h('div', { class: 'row' },
         h('div', { class: 'row__main' },
           h('span', { class: 'row__title' }, t.name),

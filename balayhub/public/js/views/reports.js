@@ -40,6 +40,13 @@ export async function reportsView(el, { query }) {
   const body = h('div');
   const barBox = h('div', { class: 'no-print' });
   const exportLink = h('a', { class: 'btn btn--primary', download: '' }, 'Export (Excel / CSV)');
+  const exportHint = h('span', { class: 'muted small' }, 'Pick both dates to export.');
+  // Export has no address until the range is complete: say so to the eye and to a screen reader.
+  const exportReady = (ready) => {
+    exportLink.className = ready ? 'btn btn--primary' : 'btn btn--secondary';
+    exportHint.hidden = ready;
+    if (ready) exportLink.removeAttribute('aria-disabled'); else { exportLink.removeAttribute('href'); exportLink.setAttribute('aria-disabled', 'true'); }
+  };
 
   // The dates the report runs for. A custom range runs only once both dates are set (see load()).
   const range = () => (filters.period === 'custom'
@@ -83,12 +90,13 @@ export async function reportsView(el, { query }) {
     const neither = filters.period === 'custom' && !filters.from && !filters.to;
     const one = filters.period === 'custom' && Boolean(filters.from) !== Boolean(filters.to);
     if (neither || one) {
-      exportLink.removeAttribute('href');
+      exportReady(false);
       body.replaceChildren(h('div', { class: 'card' }, h('p', { class: 'muted' }, windowNote
         ? 'The dates in this link must be between 2000 and 2100. Pick both dates to see this range.'
         : 'Pick both dates to see this range.')));
       return;
     }
+    exportReady(true);
     exportLink.href = `/api/reports/export${qs(apiParams())}`;
     body.replaceChildren(h('div', { class: 'skeleton' }));
     let r;
@@ -132,9 +140,9 @@ export async function reportsView(el, { query }) {
             h('td', { class: 'num' }, peso(p.expenses)),
             h('td', { class: `num${Number(p.net) < 0 ? ' amount--neg' : ''}` }, peso(p.net)),
             h('td', { class: 'num' }, peso(p.outstanding))))),
-          h('tfoot', null, h('tr', null, h('td', null, 'Total'), h('td'), h('td', { class: 'num' }, peso(t.collected)), h('td', { class: 'num' }, peso(t.expenses)), h('td', { class: 'num' }, peso(t.net)), h('td', { class: 'num' }, peso(t.outstanding))))))),
-      h('div', { class: 'grid grid--2', style: { marginTop: '16px' } },
-        h('div', { class: 'card' },
+          h('tfoot', null, h('tr', null, h('td', null, 'Total'), h('td', { class: 'num' }, `${r.by_property.reduce((s, p) => s + Number(p.occupied), 0)}/${r.by_property.reduce((s, p) => s + Number(p.units), 0)}`), h('td', { class: 'num' }, peso(t.collected)), h('td', { class: 'num' }, peso(t.expenses)), h('td', { class: 'num' }, peso(t.net)), h('td', { class: 'num' }, peso(t.outstanding))))))),
+      // The By month table has five columns, so it gets the full width (half of a two-column grid hid Net at 1280).
+      h('div', { class: 'card', style: { marginTop: '16px' } },
           h('div', { class: 'card__head' }, h('h2', null, 'By month')),
           h('div', { class: 'table-wrap' }, h('table', { class: 'table' },
             h('thead', null, h('tr', null, h('th', null, 'Month'), h('th', null, h('span', { class: 'sr-only' }, 'Collected and expenses')), h('th', { class: 'num' }, 'Collected'), h('th', { class: 'num' }, 'Expenses'), h('th', { class: 'num' }, 'Net'))),
@@ -147,12 +155,12 @@ export async function reportsView(el, { query }) {
               h('td', { class: 'num' }, peso(m.expenses)),
               h('td', { class: `num${Number(m.net) < 0 ? ' amount--neg' : ''}` }, peso(m.net))))))),
           h('p', { class: 'muted small', style: { marginTop: '8px' } }, 'Bars: green = collected, orange = expenses.')),
-        h('div', { class: 'card' },
+      h('div', { class: 'card', style: { marginTop: '16px' } },
           h('div', { class: 'card__head' }, h('h2', null, 'Expenses by category')),
           r.by_category.length ? h('ul', { class: 'list' }, r.by_category.map((c) => h('li', null, h('a', { class: 'row', href: scoped('expenses', { category: c.category }) },
             h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, label(c.category)), h('span', { class: 'row__sub' }, `${c.count} entr${c.count === 1 ? 'y' : 'ies'}`)),
             h('div', { class: 'row__end' }, h('span', { class: 'amount' }, peso(c.amount)))))))
-            : h('p', { class: 'muted' }, 'No expenses in this period.'))),
+            : h('p', { class: 'muted' }, 'No expenses in this period.')),
       h('div', { class: 'card' },
         h('div', { class: 'card__head' }, h('h2', null, 'Outstanding balances (as of today)')),
         r.outstanding.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'table' },
@@ -172,7 +180,7 @@ export async function reportsView(el, { query }) {
   el.replaceChildren(
     pageHead({
       title: 'Reports', sub: 'Income, expenses and unpaid rent for any period',
-      actions: [exportLink, h('button', { class: 'btn btn--secondary', onclick: () => window.print() }, 'Print / PDF'), h('a', { class: 'btn btn--ghost', href: '#/dashboard' }, icon('home'), 'Dashboard')],
+      actions: [exportLink, exportHint, h('button', { class: 'btn btn--secondary', onclick: () => window.print() }, 'Print / PDF'), h('a', { class: 'btn btn--ghost', href: '#/dashboard' }, icon('home'), 'Dashboard')],
     }),
     barBox,
     body);

@@ -8,6 +8,7 @@ import { get, post, qs } from '../api.js';
 import { h, brand, peso, fmtDate, fmtMonth, fmtDateTime, field, formModal, confirmDialog, emptyState, errorState, skeleton, toast, todayManila, makeForm } from '../ui.js';
 import { navigate } from '../app.js';
 import { CHANNEL_LABEL } from './reservations.js';
+import { t, useHostLang } from '../i18n.js';
 
 const TABS = [
   ['home', 'Home', '/owner/home'],
@@ -41,6 +42,7 @@ async function getMe() {
 // Wraps a portal screen: top bar, tabs, loading and error states, signed-out redirect.
 function portalScreen(key, title, build) {
   const view = async (el, ctx) => {
+    useHostLang(); // the owner portal is English for now, however it was reached
     el.replaceChildren(h('div', { class: 'op' }, h('div', { class: 'op__wrap' }, skeleton(3))));
     let me;
     try { me = await getMe(); } catch (err) {
@@ -89,6 +91,7 @@ function authCard(...children) {
 }
 
 export async function ownerSignInView(el) {
+  useHostLang();
   document.title = 'Owner sign in — BalayHub';
   // Already signed in? Skip the form.
   try { await getMe(); navigate('#/owner/home', { replace: true }); return; } catch { meCache = null; }
@@ -99,7 +102,7 @@ export async function ownerSignInView(el) {
     onSubmit: async (data) => {
       await post('/owner-portal/login', { email: data.email });
       show(
-        h('h1', null, 'Check your email'),
+        h('h1', null, t('Check your email')),
         h('p', { class: 'muted' }, `If ${data.email} is set up for the owner portal, a sign-in link is on its way. It works once and expires in 30 minutes.`),
         h('p', { class: 'small muted' }, "Can't find it? Check your spam folder, or ask your property manager to invite you."),
         h('button', { class: 'btn btn--secondary', type: 'button', onclick: () => show(...intro()) }, 'Use a different email'));
@@ -114,11 +117,12 @@ export async function ownerSignInView(el) {
 }
 
 export async function ownerLinkView(el, { query }) {
+  useHostLang();
   document.title = 'Signing in — BalayHub';
   const fail = (msg) => el.replaceChildren(authCard(
     h('h1', null, "This link doesn't work"),
     h('p', { class: 'muted' }, msg),
-    h('a', { class: 'btn btn--primary', href: '#/owner' }, 'Request a new link')));
+    h('a', { class: 'btn btn--primary', href: '#/owner' }, t('Request a new link'))));
   if (!query.token) { fail('The sign-in link is incomplete. Request a new one.'); return; }
   el.replaceChildren(authCard(h('h1', null, 'Signing you in…'), skeleton(1)));
   const token = query.token;

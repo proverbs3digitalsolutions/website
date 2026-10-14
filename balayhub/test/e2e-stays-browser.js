@@ -96,7 +96,7 @@ const OFF = 400 + (Math.floor(Date.now() / 60000) % 5000) * 4; // unique future 
   m.setDefaultTimeout(8000);
   m.on('pageerror', (e) => errors.push(`pageerror(m): ${e.message}`));
   await m.setViewportSize({ width: 390, height: 844 });
-  for (const [name, hash, heading] of [['home', '/home', /Welcome back/], ['calendar', '/calendar', 'Multi-calendar'], ['reservations', '/reservations', 'Reservations'], ['listings', '/listings', 'Listings']]) {
+  for (const [name, hash, heading] of [['home', '/home', /Welcome back/], ['calendar', '/calendar', 'Calendar'], ['reservations', '/reservations', 'Reservations'], ['listings', '/listings', 'Listings']]) {
     await step(`mobile ${name}`, async () => {
       await m.goto(BASE + '/#' + hash);
       await m.getByRole('heading', { name: heading }).first().waitFor();

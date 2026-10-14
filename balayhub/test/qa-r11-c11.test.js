@@ -20,9 +20,9 @@ const grab = (name) => src.match(new RegExp(`export function ${name}[\\s\\S]*?\\
 test('#33: the owner\'s own finished clean with no pay reads "Done by you, no pay"', () => {
   const { payText } = new Function(`${grab('payText')}\nreturn { payText };`)();
   const owner = { role: 'owner', user_id: 'u-owner' };
-  const own = { status: 'done', completed_by: 'u-owner', pay_amount: null };
+  const own = { status: 'done', done_by_viewer: true, pay_amount: null };
   assert.equal(payText(own, owner), 'Done by you, no pay');
-  assert.equal(payText({ ...own, completed_by: 'u-other' }, owner), 'Pay not set. Use Set pay.', 'someone else\'s clean is still unpriced');
+  assert.equal(payText({ ...own, done_by_viewer: false }, owner), 'Pay not set. Use Set pay.', 'someone else\'s clean is still unpriced');
   assert.equal(payText({ ...own, status: 'in_progress' }, owner), 'Pay not set. Use Set pay.', 'an unfinished clean is still unpriced');
   assert.equal(payText(own, { role: 'manager', user_id: 'u-owner' }), 'Pay not set. Use Set pay.', 'only the owner gets the self wording');
 });

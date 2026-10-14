@@ -5,7 +5,7 @@ process.env.MAIL_FROM = 'Reyes Staycations <host@example.com>';
 
 // QA round 8, inbox lane (C09): N33 a template save that changes nothing writes no row, and a changed field is logged by
 // name; K21 an `assigned` id this workspace does not have is ignored, as a bad id is; N7 automations that share a
-// created_at come back in one fixed order (by id); #11 the composer's Message guest / Internal note switch is two toggle
+// created_at come back in one fixed order (by name, then id); #11 the composer's Message guest / Internal note switch is two toggle
 // buttons with aria-pressed, not a tab list (source scan); D-81 the scheduled-message Cancel, failed-message Retry and
 // long-message Show more links name their message (source scan).
 
@@ -67,17 +67,23 @@ test('K21 an assigned id this workspace does not have is ignored, and a real ass
   assert.deepEqual(ids((await owner.get('/api/inbox?assigned=unassigned')).data.conversations), []);
 });
 
-test('N7 automations that share a created_at come back in one fixed order, by id', async () => {
+test('N7 automations that share a created_at and trigger come back in one fixed order, by name and then by id', async () => {
   const orgId = (await sql('SELECT organization_id FROM users WHERE user_id = $1', [ownerId]))[0].organization_id;
-  // Inserted out of id order, all with one created_at: the list must order them by id, not by insertion.
-  const tied = ['cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'];
-  for (const [i, id] of tied.entries()) {
+  const A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const C = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  const D = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const E = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+  // Inserted out of order, all with one created_at and trigger: name decides first, then id for the same name.
+  const rows = [[C, 'Tie 0'], [A, 'Tie 1'], [B, 'Tie 2'], [E, 'Tie 3'], [D, 'Tie 3']];
+  for (const [id, name] of rows) {
     await sql(`INSERT INTO automations (automation_id, organization_id, template_id, name, trigger_event, offset_days, send_time, enabled)
-               VALUES ($1, $2, $3, $4, 'before_check_in', 1, '10:00', false)`, [id, orgId, tplId, `Tie ${i}`]);
+               VALUES ($1, $2, $3, $4, 'before_check_in', 1, '10:00', false)`, [id, orgId, tplId, name]);
   }
   await sql('UPDATE automations SET created_at = $1 WHERE organization_id = $2', ['2026-01-01T00:00:00Z', orgId]);
+  const tied = rows.map(([id]) => id);
   const listed = (await owner.get('/api/automations')).data.automations.map((a) => a.automation_id).filter((id) => tied.includes(id));
-  assert.deepEqual(listed, [...tied].sort());
+  assert.deepEqual(listed, [C, A, B, D, E], 'by name, and the two "Tie 3" rows by id');
 });
 
 test('#11 the Message guest and Internal note switch is two toggle buttons, not a tab list (source scan)', () => {

@@ -155,7 +155,7 @@ test('the unit word agrees with the count: "1 roll", "2 rolls", and known abbrev
     assert.equal(qtyLabel(1, 'rolls'), '1 roll');
     assert.equal(qtyLabel(2, 'rolls'), '2 rolls');
     assert.equal(qtyLabel(0, 'rolls'), '0 rolls');
-    assert.equal(qtyLabel(1, 'pcs'), '1 pcs');
+    assert.equal(qtyLabel(1, 'pcs'), '1 pc');
     assert.equal(qtyLabel(1, 'boxes'), '1 box');
     assert.equal(qtyLabel(2, 'boxes'), '2 boxes');
     assert.equal(qtyLabel(1, 'batteries'), '1 battery');

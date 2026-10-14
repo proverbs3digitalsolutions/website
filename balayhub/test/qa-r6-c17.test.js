@@ -26,7 +26,9 @@ test('#34: the quote refusal for the guest limit goes to the Guests box and the 
   const at = body.indexOf('if (err.fields?.guests)');
   assert.ok(at > 0, 'the guest-limit refusal has its own branch in the catch');
   const branch = body.slice(at, body.indexOf('const reason', at));
-  assert.match(branch, /setGuestsError\(tServer\(err\.fields\.guests\)\)/, 'the message goes to the Guests box');
+  assert.match(branch, /setGuestsError\(cap \? t\('Guests must be at most \{n\}\.', \{ n: cap\[1\] \}\) : tServer\(err\.fields\.guests\)\)/, 'the message goes to the Guests box');
+  assert.match(branch, /\^Guests must be at most \(\\d\+\)\\\.\$/, 'the cap is read from the server message');
+  assert.match(branch, /tServer\(err\.fields\.guests\)/, 'other messages still go through tServer');
   assert.doesNotMatch(branch, /alert/, 'the branch draws no alert');
   assert.match(branch, /summary\.replaceChildren\(\)/, 'the summary is cleared, not left showing a stale price');
   assert.match(body.slice(body.indexOf('const reason')), /tServer\(reason\)/, 'other refusals still show the summary alert');

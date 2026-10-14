@@ -12,6 +12,9 @@
 
 :root {
   --scrim: rgba(10, 20, 35, .4);
+  /* Review stars: 3:1 or better against --surface (QA round 12 #9). */
+  --star-off: #6b756e;
+  --star-on: #9a6700;
   /* BalayHub brand: Forest Green, Sage Green, Sand Beige, Soft Off-White, Charcoal Navy */
   --forest: #0f5132;
   --sage: #7fb069;
@@ -62,6 +65,8 @@
 /* ================================================================ dark mode (brand colours, darker grounds)
    data-theme="dark" forces dark; "light" forces light; no attribute follows the device. */
 :root[data-theme="dark"] {
+  --star-off: #8a968e;
+  --star-on: #f0b45c;
   --forest: #1f7a4f;
   --teal: #1f7a4f;
   --teal-2: #186240;
@@ -103,6 +108,8 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+  --star-off: #8a968e;
+  --star-on: #f0b45c;
   --forest: #1f7a4f;
   --teal: #1f7a4f;
   --teal-2: #186240;
@@ -190,6 +197,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .btn svg { width: 20px; height: 20px; flex: none; }
 .btn:disabled { opacity: .6; cursor: progress; }
+.btn[aria-disabled="true"] { opacity: .6; cursor: not-allowed; }
 .btn--primary { background: var(--teal); color: #fff; }
 .btn--primary:hover { background: var(--teal-2); }
 .btn--secondary { background: var(--surface); border-color: var(--line-2); color: var(--navy); }
@@ -396,6 +404,8 @@ table.table { width: 100%; border-collapse: collapse; font-size: .92rem; }
 .table td.num, .table th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* Phone: low-priority columns drop out so the rest of the table fits. */
 @media (max-width: 480px) { .col-sm-hide { display: none; } }
+/* A stacked card's labelled cell is display: grid, which outranks .col-sm-hide, so the phone hide names that cell (#1). */
+@media (max-width: 480px) { .table--stack .col-sm-hide[data-label]:not([data-label=""]) { display: none; } }
 .table tfoot td { font-weight: 800; border-bottom: 0; }
 
 .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; align-items: center; }
@@ -445,6 +455,9 @@ textarea.input { min-height: 96px; resize: vertical; }
 .field label.check { font-weight: 400; font-size: .92rem; }
 .check input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--teal); flex: none; }
 .checks { display: grid; gap: 8px; max-height: 220px; overflow: auto; padding: 4px; }
+/* Notification switches: the whole row is the tap target, at least 44px (#39). The list grows to show all five. */
+.notify-list { max-height: none; }
+.notify-list .check { min-height: 44px; align-items: center; }
 .form-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; margin-top: 4px; }
 /* Collapsed form sections (QA round 9): the basics stay open, the rest folds. Open fields keep the same 14px gap as .form. */
 details.form-section { border-top: 1px solid var(--line); }
@@ -985,9 +998,9 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .bk-code .chips { margin-top: 8px; flex-wrap: nowrap; }
 .bk-code .input { max-width: 220px; text-transform: uppercase; }
 .stars { display: flex; gap: 6px; }
-.stars button { font-size: 2rem; line-height: 1; background: none; border: 0; cursor: pointer; color: var(--line-2); padding: 4px; border-radius: 8px; }
-.stars button.is-on { color: #e0a526; }
-.stars button:focus-visible { outline: 2px solid var(--forest, #0f5132); }
+.stars button { font-size: 2rem; line-height: 1; background: none; border: 0; cursor: pointer; color: var(--star-off); padding: 4px; border-radius: 8px; }
+.stars button.is-on { color: var(--star-on); }
+.stars button:focus-visible { outline: 2px solid var(--focus-ring); }
 .stars--sm button { font-size: 1.4rem; }
 .rating { color: var(--amber); letter-spacing: 1px; white-space: nowrap; }
 
@@ -1087,6 +1100,9 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .sidebar__foot .themeswitch { margin: 8px 0; }
 .chart-grid { stroke: var(--line); }
 .chart-axis { fill: var(--muted); }
+.chart-band { fill: transparent; }
+/* Hover band: navy at 5%, translucent so the bars under it stay visible (K3). */
+.chart-band--on { fill: var(--navy); fill-opacity: .05; }
 
 /* Channel badges in dark mode: tinted, readable */
 :root[data-theme="dark"] .badge--ch-airbnb, :root[data-theme="dark"] .badge--ch-booking, :root[data-theme="dark"] .badge--ch-agoda,

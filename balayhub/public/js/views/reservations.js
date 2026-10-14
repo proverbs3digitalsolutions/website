@@ -5,7 +5,7 @@ import {
   h, icon, peso, fmtDate, fmtDateTime, badge, options, field, formModal, confirmDialog, emptyState, searchBox, toast, todayManila, manilaDay, openModal, parseAmount,
 } from '../ui.js';
 import { state, navigate } from '../app.js';
-import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
+import { initFilters, filterBar, rememberFilters, changed, apiFilters } from '../filters.js';
 import { messageGuest } from './inbox.js';
 import { copyText } from './quotes.js';
 import { checkinCard } from './checkin.js';
@@ -49,6 +49,16 @@ export function paymentInfo(balance, total, feeNote = '') {
   if (Number(balance) < 0) return `Guest overpaid by ${peso(overpaid(balance))}.`;
   if (Number(balance) === 0) return 'Nothing more is owed on this booking.';
   return `Balance: ${peso(balance)} of ${peso(total)}${feeNote}`;
+}
+// The balance line on the payment card. Below 0 the guest paid more than is owed, which the alert and the receipt call "Overpaid" too.
+export function balanceLine(balance) {
+  const n = Number(balance);
+  return n < 0 ? ['Overpaid', peso(-n)] : ['Balance', peso(n)];
+}
+// What the host keeps after the channel's fee. A channel booking with no fee typed yet has no honest answer, so null (the card asks for the fee).
+export function keepLine(r) {
+  if (r.channel !== 'direct' && !(Number(r.channel_fee) > 0)) return null;
+  return Number(r.total_amount) - (r.channel_fee_ignored ? 0 : Number(r.channel_fee));
 }
 // What a payment adds over the balance, in pesos (0 when not over). Already overpaid (a balance below 0) owes nothing; an amount that cannot be read ("1,5") counts as 0.
 export function overBalance(amount, balance) {
@@ -183,7 +193,7 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
         field({ name: 'guest_phone', label: 'Guest mobile', type: 'tel', inputmode: 'tel', placeholder: '0917 123 4567' }),
         field({ name: 'guest_email', label: 'Guest email', type: 'email' })),
       field({ name: 'channel', label: 'Booked through', type: 'select', value: 'direct', placeholderOption: false, options: Object.entries(CHANNEL_LABEL) }),
-      field({ name: 'source', label: 'Where did they book?', type: 'select', value: '', placeholderOption: false, options: SOURCE_CHOICES }),
+      field({ name: 'source', label: 'Where did they book? (optional)', type: 'select', value: '', placeholderOption: false, options: SOURCE_CHOICES, hint: 'For your own records, for example Facebook or a referral.' }),
       quoteBox,
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'accommodation_total', label: 'Accommodation total', type: 'money', hint: 'Filled in from your nightly rates. You can change it.' }),
@@ -317,17 +327,17 @@ export async function reservationsView(el, { query }) {
   async function load() {
     history.replaceState(null, '', `#/reservations${qs(changed(filters, { ...defaults, view: '' }))}`);
     // Same query as the list below, so the export matches what is on screen. view is always sent, once.
-    exportLink.href = `/api/reservations/export${qs(changed(filters, { ...defaults, view: '' }))}`;
+    exportLink.href = `/api/reservations/export${qs(apiFilters(filters, defaults))}`;
     viewSelect.value = filters.view;
     side.replaceChildren(...VIEWS.map(([v, t]) => h('button', { type: 'button', 'aria-current': v === filters.view ? 'true' : null, onclick: () => { filters.view = v; rememberFilters('reservations', filters); load(); } }, t)));
-    const { reservations } = await get(`/reservations${qs(changed(filters, { ...defaults, view: '' }))}`);
+    const { reservations } = await get(`/reservations${qs(apiFilters(filters, defaults))}`);
     const filtered = Object.keys(changed(filters, defaults)).some((k) => k !== 'view' && k !== 'sort');
     if (!reservations.length) {
       listBox.replaceChildren(emptyState({
         iconName: 'inbox',
         title: filtered ? 'No results found' : 'Nothing here yet',
         text: filtered ? 'Try removing a filter or choosing another view.' : 'Reservations you add, or import from Airbnb/Booking.com, appear here.',
-        action: !filtered && canManage && h('button', { class: 'btn btn--primary', onclick: () => newReservationModal({ onSaved: load }) }, icon('plus'), 'New reservation'),
+        action: !filtered && canManage && h('button', { class: 'btn btn--primary', onclick: () => newReservationModal() }, icon('plus'), 'New reservation'),
       }));
       return;
     }
@@ -379,12 +389,12 @@ export async function reservationsView(el, { query }) {
     h('div', { class: 'page-head' },
       h('div', { class: 'page-head__title' }, h('h1', null, 'Reservations'), h('p', null, 'Every stay, from booking to check-out')),
       h('div', { class: 'page-head__actions' },
-        canManage && h('button', { class: 'btn btn--primary', onclick: () => newReservationModal({ onSaved: load }) }, icon('plus'), 'New reservation'),
+        canManage && h('button', { class: 'btn btn--primary', onclick: () => newReservationModal() }, icon('plus'), 'New reservation'),
         exportLink)),
     h('div', { class: 'res-layout' },
       h('aside', { class: 'card res-side' }, h('h3', { class: 'subhead' }, 'Saved views'), side),
       h('div', null, bar, listBox)));
-  if (query.new && canManage) newReservationModal({ onSaved: load });
+  if (query.new && canManage) newReservationModal();
 }
 
 // ---------------------------------------------------------------- damage and lost-and-found cards (owners and managers)
@@ -509,13 +519,15 @@ export async function reservationDetailView(el, { params, rerender }) {
 
   const recordPayment = () => formModal({
     title: 'Record payment', submitText: 'Save payment', idempotent: true,
+    // A direct booking has no default method: a one-tap save must not record GCash for money that came another way.
+    check: (d) => (r.channel === 'direct' && !d.payment_method ? { payment_method: 'Choose how the guest paid.' } : null),
     fields: [
       // The balance already counts refunds: below 0 the guest is still overpaid, exactly 0 is settled.
       h('div', { class: 'alert alert--info' }, paymentInfo(r.balance, r.total_amount, Number(r.channel_fee) > 0 && !r.channel_fee_ignored ? ` (after the ${peso(r.channel_fee)} channel fee)` : '')),
       field({ name: 'amount', label: 'Amount received', type: 'money', required: true, value: Number(r.balance) > 0 ? r.balance : '' }),
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'payment_date', label: 'Date received', type: 'date', required: true, value: today, max: today }),
-        field({ name: 'payment_method', label: 'Method', type: 'select', required: true, value: r.channel === 'direct' ? 'gcash' : 'channel_payout', placeholderOption: false, options: paymentMethodOptions(r.channel) })),
+        field({ name: 'payment_method', label: 'Method', type: 'select', required: r.channel !== 'direct', value: r.channel === 'direct' ? '' : 'channel_payout', placeholderOption: r.channel === 'direct' ? 'Choose…' : false, options: paymentMethodOptions(r.channel) })),
       field({ name: 'reference_number', label: 'Reference no.', maxlength: 100 }),
       // Channel payouts come from Airbnb/Booking.com, not the guest: no guest receipt by default.
       (r.guest_email || r.guest_has_email) && field({ name: 'send_receipt', label: r.guest_email ? `Email a receipt to ${r.guest_email}` : 'Email a receipt to the guest', type: 'checkbox', value: r.channel === 'direct' }),
@@ -538,6 +550,8 @@ export async function reservationDetailView(el, { params, rerender }) {
     const rate = h('button', { class: 'btn btn--secondary btn--sm', type: 'button', disabled: true, style: { visibility: 'hidden' } });
     // The latest price lookup for the dates in the form; Save awaits it so a fast Save cannot skip the question.
     let suggested = null; let seq = 0; let pending = Promise.resolve();
+    // What the quote says about the new dates: null when the listing is free, else { message } from the server. Asked before the price question.
+    let clash = null;
     const modal = formModal({
       title: 'Edit reservation', submitText: 'Save changes',
       fields: [
@@ -549,6 +563,7 @@ export async function reservationDetailView(el, { params, rerender }) {
         h('div', { class: 'form-row form-row--2' },
           field({ name: 'num_guests', label: 'Number of guests', type: 'number', min: 1, max: 50, value: r.num_guests }),
           field({ name: 'channel', label: 'Booked through', type: 'select', value: r.channel, placeholderOption: false, options: Object.entries(CHANNEL_LABEL) })),
+        field({ name: 'source', label: 'Where did they book? (optional)', type: 'select', value: r.source || '', placeholderOption: false, options: SOURCE_CHOICES, hint: 'For your own records, for example Facebook or a referral.' }),
         h('div', { class: 'form-row form-row--2' },
           field({ name: 'accommodation_total', label: 'Accommodation total', type: 'money', value: r.accommodation_total }),
           field({ name: 'cleaning_fee', label: 'Cleaning fee', type: 'money', value: r.cleaning_fee, hint: 'Leave blank for 0.' })),
@@ -561,9 +576,11 @@ export async function reservationDetailView(el, { params, rerender }) {
       onSubmit: async (d) => {
         d.channel_fee = channelFeeToSave(d.channel, r.channel_fee, d.channel_fee);
         let changes = changedFields(r, d);
+        if ('source' in changes && !changes.source) changes.source = null;
         // Dates moved and the amount box still holds the old price: ask whether to use the rates' price. Keep, or closing the question, saves as typed.
         if (!r.ical_feed_id && ('check_in' in changes || 'check_out' in changes)) {
           await pending;
+          if (clash) throw new ApiError(clash.message, { status: 409, fields: { check_out: clash.message } });
           const typed = parseAmount(d.accommodation_total);
           const stored = Number(r.accommodation_total);
           if (askNewPrice({ changedDates: true, typed, stored, suggested })) {
@@ -599,12 +616,12 @@ export async function reservationDetailView(el, { params, rerender }) {
       if (r.ical_feed_id || !['check_in', 'check_out'].includes(e.target.name)) return;
       const { check_in: ci, check_out: co } = form.elements;
       const mySeq = ++seq;
-      suggested = null; showRate();
+      suggested = null; clash = null; showRate();
       if (!ci.value || !co.value || co.value <= ci.value) return;
       pending = (async () => {
         try {
-          const q = await get(`/reservations/quote${qs({ unit_id: r.unit_id, check_in: ci.value, check_out: co.value })}`);
-          if (mySeq === seq && !q.missing_rates) { suggested = q.accommodation_total; showRate(); }
+          const q = await get(`/reservations/quote${qs({ unit_id: r.unit_id, check_in: ci.value, check_out: co.value, exclude_booking_id: r.booking_id })}`);
+          if (mySeq === seq) { clash = q.clash || null; if (!q.missing_rates) { suggested = q.accommodation_total; showRate(); } }
         } catch { /* the save reports a bad range; the offer just stays away */ }
       })();
     });
@@ -622,20 +639,22 @@ export async function reservationDetailView(el, { params, rerender }) {
     try { await post(`/booking-payments/${p.payment_id}/void`, { reason }); toast('Payment voided.'); rerender(); } catch (err) { toast(err.message, 'error'); }
   };
 
-  const checkin = canManage && r.status === 'confirmed' ? await checkinCard(r.booking_id, rerender) : null;
-  const gatepass = canManage && r.status === 'confirmed' && r.check_out >= todayManila() ? await gatepassCard(r.booking_id, rerender) : null;
-  const deposit = await depositCard(r, rerender);
-  // Money cards sit under Payment. A card that fails to load is skipped, so the page still opens.
+  // Every card loads at once (ten requests one after another kept the page blank for ~20 s on a slow connection). A money card that fails to load is skipped, so the page still opens.
   const card = (build) => build(r, rerender).catch(() => null);
-  const charges = await card(chargesCard);
-  const proofs = canManage ? await card(proofsCard) : null;
-  const refunds = await card(refundsCard);
-  const damage = canManage ? await card(damageCard) : null;
-  const lostFound = canManage ? await card(lostFoundCard) : null;
-  const activity = canManage ? await activityCard(r).catch(() => null) : null;
+  const [checkin, gatepass, deposit, charges, damage, proofs, refunds, lostFound, activity, heldInfo] = await Promise.all([
+    canManage && confirmed ? checkinCard(r.booking_id, rerender) : null,
+    canManage && confirmed && r.check_out >= todayManila() ? gatepassCard(r.booking_id, rerender) : null,
+    depositCard(r, rerender),
+    card(chargesCard),
+    canManage ? card(damageCard) : null,
+    canManage ? card(proofsCard) : null,
+    card(refundsCard),
+    canManage ? card(lostFoundCard) : null,
+    canManage ? activityCard(r).catch(() => null) : null,
+    // Overpaid and "You keep" apply to live bookings only. A cancelled booking that still holds money points to the Refunds card instead.
+    canManage && !confirmed ? get(`/reservations/${r.booking_id}/refunds`).catch(() => null) : null,
+  ]);
   const grp = r.group;
-  // Overpaid and "You keep" apply to live bookings only. A cancelled booking that still holds money points to the Refunds card instead.
-  const heldInfo = canManage && !confirmed ? await get(`/reservations/${r.booking_id}/refunds`).catch(() => null) : null;
   const overpaidBy = canManage && confirmed ? overpaid(r.balance) : 0;
   // A cancelled booking owes back what the cancellation policy suggests, not everything paid.
   const sug = heldInfo?.suggestion;
@@ -643,8 +662,9 @@ export async function reservationDetailView(el, { params, rerender }) {
   const showRefundAlert = heldInfo && !confirmed && Number(heldInfo.refundable) > 0 && (!sug || Number(sug.amount) > 0);
   const nonRefundable = heldInfo && !confirmed && Number(heldInfo.refundable) > 0 && sug && !(Number(sug.amount) > 0);
   // A stored fee on a direct booking is ignored here too, so "You keep" matches the balance.
-  const keep = Number(r.total_amount) - (r.channel_fee_ignored ? 0 : Number(r.channel_fee));
+  const keep = keepLine(r);
   const feeSaved = r.channel === 'direct' ? Math.round(keep * 15) / 100 : 0;
+  const [balLabel, balValue] = balanceLine(r.balance);
 
   // Scrolls to the Refunds card; the links keep the #refunds-card anchor.
   const goRefunds = (e) => { e.preventDefault(); document.getElementById('refunds-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
@@ -733,12 +753,13 @@ export async function reservationDetailView(el, { params, rerender }) {
             h('dt', null, 'Total'), h('dd', null, h('strong', null, peso(r.total_amount))),
             Number(r.channel_fee) > 0 && !r.channel_fee_ignored && [h('dt', null, 'Channel fee'), h('dd', { class: 'muted' }, `− ${peso(r.channel_fee)}`)],
             h('dt', null, 'Paid'), h('dd', null, peso(r.amount_paid)),
-            confirmed ? [h('dt', null, 'Balance'), h('dd', { class: Number(r.balance) > 0 ? 'amount--neg' : '' }, h('strong', null, peso(r.balance)))]
+            confirmed ? [h('dt', null, balLabel), h('dd', { class: Number(r.balance) > 0 ? 'amount--neg' : '' }, h('strong', null, balValue))]
               : [h('dt', null, 'Balance'), h('dd', { class: 'muted' }, 'Cancelled — not owed')]),
           canManage && confirmed && h('div', { class: 'keep-line' },
-            h('div', null, 'You keep ', h('strong', null, peso(keep))),
-            feeSaved > 0 && h('div', { class: 'keep-line__save' }, `No channel fee — about ${peso(feeSaved)} saved vs a 15% channel fee on this stay's total`),
-            r.channel !== 'direct' && Number(r.channel_fee) === 0 && h('div', { class: 'muted small' }, 'Enter the channel fee (Edit) to see what you keep.')),
+            keep === null
+              ? h('div', null, 'You keep: enter the channel fee to see this. ', h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': 'Edit the channel fee', onclick: editDetails }, 'Edit'))
+              : h('div', null, 'You keep ', h('strong', null, peso(keep))),
+            feeSaved > 0 && h('div', { class: 'keep-line__save' }, `No channel fee — about ${peso(feeSaved)} saved vs a 15% channel fee on this stay's total`)),
           h('h3', { class: 'subhead', style: { marginTop: '16px' } }, 'Payments'),
           payments.length ? h('ul', { class: 'list' }, payments.map((p) => h('li', null, h('div', { class: 'row' },
             h('div', { class: 'row__main' },

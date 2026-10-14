@@ -4,11 +4,16 @@ import { get, post, qs } from '../api.js';
 import { h, peso, fmtDate, fmtDateTime, field, formModal, emptyState, toast, todayManila, confirmDialog } from '../ui.js';
 import { addDays } from './reservations.js';
 
+// The line under a stored close that the viewer cannot change (closed.whole_workspace says which kind of close it is).
+export const lockedCloseText = (closed) => (closed.whole_workspace
+  ? 'This day was closed for the whole workspace. Only an owner can change it.'
+  : "This day was closed for properties you don't all manage. Only an owner or the manager who covers them all can change it.");
+
 const METHOD = { cash: 'Cash', bank_transfer: 'Bank transfer', gcash: 'GCash', maya: 'Maya', card: 'Card', channel_payout: 'Channel payout', other: 'Other' };
 
-// A YYYY-MM-DD string that names a real calendar day (2027-02-29 and 2026-02-30 do not).
+// A YYYY-MM-DD string that names a real calendar day in 2000 to 2100, the range the server accepts (2027-02-29, 2026-02-30 and 1900-01-01 do not).
 function isRealDate(s) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || s < '2000-01-01' || s > '2100-12-31') return false;
   const [y, m, d] = s.split('-').map(Number);
   return new Date(Date.UTC(y, m - 1, d)).toISOString().slice(0, 10) === s;
 }
@@ -80,11 +85,12 @@ export async function dailyCloseView(el, { query, rerender }) {
   el.replaceChildren(
     h('div', { class: 'page-head' },
       h('div', { class: 'page-head__title' }, h('h1', null, 'Daily close'), h('p', null, 'Check the day is wrapped up, then close it')),
-      h('div', { class: 'page-head__actions' }, picker, closed && h('button', { class: 'btn btn--secondary', onclick: reopen }, 'Reopen day'), h('button', { class: 'btn btn--primary', onclick: closeDay }, closed ? 'Update close' : 'Close the day'))),
+      h('div', { class: 'page-head__actions' }, picker, closed?.can_change && h('button', { class: 'btn btn--secondary', onclick: reopen }, 'Reopen day'), (!closed || closed.can_change) && h('button', { class: 'btn btn--primary', onclick: closeDay }, closed ? 'Update close' : 'Close the day'))),
     message && h('div', { class: 'alert alert--warn', id: 'dc-date-msg', role: 'alert' }, message),
     closed
       ? h('div', { class: 'alert alert--ok', role: 'status' }, `Closed ${fmtDateTime(closed.closed_at)} by ${closed.closed_by_name || 'a team member'}${closed.note ? `: ${closed.note}` : ''}`)
       : h('div', { class: `alert ${open ? 'alert--warn' : 'alert--info'}`, role: 'status' }, `${fmtDate(date)} is not closed yet.${open ? ` ${open} item${open === 1 ? '' : 's'} to look at.` : ''}`),
+    closed && !closed.can_change && h('p', { class: 'muted small' }, lockedCloseText(closed)),
     sections.length ? h('div', { class: 'dc-grid' }, sections.map(section)) : emptyState({ iconName: 'file', title: 'Nothing to check', text: 'No checklist items for this day.' }),
     h('div', { class: 'card' },
       h('div', { class: 'card__head' }, h('h2', null, 'Past closes')),

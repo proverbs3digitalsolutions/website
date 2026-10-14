@@ -12,6 +12,14 @@ extendTranslations({
   'Add-ons': 'Mga add-on',
   'Optional extras for your stay. Add-ons are paid in full now, together with your deposit.': 'Mga dagdag na pwede mong idagdag sa stay mo. Bayad na agad ang buong halaga ng add-ons ngayon, kasama ng deposit.',
   'Optional extras for your stay.': 'Mga dagdag na pwede mong idagdag sa stay mo.',
+  'Includes: {list}.': 'Kasama: {list}.',
+  'Booked-early price': 'Presyong maagang booking',
+  'Last-minute price': 'Presyong last-minute',
+  'Gap-night price': 'Presyo sa gap night',
+  'Weekend price': 'Presyo sa weekend',
+  'Holiday price': 'Presyo sa holiday',
+  'Seasonal price': 'Presyo ngayong season',
+  'Guests must be at most {n}.': 'Hanggang {n} na guests lang ang puwede.',
   '{price} per stay': '{price} kada stay',
   '{price} per night': '{price} kada gabi',
   '{price} per guest': '{price} kada guest',
@@ -74,6 +82,9 @@ function cover(l, cls = 'bk-card__img') {
 }
 
 // ---------------------------------------------------------------- host page
+// "Includes: Booked-early price." under the nightly price; nothing when no rule changed a night.
+export const priceRulesLine = (rules) => (rules?.length ? t('Includes: {list}.', { list: rules.map((r) => t(r)).join(', ') }) : null);
+
 export async function bookHostView(el, { params, query }) {
   rememberSource(query);
   initGuestLang();
@@ -321,11 +332,17 @@ export async function bookListingView(el, { params, query }) {
           const now = Number(q.deposit) + Number(q.addons_total || 0);
           return [h('dt', null, t('{pct}% deposit', { pct: l.deposit_pct })), h('dd', null, t('{now} now, {rest} due by {date}', { now: money(now), rest: money(Number(q.total) - now), date: fmtDate(q.balance_due_date) }))];
         })()),
+      priceRulesLine(q.price_rules) && h('p', { class: 'muted small' }, priceRulesLine(q.price_rules)),
       !q.available && h('div', { class: 'alert alert--error' }, t('Sorry, these dates are no longer available.')));
       submit.disabled = !q.available || !host.accepting;
     } catch (err) {
       // Over the guest limit the Guests box carries the sentence, so the summary stays quiet about it.
-      if (err.fields?.guests) { guestsFromServer = true; setGuestsError(tServer(err.fields.guests)); summary.replaceChildren(); return; }
+      if (err.fields?.guests) {
+        guestsFromServer = true;
+        const cap = /^Guests must be at most (\d+)\.$/.exec(err.fields.guests);
+        setGuestsError(cap ? t('Guests must be at most {n}.', { n: cap[1] }) : tServer(err.fields.guests));
+        summary.replaceChildren(); return;
+      }
       // Show the actual reason (e.g. minimum stay), not just "check the highlighted fields".
       const reason = err.fields ? Object.values(err.fields)[0] : err.message;
       summary.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, tServer(reason)));

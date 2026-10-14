@@ -106,5 +106,7 @@ test('on-screen receipt shows the adjustments line between total and remaining b
 });
 
 test('"You keep" ignores a stored fee on a direct booking, like the balance does', () => {
-  assert.match(src, /const keep = Number\(r\.total_amount\) - \(r\.channel_fee_ignored \? 0 : Number\(r\.channel_fee\)\);/);
+  // Round 12 (#3): the same formula now lives in keepLine(), which also returns null for a channel booking with no fee typed yet.
+  assert.match(src, /return Number\(r\.total_amount\) - \(r\.channel_fee_ignored \? 0 : Number\(r\.channel_fee\)\);/);
+  assert.match(src, /const keep = keepLine\(r\);/);
 });

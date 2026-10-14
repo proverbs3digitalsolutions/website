@@ -123,7 +123,7 @@ test('an expired or used sign-in link uses the APP-FLOW wording and offers a new
   const view = portalSrc.slice(portalSrc.indexOf('export async function ownerLinkView'), portalSrc.indexOf('export const ownerHomeView'));
   assert.ok(view.includes("'This sign-in link is invalid or has expired. Ask for a new link.'"));
   assert.doesNotMatch(view, /It may have expired or already been used/);
-  assert.ok(view.includes("h('a', { class: 'btn btn--primary', href: '#/owner' }, 'Request a new link')"));
+  assert.ok(view.includes("h('a', { class: 'btn btn--primary', href: '#/owner' }, t('Request a new link'))"));
   assert.doesNotMatch(view, /Get a new link/);
   assert.ok(view.includes('err.offline ? err.message :'), 'a connection problem still shows its own message');
 });

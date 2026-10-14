@@ -124,9 +124,9 @@ async function loadReservation(user, id) {
 const VIEWS = {
   open: `c.status = 'open' AND (c.snoozed_until IS NULL OR c.snoozed_until <= now())`,
   unread: `c.status = 'open' AND c.unread AND (c.snoozed_until IS NULL OR c.snoozed_until <= now())`,
-  mine: `c.status = 'open' AND c.assigned_to = $USER`,
-  upcoming: `c.status = 'open' AND b.status = 'confirmed' AND b.check_in > ${TODAY}`,
-  hosting: `c.status = 'open' AND b.status = 'confirmed' AND b.check_in <= ${TODAY} AND b.check_out > ${TODAY}`,
+  mine: `c.status = 'open' AND c.assigned_to = $USER AND (c.snoozed_until IS NULL OR c.snoozed_until <= now())`,
+  upcoming: `c.status = 'open' AND b.status = 'confirmed' AND b.check_in > ${TODAY} AND (c.snoozed_until IS NULL OR c.snoozed_until <= now())`,
+  hosting: `c.status = 'open' AND b.status = 'confirmed' AND b.check_in <= ${TODAY} AND b.check_out > ${TODAY} AND (c.snoozed_until IS NULL OR c.snoozed_until <= now())`,
   snoozed: `c.status = 'open' AND c.snoozed_until > now()`,
   archived: `c.status = 'archived'`,
 };
@@ -493,8 +493,8 @@ router.patch('/message-templates/:id', owners, ah(async (req, res) => {
 
 router.post('/message-templates/:id/archive', owners, ah(async (req, res) => {
   const t = await loadTemplate(req.user, uuidParam(req.params.id));
-  const used = await one('SELECT name FROM automations WHERE template_id = $1 AND enabled LIMIT 1', [t.template_id]);
-  if (used) throw new HttpError(409, `This template is used by the automatic message "${used.name}". Turn that off first.`, { code: 'IN_USE' });
+  const used = await one('SELECT name FROM automations WHERE template_id = $1 ORDER BY created_at LIMIT 1', [t.template_id]);
+  if (used) throw new HttpError(409, `This template is used by the automatic message "${used.name}". Choose another template for it, or remove it, first.`, { code: 'IN_USE' });
   await query('UPDATE message_templates SET archived = true, updated_at = now() WHERE template_id = $1', [t.template_id]);
   await audit(null, req.user, 'template.archived', 'message_template', t.template_id);
   res.json({ ok: true });
@@ -532,10 +532,10 @@ router.get('/automations', ah(async (req, res) => {
   await defaults(req.user.organization_id);
   const { rows } = await query(
     `SELECT a.automation_id, a.name, a.template_id, t.name AS template_name, a.trigger_event, a.offset_days,
-            to_char(a.send_time, 'HH24:MI') AS send_time, a.enabled,
+            to_char(a.send_time, 'HH24:MI') AS send_time, a.enabled, t.archived AS template_archived,
             (SELECT COUNT(*) FROM automation_runs r WHERE r.automation_id = a.automation_id AND r.message_id IS NOT NULL) AS sent_count
        FROM automations a JOIN message_templates t USING (template_id)
-      WHERE a.organization_id = $1 ORDER BY a.created_at, a.automation_id`, [req.user.organization_id]);
+      WHERE a.organization_id = $1 ORDER BY a.created_at, array_position($2::text[], a.trigger_event), a.name, a.automation_id`, [req.user.organization_id, TRIGGERS]);
   res.json({ automations: rows, can_edit: req.user.role === 'owner', sending: mailEnabled() });
 }));
 
@@ -552,7 +552,8 @@ router.post('/automations', owners, ah(async (req, res) => {
   const body = validate(req.body, automationSpec);
   await checkAutomationName(req.user.organization_id, body.name);
   if (DAY_TRIGGERS.includes(body.trigger_event) && body.offset_days === null) throw validationError({ offset_days: 'Enter the number of days.' });
-  await loadTemplate(req.user, body.template_id);
+  const tpl = await loadTemplate(req.user, body.template_id);
+  if (tpl.archived) throw validationError({ template_id: "Choose a template that hasn't been deleted." });
   const a = await one(
     `INSERT INTO automations (organization_id, template_id, name, trigger_event, offset_days, send_time, enabled)
      VALUES ($1,$2,$3,$4,$5,COALESCE($6::time, '10:00'),$7) RETURNING *`,
@@ -571,7 +572,13 @@ router.patch('/automations/:id', owners, ah(async (req, res) => {
   const keys = Object.keys(body).filter((k) => body[k] !== null);
   // Only the fields whose stored value really changed are written and logged, by name; a save with no change writes nothing.
   const fields = changedKeys(a, Object.fromEntries(keys.map((k) => [k, body[k]])));
-  if (body.template_id) await loadTemplate(req.user, body.template_id);
+  if (body.template_id) {
+    // A deleted template can't be chosen, and an automatic message whose template was deleted can't be turned on.
+    if ((await loadTemplate(req.user, body.template_id)).archived) throw validationError({ template_id: "Choose a template that hasn't been deleted." });
+  } else if (body.enabled === true && !a.enabled
+    && (await one('SELECT archived FROM message_templates WHERE template_id = $1', [a.template_id])).archived) {
+    throw new HttpError(409, "This automatic message's template was deleted. Choose a template first.", { code: 'TEMPLATE_DELETED' });
+  }
   if (fields.length) {
     // Turning an automation on (again) starts counting from now, so it never
     // catches up on stays whose send time passed while it was off.

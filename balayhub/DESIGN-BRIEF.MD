@@ -1,6 +1,6 @@
 # BalayHub design brief
 
-Last updated: 2026-10-15 (QA round 11: patterns in section 20; D-87)
+Last updated: 2026-10-15 (QA round 12: patterns in section 21; D-88)
 
 **Summary.** BalayHub is a phone-first web app (also an installable PWA) for Filipino rental and staycation hosts. It is built with plain CSS, one stylesheet (`public/css/app.css`), and small JavaScript helpers (`public/js/ui.js`). There is no framework and no CSS preprocessor. The look is calm and practical: Forest Green on soft off-white, Sand and Sun as warm accents, Poppins for headings, Inter for text, rounded cards, and large touch targets. Colours come from CSS custom properties on `:root`. A dark theme redefines the same tokens, so any component that uses tokens gets dark mode automatically. This brief records what is **actually built**. Every value below comes from the code. Where the code doesn't define a token (spacing, type sizes), the brief lists the values in use and says so.
 
@@ -557,3 +557,13 @@ Printable views are built from `.receipt` (with a 2px `--navy` rule under the he
 - **Chart "Show as table" sits at the left** of the chart footer, clear of the floating Ask button.
 - **Sidebar scroll cue:** the scrolling nav fades at its bottom edge while more is below, with a thin scrollbar, in token colours.
 - **A money document shows an overpayment and a void,** never a clamp: "Overpaid by ₱800.00", and a voided payment prints "VOID" and offers no receipt.
+
+## 21. Patterns added in QA round 12 (2026-10-15)
+
+- **Star tokens:** review stars use `--star-off` and `--star-on`, set in every theme block so both pass 3:1 contrast. Never hard-code a star colour.
+- **Looks disabled, stays reachable:** `.btn[aria-disabled="true"]` is dimmed (opacity 0.6) with the `not-allowed` cursor and no link. Use it when a keyboard or screen reader user should still land on the control and read the hint beside it (Reports Export). A real `:disabled` button keeps its own look, which also shows progress.
+- **Switch rows:** notification rows are at least 44px tall and are no longer capped at 220px wide. *Not yet done:* other `.checks` lists (settings property picker, owner units, add-on listings) have rows of about 22 to 25px on phones (round 13).
+- **Chart hover band:** a class using a token (navy at 5%), not a hard-coded colour in the chart code. Grid and axis colours in `charts.js` are overridden by CSS; the series palette is still fixed in code (low).
+- **Reservations on phones (480px and below):** the Channel and Code columns are hidden. The hiding rule has higher specificity than the stacked-card rule, so the card no longer shows them. *Brings the code to what this brief already said.*
+- **Page headings and focus:** a route change focuses the new page's `h1` (`tabindex="-1"`). A page reloading in place keeps the old `main` on screen with `aria-busy` until the new one is ready. A refused form focuses, in order: the row input, an element marked `data-focus`, then the group's button. A page-level error has an `h1`.
+- **Extra row actions:** a row's less common actions sit under a "More for <name>" disclosure (supply rows: Count, History, Edit, Archive).

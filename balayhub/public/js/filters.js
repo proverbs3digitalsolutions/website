@@ -111,6 +111,12 @@ export function changed(values, defaults) {
   return Object.fromEntries(Object.entries(values).filter(([k, v]) => String(v ?? '') !== String(defaults[k] ?? '')));
 }
 
+// The values to send to the server: every non-empty one, so a default tab such as status=outstanding is always sent.
+// A server that applies no filter when the key is missing would list everything. Addresses keep using changed().
+export function apiFilters(values) {
+  return Object.fromEntries(Object.entries(values).filter(([, v]) => String(v ?? '') !== ''));
+}
+
 function rangeKeys(f) { return f.keys || [`${f.name}_from`, `${f.name}_to`]; }
 const isRange = (f) => f.type === 'daterange' || f.type === 'amountrange';
 

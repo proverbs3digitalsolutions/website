@@ -64,7 +64,7 @@ const RESERVATIONS_STUB = [
 function stage(view, source, names) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), `bh-${view}-r11-c16-`));
   fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}');
-  for (const f of ['api.js', 'ui.js', 'filters.js']) fs.copyFileSync(path.join(SRC, f), path.join(dir, f));
+  for (const f of ['api.js', 'ui.js', 'filters.js', 'rates.js']) fs.copyFileSync(path.join(SRC, f), path.join(dir, f)); // calendar.js imports ../rates.js (QA round 12, C13)
   fs.writeFileSync(path.join(dir, 'app.js'), "export const state = { user: { role: 'owner' } };\nexport const navigate = () => {};\n");
   fs.mkdirSync(path.join(dir, 'views'));
   fs.writeFileSync(path.join(dir, 'views', 'reservations.js'), RESERVATIONS_STUB);

@@ -10,9 +10,10 @@ const MOVED = { used: 'Used', restocked: 'Added', count: 'Counted' };
 const MAX_QTY = 100000; // Matches MAX_QTY in src/routes/supplies.js.
 
 // The unit word for a count: "1 roll", "2 rolls". Units are typed freely, so the singular is a plain
-// English guess ("boxes" to "box", "batteries" to "battery"). "pcs" is an abbreviation and stays.
+// English guess ("boxes" to "box", "batteries" to "battery"). "pcs" is an abbreviation with its own singular: "1 pc" (#34).
 export function unitWord(n, unit) {
-  if (Number(n) !== 1 || unit.toLowerCase() === 'pcs') return unit;
+  if (Number(n) !== 1) return unit;
+  if (unit.toLowerCase() === 'pcs') return 'pc';
   if (/ies$/.test(unit)) return unit.replace(/ies$/, 'y');
   if (/(s|x|z|ch|sh)es$/.test(unit)) return unit.slice(0, -2);
   if (/ss$/i.test(unit)) return unit; // "glass" is already singular
@@ -129,11 +130,15 @@ export async function suppliesView(el, { query = {} } = {}) {
           h('div', { class: 'ops-supply__count', 'aria-label': `${qtyLabel(s.on_hand, s.unit_label)} on hand` }, h('strong', null, String(s.on_hand)), h('span', { class: 'muted small' }, ` ${unitWord(s.on_hand, s.unit_label)}`)),
           canManage && h('div', { class: 'ops-supply__actions' },
             h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => move(s, 'restocked'), 'aria-label': `Add stock to ${s.name}` }, 'Add stock'),
-            h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => move(s, 'count'), 'aria-label': `Count ${s.name}` }, 'Count'),
             h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => move(s, 'used'), 'aria-label': `Record use of ${s.name}` }, 'Record use'),
-            h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => showHistory(s), 'aria-label': `History of ${s.name}` }, 'History'),
-            h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => addOrEdit(s), 'aria-label': `Edit ${s.name}` }, 'Edit'),
-            h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => archive(s), 'aria-label': `Archive ${s.name}` }, 'Archive'))))))));
+            // The rest sit under one disclosure per row, named for its supply (#36, D-81).
+            h('details', { class: 'ops-more' },
+              h('summary', { class: 'btn btn--secondary btn--sm', 'aria-label': `More for ${s.name}` }, 'More'),
+              h('div', { class: 'ops-supply__actions' },
+                h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => move(s, 'count'), 'aria-label': `Count ${s.name}` }, 'Count'),
+                h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => showHistory(s), 'aria-label': `History of ${s.name}` }, 'History'),
+                h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => addOrEdit(s), 'aria-label': `Edit ${s.name}` }, 'Edit'),
+                h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => archive(s), 'aria-label': `Archive ${s.name}` }, 'Archive'))))))))));
   }
 
   barBox.replaceChildren(filterBar({

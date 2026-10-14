@@ -61,7 +61,8 @@ test('#2 the rate offer keeps its space once a quote shows: visibility, not hidd
 });
 
 test('#3 New reservation asks "Where did they book?" for Direct only and sends it; the detail says "Booked via"', () => {
-  assert.match(resSrc, /name: 'source', label: 'Where did they book\?'/);
+  // Round 12 (#7): the label now says (optional).
+  assert.match(resSrc, /name: 'source', label: 'Where did they book\? \(optional\)'/);
   assert.match(resSrc, /Other \(walk-in, phone call\)/);
   assert.match(resSrc, /Referral \(friend or past guest\)/);
   assert.match(resSrc, /\[data-field=source\]'\);\n\s+if \(src\) src\.hidden = !direct;/);

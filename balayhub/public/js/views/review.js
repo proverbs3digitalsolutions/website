@@ -27,7 +27,13 @@ function starPicker(name, label, required) {
     onclick: () => set(n),
   }, '★'));
   const caption = h('span', { class: 'muted small' }, required ? t('Tap a star') : t('Optional'));
-  function set(n) { value = n; paint(); }
+  function set(n) {
+    value = n; paint();
+    // Picking a star answers the "Tap a star" message.
+    el.classList.remove('field--invalid');
+    el.querySelector('.error').textContent = '';
+    el.querySelector('[role="group"]').removeAttribute('aria-invalid');
+  }
   function paint() {
     store.value = value ? String(value) : '';
     buttons.forEach((b, i) => { b.classList.toggle('is-on', i < value); b.setAttribute('aria-pressed', String(i + 1 === value)); });

@@ -265,6 +265,13 @@ export function setGuestLang(l) {
   try { localStorage.setItem(KEY, current); } catch { /* ignore */ }
 }
 
+// The host app is English. app.js calls this before an app page draws, so a Taglish choice made on a verify
+// screen does not stay on for the app until reload. The saved guest choice in storage is left alone.
+export function useHostLang() {
+  current = 'en';
+  document.documentElement.lang = 'en';
+}
+
 // Tab title from a page's h1 (minus a leading brand name). app.js marks the guest pages it titled this way (data-h1title).
 export function h1Title(root = document.getElementById('app')) {
   return root?.querySelector('h1')?.textContent.replace(/^BalayHub /, '').replace(/^Terms of Service/, 'Terms of service');

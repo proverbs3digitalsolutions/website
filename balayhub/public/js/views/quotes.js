@@ -2,7 +2,7 @@
 
 import { get, post, qs, ApiError } from '../api.js';
 import { h, icon, peso, fmtDate, fmtDateTime, badge, field, makeForm, openModal, confirmDialog, emptyState, errorState, pageHead, toast, skeleton, todayManila, parseAmount } from '../ui.js';
-import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
+import { initFilters, filterBar, rememberFilters, changed, apiFilters } from '../filters.js';
 
 const STATUS = { open: 'Open', paid: 'Paid', expired: 'Expired', cancelled: 'Cancelled' };
 const STATUS_BADGE = { open: 'open', paid: 'paid', expired: 'archived', cancelled: 'voided' };
@@ -182,7 +182,7 @@ export async function quotesView(el, { query, rerender }) {
     rememberFilters('quotes', filters);
     box.replaceChildren(skeleton(3));
     try {
-      const { quotes } = await get(`/quotes${qs(changed(filters, defaults))}`);
+      const { quotes } = await get(`/quotes${qs(apiFilters(filters))}`);
       box.replaceChildren(quotes.length ? h('ul', { class: 'list' }, quotes.map((q) => h('li', null, h('a', { class: 'row', href: `#/quotes/${q.quote_id}` },
         h('div', { class: 'row__main' },
           h('span', { class: 'row__title' }, q.guest_name || 'Guest', ' · ', q.unit_name || ''),

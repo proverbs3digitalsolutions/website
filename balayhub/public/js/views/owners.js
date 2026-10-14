@@ -4,7 +4,7 @@ import { get, post, patch, qs } from '../api.js';
 import { h, peso, fmtDate, fmtDateTime, field, formModal, confirmDialog, emptyState, pageHead, badge, toast, todayManila } from '../ui.js';
 import { navigate } from '../app.js';
 import { CHANNEL_LABEL } from './reservations.js';
-import { initFilters, filterBar, changed } from '../filters.js';
+import { initFilters, filterBar, changed, apiFilters } from '../filters.js';
 
 // Calendar day of a timestamp in Manila time (fmtDate alone would slice the UTC date).
 const manilaDay = (ts) => fmtDate(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date(ts)));
@@ -110,7 +110,7 @@ const moveConfirmed = (err, owner) => {
 export async function ownersView(el, { rerender, query = {} }) {
   const defaults = { q: '', has_units: '', unit_id: '', sort: '' };
   const filters = initFilters('owners', query, defaults);
-  let { owners, units, total } = await get(`/unit-owners${qs(changed(filters, defaults))}`);
+  let { owners, units, total } = await get(`/unit-owners${qs(apiFilters(filters))}`);
   const unitName = (id) => units.find((u) => u.unit_id === id)?.unit_name;
   const add = () => formModal({
     title: 'Add a unit owner', submitText: 'Save owner', fields: ownerForm(units),
@@ -192,7 +192,7 @@ export async function ownersView(el, { rerender, query = {} }) {
   }
   async function load() {
     history.replaceState(null, '', `#/owners${qs(changed(filters, defaults))}`);
-    ({ owners, units, total } = await get(`/unit-owners${qs(changed(filters, defaults))}`));
+    ({ owners, units, total } = await get(`/unit-owners${qs(apiFilters(filters))}`));
     draw();
   }
   // Built first: the bar drops a filter value that is not an option, so the page decides whether to show it after that.
@@ -273,12 +273,11 @@ export async function ownerStatementView(el, { params, query = {}, rerender }) {
   const [payoutsRes, reserveRes, ownersRes] = await Promise.all([
     get(`${base}/payouts${qs({ month })}`).catch(() => null),
     get(`${base}/reserve`).catch(() => null),
-    get('/unit-owners').catch(() => null),
+    detail.portal_enabled === undefined ? get('/unit-owners').catch(() => null) : null, // older payload: read the flag from the owner list
   ]);
   const payouts = payoutsRes?.payouts || null;
   const reserve = reserveRes;
-  // The portal flag is on the owner list; the statement payload doesn't carry it. An owner not on the list (archived) has no portal.
-  const portalOn = Boolean(ownersRes?.owners?.find((o) => o.owner_id === id)?.portal_enabled);
+  const portalOn = detail.portal_enabled ?? Boolean(ownersRes?.owners?.find((o) => o.owner_id === id)?.portal_enabled);
   const paid = (payouts || []).filter((p) => !p.voided).reduce((a, p) => a + Math.round(Number(p.amount) * 100), 0) / 100;
   const payoutDue = Number(t.payout);
   const owes = payoutDue < 0; // flat fee with no stays: the owner owes the host

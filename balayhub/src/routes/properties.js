@@ -14,6 +14,15 @@ const { POLICY_KEYS } = require('../lib/policies');
 const router = express.Router();
 const managers = requireRole('owner', 'manager');
 
+// The building admin email and the gate pass settings belong to owners and managers (access matrix); anyone else gets the property without them.
+const MANAGER_ONLY = ['admin_email', 'gatepass_enabled', 'gatepass_days_before', 'gatepass_attach_ids', 'gatepass_authorized_by', 'gatepass_notes'];
+const hideAdmin = (user, p) => {
+  if (user.role === 'owner' || user.role === 'manager') return p;
+  const out = { ...p };
+  for (const k of MANAGER_ONLY) delete out[k];
+  return out;
+};
+
 const PROPERTY_TYPES = ['apartment', 'boarding_house', 'condominium', 'house', 'commercial', 'dormitory', 'other'];
 const UNIT_TYPES = ['room', 'studio', 'apartment', 'bedspace', 'house', 'commercial_space', 'other'];
 // A listing's public page address (/stay/<host>/<address>).
@@ -197,7 +206,7 @@ router.get('/properties', ah(async (req, res) => {
       GROUP BY p.property_id${having ? `
      HAVING ${having}` : ''}
       ORDER BY ${own(SORTS, req.query.sort) || SORTS.name}`, params);
-  res.json({ properties: rows });
+  res.json({ properties: rows.map((p) => hideAdmin(req.user, p)) });
 }));
 
 router.post('/properties', requireRole('owner'), ah(async (req, res) => {
@@ -227,7 +236,7 @@ router.post('/properties', requireRole('owner'), ah(async (req, res) => {
 }));
 
 router.get('/properties/:id', ah(async (req, res) => {
-  const property = await loadProperty(req.user, uuidParam(req.params.id));
+  const property = hideAdmin(req.user, await loadProperty(req.user, uuidParam(req.params.id)));
   const { rows: units } = await query(
     `${UNIT_SELECT} WHERE u.property_id = $1 ORDER BY u.status, u.unit_name`, [property.property_id]);
   res.json({ property, units });

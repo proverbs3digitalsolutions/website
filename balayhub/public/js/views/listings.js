@@ -5,7 +5,8 @@ import {
   h, icon, peso, pesoShort, parseAmount, fmtDate, fmtDateTime, badge, field, formModal, makeForm, openModal, confirmDialog, emptyState, toast, options, todayManila, manilaDay, clearErrors, showErrors,
 } from '../ui.js';
 import { state } from '../app.js';
-import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
+import { initFilters, filterBar, rememberFilters, changed, apiFilters } from '../filters.js';
+import { highRateOk } from '../rates.js';
 import { CHANNEL_LABEL, SOURCE_LABEL, addDays } from './reservations.js';
 import { copyText } from './quotes.js';
 
@@ -80,6 +81,17 @@ function checkBaseRate(d) {
   if (error) throw new ApiError('Please check the highlighted fields.', { status: 400, fields: { nightly_rate: error } });
 }
 
+// A rate above the ceiling is asked about before any save (rates.js). The highest rate typed (base, weekend, holiday) is
+// the one asked about; "Change it" leaves the form open with that rate's box focused.
+async function highRateCheck(d, form) {
+  const typed = ['nightly_rate', 'weekend_rate', 'holiday_rate'].map((name) => ({ name, amount: parseAmount(d[name]) }))
+    .filter((r) => Number.isFinite(r.amount));
+  const top = typed.reduce((a, b) => (b.amount > a.amount ? b : a));
+  if (await highRateOk(top.amount)) return true;
+  form.elements[top.name].focus();
+  return false;
+}
+
 // A lowest price above the usual nightly rate means every night costs at least that much, so ask first.
 // Resolves true when the save may go ahead; a cancelled question resolves false and nothing is saved.
 // makeForm has set the save button to "Saving…"; it shows the save label again while the question waits.
@@ -111,9 +123,10 @@ function holds(u, keys) {
     ? Number(u[k]) !== START[k] : String(u[k]).replace(/^(\d\d:\d\d):00$/, '$1') !== String(START[k])));
 }
 
-// The basics are what a new listing needs. The new building's property type (Add only, passed in as `building`), room type
-// and tags sit in More details, closed; the deposit is under Booking page and payments.
-function listingFields(u = {}, roomTypes = [], building = null) {
+// The basics are what a new listing needs: the name, type, base rate and cleaning fee, then the building (Add only, passed in
+// as `buildingBasics`). The new building's property type (Add only, passed in as `building`), room type and tags sit in
+// More details, closed; the deposit is under Booking page and payments.
+function listingFields(u = {}, roomTypes = [], building = null, buildingBasics = []) {
   return [
     h('div', { class: 'form-row form-row--2' },
       field({ name: 'unit_name', label: 'Listing name', required: true, value: u.unit_name, placeholder: 'e.g. Tower 1 - 1201 or Studio A', maxlength: 60 }),
@@ -121,6 +134,7 @@ function listingFields(u = {}, roomTypes = [], building = null) {
     h('div', { class: 'form-row form-row--2' },
       field({ name: 'nightly_rate', label: 'Base nightly rate', type: 'money', required: true, value: u.nightly_rate, placeholder: '2,500' }),
       field({ name: 'cleaning_fee', label: 'Cleaning fee per stay', type: 'money', value: u.cleaning_fee, placeholder: '500' })),
+    ...buildingBasics,
     field({ name: 'max_guests', label: 'Maximum guests', type: 'number', min: 1, max: 50, value: u.max_guests || 2, inputmode: 'numeric' }),
     h('details', { class: 'form-section', open: holds(u, ['room_type', 'tags']) },
       h('summary', null, 'More details'),
@@ -197,7 +211,8 @@ async function addListingModal(onSaved) {
     field({ name: 'address', label: 'Street address', required: true, maxlength: 250 }),
     h('div', { class: 'form-row form-row--2' },
       field({ name: 'city', label: 'City / municipality', required: true, maxlength: 80 }),
-      field({ name: 'province', label: 'Province', required: true, maxlength: 80, placeholder: 'e.g. Metro Manila' })));
+      field({ name: 'province', label: 'Province', required: true, maxlength: 80, placeholder: 'e.g. Metro Manila' })),
+    h('p', { class: 'muted small' }, 'Guests see the city and province on your booking page. The street address stays private.'));
   // The property type is the only new-building field left in More details.
   const newPropMore = h('div', { class: 'form', hidden: properties.length > 0 },
     field({ name: 'property_type', label: 'Property type', type: 'select', value: 'condominium', placeholderOption: false, options: options(PROPERTY_TYPES) }));
@@ -213,11 +228,12 @@ async function addListingModal(onSaved) {
   // Not formModal: a cancelled question must leave the form open with what was typed.
   const modal = openModal({ title: 'Add listing', body: makeForm({
     submitText: 'Save listing', draftKey: 'listing-new', cancel: () => modal.close(),
-    fields: [propSelect, newProp, h('hr', { class: 'divider' }), ...listingFields({}, roomTypes, newPropMore)],
+    fields: listingFields({}, roomTypes, newPropMore, [h('hr', { class: 'divider' }), propSelect, newProp]),
     onSubmit: async (raw, { form }) => {
       const d = prepUnit(raw);
       checkBaseRate(d);
       checkDiscountOrder(d);
+      if (!await highRateCheck(d, form)) return false; // false keeps the saved draft
       if (!await lowPriceOk(d, form, 'Save listing')) return false; // false keeps the saved draft
       let propertyId = d.property_id;
       if (!propertyId || propertyId === '__new') {
@@ -339,7 +355,7 @@ async function channelsModal(listing, onChange) {
     status,
     h('div', { class: 'form-row form-row--2' },
       field({ name: 'channel', label: 'Channel', type: 'select', value: 'airbnb', placeholderOption: false, options: [['airbnb', 'Airbnb'], ['booking', 'Booking.com'], ['agoda', 'Agoda'], ['vrbo', 'Vrbo'], ['expedia', 'Expedia'], ['tripcom', 'Trip.com'], ['other', 'Other (any site with a calendar link)']] }),
-      field({ name: 'url', label: 'Their calendar (iCal) link', type: 'url', placeholder: 'https://www.airbnb.com/calendar/ical/…' })),
+      field({ name: 'url', label: 'Calendar link from Airbnb, Booking.com or Agoda (iCal)', type: 'url', placeholder: 'https://www.airbnb.com/calendar/ical/…' })),
     h('div', { class: 'form-actions' }, h('button', { class: 'btn btn--primary', type: 'submit' }, 'Connect calendar')));
   addForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -595,6 +611,7 @@ export async function listingsView(el, { query }) {
             onSubmit: async (d, { form }) => {
               checkBaseRate(d);
               checkDiscountOrder(d);
+              if (!await highRateCheck(d, form)) return false;
               if (!await lowPriceOk(d, form, 'Save changes')) return false;
               await patch(`/units/${l.unit_id}`, prepUnit(d)); toast('Listing updated.'); load(); modal.close();
             } }) });
@@ -642,10 +659,9 @@ export async function guestsView(el, { query }) {
   const { properties } = await get('/properties');
   const box = h('div', { class: 'card' });
   async function load() {
-    const active = changed(filters, defaults);
-    history.replaceState(null, '', `#/guests${qs(active)}`);
-    const { guests } = await get(`/guests${qs(active)}`);
-    const filtered = Object.keys(active).some((k) => k !== 'sort');
+    history.replaceState(null, '', `#/guests${qs(changed(filters, defaults))}`);
+    const { guests } = await get(`/guests${qs(apiFilters(filters, defaults))}`);
+    const filtered = Object.keys(changed(filters, defaults)).some((k) => k !== 'sort');
     box.replaceChildren(...(guests.length ? [
       filtered ? h('p', { class: 'muted small' }, `Showing ${guests.length} guest${guests.length === 1 ? '' : 's'}`) : '',
       h('ul', { class: 'list' }, guests.map((g) => h('li', null, h('a', { class: 'row', href: `#/guests/${g.guest_id}` },

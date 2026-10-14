@@ -194,6 +194,15 @@ export function errorState(err, retry) {
   }));
 }
 
+// The router's page-level error: the card's title is the page heading (h1), unlike errorState inside a page.
+export function pageError(err, retry) {
+  return h('div', { class: 'card' }, h('div', { class: 'empty' },
+    icon('inbox'),
+    h('h1', { style: { fontSize: '1.05rem' } }, err?.status === 404 ? 'Not found' : "Couldn't load this page"),
+    h('p', null, err?.message || 'Something went wrong.'),
+    retry && ![403, 404].includes(err?.status) && h('button', { class: 'btn btn--secondary', onclick: retry }, 'Try again')));
+}
+
 export const skeleton = (n = 2) => h('div', { class: 'stack' }, Array.from({ length: n }, () => h('div', { class: 'skeleton' })));
 
 // ---------------------------------------------------------------- focus after a redraw
@@ -249,6 +258,7 @@ export function keepFocus(old, { refocusOld = true, stop = () => false, snap, he
   const taken = old?.tagName ? (snap || snapshotControl(old)) : null;
   let done = false;
   let heading = null;
+  let wasDisabled = false; // a button disabled during its own request loses focus; it gets it back when enabled again
   FOCUS_CHECKS.forEach((ms) => setTimeout(() => {
     if (done) return;
     if (stop()) { done = true; return; }
@@ -256,7 +266,8 @@ export function keepFocus(old, { refocusOld = true, stop = () => false, snap, he
     const free = !a || a === document.body || !a.isConnected || a === heading;
     if (!free && a !== old) { done = true; return; }
     if (old?.isConnected) {
-      if (free && refocusOld && !old.disabled) { done = true; old.focus(); }
+      if (old.disabled) wasDisabled = true;
+      else if ((free || a === old) && (refocusOld || wasDisabled)) { done = true; old.focus(); }
       return;
     }
     const next = findReplacement(taken);
@@ -299,11 +310,13 @@ export function openModal({ title, body, onClose, wide }) {
   return { close, el: dlg };
 }
 
+let reasonSeq = 0;
 export function confirmDialog({ title, text, confirmText = 'Confirm', cancelText = 'Cancel', danger = false, reason = false }) {
   return new Promise((resolve) => {
     let done = false;
-    const reasonInput = reason ? h('textarea', { class: 'input', name: 'reason', required: true, maxlength: 300, placeholder: 'Required — explain why (kept in the audit log)' }) : null;
-    const err = h('div', { class: 'error', role: 'alert' });
+    const rid = `reason-${++reasonSeq}`;
+    const reasonInput = reason ? h('textarea', { class: 'input', id: rid, name: 'reason', required: true, maxlength: 300, 'aria-describedby': `${rid}-err`, placeholder: 'Required — explain why (kept in the audit log)' }) : null;
+    const err = h('div', { class: 'error', id: `${rid}-err`, role: 'alert' });
     // A form asking this question is not saving yet: its button shows its own label until the answer is yes.
     const saving = [...document.querySelectorAll('button[data-own-label]')].filter((b) => b.textContent === 'Saving…');
     for (const b of saving) b.textContent = b.dataset.ownLabel;
@@ -312,7 +325,7 @@ export function confirmDialog({ title, text, confirmText = 'Confirm', cancelText
       onClose: () => { if (!done) resolve(null); },
       body: h('div', { class: 'form' },
         h('p', null, text),
-        reasonInput && h('div', { class: 'field' }, h('label', null, 'Reason ', h('span', { class: 'req' }, '*')), reasonInput, err),
+        reasonInput && h('div', { class: 'field' }, h('label', { for: rid }, 'Reason ', h('span', { class: 'req' }, '*')), reasonInput, err),
         h('div', { class: 'form-actions' },
           h('button', { class: 'btn btn--secondary', type: 'button', onclick: () => m.close() }, cancelText),
           h('button', {
@@ -390,6 +403,17 @@ export function clearErrors(form) {
   form.querySelector('.form-error')?.replaceChildren();
 }
 
+// Where focus goes for an invalid field: a nested invalid row's own input (guest rows), else data-focus, else the first visible
+// control, else the first button of a group (stars, whose input is hidden; the group is marked, not the button).
+const FIELD_CONTROL = 'input:not([type=hidden]), select, textarea';
+function errorTarget(wrap) {
+  const row = wrap.querySelector('.field--invalid');
+  const input = row?.querySelector(FIELD_CONTROL) || wrap.querySelector('[data-focus]') || wrap.querySelector(FIELD_CONTROL);
+  if (input) return { focus: input, mark: input };
+  const group = wrap.querySelector('[role="group"], [role="radiogroup"]');
+  return { focus: group?.querySelector('button') || null, mark: group };
+}
+
 // Marks the fields it can find on the form; returns the messages of fields that aren't on it.
 export function showErrors(form, fields = {}) {
   let first = null;
@@ -402,9 +426,9 @@ export function showErrors(form, fields = {}) {
     for (let d = wrap.closest?.('details'); d; d = d.parentElement?.closest('details')) d.open = true;
     const err = wrap.querySelector('.error');
     if (err) err.textContent = msg;
-    const input = wrap.querySelector('input, select, textarea');
-    input?.setAttribute('aria-invalid', 'true');
-    first ||= input;
+    const target = errorTarget(wrap);
+    target.mark?.setAttribute('aria-invalid', 'true');
+    first ||= target.focus;
   }
   first?.focus();
   return unplaced;

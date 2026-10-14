@@ -48,7 +48,7 @@ test('#21: the calendar-link error box is an alert, and a link problem is shown 
   assert.match(src, /import \{[^}]*\bshowErrors\b[^}]*\} from '\.\.\/ui\.js'/, 'showErrors is imported from ui.js');
   assert.match(src, /import \{[^}]*\bclearErrors\b[^}]*\} from '\.\.\/ui\.js'/, 'clearErrors is imported from ui.js');
   // The link field is built by field(), which ties its input to an alert box with aria-describedby.
-  assert.match(modal, /field\(\{ name: 'url', label: 'Their calendar \(iCal\) link', type: 'url'/);
+  assert.match(modal, /field\(\{ name: 'url', label: 'Calendar link from Airbnb, Booking\.com or Agoda \(iCal\)', type: 'url'/); // QA round 12 (#31) relabelled it
 });
 
 // ---- #23: the Add listing screen
@@ -83,7 +83,9 @@ test('#23: More details is a closed section holding the property type, room type
   for (const name of ['property_name', 'address', 'city', 'province']) {
     assert.ok(!buildingBlock.includes(`name: '${name}'`), `${name} is not in More details`);
   }
-  assert.match(addText, /\.\.\.listingFields\(\{\}, roomTypes, newPropMore\)/, 'the Add form passes the building block into More details');
+  // QA round 12 (#30): the building fields now sit in Basics after the cleaning fee; only the property type stays in More details.
+  assert.match(addText, /listingFields\(\{\}, roomTypes, newPropMore, \[h\('hr', \{ class: 'divider' \}\), propSelect, newProp\]\)/,
+    'the Add form passes the building fields in Basics, after the cleaning fee, and the property type into More details');
   // Choosing a building (or a new one) shows or hides both parts of the building fields together.
   assert.match(addText, /const showNewBuilding = \(show\) => \{ newProp\.hidden = !show; newPropMore\.hidden = !show; for \(const el of buildingInputs\) el\.required = show; \};/);
   assert.match(addText, /showNewBuilding\(e\.target\.value === '__new'\)/);

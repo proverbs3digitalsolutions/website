@@ -3,7 +3,7 @@
 import { get, post, qs } from '../api.js';
 import { h, peso, fmtDate, manilaDay, field, formModal, emptyState, pageHead, toast, badge } from '../ui.js';
 import { state } from '../app.js';
-import { initFilters, filterBar, changed } from '../filters.js';
+import { initFilters, filterBar, changed, apiFilters } from '../filters.js';
 
 export const stars = (n) => h('span', { class: 'rating', 'aria-label': `${n} out of 5` }, '★'.repeat(n) + '☆'.repeat(5 - n));
 
@@ -17,7 +17,7 @@ export async function reviewsView(el, { query = {} } = {}) {
 
   async function load() {
     history.replaceState(null, '', `#/reviews${qs(changed(filters, defaults))}`);
-    const { reviews, average, count, matched, matched_average: matchedAvg } = await get(`/reviews${qs(changed(filters, defaults))}`);
+    const { reviews, average, count, matched, matched_average: matchedAvg } = await get(`/reviews${qs(apiFilters(filters))}`);
     const filtered = Object.keys(changed(filters, defaults)).some((k) => k !== 'sort');
     head.replaceChildren(pageHead({ title: 'Guest reviews', sub: count ? `${average} average from ${count} review${count === 1 ? '' : 's'} · private, only your team sees them` : 'Private feedback from your guests', back: { href: '#/guests', label: 'Guests' } }));
     if (!reviews.length) {
@@ -107,7 +107,7 @@ export async function discountCodesView(el, { rerender, query = {} }) {
 
   async function load() {
     history.replaceState(null, '', `#/discount-codes${qs(changed(filters, defaults))}`);
-    const { codes, total } = await get(`/discount-codes${qs(changed(filters, defaults))}`);
+    const { codes, total } = await get(`/discount-codes${qs(apiFilters(filters))}`);
     const filtered = Object.keys(changed(filters, defaults)).some((k) => k !== 'sort');
     if (!codes.length) {
       listBox.replaceChildren(filtered

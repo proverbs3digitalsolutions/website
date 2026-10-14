@@ -2,7 +2,7 @@
 
 This document describes BalayHub's PostgreSQL schema as it stands after migrations `001`–`026` in `db/migrations/`, where uploaded files are stored, and who can see or change each kind of data. It was checked against the migrations and the route code in `src/routes/*.js` and `src/lib/*.js`. Anything not confirmed in the code is marked **unverified**.
 
-Last updated: 2026-10-15 (QA round 11, section 17; D-87)
+Last updated: 2026-10-15 (QA round 12, section 18, rows in section 6 and 6.1a; D-88)
 
 ---
 
@@ -751,7 +751,7 @@ The workspace export (`exportOrganization`) is not complete. It leaves out `supp
 | Booking payments and receipts | View, record, void, email receipt | Same (assigned) | View, record (and email a receipt when recording); view printable receipt; no void | None | Pay link: view total, paid, refunds (amount and date) and balance; pay the balance online (creates a payment) (2026-10-15, D-86) |
 | Security deposits | View, record, settle, undo a settlement; deposits report | View, record, settle; deposits report (assigned) | View per reservation, record, see deposits due (assigned); no settle | None | Receives the deposit emails |
 | Guest check-in forms and ID photos | View form and IDs; replace link | Same (assigned) | No access to the form screen; ID files refused | None | Check-in link: submit and edit own form, upload IDs (never shown back); closes after check-out. Gate-pass link: see guest names, phone, plate, arrival time and **ID photos** until the day after check-out |
-| Gate passes | Settings per property; view, send | Same (assigned) | None | None | Building admin: view the pass and acknowledge it; guest ID photos only when the property's "Include guest ID photos" setting is on |
+| Gate passes | Settings per property; view, send | Same (assigned) | None | None | Building admin: view the pass and acknowledge it; guest ID photos only when the property's "Include guest ID photos" setting is on; *2026-10-15 (D-88): staff receive no `admin_email` or `gatepass_*` fields on `GET /properties` and `GET /properties/:id`; owners and managers unchanged* |
 | Guest inbox (conversations, messages, AI drafts) | View, send, schedule, cancel, retry, assign, archive, AI draft | Same (assigned) | None | None | Guests reply by email only |
 | Message templates and automations | Templates: view, create, edit, archive. Automations: view, create, edit, remove | Templates: view and use only (owner-only edits since 2026-10-13, D-28). Automations: view only | None | None | None |
 | Housekeeping (cleaning tasks) | View, create, edit, assign, cancel; edit default checklist | Same except the default checklist (assigned) | View (assigned); tick items; start, finish, reopen; attach photos; no create, edit or cancel | None | None |
@@ -760,7 +760,7 @@ The workspace export (`exportOrganization`) is not complete. It leaves out `supp
 | Refunds | View, record, void (capped at amount paid) | Same (assigned properties) | View only | None | Own booking only: amount and date on the pay link; never the reason, reference or who recorded it (2026-10-15, D-86) |
 | Payment proofs and proof files | View, confirm, reject | Same (assigned properties) | None | None | Submit a proof with one screenshot via the pay link, at most 5 pending; refused for cancelled, paid or ended stays |
 | Manual payment settings | View, change | None | None | None | Sees the instructions on the pay page when enabled |
-| Cancellation policy and deposit % (per listing) | View, change | Same (assigned properties) | None | None | Sees the policy and the deposit amount on the booking page |
+| Cancellation policy and deposit % (per listing) | View, change | Same (assigned properties) | View (assigned) | None | Sees the policy and the deposit amount on the booking page; *corrected 2026-10-15 (D-88): the units row already gave staff these* |
 | Discount codes | View, create, turn on or off | View only (owner-only changes since 2026-10-13, D-28) | None | None | Apply a code at checkout |
 | Direct booking page and the host's PayMongo key | View, edit; the key is write-only (hint shown) | None | None | None | Public booking page by slug |
 | Tenants | View, create, edit, archive; export one tenant's record | View, create, edit, archive (tenants with leases in assigned properties, or not placed) | View names only (contact details and notes removed) | None | None |
@@ -841,6 +841,8 @@ The cleaner role is denied by default in code (`cleanerGuard`, D-48). Any row no
 - A use with nothing on hand is refused for owners and managers (a 400 on `quantity`), because the log takes uses of at least 1.
 - A cleaner's save from a job skips the short item, saves the others, and names the skipped item.
 - Movement history stays owner and manager only (section 6.1).
+
+**Done by you (2026-10-15, D-88).** Every cleaning task from `GET /api/cleaning-tasks` and `GET /api/cleaning-tasks/:id` carries `done_by_viewer`: true when the caller is the person who finished the clean, for every role. The internal `completed_by` id is still never sent. Before this, round 11's "Done by you, no pay" never reached the task page because the server stripped the field. See section 18.
 
 **Owner portal.** The statement responses no longer include `confirmation_code`. The stored snapshot keeps it (D-47, D-77).
 
@@ -1116,3 +1118,23 @@ Decision D-84. Checked against the code after the fixes landed.
 - **Locks:** `POST /reservations`, and `PATCH /reservations/:id` when dates or unit change, lock the `units` row `FOR UPDATE` and re-run `assertStayAllowed` inside the transaction. `POST /leases` and `PATCH /leases/:id` lock the unit row before `stayClashes`. Closes the round 10 note in section 16.
 - **Public guest limit order:** the public quote and checkout check `min: 1` first, then the listing's own limit ("This place allows up to 4 guests."), then 50 only when the listing has no limit ("Guests must be at most 50.").
 - **Receipt:** when `balance_after` is below 0 the receipt email line is "Overpaid by: ₱800.00" (the page shows "Overpaid by" and the amount); otherwise "Remaining balance". Nothing is clamped to 0. `balance_after` itself is unchanged.
+
+## 18. API notes from QA round 12 (2026-10-15)
+
+Decision D-88. Servers changed only where listed; the list pages' habit of always sending their default is a client rule.
+
+- **Stay quote clash:** `GET /api/reservations/quote` accepts `exclude_booking_id` (a booking id; the stay being edited is left out of the clash check, and only the chosen listing's stays are checked, so an id from anywhere else changes nothing). The answer gains `clash`: `null`, or `{ code: 'DATES_TAKEN', message }`. The message is the same sentence `PATCH /reservations/:id` gives (a lease is checked first, then an overlapping stay or block). The screen shows it at Check-out, before the price question.
+- **Public quote price rules:** the public quote (`GET /api/public/book/:slug/units/:unitId/quote`) gains `price_rules`, a list of labels, each once, in the order they first apply across the nights: "Booked-early price", "Last-minute price", "Gap-night price", "Weekend price", "Holiday price", "Seasonal price". The booking summary prints them as "Includes: Booked-early price."
+- **Daily close:** `GET /api/daily-close` `closed` gains `can_change` (an owner: always; a manager: only when the close covers properties and every one of them is theirs, the same rule the reopen and update refusals use) and `whole_workspace` (true when the close covers every property). Reopen and Update are hidden when `can_change` is false, with a line explaining why; the line's wording depends on `whole_workspace`. A date outside 2000 to 2100 is "That date isn't valid."
+- **Tasks:** `done_by_viewer` on every task (section 6.1a).
+- **Owner statement:** `GET /api/unit-owners/:id/statement` gains `portal_enabled` (true when the owner's portal is on). The Publish dialog uses it and no longer asks `GET /api/unit-owners` for the same fact.
+- **Properties for staff:** `GET /api/properties` and `/api/properties/:id` omit `admin_email`, `gatepass_enabled`, `gatepass_days_before`, `gatepass_attach_ids`, `gatepass_authorized_by` and `gatepass_notes` for staff (section 6, Gate passes). Units are unchanged. *Closes the round 4 question "Staff and property money details" for these fields.* Staff see `deposit_pct` and `cancellation_policy` on units (section 6).
+- **Inbox templates and automatic messages:**
+  - `POST /api/message-templates/:id/archive` (the app's "delete") is 409 `IN_USE` when any automatic message uses it, on or off: "This template is used by the automatic message \"<name>\". Choose another template for it, or remove it, first."
+  - Turning an automatic message on while its template is deleted is 409 `TEMPLATE_DELETED`: "This automatic message's template was deleted. Choose a template first." A `template_id` that points at a deleted template is a 400 at `template_id`.
+  - `GET /api/automations` rows gain `template_archived`, and come back in a fixed order: `created_at`, trigger order, `name`, `automation_id` (before this, messages created at the same instant came back in a random order).
+  - Snoozed conversations are left out of the Mine, Upcoming and Hosting views until they wake.
+  - *Known gap, carried to round 13:* archiving a template and moving an automatic message onto it at the same instant can leave the message on an archived template. Both paths need to lock the template row.
+- **Lease end date:** `PATCH /api/leases/:id` with any `end_date` caps the unpaid move-in charge's due date at the end date, the same as the end-lease handler does. The full month is still billed. Ending a lease early also moves the due date.
+- **List defaults (client rule):** every list page sends its default filter to the server (the `apiFilters` helper in `public/js/filters.js`), so "All unpaid" on Rent means unpaid only. The servers did not change.
+- **Cleaner job supplies:** the job-route message for a quantity below 1 stays the generic one (D-87); the carry list has the clearer wording.

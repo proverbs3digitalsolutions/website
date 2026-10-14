@@ -56,7 +56,8 @@ test('#24: the P&L caption names the month the way the form does, not the raw YY
 
 test('#24: a line under the P&L title says what it counts and where the check-in counts are', () => {
   const src = read('pnl.js');
-  assert.match(src, /basis\.textContent = `Counts stays that checked out in \$\{fmtMonth\(month\)\} \(finished stays only\)\. Reports counts stays by check-in date\.`/);
+  // QA round 12 #27 (C09): the P&L note says what the month counts, and points to the Reports figure.
+  assert.match(src, /basis\.textContent = `Counts stays that checked out in \$\{fmtMonth\(month\)\}\. Upcoming stays are not in this total\. Reports counts nights in the month, including upcoming stays\.`/);
   // The line sits right under the title, before the filter bar.
   assert.match(src, /pageHead\(\{ title: 'Profit and loss'[^}]*\}\), basis, notice, bar, box\)/);
 });

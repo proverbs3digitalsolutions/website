@@ -294,6 +294,7 @@ router.patch('/leases/:id', managers, ah(async (req, res) => {
     if (l.end_date) {
       await db.query(`DELETE FROM rent_charges WHERE lease_id = $1 
          AND period > date_trunc('month', (SELECT start_date FROM leases WHERE lease_id = $1)) AND (period > date_trunc('month', $2::date) OR due_date > $2::date)`, [l.lease_id, l.end_date]);
+      await db.query('UPDATE rent_charges SET due_date = $2 WHERE lease_id = $1 AND period <= $2::date AND due_date > $2::date', [l.lease_id, l.end_date]);
     }
     // The names of the fields that changed, never their values.
     await audit(db, req.user, 'lease.updated', 'lease', l.lease_id, { fields: keys });
@@ -325,6 +326,8 @@ router.post('/leases/:id/end', managers, ah(async (req, res) => {
       [lease.lease_id, body.lease_status, body.end_date]);
     await db.query(`DELETE FROM rent_charges WHERE lease_id = $1 
          AND period > date_trunc('month', (SELECT start_date FROM leases WHERE lease_id = $1)) AND (period > date_trunc('month', $2::date) OR due_date > $2::date)`, [lease.lease_id, body.end_date]);
+    // The month they moved in is still billed in full, but it can't fall due after they have left.
+    await db.query('UPDATE rent_charges SET due_date = $2 WHERE lease_id = $1 AND period <= $2::date AND due_date > $2::date', [lease.lease_id, body.end_date]);
     await audit(db, req.user, `lease.${body.lease_status}`, 'lease', lease.lease_id, { end_date: body.end_date, note: body.note });
   });
   res.json({ ok: true });

@@ -2,7 +2,7 @@
 
 Every decision made on BalayHub, with the date and the reason. Newest decisions go at the bottom. When a decision changes, add a new entry and mark the old one **Superseded by D-xx**. Never delete history.
 
-Last updated: 2026-10-15 (D-87, QA round 11 calls)
+Last updated: 2026-10-15 (D-88, QA round 12 calls)
 
 ---
 
@@ -830,7 +830,7 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 > - **Report tiles say how they count** (for example "Rooms counted by night; cleaning and extras by check-in"). The ways of counting themselves are unchanged (D-44, D-85).
 >
 > *Screens and keyboard*
-> - **Focus is kept after every save or redraw, even a slow one:** BalayHub watches for up to 2 seconds and puts focus back on the same control, its renamed replacement in the same place (Mark clean to Mark dirty), or the page heading; never on something the person already moved to. Buttons inside dialogs are covered, and tab rows wait for the new row to be drawn. *Completes D-85's focus rule, which stopped watching before the redraw arrived.* Views add no focus code of their own for redraws. *Extended to 10 seconds and to dialogs with no opener 2026-10-15 (D-87).*
+> - **Focus is kept after every save or redraw, even a slow one:** BalayHub watches for up to 2 seconds and puts focus back on the same control, its renamed replacement in the same place (Mark clean to Mark dirty), or the page heading; never on something the person already moved to. Buttons inside dialogs are covered, and tab rows wait for the new row to be drawn. *Completes D-85's focus rule, which stopped watching before the redraw arrived.* Views add no focus code of their own for redraws. *Extended to 10 seconds and to dialogs with no opener 2026-10-15 (D-87).* *Extended to navigation, in-place reloads, re-enabled buttons and error targets 2026-10-15 (D-88). A view's own redraw after a dialog save still lost focus; carried to round 13.*
 > - **A form's own field checks run with the required check,** so "Accommodation is required" no longer hides "Check-out must be after check-in" (New quote, New group).
 > - **Link-style buttons are at least 24px tall** (the minimum for inline text links); buttons keep the 44px house size. Chart "Show as table" toggles are 32px tall on phones.
 > - **Every date box in reports uses 2000 to 2100,** custom report dates and a month in a Profit and loss link included. A bad month in the address shows "That month isn't valid, so this is <this month>." and the address is rewritten.
@@ -864,7 +864,7 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 > *Small-host screens (alpha)*
 > - **A day closed by mistake can be reopened** ("Reopen day"; owners any close, managers only a close that covers just their own properties, never a whole-workspace close). A past day's close lists arrivals, departures and cleanings as they stood at the end of that day. The reopen is written to the activity log with the old note, who closed it, when, which properties and the saved summary.
 > - **Maintenance "Open & in progress" shows only open and in-progress requests.** A resolved request offers only Reopen; an in-progress one offers "Back to open".
-> - **An owner's own finished clean reads "Done by you, no pay"** on the task too (D-85 wording).
+> - **An owner's own finished clean reads "Done by you, no pay"** on the task too (D-85 wording). *Did not show on the task page until 2026-10-15 (D-88): the server now says whether the viewer finished the clean.*
 > - **"Something broken?" for an owner or manager logs a repair** ("Log repair"); cleaners still send it to the host.
 > - **A cleaner who uses more than is on hand is told** how much was recorded (the server answers with `short`).
 > - **Inbox:** a second template replaces the first template's subject (a typed subject stays, as APP-FLOW says); the AI draft button is hidden in Internal note mode; Snooze 1 week wakes at 9 AM; template fields say their limits.
@@ -879,3 +879,48 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 > *Not changed (recorded so later sweeps don't file them):* Housekeeping stays under More on phones (founder question); a rent acknowledgement has no balance-after line yet (founder question); the booking calendar's day buttons are reached by Tab, not arrow keys; 22px date links rely on the spacing exception; the refund cap is what was paid (D-34).
 >
 > *Why:* a small host must see true numbers on every receipt and rent roll, must not pay a typo, and must be able to undo a mistake.
+
+---
+
+> **D-88 · 2026-10-15 · QA round 12 calls (alpha with small hosts).** The twelfth QA sweep (8 lanes, 84 entries including carried items) was fixed in 14 code lanes (C01 to C14), plus follow-up lanes for test lines and for the sign-up language (C06b). The calls below follow D-85: friction for owners of 1 to 3 properties first, then money and guests. Open questions are in BLOCKERS.MD under "Questions from QA round 12". No severe bug this round. Suite result at the merge: 2,315/2,315 (final run after C06b). Security review: PASS, with two info notes (`inbox.js` line 578 should use `?.archived`; `reservations.js` and `listings.js` pass an extra argument to `apiFilters`). **The round was not clean:** the re-verify found the focus problem again after in-place saves (SEV2) plus minor items; all are carried to round 13 (see IMPLEMENTATION-PLAN session notes).
+>
+> *Money*
+> - **Every list sends its default tab to the server.** The Rent page's "All unpaid" shows only unpaid charges. One shared rule (`apiFilters`) and a test that checks every list page. *Second time for this class (round 11 fixed Maintenance by hand).*
+> - **Record payment on a direct booking starts with no method chosen;** the host picks one. Channel bookings still start on "Channel payout".
+> - **The payment card says "Overpaid ₱800.00",** the same word as the alert and the receipt. **"You keep" shows only once the channel fee is known;** until then the card asks for the fee and shows the total.
+> - **Ending a lease moves an unpaid move-in charge's due date to the move-out day,** and editing the lease's end date does the same. The full month is still billed (PRD).
+> - **The Rent cards say they count all unpaid rent** when the list is narrowed. **P&L and Reports each say what they count.**
+> - **A nightly rate above ₱50,000.00 asks "Save anyway?"** before saving (listing, calendar price, bulk "Set a price"). Nothing is refused.
+>
+> *Guests*
+> - **An automatic message can't run on a deleted template:** the template can't be deleted while any automatic message uses it, and a message can't be turned on with a deleted one. The page says when all messages are off and links to the guest language setting.
+> - **Snoozed conversations are hidden from every working list** until they wake.
+> - **The booking summary names the price rule** that changed the nightly price ("Includes: Booked-early price.").
+> - **Review stars meet 3:1 contrast in both themes;** the star message clears when a star is picked; the check-in thank-you screen says "Thank you! You're registered."; the door code card says "Door code" once (Taglish "Code ng pinto").
+>
+> *Small-host screens (alpha)*
+> - **A new reservation saved from the list opens it** (APP-FLOW 7.5); the calendar stays. Edit can change "Where did they book?", which is now marked optional. A date clash is reported before the price question.
+> - **With 3 or fewer units, the Rent page keeps Month and Property under More filters.** Each supply row shows Add stock and Record use, with the rest (Count, History, Edit, Archive) under "More".
+> - **The Calendar is called "Calendar";** the Launchpad uses the form's words and the Add listing form asks for the name, type, rate and cleaning fee before the building.
+> - **Daily close:** a year outside 2000 to 2100 is "That date isn't valid."; a manager no longer sees Reopen or Update on a close only an owner can change.
+> - **Housekeeping:** an owner's own clean reads "Done by you, no pay" on the task page too (*completes D-87*); "1 pc"; "Copy for cleaner" is not offered on a finished or cancelled clean.
+> - **Reports:** switching the period clears the old one from the link; a date link without a period is read as custom dates; Export is off until both dates are set; By month shows every column; the By property total shows occupied units. Archived add-ons are listed only on the Archived tab.
+>
+> *Screens and keyboard*
+> - **Focus goes to the new page's heading after any navigation,** a page reloading in place stays on screen until the new one is ready, a button disabled during its own request gets focus back, and a refused form focuses the field that needs fixing (the stars, the blank guest row). *Completes D-86 and D-87's focus rule for navigation; a view's own redraw after a dialog save still loses focus (round 13 top priority).*
+> - **Every page-level error has a heading;** the void reason box is labelled.
+>
+> *Access*
+> - **Staff no longer receive the building admin email or gate-pass settings** (section 6: gate passes, staff None). *Settles BLOCKERS round 4 "Staff and property money details" for these fields.* **Staff see a listing's cancellation policy and deposit %** (the section 6 rows now agree).
+>
+> *Calls made by the orchestrator this round (2026-10-15):*
+> - **The owner portal is English throughout for now.** A mixed Taglish heading over an English body (seen in the re-verify) is worse than plain English. Founder question open: should the owner portal be Taglish at all? (BLOCKERS.)
+> - **The host-only daily-close line stays English.** The line that explains who can change a close is on a host app screen, and the host app is English (see "Not changed" below and the host app language question in BLOCKERS). The follow-up lane correctly left it in English.
+> - **A nightly rate above ₱50,000.00 asks "Save anyway?"; bulk percent changes are not questioned yet.** A typed rate is one clear number to check. A "Change prices by %" can push many nights over the limit at once, and the right question there is not clear; the founder is asked (BLOCKERS). *Default: no question on bulk percent changes.*
+> - **Automatic messages list in a fixed order:** created time, then trigger order, then name, then id. Before this, messages created at the same instant came back in a random order.
+> - **A button that looks disabled but must stay reachable uses `aria-disabled="true"`, drawn dimmed with the not-allowed cursor** (`.btn[aria-disabled]`). Real `:disabled` buttons keep their own look, which also shows progress. *Why:* a keyboard or screen reader user can still land on the button and read the hint beside it (for example Export on Reports before both dates are set).
+> - **The supplies button stays labelled "Count"** (inside the "More" list with History, Edit and Archive). Renaming it was considered and not done: the label is already in use across the supplies screens and the sweep found nothing wrong with it.
+>
+> *Not changed (recorded so later sweeps don't file them):* the host app stays English (founder question), apart from the verify screens, which follow the chosen language; the job sheet, Record use and Count keep their own quantity messages because their rules differ; the 101x32 theme buttons pass the 24px minimum; rates saved above the round 11 ceiling still price cleans (round 11 question); the staff quote route has no role guard (pre-existing; the clash text shows staff nothing they can't already see).
+>
+> *Why:* a small host must see true money on every list and card, must not save a wrong method or rate with one tap, and must be able to use every page with a keyboard.

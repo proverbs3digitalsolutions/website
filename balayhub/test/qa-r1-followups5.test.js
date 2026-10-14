@@ -58,7 +58,7 @@ test('admin: trialLastDay gives the day the admin entered, one millisecond befor
   fs.mkdirSync(path.join(dir, 'views'));
   for (const f of ['api.js', 'ui.js']) fs.copyFileSync(path.join(__dirname, '..', 'public', 'js', f), path.join(dir, f));
   fs.writeFileSync(path.join(dir, 'app.js'), 'export const state = {};\n');
-  fs.writeFileSync(path.join(dir, 'filters.js'), 'export const initFilters = () => ({}); export const filterBar = () => null; export const changed = () => ({});\n');
+  fs.writeFileSync(path.join(dir, 'filters.js'), 'export const initFilters = () => ({}); export const filterBar = () => null; export const changed = () => ({}); export const apiFilters = () => ({});\n');
   fs.copyFileSync(path.join(__dirname, '..', 'public', 'js', 'views', 'admin.js'), path.join(dir, 'views', 'admin.js'));
   globalThis.Element = class { };
   const admin = await import(pathToFileURL(path.join(dir, 'views', 'admin.js')));

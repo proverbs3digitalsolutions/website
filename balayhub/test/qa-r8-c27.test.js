@@ -88,6 +88,7 @@ const FILTERS_STUB = `export const initFilters = (key, query, defaults) => ({ ..
 export const filterBar = () => null;
 export const rememberFilters = () => {};
 export const changed = (values, defaults) => Object.fromEntries(Object.entries(values).filter(([k, v]) => String(v ?? '') !== String(defaults[k] ?? '')));
+export const apiFilters = (values) => Object.fromEntries(Object.entries(values).filter(([, v]) => String(v ?? '') !== ''));
 `;
 
 let dir; let api; let ui; let rent; let refunds;

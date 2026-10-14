@@ -67,7 +67,7 @@ test('a send-later time that has already passed asks before sending now', () => 
 });
 
 test('a failed list load shows a message and leaves the filter bar on screen', () => {
-  assert.match(src, /list = await get\(`\/inbox\$\{qs\(changed\(filters, \{ \.\.\.defaults, view: '' \}\)\)\}`\);\s*\} catch \(err\) \{\s*(?:\/\/[^\n]*\n\s*)?items\.replaceChildren\(emptyState\(\{ title: "Couldn't load conversations", text: err\.message \}\)\);\s*return;\s*\}/);
+  assert.match(src, /list = await get\(`\/inbox\$\{qs\(apiFilters\(filters, defaults\)\)\}`\);\s*\} catch \(err\) \{\s*(?:\/\/[^\n]*\n\s*)?items\.replaceChildren\(emptyState\(\{ title: "Couldn't load conversations", text: err\.message \}\)\);\s*return;\s*\}/);
 });
 
 test('the composer hint does not promise an email to a guest who has none', () => {

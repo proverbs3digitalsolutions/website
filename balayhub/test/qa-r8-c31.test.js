@@ -43,7 +43,7 @@ test('the other singulars and the plain-count cases are unchanged', () => {
   assert.equal(unitWord(1, 'boxes'), 'box');
   assert.equal(unitWord(1, 'batteries'), 'battery');
   assert.equal(unitWord(1, 'bottles'), 'bottle');
-  assert.equal(unitWord(1, 'pcs'), 'pcs', 'an abbreviation stays');
+  assert.equal(unitWord(1, 'pcs'), 'pc', 'one pc, not one pcs (QA round 12, #34)');
   assert.equal(unitWord(2, 'glass'), 'glass', 'two or more keeps the unit as typed');
   assert.equal(unitWord(0, 'towels'), 'towels');
 });

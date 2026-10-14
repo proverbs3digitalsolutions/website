@@ -36,7 +36,7 @@ export async function pnlView(el, { query = {} } = {}) {
     const bad = filters.month && !MONTH_RE.test(filters.month);
     if (bad) filters.month = thisMonth;
     const month = filters.month || thisMonth;
-    basis.textContent = `Counts stays that checked out in ${fmtMonth(month)} (finished stays only). Reports counts stays by check-in date.`;
+    basis.textContent = `Counts stays that checked out in ${fmtMonth(month)}. Upcoming stays are not in this total. Reports counts nights in the month, including upcoming stays.`;
     notice.replaceChildren(bad ? h('div', { class: 'alert alert--warn', role: 'alert' }, `That month isn't valid. Showing ${monthName(month)}.`) : '');
     monthInput.value = month;
     history.replaceState(null, '', `#/pnl${qs(changed(filters, defaults))}`);

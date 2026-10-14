@@ -58,7 +58,9 @@ test('#41: the server guest-limit refusal marks its message as the server\'s', (
   assert.ok(at > 0, 'the guest-limit refusal has its own branch in the catch');
   const branch = body.slice(at, body.indexOf('const reason', at));
   assert.match(branch, /guestsFromServer = true;/);
-  assert.match(branch, /setGuestsError\(tServer\(err\.fields\.guests\)\)/);
+  assert.match(branch, /setGuestsError\(cap \? t\('Guests must be at most \{n\}\.', \{ n: cap\[1\] \}\) : tServer\(err\.fields\.guests\)\)/);
+  assert.match(branch, /\^Guests must be at most \(\\d\+\)\\\.\$/, 'the cap is read from the server message');
+  assert.match(branch, /tServer\(err\.fields\.guests\)/, 'other messages still go through tServer');
 });
 
 test('#9: each booking view sets redraw before its first request, so a language switch on an error card redraws it', () => {

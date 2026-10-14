@@ -19,7 +19,8 @@ extendTranslations({
   'Wi-Fi': 'Wi-Fi',
   'Network name': 'Pangalan ng network',
   'Password': 'Password',
-  'Door code': 'Door code',
+  'Door code': 'Code ng pinto',
+  'Code': 'Code',
   'Copy': 'Kopyahin',
   'Copied.': 'Nakopya na.',
   'Could not copy. Please select the text and copy it.': 'Hindi makopya. Piliin ang text at kopyahin ito.',
@@ -104,7 +105,7 @@ export async function guideView(el, { params }) {
     (hasWifi || wifiFrom) && secretCard(t('Wi-Fi'), 'cash', [
       { label: t('Network name'), value: d.wifi_name },
       { label: t('Password'), value: d.wifi_password, copy: true }], wifiFrom && !d.wifi_password ? wifiFrom : null),
-    (d.door_code || wifiFrom) && secretCard(t('Door code'), 'shield', [{ label: t('Door code'), value: d.door_code, copy: true }], wifiFrom && !d.door_code ? wifiFrom : null),
+    (d.door_code || wifiFrom) && secretCard(t('Door code'), 'shield', [{ label: t('Code'), value: d.door_code, copy: true }], wifiFrom && !d.door_code ? wifiFrom : null),
   ].filter(Boolean);
   const blocks = SECTIONS.map(([key, title, ic]) => {
     const text = sectionText(d, key);

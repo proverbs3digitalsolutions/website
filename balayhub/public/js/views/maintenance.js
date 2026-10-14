@@ -5,7 +5,7 @@ import {
   h, icon, peso, fmtDate, fmtDateTime, manilaDay, badge, label, options, field, formModal, emptyState, pageHead, toast,
   todayManila, filesList, openModal, unitLabel, confirmDialog, showErrors } from '../ui.js';
 import { state, navigate } from '../app.js';
-import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
+import { initFilters, filterBar, rememberFilters, changed, apiFilters } from '../filters.js';
 
 const PRIORITIES = ['low', 'medium', 'high', 'urgent'];
 const STATUSES = ['open', 'in_progress', 'resolved', 'cancelled'];
@@ -95,7 +95,7 @@ export async function maintenanceView(el, { query }) {
     tabs.replaceChildren(...[['active', 'Open & in progress'], ['open', 'Open'], ['in_progress', 'In progress'], ['resolved', 'Resolved'], ['cancelled', 'Cancelled'], ['all', 'All']].map(([s, t]) =>
       h('button', { role: 'tab', 'aria-selected': String(filters.status === s), onclick: () => { filters.status = s; rememberFilters('maintenance', filters); load(); } }, t)));
     // The status is always sent: the default "active" is dropped from the address but the server lists every status without it.
-    const res = await get(`/maintenance${qs({ ...changed(filters, defaults), status: filters.status })}`);
+    const res = await get(`/maintenance${qs(apiFilters(filters))}`);
     // A name no request is assigned to (typed into a link) is dropped, and the list loads again without it.
     if (filters.assigned && filters.assigned !== 'none' && !res.assignees.includes(filters.assigned)) {
       filters.assigned = defaults.assigned; rememberFilters('maintenance', filters); renderBar(); return load();

@@ -84,7 +84,7 @@ function frame({ labels, series, fmt, height = 220, draw, ariaLabel, integer = f
     draw({ root, m, w, hgt, y, step, width, height });
     // Hover bands: one per category, wider than the marks.
     labels.forEach((l, i) => {
-      const band = svg('rect', { x: m.l + step * i, y: m.t, width: step, height: hgt, fill: 'transparent' });
+      const band = svg('rect', { x: m.l + step * i, y: m.t, width: step, height: hgt, class: 'chart-band' });
       const show = (evt) => {
         tip.replaceChildren(h('strong', null, l), ...series.map((s, si) => h('div', { class: 'chart-tip__row' },
           h('span', { class: 'chart-swatch', style: { background: s.color || SERIES[si] } }), `${s.name}: ${fmt(s.values[i])}`)));
@@ -93,11 +93,11 @@ function frame({ labels, series, fmt, height = 220, draw, ariaLabel, integer = f
         const x = (evt.clientX ?? rect.left + ((m.l + step * i) / width) * rect.width) - rect.left;
         tip.style.left = `${Math.min(Math.max(x + 12, 0), rect.width - 180)}px`;
         tip.style.top = '8px';
-        band.setAttribute('fill', 'rgba(22,50,79,0.05)');
+        band.classList.add('chart-band--on');
       };
       band.addEventListener('mousemove', show);
       band.addEventListener('click', show);
-      band.addEventListener('mouseleave', () => { tip.hidden = true; band.setAttribute('fill', 'transparent'); });
+      band.addEventListener('mouseleave', () => { tip.hidden = true; band.classList.remove('chart-band--on'); });
       root.append(band);
     });
     plot.replaceChildren(root);

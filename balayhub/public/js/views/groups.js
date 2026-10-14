@@ -15,6 +15,11 @@ export const roomsLine = (rooms, cancelled) => {
   return `${n} room${n === 1 ? '' : 's'}${cancelled ? ', cancelled' : ''}`;
 };
 
+// The message for a room row with no room type chosen; it names the room when the form numbers its rows (0 = the add-a-room dialog).
+export function roomTypeProblem(num) {
+  return num ? `Choose a room type for room ${num}.` : 'Choose a room type for this room.';
+}
+
 // ---------------------------------------------------------------- one room row (used by "new group" and "add a room")
 function roomRow({ listings, roomTypes, defaults, onRemove, number = 0 }) {
   const uid = Math.random().toString(36).slice(2, 7);
@@ -28,7 +33,7 @@ function roomRow({ listings, roomTypes, defaults, onRemove, number = 0 }) {
   const unit = h('select', { class: 'input', id: `gr-unit-${uid}`, 'aria-describedby': `gr-unit-${uid}-err` },
     h('option', { value: '' }, 'Choose a listing…'),
     listings.map((l) => h('option', { value: l.unit_id }, `${l.unit_name} — ${l.property_name}`)));
-  const type = h('select', { class: 'input', id: `gr-type-${uid}` },
+  const type = h('select', { class: 'input', id: `gr-type-${uid}`, 'aria-describedby': `gr-type-${uid}-err` },
     h('option', { value: '' }, 'Choose a room type…'),
     roomTypes.map((t) => h('option', { value: `${t.property_id}|${t.room_type}` }, `${t.room_type} · ${propName.get(t.property_id) || 'Property'} (${t.count})`)));
   const count = h('input', { class: 'input', id: `gr-count-${uid}`, type: 'number', min: 1, max: 20, value: 1, inputmode: 'numeric' });
@@ -49,7 +54,9 @@ function roomRow({ listings, roomTypes, defaults, onRemove, number = 0 }) {
   price.addEventListener('input', () => { priceEdited = price.value.trim() !== ''; });
   cleaning.addEventListener('input', () => { cleaningEdited = cleaning.value.trim() !== ''; });
 
-  const typeBox = mk('type', 'Room type', type);
+  // The room type box is a field the form can mark, like the listing box below, so a row with no type shows its message on this row (see rooms()).
+  const typeKey = `room_type-${uid}`;
+  const typeBox = h('div', { class: 'field', dataset: { field: typeKey } }, h('label', { for: `gr-type-${uid}` }, 'Room type'), type, h('div', { class: 'error', id: `gr-type-${uid}-err`, role: 'alert' }));
   const countBox = mk('count', 'How many', count);
   // The listing box is a field the form can mark, so a row with no listing shows its message on this row (see rooms()).
   const unitKey = `unit_id-${uid}`;
@@ -118,7 +125,7 @@ function roomRow({ listings, roomTypes, defaults, onRemove, number = 0 }) {
       if (price.value.trim()) base.accommodation_total = price.value.trim();
       if (cleaning.value.trim()) base.cleaning_fee = cleaning.value.trim();
       if (mode.value === 'type') {
-        if (!type.value) throw new Error('Choose a room type for each room row.');
+        if (!type.value) throw new ApiError('Please check the highlighted fields.', { status: 400, fields: { [typeKey]: roomTypeProblem(num) } });
         const [property_id, ...rt] = type.value.split('|');
         // Never adjusted into range: a count the owner did not mean would book real rooms.
         const n = Number(count.value);
@@ -392,7 +399,8 @@ export async function groupDetailView(el, { params, rerender }) {
             h('td', null, h('a', { href: `#/reservations/${r.booking_id}` }, h('strong', null, r.unit_name)), off && h('span', { class: 'badge badge--voided' }, 'Cancelled')),
             h('td', null, `${fmtDate(r.check_in)} – ${fmtDate(r.check_out)}`, h('div', { class: 'muted small' }, `${nightsOf(r.check_in, r.check_out)} nights`)),
             h('td', null, r.num_guests ? String(r.num_guests) : '—'),
-            canManage && h('td', { class: 'num' }, peso(r.total_amount)),
+            // A cancelled room is not in the group total, so its amount is not shown as owed (the balance column does the same).
+            canManage && h('td', { class: 'num' }, off ? ['—', h('span', { class: 'sr-only' }, ' Cancelled')] : peso(r.total_amount)),
             canManage && h('td', { class: 'num' }, peso(r.amount_paid)),
             canManage && h('td', { class: `num${Number(r.balance) > 0 && !off ? ' amount--neg' : ''}` }, off ? '—' : peso(r.balance)),
             canManage && !cancelled && h('td', null, !off && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Remove ${r.unit_name} from the group`, onclick: () => removeRoom(r) }, 'Remove')));

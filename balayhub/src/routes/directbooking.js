@@ -284,6 +284,24 @@ publicRouter.get('/public/book/:slug/units/:unitId/availability', ah(async (req,
   res.json({ from, to, days: rows.map((r) => ({ ...r, price: prices.get(r.date)?.price ?? null, holiday: prices.get(r.date)?.kind === 'holiday' ? prices.get(r.date).label : null })) });
 }));
 
+// The guest-facing name of each rule that changed a night's price. Base, custom, minimum price and max discount add nothing.
+const PRICE_RULE_LABELS = new Map([
+  ['far_out', 'Booked-early price'], ['last_minute', 'Last-minute price'], ['gap_night', 'Gap-night price'],
+  ['weekend', 'Weekend price'], ['holiday', 'Holiday price'], ['season', 'Seasonal price'],
+]);
+
+// Each label once, in the order it first applies across the nights (a night's own kind, then the rules applied to it).
+function priceRules(nights) {
+  const labels = [];
+  for (const n of nights) {
+    for (const kind of [n.kind, ...n.applied.map((a) => a.kind)]) {
+      const label = PRICE_RULE_LABELS.get(kind);
+      if (label && !labels.includes(label)) labels.push(label);
+    }
+  }
+  return labels;
+}
+
 // `promo`: { orgId, code, email, strict } — strict (at checkout) rejects a bad code; otherwise it's reported.
 async function priceStay(u, checkIn, checkOut, promo = {}) {
   if (!isValidDate(checkIn) || !isValidDate(checkOut) || checkOut <= checkIn) throw validationError({ check_out: 'Choose a check-out date after check-in.' });
@@ -312,7 +330,7 @@ async function priceStay(u, checkIn, checkOut, promo = {}) {
   // A deposit only makes sense if the balance isn't already due.
   const depositAllowed = u.payment_option !== 'full' && due > manilaToday();
   return {
-    nights, subtotal: q.subtotal, discount_label: q.discount_label, discount_amount: q.discount_amount,
+    nights, price_rules: priceRules(q.nights), subtotal: q.subtotal, discount_label: q.discount_label, discount_amount: q.discount_amount,
     promo_code: applied?.code || null, promo_code_id: applied?.code_id || null, promo_label: applied?.label || null,
     promo_discount: applied ? applied.discount.toFixed(2) : '0.00', code_error: codeError,
     promo_note: applied?.returning_only && !promo.strict ? 'For returning guests: checked at payment against your previous stay.' : null,

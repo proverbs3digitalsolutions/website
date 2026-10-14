@@ -2,7 +2,7 @@
 
 BalayHub is a web app that helps Filipino hosts run 1 to 10 rental units from one place. It covers condo staycations listed on Airbnb, Booking.com and Agoda, and long-term monthly rentals such as apartments, boarding houses, dorms and bedspaces. Hosts get one calendar for every channel, a direct booking page with GCash, Maya and card payments, a guest inbox, cleaning tasks, condo gate passes, deposits, reports and owner statements. Long-term landlords get properties, tenants, leases, rent, expenses and repairs. This document describes what is **actually built** today, feature by feature, and lists what is planned. It was written from the code (`src/routes`, `src/lib`, `public/js`, `db/migrations`) and the existing docs.
 
-Last updated: 2026-10-15 (QA round 11; D-87)
+Last updated: 2026-10-15 (QA round 12; D-88)
 
 *2026-10-14 (D-85): the alpha targets owners of 1 to 3 properties; the Guesty-inspired ideas are on hold as reference only. QA puts small-host friction first.*
 
@@ -250,6 +250,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - Guest replies come in only when the server has `IMAP_URL` set. Otherwise the page explains replies go to the email inbox.
 - Templates: Booking confirmation, Check-in instructions, Thank you after check-out, Payment reminder, plus custom templates. Taglish versions exist.
 - Automatic messages: triggers on booking created, days before check-in, on check-in day, days before check-out, days after check-out, at a set Philippine time. Defaults are created **off**, and so is every automatic message the owner adds: the "Turned on" box starts empty (D-85). Only the owner can add, edit, turn on or delete automations.
+- *2026-10-15 (D-88): a template used by an automatic message can't be deleted until that message uses another template or is removed, and a message whose template was deleted can't be turned on. Messages list in a fixed order.*
 - **✨ Draft reply with AI** writes a draft in the guest's language (English, Tagalog or Taglish) for review. Shown only when `ANTHROPIC_API_KEY` is set and the plan includes AI (trial, Growth, Pro, Complimentary).
 - System notes appear for check-in forms, online payments, reviews and gate pass receipts.
 
@@ -393,6 +394,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - **Properties and units:** add (owner), edit, archive and restore. Occupancy comes from leases.
 - **Tenants and leases:** profiles with duplicate warning, assign a unit (creates a lease), change terms, end or cancel a lease, lease documents, payment history, owner-only data export.
 - **Rent:** monthly charges generated from each lease. Statuses paid, partial, unpaid, overdue. Payments go to the oldest charge first (the Record form names that month; the row's Record box is filled with that month's own amount).
+- *2026-10-15 (D-88): ending a lease, or changing its end date, caps an unpaid move-in charge's due date at the move-out date. The full month is still billed.*
 - **Payments:** full or partial, cash, bank, GCash, Maya, check, reference, receipt file. Never edited or deleted, only voided with a reason. Print gives an acknowledgement receipt (not a BIR official receipt); no receipt number yet (BLOCKERS).
 - **Expenses:** categories (repairs, utilities, taxes, insurance, association dues, supplies, salaries, cleaning, other), unit, vendor, receipt. Corrections are logged; voids keep history. Short-term workspaces see this page as "Expenses".
 - **Maintenance:** requests by property and unit, priority, status workflow (open, in progress, resolved, cancelled), repair costs saved as Repairs expenses, photos.
@@ -978,6 +980,8 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 
 ## Known gaps and open questions
 
+- QA round 12: the host app is English only; a host who signs up in Tagalog gets an English app and only guest pages and the verify screens switch (BLOCKERS round 12). The owner portal is also English throughout for now.
+- QA round 12: the Starter plan allows 2 short-term listings, so a host with 3 units needs Growth (D-03 unchanged; BLOCKERS round 12).
 - QA round 11: a printed rent acknowledgement has no balance-after line (needs a rule for advance credit and months paid oldest first; BLOCKERS round 11, decide with rent receipt numbers).
 - After a **new** Google sign-up the server redirects to `#/`, the landing page. The app does not send the user on to workspace setup from there. Unverified in a browser; worth checking.
 - The Inbox API returns `ai_needs_upgrade` for Starter plans, but the app does not use it. Starter users see no AI button and no upgrade hint.

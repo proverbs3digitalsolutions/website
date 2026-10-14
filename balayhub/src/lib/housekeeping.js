@@ -86,16 +86,19 @@ function cleanerKey(assignedTo, assigneeName) {
 // else gets pay only on a clean paid to them: the same payee rule as My pay (D-52), i.e.
 // assigned to them, or unassigned and finished by them (BACKEND-SCHEMA 6.1). Everyone
 // gets is_paid, yes or no with no amount, so a job page can show that a clean is paid.
-// A cleaner also gets the guest's first name only. The internal completed_by id is never sent.
+// A cleaner also gets the guest's first name only. The internal completed_by id is never sent: done_by_viewer
+// says only whether the viewer finished the clean, for every role.
 function presentTask(user, row) {
   const { completed_by: doneBy, ...task } = row;
   const is_paid = task.pay_status === 'paid';
-  if (['owner', 'manager'].includes(user.role)) return { ...task, is_paid };
+  const done_by_viewer = doneBy === user.user_id;
+  if (['owner', 'manager'].includes(user.role)) return { ...task, is_paid, done_by_viewer };
   const mine = task.assigned_to ? task.assigned_to === user.user_id
-    : !task.assignee_name && doneBy === user.user_id;
+    : !task.assignee_name && done_by_viewer;
   const shown = {
     ...task,
     is_paid,
+    done_by_viewer,
     pay_amount: mine ? task.pay_amount : null,
     pay_status: mine ? task.pay_status : null,
   };

@@ -3,7 +3,7 @@
 import { get, patch, qs } from '../api.js';
 import { h, fmtDate, fmtDateTime, manilaDay, badge, field, makeForm, openModal, confirmDialog, todayManila, emptyState, toast } from '../ui.js';
 import { state } from '../app.js';
-import { initFilters, filterBar, changed } from '../filters.js';
+import { initFilters, filterBar, changed, apiFilters } from '../filters.js';
 
 const BUSINESS = { short_term: 'Short-term stays', long_term: 'Monthly rentals', both: 'Both' };
 
@@ -29,7 +29,7 @@ export async function adminView(el, { rerender, query = {} }) {
   }
   const defaults = { q: '', status: '', plan: '', business_type: '', created_from: '', created_to: '', sort: '' };
   const filters = initFilters('admin-workspaces', query, defaults);
-  const first = await get(`/admin/workspaces${qs(changed(filters, defaults))}`);
+  const first = await get(`/admin/workspaces${qs(apiFilters(filters))}`);
   // The stats always count every workspace, whatever the filters.
   const { plans, summary, mrr } = first;
   const counts = {
@@ -95,7 +95,7 @@ export async function adminView(el, { rerender, query = {} }) {
   draw(first);
   async function load() {
     history.replaceState(null, '', `#/admin${qs(changed(filters, defaults))}`);
-    try { draw(await get(`/admin/workspaces${qs(changed(filters, defaults))}`)); } catch (err) { toast(err.message, 'error'); }
+    try { draw(await get(`/admin/workspaces${qs(apiFilters(filters))}`)); } catch (err) { toast(err.message, 'error'); }
   }
   const bar = filterBar({
     key: 'admin-workspaces', values: filters, defaults, onChange: load,

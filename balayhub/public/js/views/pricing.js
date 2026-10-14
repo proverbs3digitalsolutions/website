@@ -1,7 +1,8 @@
 // Pricing rules: how nightly prices are worked out, seasons, and the PH holiday calendar.
 
 import { get, post, patch, qs } from '../api.js';
-import { h, peso, fmtDate, field, formModal, openModal, confirmDialog, emptyState, pageHead, toast, todayManila, showErrors } from '../ui.js';
+import { h, peso, parseAmount, fmtDate, field, formModal, openModal, confirmDialog, emptyState, pageHead, toast, todayManila, showErrors } from '../ui.js';
+import { highRateOk } from '../rates.js';
 import { state } from '../app.js';
 import { addDays } from './reservations.js';
 
@@ -390,7 +391,7 @@ async function bulkModal({ listings, rerender }) {
       total = r.count;
       result.replaceChildren(
         h('p', null, h('strong', null, `${total} ${actSel.value === 'block' ? 'block' : 'manual block'}${total === 1 ? '' : 's'} would be ${actSel.value === 'block' ? 'created' : 'cancelled'}.`)),
-        rows.length ? tableOf(['Listing', 'From', 'To'], rows.map((x) => [x.unit_name, fmtDate(x.check_in), fmtDate(x.check_out)])) : null,
+        rows.length ? tableOf(['Listing', 'From', 'Last night'], rows.map((x) => [x.unit_name, fmtDate(x.check_in), fmtDate(addDays(x.check_out, -1))])) : null,
         skipped(r.skipped));
     } else {
       const rows = r.changes;
@@ -405,6 +406,8 @@ async function bulkModal({ listings, rerender }) {
     if (total === 0 && isBlocks()) result.append(h('p', { class: 'muted small' }, 'Nothing to change for these choices.'));
   });
   applyBtn.addEventListener('click', async () => {
+    // A typed price above the ceiling is asked about before it is applied; "Change it" puts focus back in the price box.
+    if (actSel.value === 'set' && !await highRateOk(parseAmount(price.value))) { price.focus(); return; }
     applyBtn.disabled = true; applyBtn.textContent = 'Applying…';
     const r = await run(false);
     applyBtn.textContent = 'Apply';

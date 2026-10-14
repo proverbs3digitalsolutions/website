@@ -5,7 +5,7 @@ import {
   h, icon, peso, fmtDate, fmtDateTime, fmtMonth, badge, label, options, field, formModal, confirmDialog, emptyState,
   pageHead, toast, todayManila, filesList, openModal, unitLabel, parseAmount } from '../ui.js';
 import { state, navigate } from '../app.js';
-import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
+import { initFilters, filterBar, rememberFilters, changed, apiFilters } from '../filters.js';
 
 const METHODS = ['cash', 'bank_transfer', 'gcash', 'maya', 'check', 'other'];
 // A tenant who is archived reads "(archived)"; one who has moved out reads "(former)".
@@ -161,6 +161,8 @@ const NOT_NARROWING = ['status', 'sort'];
 // A status chip narrows the list too, except All unpaid, Overdue and All, whose own empty text already fits.
 const STATUS_OWN_EMPTY_TEXT = ['outstanding', 'overdue', 'all'];
 export const statusCountsAsFilter = (status) => !STATUS_OWN_EMPTY_TEXT.includes(status);
+// A host with 3 or fewer units rarely needs to pick a month or a property first, so those two sit under More filters.
+export const compactRentFilters = (unitCount) => unitCount <= 3;
 
 // The last 24 months, newest first, for the rent roll's month filter.
 function recentMonths(today) {
@@ -202,7 +204,7 @@ export async function rentView(el, { query }) {
     load();
   };
   const noResults = () => emptyState({ title: 'No results found', text: 'Nothing matches these filters. Try removing a filter.', action: h('button', { class: 'btn btn--secondary', onclick: clearFilters }, 'Clear filters') });
-  const apiQuery = () => qs(changed(valuesFor(tab), TABS[tab].defaults));
+  const apiQuery = () => qs(apiFilters(valuesFor(tab), TABS[tab].defaults));
 
   async function load() {
     const f = valuesFor(tab);
@@ -220,11 +222,15 @@ export async function rentView(el, { query }) {
     // "all" isn't a status the server knows, so it lists every charge.
     const { charges, totals } = await get(`/rent${apiQuery()}`);
     const filtered = isFiltered();
+    // The cards count every unpaid charge (only the property narrows them); say so when the list below is narrowed further.
+    const cardsCaption = Object.keys(changed(f, TABS.rent.defaults)).some((k) => !['status', 'sort', 'property_id'].includes(k));
+    const cardProperty = properties.find((p) => p.property_id === f.property_id)?.property_name;
     summary.replaceChildren(h('div', { class: 'stats' },
       h('div', { class: 'stat' }, h('div', { class: 'stat__label' }, 'Outstanding'), h('div', { class: 'stat__value' }, peso(totals.outstanding))),
       h('div', { class: `stat${Number(totals.overdue) > 0 ? ' stat--alert' : ''}` }, h('div', { class: 'stat__label' }, 'Overdue'), h('div', { class: 'stat__value' }, peso(totals.overdue)), h('div', { class: 'stat__sub' }, `${totals.overdue_count} overdue charge${totals.overdue_count === 1 ? '' : 's'}`)),
       h('div', { class: 'stat' }, h('div', { class: 'stat__label' }, 'Partly paid'), h('div', { class: 'stat__value' }, totals.partial_count)),
-      h('div', { class: 'stat' }, h('div', { class: 'stat__label' }, 'Due, not yet paid'), h('div', { class: 'stat__value' }, totals.unpaid_count))));
+      h('div', { class: 'stat' }, h('div', { class: 'stat__label' }, 'Due, not yet paid'), h('div', { class: 'stat__value' }, totals.unpaid_count))),
+      cardsCaption && h('p', { class: 'muted small' }, `The cards count all unpaid rent, every month and tenant${cardProperty ? ` at ${cardProperty}` : ''}.`));
     const due = charges.reduce((sum, c) => sum + Number(c.balance), 0);
     body.replaceChildren(h('div', { class: 'card' }, charges.length
       ? [filtered && h('p', { class: 'muted small' }, `Showing ${charges.length} charge${charges.length === 1 ? '' : 's'} · ${peso(due)} still to collect`),
@@ -287,13 +293,13 @@ export async function rentView(el, { query }) {
 
   function barConfig(f) {
     if (tab === 'rent') {
+      const monthProp = [{ name: 'month', label: 'Month', all: 'All months', options: recentMonths(todayManila()) }, propertyField()].filter(Boolean);
+      const compact = compactRentFilters(units.length);
       return {
         search: { placeholder: 'Search tenant, unit or property' },
-        quick: [
-          { name: 'month', label: 'Month', all: 'All months', options: recentMonths(todayManila()) },
-          propertyField(),
-        ].filter(Boolean),
+        quick: compact ? [] : monthProp,
         more: [
+          ...(compact ? monthProp : []),
           unitField(f),
           { name: 'late', label: 'Days late', all: 'Any', options: [['7', 'More than 7 days late'], ['30', 'More than 30 days late'], ['60', 'More than 60 days late'], ['90', 'More than 90 days late']] },
           { name: 'lease', label: 'Tenant', all: 'Current and former', options: [['current', 'Current tenants'], ['former', 'Moved out (still owing)']] },

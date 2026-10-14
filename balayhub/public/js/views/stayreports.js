@@ -18,6 +18,19 @@ function isDay(v) {
   return /^\d{4}-\d{2}-\d{2}$/.test(v || '') && !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
 }
 
+// The period a link means. A link with a from or to date and no period is a custom range (links from before the period was in the address).
+export function periodFromLink(query) {
+  if (query.period) return query.period;
+  return query.from || query.to ? 'range' : '';
+}
+
+// Choosing a period drops the other periods' keys, so the address and a reload show only the period on screen (#23).
+export function periodPatch(period) {
+  if (period === 'year') return { period, month: '', from: '', to: '' };
+  if (period === 'range') return { period, month: '', year: '' };
+  return { period: '', year: '', from: '', to: '' };
+}
+
 function stat(label, value, sub) {
   return h('div', { class: 'stat stat--flat' }, h('div', { class: 'stat__value' }, value), h('div', { class: 'stat__label' }, label), sub && h('div', { class: 'muted small' }, sub));
 }
@@ -107,6 +120,10 @@ export async function stayReportsView(el, { query = {} }) {
   const defaults = { period: '', month: '', year: '', from: '', to: '', property_id: '', unit_id: '', channel: '' };
   const filters = initFilters('stay-reports', query, defaults);
   if (!filters.period && filters.year && !query.month) filters.period = 'year'; // old links: ?year=2026
+  if (!filters.period) filters.period = periodFromLink(query); // a link with from or to and no period is a custom range
+  // A link date that is not a real day (2026-02-30, or text) can't be shown: this month is shown, both link dates are dropped, and the status line says why.
+  let linkInvalid = periodFromLink(query) === 'range' && [query.from, query.to].some((v) => v && !isDay(v));
+  if (linkInvalid) Object.assign(filters, { period: '', from: '', to: '' });
   // initFilters() holds back a range that runs backwards. A shared link keeps its real dates on screen; load() says why.
   // A link date outside 2000 to 2100 is never put back on screen: the status line names that problem instead.
   if (filters.period === 'range' && isDay(query.from) && isDay(query.to) && query.to < query.from && !outOfWindow(query.from) && !outOfWindow(query.to)) { filters.from = query.from; filters.to = query.to; }
@@ -115,13 +132,13 @@ export async function stayReportsView(el, { query = {} }) {
   const periodBox = h('div', { class: 'flt__period' });
   const status = h('span', { class: 'muted small', id: 'stay-report-status' });
   const notice = h('div');
-  const setPeriod = (patch) => { windowLink = false; Object.assign(filters, patch); rememberFilters('stay-reports', filters); load(); };
+  const setPeriod = (patch) => { windowLink = false; linkInvalid = false; Object.assign(filters, patch); rememberFilters('stay-reports', filters); load(); };
 
   function drawPeriod() {
     // Drawing the controls again drops focus, so the control that had it gets it back (found by its name).
     const focusName = periodBox.contains(document.activeElement) && document.activeElement.getAttribute('aria-label');
     // Same control size as the Property, Listing and Channel selects, so the whole filter row lines up.
-    const sel = h('select', { class: 'input', 'aria-label': 'Period', onchange: (e) => setPeriod({ period: e.target.value }) },
+    const sel = h('select', { class: 'input', 'aria-label': 'Period', onchange: (e) => setPeriod(periodPatch(e.target.value)) },
       [['', 'Month'], ['year', 'Whole year'], ['range', 'Custom dates']].map(([v, t]) => h('option', { value: v, selected: filters.period === v }, t)));
     let inputs;
     if (filters.period === 'year') {
@@ -153,7 +170,8 @@ export async function stayReportsView(el, { query = {} }) {
     if (filters.period === 'year') periodQ = { year: filters.year || thisYear };
     else if (filters.period === 'range' && filters.from && filters.to && !backwards) periodQ = { from: filters.from, to: filters.to };
     else periodQ = { month: filters.month || todayManila().slice(0, 7) };
-    status.textContent = windowLink ? `${OUT_OF_WINDOW} Showing this month for now.`
+    status.textContent = linkInvalid ? 'The dates in this link aren\'t valid. Showing this month for now.'
+      : windowLink ? `${OUT_OF_WINDOW} Showing this month for now.`
       : backwards ? 'The end date must be after the start date. Showing this month for now.'
       : filters.period === 'range' && !(filters.from && filters.to) ? 'Choose both dates. Showing this month for now.' : '';
     const apiQ = qs({ ...periodQ, ...scopeOf(filters) });
@@ -164,6 +182,8 @@ export async function stayReportsView(el, { query = {} }) {
     if (r.month_invalid) { filters.month = r.period; drawPeriod(); setUrl(changed(filters, defaults)); }
     notice.replaceChildren(r.month_invalid ? h('div', { class: 'alert alert--warn', role: 'alert' }, `That month isn't valid. Showing ${monthName(r.period)}.`) : '');
     if (r.partial && !status.textContent) status.textContent = 'Includes upcoming confirmed stays.';
+    // The note under the totals names the period on screen. A bad month was replaced by the server's month, which is r.period.
+    const when = periodQ.year ? String(periodQ.year) : periodQ.from ? 'the dates you chose' : monthName(r.period);
     const t = r.totals;
     const narrowed = filters.property_id || filters.unit_id || filters.channel;
     if (!t.nights && !t.stays) {
@@ -179,7 +199,8 @@ export async function stayReportsView(el, { query = {} }) {
           stat('Avg nightly rate', peso(t.adr), `RevPAR ${peso(t.revpar)}`),
           stat('Net (before refunds)', peso(t.net), r.expenses_excluded ? `${peso(t.channel_fees)} channel fees · expenses not split by channel` : `${peso(t.channel_fees)} channel fees · ${peso(t.expenses)} expenses`)),
         h('p', { class: 'muted small' }, `Average stay ${t.avg_stay} nights (whole stays, check-ins in this period)${t.cancelled ? ` · ${t.cancelled} cancelled` : ''}.`),
-        h('p', { class: 'muted small' }, 'Refunds aren\'t deducted here. Profit and loss shows the net after refunds.')),
+        h('p', { class: 'muted small' }, 'Refunds aren\'t deducted here. Profit and loss shows the net after refunds.'),
+        h('p', { class: 'muted small' }, `Counts nights in ${when}, including upcoming confirmed stays. Profit and loss counts only stays that have checked out.`)),
       h('div', { class: 'grid grid--2' },
         h('div', { class: 'card' }, h('h2', null, 'Revenue by channel'),
           shareBars(r.channels, (c) => c.revenue, (c) => c.label),

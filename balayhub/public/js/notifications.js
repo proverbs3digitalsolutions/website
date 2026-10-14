@@ -111,7 +111,7 @@ export async function notificationsCard(rerender) {
     s.devices.length > 0 && h('p', { class: 'muted small' }, `Turned on for: ${s.devices.map((d) => d.device || 'a device').join(', ')}`),
     noTypes
       ? h('p', { class: 'muted' }, 'Alerts for monthly rentals aren’t available yet.')
-      : h('fieldset', { class: 'checks', style: { border: 0, padding: 0, margin: '12px 0 0' } },
+      : h('fieldset', { class: 'checks notify-list', style: { border: 0, padding: 0, margin: '12px 0 0' } },
         h('legend', { class: 'small' }, 'Notify me about'),
         s.types.map((t) => h('label', { class: 'check' },
           h('input', { type: 'checkbox', checked: t.on, onchange: (e) => toggle(e.target, t.key) }),

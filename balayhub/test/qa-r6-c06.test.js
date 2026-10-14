@@ -141,7 +141,7 @@ test('updating an existing close says "Close updated."; a first close still says
     }
 
     assert.equal(await submitClose(null), 'Day closed.', 'a first close says the day is closed');
-    const updated = { closed_at: '2026-10-14T10:00:00Z', closed_by_name: 'Bea Reyes', note: 'Checked' };
+    const updated = { closed_at: '2026-10-14T10:00:00Z', closed_by_name: 'Bea Reyes', note: 'Checked', can_change: true };
     assert.equal(await submitClose(updated), 'Close updated.', 'updating a close does not say it was closed again');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });

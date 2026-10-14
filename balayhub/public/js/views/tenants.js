@@ -5,7 +5,7 @@ import {
   h, icon, peso, fmtDate, badge, label, field, formModal, confirmDialog, emptyState, pageHead, toast,
   todayManila, filesList, openModal, unitLabel } from '../ui.js';
 import { state, navigate } from '../app.js';
-import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
+import { initFilters, filterBar, rememberFilters, changed, apiFilters } from '../filters.js';
 import { recordPaymentModal } from './rent.js';
 
 function tenantFields(t = {}) {
@@ -135,7 +135,7 @@ export async function tenantsView(el, { query }) {
   async function load() {
     history.replaceState(null, '', `#/tenants${qs(changed(filters, defaults))}`);
     tabs.replaceChildren(...['active', 'archived'].map((s) => h('button', { role: 'tab', 'aria-selected': String(filters.status === s), onclick: () => { filters.status = s; rememberFilters('tenants', filters); load(); } }, s === 'active' ? 'Current' : 'Archived')));
-    const { tenants } = await get(`/tenants${qs(changed(filters, defaults))}`);
+    const { tenants } = await get(`/tenants${qs(apiFilters(filters))}`);
     const filtered = Object.keys(changed(filters, defaults)).some((k) => k !== 'status' && k !== 'sort');
     const owing = tenants.reduce((sum, t) => sum + Number(t.outstanding), 0);
     listCard.replaceChildren(tenants.length

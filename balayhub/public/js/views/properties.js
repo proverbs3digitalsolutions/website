@@ -4,7 +4,7 @@ import { get, post, patch, qs, ApiError } from '../api.js';
 import {
   h, icon, peso, badge, label, options, field, formModal, confirmDialog, emptyState, pageHead, toast, todayManila, unitLabel } from '../ui.js';
 import { state, navigate } from '../app.js';
-import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
+import { initFilters, filterBar, rememberFilters, changed, apiFilters } from '../filters.js';
 import { assignTenantModal } from './tenants.js';
 
 const PROPERTY_TYPES = ['apartment', 'boarding_house', 'condominium', 'house', 'commercial', 'dormitory', 'other'];
@@ -109,7 +109,7 @@ export async function propertiesView(el, { query }) {
       role: 'tab', 'aria-selected': String(filters.status === s),
       onclick: () => { filters.status = s; rememberFilters('properties', filters); load(); },
     }, t)));
-    const { properties } = await get(`/properties${qs(changed(filters, defaults))}`);
+    const { properties } = await get(`/properties${qs(apiFilters(filters))}`);
     const filtered = Object.keys(changed(filters, defaults)).some((k) => k !== 'status' && k !== 'sort');
     listCard.replaceChildren(properties.length
       ? [filtered && h('p', { class: 'muted small' }, `Showing ${properties.length} propert${properties.length === 1 ? 'y' : 'ies'}`),

@@ -39,7 +39,7 @@ const MOVEMENT_FIELDS = {
 const TASK_ITEM_FIELDS = {
   supply_id: { type: 'uuid', required: true, label: 'Supply' },
   kind: { type: 'enum', values: ['used', 'restocked'], required: true, label: 'Movement' },
-  quantity: { type: 'int', required: true, min: 1, max: MAX_QTY, label: 'Quantity' },
+  quantity: { type: 'int', required: true, min: 1, max: MAX_QTY, label: 'Quantity', message: 'Enter a quantity of at least 1.' },
   record_on_hand: { type: 'bool', label: 'Record what is on hand' },
 };
 

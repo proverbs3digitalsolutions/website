@@ -2,7 +2,7 @@
 
 import { get, post, uploadFile, qs } from '../api.js';
 import { h, peso, fmtDate, fmtDateTime, field, formModal, confirmDialog, toast, badge, todayManila, emptyState, parseAmount } from '../ui.js';
-import { initFilters, filterBar, changed } from '../filters.js';
+import { initFilters, filterBar, changed, apiFilters } from '../filters.js';
 import { state } from '../app.js';
 
 const METHODS = [['cash', 'Cash'], ['gcash', 'GCash'], ['maya', 'Maya'], ['bank_transfer', 'Bank transfer'], ['card', 'Card'], ['other', 'Other']];
@@ -131,7 +131,7 @@ export async function depositsPanel({ query = {}, onUrl }) {
 
   async function load() {
     onUrl?.(changed(filters, defaults));
-    const { deposits } = await get(`/deposits${qs(changed(filters, defaults))}`);
+    const { deposits } = await get(`/deposits${qs(apiFilters(filters))}`);
     const filtered = Object.keys(changed(filters, defaults)).some((k) => k !== 'sort');
     if (!deposits.length) {
       listBox.replaceChildren(emptyState({

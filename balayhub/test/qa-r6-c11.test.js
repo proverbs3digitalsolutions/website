@@ -260,7 +260,7 @@ test('rent.js: payments and expenses use one amount range, and the rent roll "at
   assert.match(rent, /type: 'amountrange', keys: \['min_amount', 'max_amount'\]/);
   assert.match(rent, /label: 'Amount due at least \(₱\)', type: 'number', min: 0, step: '0\.01', pattern: AMOUNT_PATTERN, patternText: 'Enter an amount of 0 or more \(up to 10 digits\)\.'/);
   // qa-r5-c15 loads rent.js with a stub filters.js that exports only these four names, so rent.js must not import more.
-  assert.match(rent, /import \{ initFilters, filterBar, rememberFilters, changed \} from '\.\.\/filters\.js';/);
+  assert.match(rent, /import \{ initFilters, filterBar, rememberFilters, changed, apiFilters \} from '\.\.\/filters\.js';/);
 });
 
 test('the amount rule is the server rule: money.js, filters.js and rent.js use the same pattern', () => {

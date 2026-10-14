@@ -1,7 +1,7 @@
 // BalayHub single-page app: routing, session state and the app shell.
 
 import { get, post, onAuthLost, ApiError } from './api.js';
-import { h, icon, brand, toast, errorState, skeleton, FOCUS_CHECKS } from './ui.js';
+import { h, icon, brand, toast, pageError, skeleton, FOCUS_CHECKS } from './ui.js';
 import * as authViews from './views/auth.js';
 import { dashboardView } from './views/dashboard.js';
 import { propertiesView, propertyDetailView } from './views/properties.js';
@@ -48,6 +48,7 @@ import { registerServiceWorker, forgetThisDevice } from './notifications.js';
 import { themeSwitch } from './themeswitch.js';
 import { assistantButton, placeAssistantButton, resetAssistant } from './assistant.js';
 import { h1Title } from './i18n.js';
+import * as i18n from './i18n.js';
 
 export const state = { user: null, requireEmailVerification: true };
 
@@ -413,6 +414,16 @@ function buildShell(path) {
 const PUBLIC_TITLES = { '/login': 'Log in', '/signup': 'Sign up', '/forgot': 'Forgot password' };
 const RESET_TITLE = 'BalayHub — Rental Property Management';
 let renderSeq = 0;
+let lastDrawing = null; // the path the shell on screen is drawing or showing
+let drawnPath = null; // the path last drawn to the end: a different path next moves focus to the new page's heading
+
+// Focus goes to the new page's heading after a route change, but only when nothing (a dialog, a field) has taken it.
+function focusPageHeading(root) {
+  const a = document.activeElement;
+  if (a && a !== document.body && a.isConnected) return;
+  const h1 = root.querySelector('h1');
+  if (h1) { h1.setAttribute('tabindex', '-1'); h1.focus(); }
+}
 export async function render() {
   const seq = ++renderSeq;
   const { path, query } = parseHash();
@@ -438,36 +449,57 @@ export async function render() {
   delete document.documentElement.dataset.h1title; // set below when a guest page's tab title is taken from its heading
   const ctx = { params: route.params, query, state, navigate, rerender: render };
 
+  // Signed-in screens are the English host app too; only the verify screens stay in the guest's language.
+  if (route.access === SIGNED_IN && route.view !== authViews.verifyView && route.view !== authViews.verifyPendingView) i18n.useHostLang?.();
+
   if (route.access === APP) {
     // The screen someone was on before Help, attached to a support ticket.
     if (!path.startsWith('/help')) state.lastPage = location.hash;
+    i18n.useHostLang?.(); // a guest page may have left the in-memory language on Taglish
+    // Same page again (rerender, report tab): the old page stays on screen, busy, until the new one is drawn.
+    const prev = shell?.content?.isConnected && lastDrawing === path ? shell.content : null;
     shell = buildShell(path);
     app.replaceChildren(shell.el);
     placeAssistantButton();
-    const mount = shell.content;
-    mount.replaceChildren(skeleton());
+    let mount = shell.content;
+    if (prev) {
+      mount.replaceWith(prev);
+      prev.setAttribute('aria-busy', 'true');
+      shell.content = prev;
+      mount = h('main', { class: 'content', id: 'main' });
+    } else mount.replaceChildren(skeleton());
+    lastDrawing = path;
     try {
       await route.view(mount, ctx);
     } catch (err) {
       if (seq !== renderSeq) return;
       if (err.status === 401) return;
-      mount.replaceChildren(errorState(err, render));
+      mount.replaceChildren(pageError(err, render));
     }
+    if (seq !== renderSeq) return;
+    if (prev) { prev.replaceWith(mount); shell.content = mount; }
     const title = mount.querySelector('h1')?.textContent;
     document.title = title ? `${title} — BalayHub` : 'BalayHub';
-    if (seq === renderSeq) window.scrollTo(0, 0);
+    if (!prev) window.scrollTo(0, 0);
+    if (drawnPath !== null && drawnPath !== path) focusPageHeading(mount);
+    drawnPath = path;
   } else {
+    lastDrawing = null;
     shell = null;
     const mount = h('div');
     app.replaceChildren(mount);
     document.title = RESET_TITLE;
-    try { await route.view(mount, ctx); } catch (err) { mount.replaceChildren(errorState(err, render)); }
+    try { await route.view(mount, ctx); } catch (err) { mount.replaceChildren(pageError(err, render)); }
     // Landing keeps the site title; sign-in pages have friendly h1s, so name them; others use their h1 (minus a leading brand name).
     // A title the view set itself (the booking page names its host) is kept. Pages titled from the heading are marked so a language switch re-takes it.
     const title = path === '/' ? '' : PUBLIC_TITLES[path] || h1Title(mount);
     if (seq === renderSeq && title && document.title === RESET_TITLE) {
       document.title = `${title} — BalayHub`;
       if (!PUBLIC_TITLES[path]) document.documentElement.dataset.h1title = '1';
+    }
+    if (seq === renderSeq) {
+      if (drawnPath !== null && drawnPath !== path) focusPageHeading(mount);
+      drawnPath = path;
     }
   }
 }
@@ -660,7 +692,7 @@ document.addEventListener('click', (e) => {
   try {
     await refreshUser();
   } catch {
-    document.getElementById('app').replaceChildren(errorState({ message: "Can't reach BalayHub. Check your internet connection." }, () => location.reload()));
+    document.getElementById('app').replaceChildren(pageError({ message: "Can't reach BalayHub. Check your internet connection." }, () => location.reload()));
     return;
   }
   render();

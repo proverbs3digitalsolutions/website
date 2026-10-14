@@ -31,5 +31,7 @@ test('a Custom range with both dates empty asks for both dates and runs no repor
 });
 
 test('that empty custom state also clears the export link, so it cannot export a period the page does not show', () => {
-  assert.match(beforeFetch, /exportLink\.removeAttribute\('href'\)/);
+  // Round 12 (K14): the clearing moved into exportReady(false), which also marks the link aria-disabled.
+  assert.match(beforeFetch, /exportReady\(false\)/);
+  assert.match(src, /else \{ exportLink\.removeAttribute\('href'\); exportLink\.setAttribute\('aria-disabled', 'true'\); \}/);
 });

@@ -2,7 +2,7 @@
 
 Things only the founder can do or decide before related work can go ahead. Automated runs add items here. The founder clears them by doing the item and ticking it, or by writing the decision in DECISIONS.MD.
 
-Last updated: 2026-10-15 (QA round 11 questions added; earlier rounds unchanged)
+Last updated: 2026-10-15 (QA round 12 questions added; earlier rounds unchanged apart from one inline note)
 
 ## Security — do first
 
@@ -128,7 +128,7 @@ Each one has the default already applied. None of them stops the work.
 
 Each one has the default already applied. None of them stops the work.
 
-- [ ] **Staff and property money details.** Staff can't see rent, deposits, the admin email or gate-pass notes on screen, but the app still sends those numbers to a staff member's browser when they open a property. Should we stop sending them to staff? *Default: no change for now. It matches the written access rules, and nothing on the staff screen shows them.*
+- [ ] **Staff and property money details.** Staff can't see rent, deposits, the admin email or gate-pass notes on screen, but the app still sends those numbers to a staff member's browser when they open a property. Should we stop sending them to staff? *Default: no change for now. It matches the written access rules, and nothing on the staff screen shows them.* *2026-10-15 (D-88): staff no longer receive the admin email or the gate-pass settings; staff do see a listing's cancellation policy and deposit %. Rent and deposit amounts on a property are unchanged.*
 - [ ] **Staff invited with no property.** You can invite a staff member without giving them a property. They then see an empty workspace until you assign one. Should staff need a property too, as managers and cleaners do? *Default: allowed, as today.*
 - [ ] **Taglish descriptions for add-ons.** Add-on names can have a Taglish version, but their descriptions can't, so guests reading in Taglish see the description in English. Do you want a Taglish description box? *Default: no. Descriptions show as you typed them.*
 - [ ] **Inserting a template under a typed message.** When you pick a template after typing a reply, the template now goes below your text, and a typed subject is kept. Would you rather we ask first? *Default: add below.*
@@ -290,3 +290,20 @@ Every question has its default already applied in the app; nothing waits on the 
 - [ ] **Housekeeping on the phone's bottom bar.** Housekeeping is under More on phones. Should it take a bottom-bar slot, or should owners pick the four items? *Default: unchanged.*
 - [ ] **Taglish check (native speaker).** Please check: "Tuluyan" for the room charge; "{pct}% na deposit"; "Hindi available ang online payment ngayon. Subukan ulit pagkalipas ng ilang minuto, o kontakin ang host."; "Ibinalik sa iyo, idinagdag ulit sa babayaran"; the Check your email and verify screens; and the other new sentences (the guest-count message and the not-available listing message). *Default: as written.*
 - [ ] **Rent acknowledgement balance.** Should a printed rent acknowledgement show the tenant's balance after the payment? It needs a rule for advance credit and months paid oldest first. Decide together with rent receipt numbers (round 10 question 4). *Default: no balance line.*
+
+## Questions from QA round 12 (2026-10-15)
+
+Every question has its default already applied in the app; nothing waits on the answer.
+
+- [ ] **Owner portal language.** Should the owner portal be Taglish? Today it is English throughout, because a mixed Taglish heading over an English body was worse. The two strings that were translated are English again. *Default: English.*
+- [ ] **Who finished a clean.** A cleaner's task list still sends `completed_by_name`, so a cleaner can see who finished another cleaner's job. May they? Or should a cleaner see only "Done by you" and "Done"? *Default: unchanged (names shown).*
+- [ ] **Bulk price changes.** Saving one nightly rate above ₱50,000 now asks "Save anyway?". "Change prices by %" can push many nights over that in one go and does not ask yet. Should it ask when any result is above ₱50,000? *Default: no question on bulk percent changes.*
+- [ ] **High nightly rate.** Is ₱50,000 the right limit for the "Save anyway?" question, or should it refuse above some amount instead? *Default: ask above ₱50,000, refuse nothing.*
+- [ ] **Host app language.** A host who signs up in Tagalog gets an English app (only guest pages and the verify screens switch). Should the host app offer Tagalog? *Default: English.*
+- [ ] **Starter plan and a 3-unit host.** Starter allows 2 short-term listings, so a host with 3 units needs Growth (₱999 a month). Is that right for the alpha? *Default: unchanged (D-03).*
+- [ ] **Automatic messages start off.** The page now says the four starter messages are ready but off. Should they start on instead? *Default: off, with the line.*
+- [ ] **Rent filters for small hosts.** With 3 or fewer units, Month and Property sit under More filters. OK? *Default: yes.*
+- [ ] **Supply row buttons.** Each supply shows Add stock and Record use. Count, History, Edit and Archive are under More. OK? *Default: yes.*
+- [ ] **Where did they book?** A direct booking still asks where the guest found you, now marked optional. Fold it into Booked through instead? *Default: keep, optional.*
+- [ ] **Record payment method.** A direct booking's payment now starts with no method and the host must pick one. Or remember the last method used? *Default: no method.*
+- [ ] **Taglish check (native speaker).** Please check: "Code ng pinto"; "Kasama: ..." and the price-rule names; "Hanggang 50 na guests lang ang puwede."; and the verify screens (Check your email, "I've verified, continue", Resend). The setup screens and the owner portal are English for now. *Default: as written.*

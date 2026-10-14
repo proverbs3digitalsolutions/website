@@ -95,7 +95,7 @@ test('past day: arrivals and cleanings use what was true at the end of that day'
 test('views: maintenance status, buttons; daily close reopen button', () => {
   const dir = path.join(__dirname, '..', 'public', 'js', 'views');
   const m = fs.readFileSync(path.join(dir, 'maintenance.js'), 'utf8');
-  assert.match(m, /status: filters\.status/);
+  assert.match(m, /apiFilters\(filters\)/);
   assert.match(m, /resolved: \['open'\]/);
   assert.doesNotMatch(m, /resolved: \['open', 'cancelled'\]/);
   assert.match(m, /Back to open/);

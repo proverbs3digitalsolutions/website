@@ -73,11 +73,17 @@ export async function addonsView(el, { query = {}, rerender }) {
     history.replaceState(null, '', `#/addons${qs(changed(filters, defaults))}`);
     rememberFilters('addons', filters);
     const q = filters.q.toLowerCase();
-    const shown = addons.filter((a) => (!q || a.name.toLowerCase().includes(q)) && (!filters.status || (filters.status === 'active') === a.active));
-    box.replaceChildren(shown.length ? h('ul', { class: 'list' }, shown.map(row))
+    const matches = (a) => !q || a.name.toLowerCase().includes(q);
+    // The All tab lists active add-ons only. An archived copy can look just like the active one, so the page says how many it leaves out (#28).
+    const archivedTab = filters.status === 'archived';
+    const shown = addons.filter((a) => matches(a) && Boolean(a.active) !== archivedTab);
+    const hidden = filters.status ? 0 : addons.filter((a) => matches(a) && !a.active).length;
+    const content = shown.length ? h('ul', { class: 'list' }, shown.map(row))
       : addons.length ? emptyState({ iconName: 'inbox', title: 'No results found', text: 'Try another search or status.' })
         : emptyState({ iconName: 'plus', title: 'No add-ons yet', text: 'Offer airport pickup, early check-in, an extra bed or breakfast, and get paid with the booking.',
-          action: isOwner && h('button', { class: 'btn btn--primary', onclick: () => addonModal(null, listings, rerender) }, 'Add your first add-on') }));
+          action: isOwner && h('button', { class: 'btn btn--primary', onclick: () => addonModal(null, listings, rerender) }, 'Add your first add-on') });
+    const note = hidden && h('p', { class: 'muted small' }, `${hidden} archived add-on${hidden === 1 ? '' : 's'} not shown. `, h('a', { href: '#/addons?status=archived' }, 'See Archived'), '.');
+    box.replaceChildren(...[content, note].filter(Boolean));
   }
   const bar = filterBar({ key: 'addons', values: filters, defaults, onChange: load, search: { placeholder: 'Search add-ons' },
     quick: [{ name: 'status', label: 'Status', all: 'All add-ons', options: [['active', 'Active'], ['archived', 'Archived']] }] });

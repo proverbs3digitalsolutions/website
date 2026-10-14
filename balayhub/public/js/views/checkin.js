@@ -70,10 +70,12 @@ export async function guestCheckinView(el, { params }, kept) {
   }
   const { stay: s, registration: r } = data;
   initGuestLang(s.guest_language);
+  const heading = h('h1', null, s.closed ? t('Guest registration') : s.checked_in ? t('Your check-in details') : s.guest_first_name ? t('Hi {name}! Please register before you arrive', { name: s.guest_first_name }) : t('Guest registration'));
+  const intro = !s.closed && h('p', { class: 'muted' }, t('The building requires the names and a valid ID of everyone staying. It takes about 2 minutes.'));
   const header = h('div', { class: 'gc__stay card' },
     h('p', { class: 'gc__eyebrow' }, s.workspace_name),
-    h('h1', null, s.closed ? t('Guest registration') : s.checked_in ? t('Your check-in details') : s.guest_first_name ? t('Hi {name}! Please register before you arrive', { name: s.guest_first_name }) : t('Guest registration')),
-    !s.closed && h('p', { class: 'muted' }, t('The building requires the names and a valid ID of everyone staying. It takes about 2 minutes.')),
+    heading,
+    intro,
     h('dl', { class: 'dl', style: { marginTop: '12px' } },
       h('dt', null, t('Stay')), h('dd', null, `${s.listing}, ${s.property}${s.city ? `, ${s.city}` : ''}`),
       h('dt', null, t('Check-in')), h('dd', null, s.checkin_time ? t('{date}, from {time}', { date: fmtDateL(s.check_in), time: fmtTime(s.checkin_time) }) : fmtDateL(s.check_in)),
@@ -198,9 +200,11 @@ export async function guestCheckinView(el, { params }, kept) {
         uploaded.add(f);
       }
       progress.textContent = '';
+      // The page heading becomes the thank-you, so the screen no longer says "Please register".
+      heading.textContent = t("Thank you! You're registered.");
+      if (intro) intro.hidden = true;
       el.replaceChildren(page(header, h('div', { class: 'card gc__done' },
         h('div', { class: 'gc__tick', 'aria-hidden': 'true' }, '✓'),
-        h('h2', null, t("Thank you! You're registered.")),
         h('p', { class: 'muted' }, t("{host} has received your details. You'll get your check-in instructions before arrival.", { host: s.workspace_name })),
         h('p', null, h('button', { class: 'linkbtn', onclick: () => guestCheckinView(el, { params }) }, t('Review or change my answers'))))));
     } catch (err) {

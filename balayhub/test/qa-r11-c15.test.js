@@ -54,9 +54,9 @@ test('#23 the Publish text promises the portal only when the owner\'s portal is 
   assert.doesNotMatch(off, /can see them in their portal/);
 });
 
-test('#23 the statement view reads the portal flag from the owner list, because the statement payload does not carry it', () => {
+test('#23 the statement view reads the portal flag from the statement payload (R12 K4a), falling back to the owner list', () => {
   assert.match(ownSrc, /get\('\/unit-owners'\)\.catch\(\(\) => null\)/);
-  assert.match(ownSrc, /const portalOn = Boolean\(ownersRes\?\.owners\?\.find\(\(o\) => o\.owner_id === id\)\?\.portal_enabled\);/);
+  assert.match(ownSrc, /const portalOn = detail\.portal_enabled \?\? Boolean\(ownersRes\?\.owners\?\.find\(\(o\) => o\.owner_id === id\)\?\.portal_enabled\);/);
   assert.match(ownSrc, /text: publishText\(s\.month_label, portalOn\)/);
 });
 

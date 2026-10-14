@@ -208,9 +208,13 @@ function snapshotOf(sections) {
 
 const sameSet = (a, b) => [...a].sort().join() === [...b].sort().join();
 
+// A manager may change a close only when it covers properties and every one of them is theirs. An owner may change any close.
+const managerCanChange = (row, mine) => row.property_ids.length > 0 && row.property_ids.every((id) => mine.includes(id));
+
 // The stored close for a day. A manager sees it only when it is the whole workspace or covers one of
 // their properties (the same rule as GET /daily-closes), and sees the summary only for a close that
-// covers exactly their properties. `mine` is the caller's property ids (see assignedIds).
+// covers exactly their properties. `can_change` says whether the caller may reopen or update it.
+// `mine` is the caller's property ids (see assignedIds).
 async function closedFor(user, date, mine) {
   const { rows: [row] } = await query(
     `SELECT c.close_date, c.closed_at, c.note, c.summary, c.property_ids::text[] AS property_ids, u.full_name AS closed_by_name
@@ -224,6 +228,8 @@ async function closedFor(user, date, mine) {
   return {
     close_date: row.close_date, closed_at: row.closed_at, closed_by_name: row.closed_by_name, note: row.note,
     summary: canSeeSummary ? row.summary : null,
+    whole_workspace: row.property_ids.length === 0,
+    can_change: isOwner(user) || managerCanChange(row, mine),
   };
 }
 
@@ -277,7 +283,7 @@ router.post('/daily-close/reopen', managers, ah(async (req, res) => {
       [user.organization_id, date],
     );
     if (!row) throw new HttpError(404, 'This day is not closed.', { code: 'NOT_FOUND' });
-    if (!isOwner(user) && !(row.property_ids.length > 0 && row.property_ids.every((id) => mine.includes(id)))) {
+    if (!isOwner(user) && !managerCanChange(row, mine)) {
       throw new HttpError(409, 'This day was already closed for more properties than you manage. Only an owner can change that close.', { code: 'ALREADY_CLOSED' });
     }
     await db.query('DELETE FROM daily_closes WHERE close_id = $1', [row.close_id]);

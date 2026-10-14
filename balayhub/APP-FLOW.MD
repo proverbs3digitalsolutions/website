@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-15 (QA round 11, section 24; D-87)
+Last updated: 2026-10-15 (QA round 12, section 25; D-88)
 
 ---
 
@@ -308,6 +308,7 @@ Managers follow the same flows unless section 8 says otherwise.
 - **Click a row** to open `#/reservations/<id>`. From the keyboard, Tab to the check-in date (it is a link) and press Enter; rows are not Tab stops (round 5, section 18).
 - On a cancelled booking that still holds money, the page shows "Cancelled: ₱… still to refund" with a link to the Refunds card (the "Overpaid" and "You keep" lines are for live bookings only). The Unpaid and Partial payment filters list confirmed bookings only.
 - Empty: "Nothing here yet" + **New reservation**. Filtered: "No results found".
+- *2026-10-15 (D-88): saving from the list opens the new reservation, as written here; the calendar stays on the calendar.*
 
 ### 7.6 Reservation detail `#/reservations/<id>`
 - Header buttons: **Check in** (from check-in day), **Check out** → listing marked dirty, cleaning task created. **Undo check-in / Undo check-out**. **Message guest** → `#/inbox/<conversation>`. **Edit** (dates locked for channel imports). **Cancel** → reason → "Reservation cancelled." (not for channel imports or checked-out stays).
@@ -967,3 +968,26 @@ Decision D-87. Still for owners of 1 to 3 properties: less friction, true money 
 - **Reports:** a link with years outside 2000 to 2100 says "The dates in this link must be between 2000 and 2100. Pick both dates to see this range." A single date filter shows "Enter a year from 2000 to 2100." at the box. The performance occupancy total counts only listings that have capacity.
 - **Charts and shell:** an empty account's chart axes show one 0 label; no two neighbouring axis labels repeat. "Show as table" sits at the left of the chart card, clear of the Ask button. The sidebar fades at its bottom edge while more is below, with a thin scrollbar.
 - **Owner statements:** the Publish dialog says to send the statement by email when the owner's portal is off; unpublishing a statement that was sent adds "It was emailed on <date>. The owner keeps that copy."
+
+## 25. QA round 12 flow changes (2026-10-15)
+
+Decision D-88. Still for owners of 1 to 3 properties: less friction, true money on every screen, nothing removed. Round 12 was not clean: the focus rule below is only partly done (see "Focus").
+
+- **List pages send their default:** every list (Rent, Reservations, Housekeeping, Inbox, Guests and the rest) asks the server for the tab or filter it shows, so "All unpaid" on Rent lists unpaid charges only.
+- **Record payment (reservation):** on a direct booking the payment method starts blank and is required ("Choose how the guest paid."). A channel booking still starts on "Channel payout".
+- **Payment card:** an overpayment reads "Overpaid ₱800.00" (the alert and the receipt use the same word). "You keep" shows only once the channel fee is known; until then the card asks for the fee and shows the total.
+- **Edit reservation:** a date clash is shown at Check-out before any price question. "Where did they book?" can be changed and is marked "(optional)". Saving a new reservation from the list opens it (7.5).
+- **Group bookings:** a cancelled room shows "—" for its room total; a room type's name reads "room N".
+- **Rent page:** when the list is narrowed, the cards say they still count all unpaid rent. With 3 or fewer units, Month and Property sit under **More filters**. Ending a lease, or changing its end date, moves an unpaid move-in charge's due date to the end date.
+- **Reports and Stay reports:** switching the period clears the old one from the link ("Whole year" to "Month" drops `year=`). A link with `from` and `to` and no period opens as Custom dates. A bad date in a link ("2026-02-30") shows "The dates in this link aren't valid. Showing this month for now." and a reversed range keeps its dates and says why. P&L and Performance each say what they count. By month shows every column on one width; By property shows the occupied total.
+- **Reports Export:** until both dates are set, Export (Excel / CSV) is dimmed and has no link, and "Pick both dates to export." sits beside it. It is reachable by keyboard (`aria-disabled`, not `disabled`).
+- **Add-ons:** the All tab lists active add-ons only and ends with "N archived add-ons not shown. See Archived." (a link to the Archived tab).
+- **Add listing:** the Basics section asks, in order, for name, type, nightly rate, cleaning fee, building, then max guests. The Launchpad step text uses the same words. A nightly rate above ₱50,000.00 asks "Check the nightly rate: This is ₱… a night. Save anyway?" with **Save anyway** and **Change it** (Change it puts focus back in the rate box). The same question applies to the Calendar's price change and to bulk **Set a price**. Bulk **Change prices by %** does not ask yet (BLOCKERS).
+- **Calendar:** the page heading is "Calendar"; the iCal link has a clearer label; the bulk block preview ends with "Last night".
+- **Housekeeping:** the task page of an owner's own finished clean reads "Done by you, no pay"; a quantity reads "1 pc". **Copy for cleaner** shows only on open cleans (not done, not cancelled) and copies the due date.
+- **Supplies:** each row shows **Add stock** and **Record use**, and a **More** button ("More for <name>") that opens Count, History, Edit and Archive.
+- **Daily close:** a date outside 2000 to 2100 shows "That date isn't valid." with today's checklist. A close a manager may not change shows a line saying who can (a whole-workspace close, or one that covers properties that are not theirs), and no Reopen or Update. The owner always sees both. The line is English (the host app is English).
+- **Automatic messages (Inbox):** the page says when the four starter messages are ready but off, with a link to the guest language setting. A template used by an automatic message can't be deleted ("Choose another template for it, or remove it, first."); an automatic message with a deleted template can't be turned on. They list in a fixed order. Snoozed conversations disappear from Mine, Upcoming and Hosting until they wake.
+- **Guest pages:** the booking summary names the price rule ("Includes: Booked-early price."); the door code card reads "Door code" (Taglish "Code ng pinto"); the check-in thank-you screen says "Thank you! You're registered." under its own heading; the review page's star message goes away when a star is picked; the guest-limit message has a Taglish line.
+- **Language:** the **verify screens** (Check your email, "I've verified, continue", Resend) follow the chosen language, including Taglish; after sign-in the app resets to the host language. **Setup and the owner portal are English throughout** for now (founder question in BLOCKERS).
+- **Focus:** after any route change focus goes to the new page's h1. A page that reloads in place stays on screen (marked `aria-busy`) until the new one is ready, then swaps; a button that was disabled during its own request gets focus back; a refused form focuses the field that needs fixing (the stars, a blank guest row, the reason box). A page-level error has a heading. *Still open, round 13 top priority:* after a dialog save that redraws the view itself (Record payment, Edit reservation, Remove room, supply Add stock, Record use, Count, Edit and Archive, Mark done, Update close, Close the day, stay report tabs on a slow network, void payout) focus can land on the page body instead of the control or the h1.

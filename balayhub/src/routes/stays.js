@@ -7,7 +7,7 @@ const express = require('express');
 const { query, one, tx } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
 const { own } = require('../lib/pick');
-const { validate, uuidParam, isValidDate } = require('../lib/validate');
+const { validate, uuidParam, isValidDate, UUID_RE } = require('../lib/validate');
 const { audit } = require('../lib/audit');
 const { changedKeys } = require('../lib/auditdiff');
 const { requireRole } = require('../lib/auth');
@@ -100,19 +100,38 @@ async function loadBooking(user, id, db) {
   return row;
 }
 
-async function overlapError(unitId, checkIn, checkOut, exceptId) {
-  const clash = await one(
+// The first confirmed stay or block on the listing that these dates run into, other than exceptId.
+async function findOverlap(unitId, checkIn, checkOut, exceptId) {
+  return one(
     `SELECT b.kind, b.check_in, b.check_out, b.confirmation_code, COALESCE(g.full_name, b.guest_label) AS who
        FROM bookings b LEFT JOIN guests g ON g.guest_id = b.guest_id
       WHERE b.unit_id = $1 AND b.status = 'confirmed' AND daterange(b.check_in, b.check_out) && daterange($2::date, $3::date)
         AND b.booking_id IS DISTINCT FROM $4 LIMIT 1`, [unitId, checkIn, checkOut, exceptId || null]);
+}
+
+// The sentence for a clash found by findOverlap (the quote and PATCH both say it).
+function overlapMessage(clash) {
   // Readable dates; blocks are shown by their nights (last night = the day before the end date).
   const fmt = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
   const nights = (a, b) => (addDays(a, 1) === b ? `the night of ${fmt(a)}` : `the nights of ${fmt(a)} to ${fmt(addDays(b, -1))}`);
   const what = clash
     ? (clash.kind === 'block' ? `a block on ${nights(clash.check_in, clash.check_out)}` : `${clash.who || 'another guest'}'s stay ${fmt(clash.check_in)} – ${fmt(clash.check_out)} (${clash.confirmation_code})`)
     : 'another booking';
-  return new HttpError(409, `These dates overlap ${what} on this listing.`, { code: 'DATES_TAKEN', fields: { check_in: 'Dates not available', check_out: 'Dates not available' } });
+  return `These dates overlap ${what} on this listing.`;
+}
+
+const LEASED_MESSAGE = 'This unit has an active monthly lease over these dates, so it can\'t be booked for a short stay.';
+
+async function overlapError(unitId, checkIn, checkOut, exceptId) {
+  return new HttpError(409, overlapMessage(await findOverlap(unitId, checkIn, checkOut, exceptId)),
+    { code: 'DATES_TAKEN', fields: { check_in: 'Dates not available', check_out: 'Dates not available' } });
+}
+
+// What PATCH /reservations/:id would refuse for these dates on this listing (a monthly lease, else an overlap), ignoring one stay. Null when free.
+async function clashFor(unitId, checkIn, checkOut, exceptId) {
+  if ((await leasedListings([unitId], checkIn, checkOut)).size) return { code: 'UNIT_LEASED', message: LEASED_MESSAGE };
+  const clash = await findOverlap(unitId, checkIn, checkOut, exceptId);
+  return clash ? { code: 'DATES_TAKEN', message: overlapMessage(clash) } : null;
 }
 
 const { quote, nightlyPrices } = require('../lib/pricing');
@@ -369,7 +388,10 @@ router.get('/reservations/quote', ah(async (req, res) => {
   if (nightsBetween(ci, co) > 366) throw validationError({ check_out: 'Stays are limited to one year.' });
   const picked = byType ? await pickListing(req.user, room) : unit;
   const q = await quote(picked.unit_id, ci, co);
-  res.json({ ...q, cleaning_fee: picked.cleaning_fee, max_guests: picked.max_guests, ...(byType && { unit_id: picked.unit_id, unit_name: picked.unit_name }) });
+  // The stay being edited is left out of the clash check. Only this listing's stays are checked, so an id from anywhere else changes nothing.
+  const exceptId = typeof req.query.exclude_booking_id === 'string' && UUID_RE.test(req.query.exclude_booking_id) ? req.query.exclude_booking_id.toLowerCase() : null;
+  const clash = await clashFor(picked.unit_id, ci, co, exceptId);
+  res.json({ ...q, clash, cleaning_fee: picked.cleaning_fee, max_guests: picked.max_guests, ...(byType && { unit_id: picked.unit_id, unit_name: picked.unit_name }) });
 }));
 
 router.get('/reservations/:id', ah(async (req, res) => {
@@ -481,7 +503,7 @@ function assertShortTerm(user) {
 async function assertStayAllowed(user, unitId, checkIn, checkOut, db) {
   assertShortTerm(user);
   if ((await leasedListings([unitId], checkIn, checkOut, db)).size) {
-    throw new HttpError(409, 'This unit has an active monthly lease over these dates, so it can\'t be booked for a short stay.',
+    throw new HttpError(409, LEASED_MESSAGE,
       { code: 'UNIT_LEASED', fields: { check_in: 'Unit is on a monthly lease', check_out: 'Unit is on a monthly lease' } });
   }
 }

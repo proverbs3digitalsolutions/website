@@ -2,8 +2,9 @@
 // nightly prices on open nights. Tap an open night to book, block or reprice.
 
 import { get, post, patch, api, qs, ApiError } from '../api.js';
-import { h, icon, peso, pesoShort, fmtDate, field, formModal, openModal, confirmDialog, toast, emptyState, label } from '../ui.js';
+import { h, icon, peso, pesoShort, parseAmount, fmtDate, field, formModal, openModal, confirmDialog, toast, emptyState, label } from '../ui.js';
 import { initFilters, filterBar, changed } from '../filters.js';
+import { highRateOk } from '../rates.js';
 import { state, navigate } from '../app.js';
 import { addDays, newReservationModal, CHANNEL_LABEL } from './reservations.js';
 
@@ -246,12 +247,14 @@ export async function calendarView(el, { query }) {
           field({ name: 'end_date', label: 'To night', type: 'date', required: true, value: date })),
         field({ name: 'price', label: 'Price per night', type: 'money', hint: now }),
       ],
-      onSubmit: async (d) => {
+      onSubmit: async (d, { form }) => {
         // 0 would make the night free; a blank still clears the price back to the usual rates.
         if (d.price.trim() !== '' && Number(d.price) === 0) {
           const m = 'Price must be greater than zero. Leave it blank to use your usual price.';
           throw new ApiError('Please check the highlighted fields.', { status: 400, code: 'VALIDATION', fields: { price: m } });
         }
+        // A price above the ceiling is asked about first; "Change it" keeps this dialog open with the price box focused.
+        if (!await highRateOk(parseAmount(d.price))) { form.elements.price.focus(); return false; }
         const res = await api('PUT', '/rates', { ...d, unit_id: listing.unit_id });
         // A blank price clears any set prices in the range; the server says how many it removed.
         if (d.price.trim() === '') toast(res.cleared > 0 ? (res.cleared === 1 ? 'Set prices cleared for 1 night. This night uses your usual rates again.' : `Set prices cleared for ${res.cleared} nights. These nights use your usual rates again.`) : 'No set prices to clear. These nights already use your usual rates.');
@@ -296,7 +299,7 @@ export async function calendarView(el, { query }) {
 
   el.replaceChildren(
     h('div', { class: 'page-head' },
-      h('div', { class: 'page-head__title' }, h('h1', null, 'Multi-calendar'), h('p', null, canManage ? 'Tap an open night to book, block or change its price' : 'See who is staying and which nights are open. Booking and price changes are for owners and managers.')),
+      h('div', { class: 'page-head__title' }, h('h1', null, 'Calendar'), h('p', null, canManage ? 'Tap an open night to book, block or change its price' : 'See who is staying and which nights are open. Booking and price changes are for owners and managers.')),
       canManage && h('div', { class: 'page-head__actions' },
         h('a', { class: 'btn btn--secondary', href: '#/pricing' }, '₱ Pricing rules'),
         h('button', { class: 'btn btn--primary', onclick: () => newReservationModal({ onSaved: load }) }, icon('plus'), 'New reservation'))),

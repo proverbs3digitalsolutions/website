@@ -5,7 +5,7 @@ import { get, post, ApiError } from '../api.js';
 import { h, brand, field, makeForm, badge, toast } from '../ui.js';
 import { state, navigate, refreshUser, afterLogin } from '../app.js';
 import { tryDemo } from './landing.js';
-import { t, initGuestLang, extendTranslations } from '../i18n.js';
+import { t, tServer, initGuestLang, extendTranslations } from '../i18n.js';
 
 function publicPage(...children) {
   return h('div', { class: 'public' },
@@ -55,7 +55,7 @@ const GOOGLE_ERRORS = {
 };
 
 const devLink = (url, text) => url && h('div', { class: 'alert alert--info' },
-  'Development mode — email is not configured, so here is the link: ', h('a', { href: url.slice(url.indexOf('#')) }, text));
+  t('Development mode — email is not configured, so here is the link: '), h('a', { href: url.slice(url.indexOf('#')) }, text));
 
 // ---------------------------------------------------------------- Screen 1: Welcome
 export async function welcomeView(el) {
@@ -240,6 +240,12 @@ extendTranslations({
   "I've verified — continue": 'Na-verify ko na — tuloy',
   'Not verified yet. Open the link we sent to {email}, then press this again.': 'Hindi pa verified. Buksan ang link na ipinadala namin sa {email}, saka pindutin ulit ito.',
   'Use a different account': 'Gumamit ng ibang account',
+  "Couldn't check. Check your connection and try again.": 'Hindi ma-check. Tingnan ang connection mo at subukan ulit.',
+  'Development mode — email is not configured, so here is the link: ': 'Development mode — hindi pa naka-set ang email, kaya narito ang link: ',
+  'This verification link is invalid or has expired. Log in to request a new one.': 'Hindi valid o expired na ang verification link na ito. Mag-log in para humingi ng bagong link.',
+  'Too many attempts. Please wait a few minutes and try again.': 'Sobrang dami na ng subok. Maghintay ng ilang minuto at subukan ulit.',
+  "We couldn't send the email. The BalayHub administrator needs to check the email settings on the server (docs/EMAIL-SETUP.md).": 'Hindi namin naipadala ang email. Kailangang i-check ng BalayHub administrator ang email settings sa server (docs/EMAIL-SETUP.md).',
+  "You're offline or the server can't be reached.": 'Offline ka o hindi maabot ang server.',
 });
 
 export async function verifyView(el, { query }) {
@@ -258,7 +264,7 @@ export async function verifyView(el, { query }) {
     if (state.user) afterLogin();
     else card.replaceChildren(h('h1', null, t('Email verified')), h('p', { class: 'lead' }, t('You can now log in.')), h('a', { class: 'btn btn--primary btn--block', href: '#/login' }, t('Log in')));
   } catch (err) {
-    fail(err.message);
+    fail(tServer(err.message));
   }
 }
 
@@ -279,8 +285,10 @@ export async function verifyPendingView(el) {
       try {
         const r = await post('/auth/resend-verification');
         if (r.alreadyVerified) { await refreshUser(); afterLogin(); return; }
+        // A new email replaces the old one, so the "not verified yet" note from an earlier press goes too.
+        status.replaceChildren();
         msg.replaceChildren(h('div', { class: 'alert alert--ok' }, t('A new verification email is on its way.')), devLink(r.devVerificationLink, t('Verify my email')));
-      } catch (err) { msg.replaceChildren(h('div', { class: 'alert alert--error' }, err.message)); }
+      } catch (err) { msg.replaceChildren(h('div', { class: 'alert alert--error' }, tServer(err.message))); }
       resend.disabled = false;
     },
   }, t('Resend verification email'));
@@ -292,7 +300,11 @@ export async function verifyPendingView(el) {
     h('div', { class: 'form' }, resend,
       h('div', null,
         h('button', { class: 'btn btn--ghost btn--block', onclick: async () => {
-          await refreshUser();
+          // Offline, the check cannot run: say so here and keep the page as it is.
+          try { await refreshUser(); } catch {
+            status.replaceChildren(h('div', { class: 'alert alert--error', style: { marginTop: '8px' } }, t("Couldn't check. Check your connection and try again.")));
+            return;
+          }
           if (!state.user || state.user.email_verified || !state.requireEmailVerification) { afterLogin(); return; }
           status.replaceChildren(h('div', { class: 'alert alert--warn', style: { marginTop: '8px' } },
             t('Not verified yet. Open the link we sent to {email}, then press this again.', { email })));

@@ -6,7 +6,7 @@ import {
 } from '../ui.js';
 import { t, initGuestLang, extendTranslations, locale } from '../i18n.js';
 import { state } from '../app.js';
-import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
+import { initFilters, filterBar, rememberFilters, changed, apiFilters } from '../filters.js';
 import { addDays } from './reservations.js';
 import { qtyLabel } from './supplies.js';
 
@@ -88,11 +88,11 @@ function nextGuestText(task) {
 
 const assigneeText = (x) => x.assigned_user_name || x.assignee_name || T('Unassigned');
 
-// Plain-text version to paste into Messenger / Viber for a cleaner without a login.
+// Plain-text version to paste into Messenger / Viber for a cleaner without a login. It always gives the due date (#35).
 function taskText(t) {
   return [
     `Cleaning: ${t.unit_name}, ${t.property_name}`,
-    `When: ${dueText(t)}`,
+    `When: ${fmtDate(t.due_date)}`,
     nextGuestText(t),
     t.notes ? `Notes: ${t.notes}` : null,
     '',
@@ -268,7 +268,7 @@ export function canOpenCleanerPay(role) {
 
 // The Cleaner pay card's line while a clean has no amount (#33): the owner's own finished clean reads "Done by you, no pay", as Cleaner pay does; any other reads "Pay not set".
 export function payText(t, viewer) {
-  const own = viewer?.role === 'owner' && t.status === 'done' && t.completed_by === viewer.user_id;
+  const own = viewer?.role === 'owner' && t.status === 'done' && t.done_by_viewer;
   return own && t.pay_amount == null ? 'Done by you, no pay' : 'Pay not set. Use Set pay.';
 }
 
@@ -317,9 +317,8 @@ async function tasksTab(box, query) {
   const list = h('div');
 
   async function load() {
-    const active = changed(filters, { ...defaults, view: '' });
-    history.replaceState(null, '', `#/housekeeping${qs(active)}`);
-    const { tasks, counts } = await get(`/cleaning-tasks${qs(active)}`);
+    history.replaceState(null, '', `#/housekeeping${qs(changed(filters, { ...defaults, view: '' }))}`);
+    const { tasks, counts } = await get(`/cleaning-tasks${qs(apiFilters(filters))}`);
     const count = { today: counts.today, upcoming: counts.upcoming };
     tabs.replaceChildren(...TABS.map(([k, label]) => h('button', {
       type: 'button', role: 'tab', 'aria-selected': String(k === filters.view),
@@ -732,9 +731,9 @@ export async function housekeepingDetailView(el, { params, rerender }) {
           ? h('span', { class: 'small muted' }, T('Paid.'))
           : h('span', { class: 'small muted' }, undoPaidLead(state.user.role), payLink, ' first.')),
         canReopen(t, state.user.role) && h('button', { class: 'btn btn--secondary', onclick: reopen }, T('Reopen')),
-        // No Inspect on a paid clean (the server refuses it, as with Reopen), and no Copy for cleaner on a cancelled job.
+        // No Inspect on a paid clean (the server refuses it, as with Reopen), and Copy for cleaner only on an open clean (#35).
         isManager && t.status === 'done' && t.checklist.length > 0 && !isPaidClean(t) && h('button', { class: 'btn btn--primary', onclick: () => inspectModal(t, rerender) }, 'Inspect'),
-        isManager && t.status !== 'cancelled' && h('button', { class: 'btn btn--secondary', onclick: () => copyText(taskText(t)) }, 'Copy for cleaner'),
+        isManager && open && h('button', { class: 'btn btn--secondary', onclick: () => copyText(taskText(t)) }, 'Copy for cleaner'),
         isManager && open && h('button', { class: 'btn btn--ghost', onclick: async () => {
           if (await confirmDialog({ title: 'Cancel this cleaning task?', text: 'Use this if the cleaning is no longer needed.', confirmText: 'Cancel task', danger: true })) setStatus('cancelled', 'Task cancelled.');
         } }, 'Cancel task'))),
