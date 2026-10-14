@@ -2,7 +2,7 @@
 
 Things only the founder can do or decide before related work can go ahead. Automated runs add items here. The founder clears them by doing the item and ticking it, or by writing the decision in DECISIONS.MD.
 
-Last updated: 2026-10-14 (QA round 5 questions added; QA round 4 wide-table question answered by D-80 and built in round 5)
+Last updated: 2026-10-14 (QA round 6 questions added; round 5 question 13 (my pay) decided by D-82)
 
 ## Security — do first
 
@@ -136,7 +136,7 @@ Each one has the default already applied. None of them stops the work.
 - [x] **Two cleaning tasks for the same unit on the same day.** That can be right (two short stays on one day, or a redo), but it could also mean paying a cleaner twice. Should the app warn you? *Default: allowed with no warning, as today. Each task's pay shows separately before it is marked paid.* Answered 2026-10-14 (D-80): allowed, with no warning, as today.
 - [ ] **Alerts for monthly rentals.** All of today's alerts are about short stays: bookings, guest messages, check-in forms and cleaning. A monthly-rental workspace now sees a note that alerts aren't available yet, instead of a list it can't use. Which alerts would help most for monthly rentals: rent due, rent overdue, lease ending, or maintenance requests? *Default: none until you choose.*
 - [ ] **Prices and groups on past dates.** You can set a nightly price on a night that has already passed, and create a group booking for past dates. That helps record what already happened. Keep it, or warn first? *Default: allowed, as today.*
-- [ ] **Reopening a finished clean.** Reopening clears the clean's pay, and finishing it again works the pay out from the cleaner's rate, so a special amount you typed would need typing again. The app now asks before reopening. Would you rather keep a typed amount? *Default: ask first, then clear the pay (the same as a failed inspection).*
+- [ ] **Reopening a finished clean.** Reopening clears the clean's pay, and finishing it again works the pay out from the cleaner's rate, so a special amount you typed would need typing again. The app now asks before reopening. Would you rather keep a typed amount? *Default: ask first, then clear the pay (the same as a failed inspection).* *The gap with a newer clean was fixed in round 6 (D-82).*
 - [x] **Wide tables on phones.** On a phone, a wide table or the calendar now fades its cut-off edge to show that more columns are there. The fade is subtle, and it can read as text running off the edge. Keep the fade, add a small "Swipe for more" hint above wide tables on phones, or show those tables as stacked cards on phones? The stacked cards are the biggest change, because each table needs its own layout. The hint is the smallest change that makes the cue clearer. *Default: keep the fade, as it is now.* Answered 2026-10-14 (D-80): stacked cards on phones. Each wide table shows one card per row, with a label and value pair for each column. Tablet and computer keep the table. The calendar is not part of this answer, so it keeps its edge fade as built. Built in QA round 5.
 - [ ] **Taglish check.** These new lines need a Taglish speaker to read them: the guest-limit message on the booking page, the "Quantity must be a whole number" message for cleaners, and the Terms message on the Get started sign-up. *Default: keep the drafts.*
 
@@ -145,7 +145,7 @@ Each one has the default already applied. None of them stops the work.
 Each one has the default already applied. None of them stops the work.
 
 - [ ] **Balance after refunding an overpayment.** When a guest overpays and you refund the extra, the Payment card still shows a negative balance (for example -₱250.00), because refunds are kept as a separate record and don't change the balance. Should the card show ₱0.00 once the extra is refunded? *Default: no change (D-34, D-77). The payment dialog now says "Nothing more is owed on this booking." when nothing is left, instead of "overpaid by ₱0.00".*
-- [ ] **Reopening a finished clean.** Reopening a finished clean now marks the unit as dirty, the same as a failed inspection. OK? One gap is left for the next round: if a newer clean of the same unit is already done, reopening an older one still marks the unit dirty. *Default: dirty.*
+- [ ] **Reopening a finished clean.** Reopening a finished clean now marks the unit as dirty, the same as a failed inspection. OK? One gap is left for the next round: if a newer clean of the same unit is already done, reopening an older one still marks the unit dirty. *Default: dirty.* *The gap with a newer clean was fixed in round 6 (D-82).*
 - [ ] **Future dates on expenses.** Adding an expense refused a future date, but correcting one allowed it. Both now refuse a future date, the same as payments. OK, or do you want to log bills ahead of time? *Default: refused on both.*
 - [ ] **Staff and money on reservations versus groups.** Staff can see the total, balance and payments on a reservation, but group bookings hide money from staff. Which do you want for staff: see money on both, or on neither? *Default: as today (reservations show it, groups don't), because both are written that way.*
 - [ ] **Refunds in the daily close.** The daily close counts payments that came in that day, but not refunds you paid out. Should it list refunds paid out too? *Default: payments only, as D-72 says.*
@@ -164,4 +164,34 @@ Each one has the default already applied. None of them stops the work.
     If it lists anything, archive the extra copies on the Add-ons page and keep the oldest. *Default: no data change from us.*
 - [ ] **Contact email on the plan card.** The plan card says "contact us" with no link when `SALES_CONTACT_EMAIL` isn't set. Please check it is set in `deploy/.env` on the server. *Default: none; a check only.*
 - [ ] **Taglish check.** These new lines need a Taglish speaker to read them: on Get started, "Maglagay ng tamang numero ng telepono." (the mobile number message) and "Pangalan ng negosyo" (business name); on the pay page, "Mga patunay na naghihintay sa host" (proofs waiting for the host), "Idagdag ang screenshot", "Bawiin ito" (take it back) and the two proof-limit sentences; for cleaners, "Bayad na." (paid), "Hindi puwedeng negatibo ang dami." (quantity can't be negative), and the found-item labels "Hawak pa" (held), "Naibalik" (returned) and "Itinapon" (disposed). The owner's note on a paid clean is in English only. *Default: keep the drafts.*
-- [ ] **The pay list for other roles.** The "My pay" page is for cleaners only, and everyone else is sent home. The data behind that page still answers any signed-in person, but only with that person's own cleans, and it shows pay only on cleans that are theirs. Nobody can read another person's pay that way. Should the data also be closed to everyone except cleaners? *Default: leave it as it is, since nothing leaks. If you say yes, we close it in the next round.*
+- [ ] **The pay list for other roles.** The "My pay" page is for cleaners only, and everyone else is sent home. The data behind that page still answers any signed-in person, but only with that person's own cleans, and it shows pay only on cleans that are theirs. Nobody can read another person's pay that way. Should the data also be closed to everyone except cleaners? *Default: leave it as it is, since nothing leaks. If you say yes, we close it in the next round.* *Superseded by D-82 (2026-10-14): the data is now closed to everyone but cleaners, because it still carried other cleaners' names.*
+
+## Questions from QA round 6 (2026-10-14)
+
+Each one has the default already applied. None of them stops the work.
+
+- [ ] **What staff may see about guests.** Staff now see only a guest's name: on the Guests page, on a guest's page, on a reservation and as a group's lead guest. They no longer see VIP or Do not rebook, how many times someone stayed, their stay dates, their ratings or the review card. Before this, staff saw all of that except contact details and total spent. Is name-only right, or should staff see some of it again (for example Do not rebook, so they are warned at check-in)? *Default: name only.*
+- [ ] **Staff and guest reviews.** Staff can still open the Reviews page and read guests' full reviews (names and comments), as the access table and D-62 allow. Now that staff see only names everywhere else, should we keep that, or make reviews owners and managers only so the rules line up? *Default: keep (staff can read reviews in their properties).*
+- [ ] **Removing a listing's page address.** Once a listing has its own page address, the form won't save it blank, so you can't remove it, only change it. Should blank be allowed? (The listing page link would stop working.) *Default: unchanged (an address can be changed, not removed).*
+- [ ] **Discount ladder.** A listing can no longer save a weekly discount above its 14+ night discount, or a 14+ night discount above its monthly one, because only one discount applies and a longer stay would end up dearer per night. OK? *Default: refused. An old listing that already has an inverted ladder is left as it is until someone edits a discount.*
+- [ ] **Payouts need a month.** Every payout now has to say which statement month it pays (2000 to 2100). The screens already did this; only a direct call could leave it out. OK? *Default: month required.*
+- [ ] **Taglish check.** These new lines need a Taglish speaker to read them: for cleaners, "Pumili ng litrato" (choose a photo), "Wala pang litrato.", "Mag-upload ng JPG, PNG o WEBP na litrato, hanggang 10 MB.", "Mga inspection", "Pasado", "Hindi pasado"; on Get started, "Panandaliang stays (Airbnb, staycation)", the language switch name "Wika: TL", and the taken-email message; on the quote page, "ang host" and the loading line; on the booking page, the new not-found sentence and the guest-limit message. *Default: keep the drafts.*
+- [ ] **The staff stay counts promise in the app guide.** APP-FLOW used to say staff see "names and stay counts". Staff now see names only, so that promise was removed from APP-FLOW (line 108 is annotated). Nothing to do unless you want stay counts back (see the first question). *Default: promise removed.*
+- [ ] **Two read-only checks on the live database (we change nothing).** Run each and tell us what it lists.
+  (a) Notification settings saved with an empty property list before the fix (these accounts stay muted until they save again):
+
+    ```
+    cd /opt/balayhub-src/balayhub
+    C="docker compose -f docker-compose.prod.yml --env-file deploy/.env"
+    $C exec -T db psql -U balayhub balayhub -c "select count(*) from users where notify_prefs->'property_ids' = '[]'::jsonb;"
+    ```
+
+  (b) Listings whose discounts were saved with a longer stay cheaper than a shorter one (an inverted ladder):
+
+    ```
+    $C exec -T db psql -U balayhub balayhub -c "select unit_id, weekly_discount, fortnight_discount, monthly_discount from units where (weekly_discount > 0 and fortnight_discount > 0 and weekly_discount > fortnight_discount) or (fortnight_discount > 0 and monthly_discount > 0 and fortnight_discount > monthly_discount) or (weekly_discount > 0 and monthly_discount > 0 and weekly_discount > monthly_discount);"
+    ```
+
+  *If either lists rows, tell us and we plan a data fix. Default: no data change from us. The names above come from the code (`users.notify_prefs`, and `units.weekly_discount`, `fortnight_discount`, `monthly_discount`); if psql still complains, send us the message.*
+- [ ] **Staff and booking group notes.** Staff can read the notes on a booking group. The access table says nothing about group notes. Keep it, or hide the notes from staff? Same-name guests also show staff nothing to tell them apart, which is what names-only means. *Default: staff can read group notes (unchanged).*
+- [ ] **My pay: cleans paid to someone else.** Today the My pay page hides those rows, then says "No cleans finished this month" even when the cleaner finished some. The access table (6.1) says to show them without a name or money. *Default for round 7: show them as "Paid to another cleaner" rows with no amount, following the table.*

@@ -1,6 +1,6 @@
 # BalayHub design brief
 
-Last updated: 2026-10-14 (QA round 5: stacked cards, More dialog, theme icons; D-81 and section 14)
+Last updated: 2026-10-14 (QA round 6: patterns in section 15; D-82)
 
 **Summary.** BalayHub is a phone-first web app (also an installable PWA) for Filipino rental and staycation hosts. It is built with plain CSS, one stylesheet (`public/css/app.css`), and small JavaScript helpers (`public/js/ui.js`). There is no framework and no CSS preprocessor. The look is calm and practical: Forest Green on soft off-white, Sand and Sun as warm accents, Poppins for headings, Inter for text, rounded cards, and large touch targets. Colours come from CSS custom properties on `:root`. A dark theme redefines the same tokens, so any component that uses tokens gets dark mode automatically. This brief records what is **actually built**. Every value below comes from the code. Where the code doesn't define a token (spacing, type sizes), the brief lists the values in use and says so.
 
@@ -499,3 +499,12 @@ Printable views are built from `.receipt` (with a 2px `--navy` rule under the he
 - **Long words wrap.** Headings, table and list titles, alerts and definition values use `overflow-wrap: anywhere`. Grid and flex children that hold text can shrink (`min-width: 0`), so no page scrolls sideways at 390px.
 - **Names for controls.** A repeated button names its row, for example "Edit template: Booking confirmation". The two boxes of a date range are named "<label>, from" and "<label>, to". A rating star is a radio with a checked state. The account link at the top starts with the workspace name. The theme switch uses three equal-size inline SVG icons.
 - **Taglish.** New guest-facing and cleaner-facing lines go through the file's own translation table (`t()` or `T()`). BLOCKERS question 12 lists this round's new lines for a Taglish check.
+
+## 15. Patterns added in QA round 6 (2026-10-14)
+
+- **Stacked-card labels stay on one line.** On the phone card layout, a label (for example "Check-in") never wraps onto two lines.
+- **Nothing focusable in a clipped table header.** A control in a header that scrolls out of view can be tabbed to but not seen. "Select all" lives in the visible bar above the table.
+- **Card heads keep their badge on the heading line.** A badge such as "All clear" sits next to the heading at 390px, not on a line of its own.
+- **Narrow filter panels put range fields on their own row.** A from and to pair gets a full row so the two boxes and their messages fit.
+- **A control's name includes its visible label.** The language switch is named "Language: EN" or "Wika: TL", matching what is on screen.
+- **Each problem is said once, at its field.** A banner or summary doesn't repeat a field message.

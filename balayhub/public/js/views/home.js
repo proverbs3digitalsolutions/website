@@ -133,7 +133,7 @@ function revenueSection() {
         h('div', { class: 'card' },
           h('div', { class: 'stat__label' }, 'Total revenue'),
           h('div', { class: 'hero-num' }, pesoWhole(r.current.total_revenue)), change(r.current.total_revenue, r.previous.total_revenue),
-          h('p', { class: 'muted small' }, `Stays ${pesoWhole(r.current.accommodation)} + fees ${pesoWhole(r.current.fees)}`),
+          h('p', { class: 'muted small' }, `Stays ${pesoWhole(r.current.accommodation)} + cleaning and extras ${pesoWhole(r.current.fees)}`),
           barChart({
             labels: weekLabels, height: 180, ariaLabel: 'Accommodation revenue by week, this month vs previous month',
             series: [{ name: fmtMonth(`${month}-01`), values: byWeek(r.current.weekly) }, { name: fmtMonth(`${r.previous.month}-01`), values: byWeek(r.previous.weekly), color: SERIES[2] }],

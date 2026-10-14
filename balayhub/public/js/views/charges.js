@@ -46,7 +46,9 @@ function addCharge(reservationId, rerender) {
   const priceIn = inputOf(price);
   const showTotal = () => {
     // A blank price counts as 0; a price that can't be read shows no total rather than a made-up one.
-    const unit = priceIn.value.trim() === '' ? 0 : parseAmount(priceIn.value);
+    // A negative price is refused on save, so it reads as unreadable here too.
+    const typed = priceIn.value.trim() === '' ? 0 : parseAmount(priceIn.value);
+    const unit = typed < 0 ? NaN : typed;
     total.textContent = Number.isNaN(unit) ? '' : `Charge total: ${peso((Number(qtyIn.value) || 0) * unit)}`;
   };
   catIn.addEventListener('change', () => {

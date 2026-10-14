@@ -7,6 +7,8 @@ import { initFilters, filterBar, rememberFilters, changed } from '../filters.js'
 const STATUS = { open: 'Open', paid: 'Paid', expired: 'Expired', cancelled: 'Cancelled' };
 const STATUS_BADGE = { open: 'open', paid: 'paid', expired: 'archived', cancelled: 'voided' };
 const statusBadge = (s) => badge(STATUS_BADGE[s] || 'archived', STATUS[s] || s);
+// The date means different things by status: an open link expires; a paid or cancelled quote only has a valid-until date.
+export const expiryLabel = (status) => (status === 'open' ? 'Expires' : status === 'expired' ? 'Expired' : 'Valid until');
 const quoteUrl = (q) => q.url;
 // An empty box is 0; text that is not an amount (or is negative) is NaN, so it can never pass as a PHP 0 price.
 const money = (v) => {
@@ -198,7 +200,7 @@ export async function quoteDetailView(el, { params, rerender }) {
           Number(q.discount_amount) > 0 && [h('dt', null, 'Discount'), h('dd', null, `− ${peso(q.discount_amount)}`)],
           h('dt', null, 'Total'), h('dd', null, h('strong', null, peso(q.total_amount))),
           h('dt', null, 'Guest pays'), h('dd', null, q.pay_type === 'deposit' ? 'A deposit now, the rest later' : 'The full amount'),
-          h('dt', null, open ? 'Expires' : 'Expired'), h('dd', null, fmtDateTime(q.expires_at)),
+          h('dt', null, expiryLabel(q.status)), h('dd', null, fmtDateTime(q.expires_at)),
           q.guest_email && [h('dt', null, 'Email'), h('dd', null, q.guest_email)],
           q.guest_phone && [h('dt', null, 'Mobile'), h('dd', null, q.guest_phone)],
           q.note && [h('dt', null, 'Note'), h('dd', { style: { whiteSpace: 'pre-wrap' } }, q.note)])),

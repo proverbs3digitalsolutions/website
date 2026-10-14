@@ -2,7 +2,7 @@
 
 This document describes BalayHub's PostgreSQL schema as it stands after migrations `001`–`026` in `db/migrations/`, where uploaded files are stored, and who can see or change each kind of data. It was checked against the migrations and the route code in `src/routes/*.js` and `src/lib/*.js`. Anything not confirmed in the code is marked **unverified**.
 
-Last updated: 2026-10-14 (QA round 5, section 11)
+Last updated: 2026-10-14 (QA round 6, section 12)
 
 ---
 
@@ -782,6 +782,8 @@ The workspace export (`exportOrganization`) is not complete. It leaves out `supp
 | Workspace export and deletion | Export JSON; request and cancel deletion | None | None | None | None |
 | Files (generic) | Follows the parent record's rule | Same, assigned | Same, assigned, except lease and guest ID files | Support attachments only | Guest IDs: upload only. Building admin: view guest IDs. Public listing photos |
 
+*2026-10-14 (D-82): staff get `{ guest_id, full_name, limited }` only, on `/guests`, `/guests/:id` (with empty stays and reviews) and a group's lead guest. Reservation rows for staff carry no `guest_vip` or `guest_do_not_rebook`, no review card and no Returning badge. Staff can still read full reviews on `GET /reviews` (the Reviews page; the matrix allows it; BLOCKERS round 6, question 2). Correction 2026-10-14: cleaners are not names only. Cleaners get 403 on guests, guest profiles, reservations, booking groups and reviews (matches 6.2); only staff get names only.*
+
 ---
 
 ### 6.1 Phase 3 access matrix (with the Cleaner column)
@@ -801,7 +803,7 @@ The cleaner role is denied by default in code (`cleanerGuard`, D-48). Any row no
 | Lost and found: list and status | Full | Assigned | No (page). On a job they see only items they logged, with no status note | Own items only |
 | Cleaner rates | View, set, delete | No | No | No |
 | Cleaner pay list and mark paid | View, mark paid, undo | View and mark paid (assigned); no undo | No | No |
-| My pay (page `#/my-pay`) | Not shown. The API answers only with their own cleans | Not shown. The API answers only with their own cleans | Not shown. The API answers only with their own cleans | Own pay only (page and API). The page is cleaners only (round 5) |
+| My pay (page `#/my-pay`) | Not shown. The API refuses with 403 "My pay is for cleaners." | Same (403) | Same (403) | Own pay only (page and API). Cleans they finished that are paid to someone else show as hidden rows with no name and no money (2026-10-14, D-82) |
 | Expenses made by mark paid | Yes | Yes (assigned) | No | No |
 | Supplies: list | Full | Assigned | Assigned; the Supplies page opens read-only (no add, edit, count or restock buttons) | Names and counts only (assigned). No costs exist |
 | Supplies: add, edit, archive, count, restock | Yes | Yes (assigned) | No | No |
@@ -822,6 +824,7 @@ The cleaner role is denied by default in code (`cleanerGuard`, D-48). Any row no
 - **Owner and manager (assigned):** the whole record: checklist files, inspections, every damage report with `estimated_cost`, `status`, `charge_id`, `resolution_note`, `resolved_at` and `resolved_by_name`, every lost item with `status_note`, and the work orders (`request_id`, `title`, `status`).
 - **Staff (assigned properties):** checklist files, and only the damage reports and lost items they filed. Damage reports carry `report_id`, `description`, `created_at`, `reported_by_name` and their photos under `files`; lost items carry `item_id`, `description`, `found_where`, `found_on`, `status`, `created_at`, `found_by_name` and photos. No amounts, charge, resolution, status note or inspections. Work orders as in section 6.
 - **Pay fields (dated 2026-10-14, QA round 5):** until round 5 the cleaning-task list and detail routes sent `pay_amount` and `pay_status` to staff on every job. Now staff and cleaners get them only on a job assigned to them, or on an unassigned job they completed. Owners and managers get them on every job (section 11).
+- **Cleaner inspections (2026-10-14, D-82):** inspections carry only `inspection_id`, `passed` and `created_at`, and only on jobs assigned to that cleaner.
 - **Cleaner (own and unassigned jobs):** the same filed-by-them damage and lost-item fields as staff. Inspections appear only when the job is assigned to that cleaner. `work_orders` is always empty. No estimate, no damage status, no charge, no resolution, no status note.
 
 **Staff pages.** Staff may open Group bookings (rooms and stays, without money, only when every room is in their properties; section 6.3) and the Supplies page (read-only). The screen route block (`public/js/routeaccess.js`) and the menu no longer hide them. Housekeeping is a stay-only page; cleaners keep it.
@@ -924,8 +927,8 @@ Cleaners are denied by `cleanerGuard` on every Phase 5 route. "Assigned" means t
 | 14 | ~~D-46 security items~~ Fixed 2026-10-13: an email change or clear ends the owner's portal sessions and cancels unused links (clearing also turns access off); owner blocks are refused while the workspace is view-only (402) or the demo (403); block create and cancel are limited to 20 per hour per owner; the sign-in link is removed from the address bar after use. Covered by tests | `src/routes/ownerportal.js`, `src/routes/owners.js`, `src/lib/auth.js` (`planGuard`) |
 | 15 | ~~Daily close by a manager with no properties~~ Fixed 2026-10-13: such a manager gets 403 on the daily close (D-75) | `src/routes/dailyclose.js` (`POST /daily-close`) |
 | 16 | New 2026-10-13 (QA round 1, D-76): add-on names are unique among active add-ons only in the app (`assertNameFree` in `src/routes/addons.js`); there is no database index, because live data may already hold duplicates. Two creates at the same instant could both pass | `src/routes/addons.js` |
-| 17 | `GET /api/my-pay` answers any signed-in person, with only that person's own cleans and pay. The page `#/my-pay` is for cleaners only, but the API is not limited to cleaners. Founder question in BLOCKERS (question 13). | `src/routes/cleanerpay.js` (`GET /my-pay`), `public/js/routeaccess.js` |
-| 18 | Reopening an older clean while a newer clean of the same unit is done still marks the unit dirty. Carried to round 6. | `src/routes/housekeeping.js` (the status route, the reopen update) |
+| 17 | ~~`GET /api/my-pay` answers any signed-in person, with only that person's own cleans and pay. The page `#/my-pay` is for cleaners only, but the API is not limited to cleaners.~~ **Resolved 2026-10-14 (round 6, D-82):** `GET /api/my-pay` is cleaners only (403 for everyone else). | `src/routes/cleanerpay.js` (`GET /my-pay`), `public/js/routeaccess.js` |
+| 18 | ~~Reopening an older clean while a newer clean of the same unit is done still marks the unit dirty.~~ **Fixed 2026-10-14 (round 6, D-82):** reopening, or failing an inspection, leaves the unit alone when a newer clean of it is done. | `src/routes/housekeeping.js` (the status route, the reopen update) |
 - Paused maintenance schedules are resumed with `PATCH /maintenance-schedules/:id { active: true }` (the Resume button on the Maintenance page).
 - Monthly schedules step from the last due date, so a due date on the 31st can drift to the 28th (`src/lib/maintschedule.js`).
 - Section 6 (the older matrix) has no Cleaner column. Cleaners are denied by default by `cleanerGuard`, and section 6.1 covers the Phase 3 rows.
@@ -990,3 +993,27 @@ Cleaners are denied by `cleanerGuard` on every Phase 5 route. "Assigned" means t
 - **`GET /api/my-pay`:** answers any signed-in person with that person's own finished or assigned cleans. Each clean carries `pay_visible`, which is true only for the caller's own pay. The `#/my-pay` page is for cleaners only (section 6.1). Known gap: section 7, row 17.
 - **Get started, mobile number:** the browser check uses the same pattern as the server's phone check (`src/lib/validate.js`), so no server change was needed.
 - **Browser-side changes this round that need no API change:** the paid clean note and the reopen wording, the proof list on the pay page, the phone number check, the "Use ₱X from your rates" button, the stacked-card layout for wide tables, the More dialog, the notification card and the names on controls.
+
+## 12. API notes from QA round 6 (2026-10-14)
+
+- **`GET /api/cleaning-board`:** `last_inspection` per role: owners and managers get the full result, staff get none, a cleaner gets `passed` and `at` only for a unit where she has a job. `current_stay` (the guest) is sent to a cleaner only where she has a visible open job.
+- **`GET /api/cleaning-tasks/:id`:** a cleaner's inspections carry `inspection_id`, `passed` and `created_at` only, and only on jobs assigned to her (section 6.1a). Staff get no inspections.
+- **`GET /api/files/:id`, damage and lost-and-found photos:** staff and cleaners can open only photos on records they filed (404 otherwise). Owners and managers can open all. A staff member can still add a photo to a report they filed.
+- **`GET /api/my-pay`:** cleaners only; everyone else gets 403 "My pay is for cleaners." Rows for cleans paid to someone else are hidden rows: no name and no money. This closes section 7, row 17.
+- **`GET /api/guests` and `GET /api/guests/:id`:** staff get `{ guest_id, full_name, limited }`, the profile has empty `stays` and `reviews`, and the `segment` and `guest` filters are ignored for staff (the answer equals the unfiltered list). A group's lead guest has the same limited shape.
+- **`GET /api/reservations?guest=`:** ignored for staff. Reservation rows for staff have no `guest_vip` or `guest_do_not_rebook`.
+- **Unit create and edit (discount ladder):** among the discounts that are on, weekly <= 14+ night (`fortnight_discount`) <= monthly. A broken order is refused with 400 on the longer-stay field. `PATCH` checks the order only when the request sends a discount field, so an older listing with an inverted ladder can still be edited for other reasons.
+- **`POST /api/unit-owners/:id/payouts`:** `month` is required (400 on `month` without it) and must be between 2000 and 2100; the `GET` month filter follows the same range.
+- **`GET /api/owner-statements`:** leaves out owners with no units and no saved statement for the month.
+- **`POST /api/unit-owners/:id/archive`:** turns portal access off and removes the owner's sessions and unused sign-in links. The invite route answers `sent: false` when the email failed, and the screen says so.
+- **`PATCH /api/account/notify-prefs`:** `property_ids: []` is refused with 400 on `property_ids`. Accounts that saved an empty list before this fix stay muted until they save again (BLOCKERS round 6, read-only check).
+- **`GET /api/reviews`:** a malformed `unit_id` or `property_id` is ignored (D-77), so the full list comes back instead of a 404. `matched` and `matched_average` count every match, not only the rows sent back (the 200-row limit).
+- **`POST /api/support/tickets/:id/rate`:** the first rating is kept; a second one gets 409 `ALREADY_RATED`.
+- **Daily close:** balances detail dates are written out ("Oct 15, 2026"), and sync-problem rows carry a link to the listing.
+- **Reopening a finished clean, and failing an inspection:** the unit's `cleaning_status` is left alone when a newer clean of that unit is already done (closes section 7, row 18).
+- **Supplies:** a quantity above 100,000 is refused (400 on `quantity`) before the "Not enough on hand" question.
+- **Amount filters (payments, expenses and similar lists):** an amount that can't be used or a backwards range is refused or ignored with a message on the field; the screen turns the filter off and shows no chip.
+- **Section 11, `GET /api/my-pay` bullet** is superseded by the first bullet above of this section.
+- **House rules on reservations (C22):** `GET /api/reservations` and `GET /api/reservations/:id` give `rules_text` and `rules_accepted_at` to owners and managers only. Staff do not get them (matrix 6.2). Guest detail redaction is an allow-list: every role except owner and manager is redacted.
+- **`POST /api/reservations/:id/payments`:** staff can record a payment, but the response is redacted the same way: no guest email, phone or flags, no other stays, review or house rules. Owners and managers get the full guest.
+- **Payment idempotency keys:** `idempotency_key` is internal. It is removed from payment and receipt responses for every role.

@@ -150,7 +150,7 @@ export async function tenantsView(el, { query }) {
               : Number(t.outstanding) > 0 ? [h('span', { class: 'amount' }, peso(t.outstanding)), badge('unpaid', 'Balance')]
                 : t.lease_id ? badge('paid', 'Up to date') : badge('vacant', 'Unassigned'))))))]
       : (filtered
-        ? emptyState({ title: 'No results found', text: filters.q ? `No tenant matches “${filters.q}” with these filters. Try removing a filter.` : 'No tenant matches these filters. Try removing a filter.', action: h('button', { class: 'btn btn--secondary', onclick: () => { Object.assign(filters, defaults, { status: filters.status }); rememberFilters('tenants', filters); renderBar(); load(); } }, 'Clear filters') })
+        ? emptyState({ title: 'No results found', text: filters.q ? `No tenant matches “${filters.q}” with these filters. Try removing a filter.` : 'No tenant matches these filters. Try removing a filter.', action: h('button', { class: 'btn btn--secondary', onclick: () => { Object.assign(filters, defaults); rememberFilters('tenants', filters); renderBar(); load(); } }, 'Clear filters') })
         : emptyState({
           iconName: 'users',
           title: filters.status === 'archived' ? 'No archived tenants' : 'No tenants yet',

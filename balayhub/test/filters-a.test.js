@@ -101,8 +101,9 @@ test('guests: staff and managers only see stays (and guests) in their properties
   assert.ok(s.every((g) => g.total_spent === undefined && g.email === undefined));
   assert.deepEqual(names(s), ['Ana Cruz', 'Cara Lim', 'Eve Walk-in'], 'sort=spent is ignored for staff, falls back to name');
   assert.equal(s[0].full_name, 'Ana Cruz');
-  assert.equal((await staff.get(`/api/guests?property_id=${prop2.property_id}`)).data.guests.length, 0, 'no stays visible at another property');
-  assert.equal((await staff.get('/api/guests?channel=airbnb')).data.guests.map((g) => g.full_name).join(), 'Ana Cruz');
+  // QA r6 C03: staff get names only, so stay-based filters are ignored (they would reveal stay history).
+  assert.deepEqual(names((await staff.get(`/api/guests?property_id=${prop2.property_id}`)).data.guests), ['Ana Cruz', 'Cara Lim', 'Eve Walk-in']);
+  assert.deepEqual(names((await staff.get('/api/guests?channel=airbnb')).data.guests), ['Ana Cruz', 'Cara Lim', 'Eve Walk-in']);
   const m = (await mgr.get('/api/guests?segment=repeat')).data.guests;
   assert.equal(m.length, 0, 'Ana stayed twice, but not at the manager\'s property');
   assert.deepEqual(names((await mgr.get('/api/guests?stay=upcoming')).data.guests), ['Ben Reyes']);

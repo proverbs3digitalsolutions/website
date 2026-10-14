@@ -367,9 +367,9 @@ test('photos: the reporter adds photos, others and the wrong record types are re
   assert.equal((await upload(cleanerX.c, 'listing', unitA.unit_id)).status, 403, 'refused by type, before anything else');
   assert.equal((await upload(cleanerX.c, 'lease', NO_ID)).status, 403);
 
-  assert.equal((await upload(staff, 'damage', rep.A.report_id)).status, 201, 'staff who can see the unit can add photos');
+  assert.equal((await upload(staff, 'damage', rep.A.report_id)).status, 404, 'staff who can see the unit cannot add photos to a report someone else filed');
   const list = await owner.get('/api/damage-reports');
-  assert.equal(list.data.reports.find((r) => r.report_id === rep.A.report_id).photo_count, 2);
+  assert.equal(list.data.reports.find((r) => r.report_id === rep.A.report_id).photo_count, 1);
 
   const fileId = mine.data.file.file_id;
   assert.equal((await cleanerX.c.get(`/api/files/${fileId}`)).status, 200);

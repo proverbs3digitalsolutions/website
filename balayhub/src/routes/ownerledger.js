@@ -16,7 +16,8 @@ const router = express.Router();
 const ownersOnly = requireRole('owner');
 
 const PAYOUT_METHODS = ['gcash', 'maya', 'bank_transfer', 'cash', 'other'];
-const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+// 2000 to 2100, the same years the statement routes accept.
+const MONTH_RE = /^(20\d{2}|2100)-(0[1-9]|1[0-2])$/;
 const manilaToday = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
 const validationError = (fields) => new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields });
 const centavos = (s) => Math.round(Number(s) * 100);
@@ -71,7 +72,8 @@ const PAYOUT_SPEC = {
 router.post('/unit-owners/:id/payouts', ownersOnly, ah(async (req, res) => {
   const o = await loadOwner(req.user, uuidParam(req.params.id));
   const body = validate(req.body, PAYOUT_SPEC);
-  if (body.month !== null) monthParam(body.month);
+  if (!body.month) throw validationError({ month: 'Choose the statement month this payout is for.' });
+  monthParam(body.month);
   if (body.paid_on > manilaToday()) throw validationError({ paid_on: 'Date paid cannot be in the future.' });
   const key = req.get('Idempotency-Key');
   if (key && !/^[A-Za-z0-9_-]{8,100}$/.test(key)) throw new HttpError(400, 'Invalid Idempotency-Key header.', { code: 'BAD_REQUEST' });
@@ -95,27 +97,25 @@ router.post('/unit-owners/:id/payouts', ownersOnly, ah(async (req, res) => {
         const again = await replay(db);
         if (again) return again;
       }
-      if (body.month) {
-        const { rows: [saved] } = await db.query(
-          "SELECT snapshot FROM owner_statements WHERE owner_id = $1 AND month = $2 AND status = 'published'", [o.owner_id, body.month]);
-        // Due = the published copy's payout, or the live payout for a draft (skipped when the owner has no units to report on).
-        const stmt = saved ? saved.snapshot : await ownerStatement(org, o.owner_id, body.month, db);
-        if (stmt && (saved || stmt.units.length)) {
-          const due = centavos(stmt.totals.payout);
-          // The owner owes the workspace this month, so there is nothing to pay out. Refused even when the request confirms it.
-          if (due < 0) {
-            throw new HttpError(409, `Nothing is due to ${o.full_name} for ${monthName(body.month)}: they owe you ${peso(-due)}. A payout can't be recorded for this month.`,
-              { code: 'NOTHING_DUE', due: money(due) });
-          }
-          // Paying more than the month's statement is allowed, but only when the request says it was meant.
-          if (!body.confirm_over) {
-            const { rows: [{ paid }] } = await db.query(
-              'SELECT COALESCE(SUM(amount), 0) AS paid FROM owner_payouts WHERE owner_id = $1 AND month = $2 AND voided_at IS NULL', [o.owner_id, body.month]);
-            const total = centavos(paid) + centavos(body.amount);
-            if (total > due) {
-              throw new HttpError(409, `This takes the ${monthName(body.month)} payouts to ${peso(total)}, more than the ${peso(due)} due. Confirm to record it anyway.`,
-                { code: 'PAYOUT_OVER_DUE', due: money(due), paid: money(centavos(paid)) });
-            }
+      const { rows: [saved] } = await db.query(
+        "SELECT snapshot FROM owner_statements WHERE owner_id = $1 AND month = $2 AND status = 'published'", [o.owner_id, body.month]);
+      // Due = the published copy's payout, or the live payout for a draft (skipped when the owner has no units to report on).
+      const stmt = saved ? saved.snapshot : await ownerStatement(org, o.owner_id, body.month, db);
+      if (stmt && (saved || stmt.units.length)) {
+        const due = centavos(stmt.totals.payout);
+        // The owner owes the workspace this month, so there is nothing to pay out. Refused even when the request confirms it.
+        if (due < 0) {
+          throw new HttpError(409, `Nothing is due to ${o.full_name} for ${monthName(body.month)}: they owe you ${peso(-due)}. A payout can't be recorded for this month.`,
+            { code: 'NOTHING_DUE', due: money(due) });
+        }
+        // Paying more than the month's statement is allowed, but only when the request says it was meant.
+        if (!body.confirm_over) {
+          const { rows: [{ paid }] } = await db.query(
+            'SELECT COALESCE(SUM(amount), 0) AS paid FROM owner_payouts WHERE owner_id = $1 AND month = $2 AND voided_at IS NULL', [o.owner_id, body.month]);
+          const total = centavos(paid) + centavos(body.amount);
+          if (total > due) {
+            throw new HttpError(409, `This takes the ${monthName(body.month)} payouts to ${peso(total)}, more than the ${peso(due)} due. Confirm to record it anyway.`,
+              { code: 'PAYOUT_OVER_DUE', due: money(due), paid: money(centavos(paid)) });
           }
         }
       }

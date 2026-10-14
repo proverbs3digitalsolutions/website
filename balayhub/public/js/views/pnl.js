@@ -54,9 +54,9 @@ export async function pnlView(el, { query = {} } = {}) {
     box.replaceChildren(
       h('div', { class: 'card' }, h('div', { class: 'grid grid--4 stats' },
         stat('Gross', peso(t.gross), `${t.stays} stay${t.stays === 1 ? '' : 's'} · ${t.nights} nights`),
-        stat('Channel fees and refunds', peso(Number(t.channel_fees) + Number(t.refunds)), `${peso(t.channel_fees)} fees · ${peso(t.refunds)} refunds`),
+        stat('Channel fees and refunds', peso(Number(t.channel_fees) + Number(t.refunds)), `${peso(t.channel_fees)} channel fees · ${peso(t.refunds)} refunds`),
         stat('Expenses', peso(t.expenses)),
-        h('div', { class: `stat stat--flat${neg(t.net) ? ' stat--alert' : ''}` }, h('div', { class: 'stat__value' }, peso(t.net)), h('div', { class: 'stat__label' }, 'Net'), h('div', { class: 'muted small' }, 'gross − fees − refunds − expenses')))),
+        h('div', { class: `stat stat--flat${neg(t.net) ? ' stat--alert' : ''}` }, h('div', { class: 'stat__value' }, peso(t.net)), h('div', { class: 'stat__label' }, 'Net'), h('div', { class: 'muted small' }, 'gross − channel fees − refunds − expenses')))),
       h('div', { class: 'card card--flush' }, h('div', { class: 'table-wrap' }, h('table', { class: 'table table--compact' },
         h('caption', { class: 'sr-only' }, `Profit and loss per unit for ${month}`),
         h('thead', null, h('tr', null, ['Unit', 'Stays', 'Nights', 'Gross', 'Channel fees', 'Refunds', 'Expenses', 'Net'].map((x, i) => h('th', { scope: 'col', class: i ? 'num' : null }, x)))),

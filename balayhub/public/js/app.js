@@ -1,6 +1,6 @@
 // BalayHub single-page app: routing, session state and the app shell.
 
-import { get, post, onAuthLost } from './api.js';
+import { get, post, onAuthLost, ApiError } from './api.js';
 import { h, icon, brand, toast, errorState, skeleton } from './ui.js';
 import * as authViews from './views/auth.js';
 import { dashboardView } from './views/dashboard.js';
@@ -248,11 +248,19 @@ function parseHash() {
 }
 
 function match(path) {
+  // A blank id (#/payments/%20) or a broken escape (#/payments/%E0%A4%A) is not a record. It gets the Not found state a 404 gives,
+  // and the view never calls the API.
+  const incomplete = async () => { throw new ApiError('This link is incomplete. Check the address, or go back and try again.', { status: 404 }); };
   for (const [pattern, view, access] of routes) {
     const names = [];
     const re = new RegExp(`^${pattern.replace(/:(\w+)/g, (_, n) => { names.push(n); return '([^/]+)'; })}$`);
     const m = re.exec(path);
-    if (m) return { view, access, params: Object.fromEntries(names.map((n, i) => [n, decodeURIComponent(m[i + 1])])) };
+    if (m) {
+      let params;
+      try { params = Object.fromEntries(names.map((n, i) => [n, decodeURIComponent(m[i + 1])])); } catch { return { view: incomplete, access, params: {} }; }
+      if (Object.values(params).some((v) => !v.trim())) return { view: incomplete, access, params };
+      return { view, access, params };
+    }
   }
   return null;
 }

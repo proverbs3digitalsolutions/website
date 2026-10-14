@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-14 (QA round 5, section 18)
+Last updated: 2026-10-14 (QA round 6, section 19)
 
 ---
 
@@ -103,9 +103,9 @@ Managers and staff only see records in properties assigned to them (`propertySco
 | Security deposit | Record, return, undo a return | Record, return | Record only |
 | Inbox, templates | Yes | Yes | No (403) |
 | Automatic messages | Add, edit, turn on/off, delete | View only ("Only the workspace owner can change automatic messages.") | No |
-| Housekeeping | All, plus Edit checklist | Add, assign, cancel, copy for cleaner | View, tick checklist, start, mark done, reopen, add photos |
+| Housekeeping | All, plus Edit checklist | Add, assign, cancel, copy for cleaner | View, tick checklist, start, mark done, add photos (no reopen; D-56) |
 | Listings | Add, edit, photos, channels, gate pass | Same, but can't create a new building | View, mark clean/dirty |
-| Guests | Edit, VIP, Do not rebook; Reviews; Discount codes | Same | Names and stay counts only; no Reviews or Discount codes buttons |
+| Guests | Edit, VIP, Do not rebook; Reviews; Discount codes | Same | Names and stay counts only; no Reviews or Discount codes buttons *Changed 2026-10-14 (D-82): names only; no stay counts.* |
 | Unit owners, statements, payouts and repairs reserve | Yes | No (403) | No (403) |
 | Profit and loss (`#/pnl`) | Yes, all units | Yes, assigned properties | No (403) |
 | Owner portal (unit owners, separate sign-in) | Invites and turns off access | No access | No access |
@@ -121,6 +121,8 @@ Managers and staff only see records in properties assigned to them (`propertySco
 | Push topics | All | All | Cleaning only |
 | Support tickets | All workspace tickets | Own tickets | Own tickets |
 
+*Corrected 2026-10-14 (QA round 6): cleaners can't reopen a finished job, as D-56 says and the code does; owners, managers and staff can.*
+
 Note: staff can open Settings, but only see personal sections. Staff can see the long-term Dashboard and Reports for assigned properties. The short-term stay reports are the ones hidden from staff.
 
 ---
@@ -134,12 +136,14 @@ A cleaner is a team member with the cleaner role. They must have at least one pr
 | Area | Cleaner |
 |---|---|
 | Cleaning jobs, board, calendar | Their own jobs and unassigned jobs in their properties. Guests by first name only. |
-| Job detail | Tick checklist items, Start, Mark done, Reopen, add photos, Report damage, Found an item, Supplies used, Something broken? (work order). No cancel, no reassign, no edit, no inspect. |
+| Job detail | Tick checklist items, Start, Mark done, add photos (no reopen; D-56), Report damage, Found an item, Supplies used, Something broken? (work order). No cancel, no reassign, no edit, no inspect. |
 | Pay | Their own pay only (`#/my-pay`). |
 | Supplies | Names and counts only (no costs). Record used or restocked on a job. |
 | Files | Photos on cleaning, damage and lost-and-found records they can see. |
 | Account, help, support | Yes. |
 | Everything else | Not shown. The server refuses with 403 CLEANER_FORBIDDEN. |
+
+*Corrected 2026-10-14 (QA round 6): cleaners can't reopen a finished job, as D-56 says and the code does; owners, managers and staff can.*
 
 **Flow: a clean.** Open the job → tick items → Start → Mark done. The unit becomes Clean. Owners and managers get a notification. Pay for the job is worked out from the cleaner's rate.
 
@@ -796,3 +800,29 @@ Spec: `docs/specs/PHASE-5-PRICING-TEAM.md`. Decisions D-66 to D-74. Staff and cl
 - **Phones, wide tables:** a table with four or more columns shows one card per row below 560px (see DESIGN-BRIEF section 14). Tables with three or fewer columns stay tables. The calendar keeps its grid and its edge fade.
 - **Phones, long names:** long words wrap in headings, listing names, the launchpad and reservation names, so no page scrolls sideways at 390px.
 - **Accessibility:** the account link at the top of the app is named "<workspace name>, my account".
+
+## 19. QA round 6 flow changes (2026-10-14)
+
+- **Staff and guests (D-82):** staff see a guest's name only. The Guests page has only the search box (no VIP or Do not rebook filters, no stay counts). A guest's page says the details are limited. A reservation shows no VIP star, no Returning badge and no review card. A group's lead guest carries no flags. Owners and managers see everything as before.
+- **Cleaning board and job page, per role:** owners and managers see inspection results in full. Staff see no inspection line. A cleaner sees "Passed" or "Failed" with the date on a unit where she has the job (no score, notes or inspector), and sees the guest only on units where she has a job.
+- **Housekeeping buttons:** Copy for cleaner is hidden on a cancelled job. Inspect is hidden on a paid clean (as Reopen is).
+- **Cleaner photo card:** the file box is named "Choose a photo". The empty card and the message for a file that isn't JPG, PNG or WEBP are in Taglish for cleaners using Taglish.
+- **New reservation:** "Use ₱X from your rates" fills the total and then disappears. If the stay's rates are missing it offers the cleaning fee only. A rate typed as "1,5" is read as 1.5. A check-out before check-in shows one message.
+- **Group lead guest:** the search says "Showing 8 of N" when there are more matches.
+- **Daily close:** balances show dates written out ("Check-in Oct 15, 2026"). A sync problem opens the listing. Update close says "Close updated." On phones each "All clear" badge stays on its heading line.
+- **Listing form, discounts:** a weekly discount above the 14+ night discount, or a 14+ night discount above the monthly one, is refused at the longer stay's field with the reason.
+- **Quotes:** an open or cancelled quote says "Valid until <date>" (and "Expired" once past). The quote page loading line and the host fallback are in Taglish.
+- **Stay reports, Home, profit and loss:** "Channel fees" is the channel commission only. Cleaning and extras is its own column on Stay reports and its own part of the Revenue tile. A negative charge price shows no total in the preview.
+- **Amount filters:** an unusable amount (negative, or 11 or more digits) or a backwards range shows a message at the field and the filter is off, with no chip. Payments and Expenses show one "Amount (₱)" chip.
+- **Status chips with no matches** (maintenance, tenants, properties): "No results found" with Clear filters, which returns to the default status.
+- **Owners:** if the portal invite email fails, a toast says so and the owner card offers "Send the invite again" while access is on. Owners with no units are left out of a month's statements and the ready count, unless a statement was already saved. A month outside 2000 to 2100 shows a message at the month field. Archiving an owner turns portal access off.
+- **Cleaner pay:** "Select all unpaid" sits in the visible bar above the table (nothing focusable is hidden in the table header on phones).
+- **My pay:** for cleaners only, on the page and behind it. Other roles get "My pay is for cleaners."
+- **Launchpad:** "N of 11 steps done · K skipped". The bar counts done steps only.
+- **Settings, activity:** a listing or guide edit shows "Changed: <field names>" with no values.
+- **Public booking page:** one guest-limit message when the guests don't fit. A done link that doesn't exist shows a new not-found sentence and "See all places".
+- **Get started:** going back and forward keeps the step 3 answers (email, password, Terms tick); the password is held in memory only. A taken email shows one message at the email field: "This email is already registered. Log in or reset your password instead."
+- **Page addresses:** a blank id (`#/payments/%20`, `#/tenants/%20`, `#/maintenance/%20`) or a badly written one shows "Not found", never a raw error.
+- **Reviews and support:** a review filter that isn't a real id is ignored. A support rating can be given once; a second try is refused.
+- **Notifications:** a notification setting can't be saved with an empty property list.
+- **Long-term assistant:** the footer wording matches a monthly-rental workspace.

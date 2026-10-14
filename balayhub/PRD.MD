@@ -2,7 +2,7 @@
 
 BalayHub is a web app that helps Filipino hosts run 1 to 10 rental units from one place. It covers condo staycations listed on Airbnb, Booking.com and Agoda, and long-term monthly rentals such as apartments, boarding houses, dorms and bedspaces. Hosts get one calendar for every channel, a direct booking page with GCash, Maya and card payments, a guest inbox, cleaning tasks, condo gate passes, deposits, reports and owner statements. Long-term landlords get properties, tenants, leases, rent, expenses and repairs. This document describes what is **actually built** today, feature by feature, and lists what is planned. It was written from the code (`src/routes`, `src/lib`, `public/js`, `db/migrations`) and the existing docs.
 
-Last updated: 2026-10-14 (QA round 5)
+Last updated: 2026-10-14 (QA round 6)
 
 ---
 
@@ -1007,3 +1007,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - QA round 5: duplicate add-ons made before the name rule are archived in the local copy only. Guest lists show each name once. The live database check is BLOCKERS question 10.
 - QA round 5: the balance after refunding an overpayment stays as D-34 and D-77 define it. Founder question 1 in BLOCKERS.
 - QA round 5: add-on descriptions are still English only (round 4 question, still open).
+
+- QA round 6: staff see a guest's name only (no VIP or Do not rebook flag, stay counts, ratings or review card on guest pages and reservations). Staff can still read full reviews on the Reviews page. Founder questions 1 and 2 in BLOCKERS (D-82).
+- QA round 6: `GET /api/my-pay` is now cleaners only, which closes the round 5 question (D-82).
+- QA round 6: add-on descriptions are still English only (unchanged, round 4 question).

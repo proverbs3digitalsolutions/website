@@ -11,7 +11,8 @@ const manilaDay = (ts) => fmtDate(new Intl.DateTimeFormat('en-CA', { timeZone: '
 const short = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 const num = (v) => h('td', { class: 'num' }, v);
 
-const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+// 2000 to 2100, the same years the server accepts.
+const MONTH_RE = /^(20\d{2}|2100)-(0[1-9]|1[0-2])$/;
 // A month in the URL: valid, or '' when absent (use last month). Anything else is bad and gets a message.
 const badMonth = (q) => q.month != null && q.month !== '' && !MONTH_RE.test(q.month);
 const badMonthAlert = (q) => h('div', { class: 'alert alert--warn', role: 'alert' }, `"${q.month}" is not a valid month. Choose a month above.`);
@@ -96,7 +97,13 @@ export async function ownersView(el, { rerender, query = {} }) {
   const invite = async (o) => {
     if (!o.email) { toast('Add an email for this owner first.', 'error'); return; }
     if (!await confirmDialog({ title: 'Invite to owner portal?', text: `${o.full_name} will get an email at ${o.email} with a sign-in link. They can see their published statements, bookings and payouts, and block their own dates.`, confirmText: 'Send invite' })) return;
-    try { await post(`/unit-owners/${o.owner_id}/portal-invite`); toast(`Invite sent to ${o.email}.`); rerender(); } catch (err) { toast(err.code === 'NO_EMAIL' ? 'Add an email for this owner first.' : err.message, 'error'); }
+    try {
+      const r = await post(`/unit-owners/${o.owner_id}/portal-invite`);
+      // The server turns portal access on even when the email is refused, so the toast and the card say which it was.
+      if (r.sent) toast(`Invite sent to ${o.email}.`);
+      else toast(`The invite email to ${o.email} couldn't be sent. Portal access is on. Check the email address, then use Send the invite again.`, 'error');
+      rerender();
+    } catch (err) { toast(err.code === 'NO_EMAIL' ? 'Add an email for this owner first.' : err.message, 'error'); }
   };
   const disablePortal = async (o) => {
     if (!await confirmDialog({ title: 'Turn off portal access?', text: `${o.full_name} will be signed out and can't sign in again until you invite them.`, confirmText: 'Turn off access', danger: true })) return;
@@ -134,7 +141,8 @@ export async function ownersView(el, { rerender, query = {} }) {
           h('a', { class: 'btn btn--primary btn--sm', href: `#/owners/${o.owner_id}/statement?month=${lastMonth()}` }, 'Statement for last month'),
           h('a', { class: 'btn btn--secondary btn--sm', href: `#/owners/${o.owner_id}/statement?month=${todayManila().slice(0, 7)}` }, 'This month so far'),
           o.portal_enabled
-            ? h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => disablePortal(o) }, 'Turn off portal access')
+            ? [h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => disablePortal(o) }, 'Turn off portal access'),
+              h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => invite(o) }, 'Send the invite again')]
             : h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => invite(o) }, o.portal_invited_at ? 'Invite again' : 'Invite to owner portal'))))));
   }
   async function load() {

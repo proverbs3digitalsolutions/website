@@ -272,10 +272,10 @@ export async function rentView(el, { query }) {
     options: [...extra, ...units.filter((u) => !f.property_id || u.property_id === f.property_id)
       .map((u) => [u.unit_id, `${unitLabel(u.unit_name)}${properties.length > 1 && !f.property_id ? ` · ${u.property_name}` : ''}`])],
   });
-  const amountFields = [
-    { name: 'min_amount', label: 'Amount from (₱)', type: 'number', min: 0, step: '0.01' },
-    { name: 'max_amount', label: 'Amount up to (₱)', type: 'number', min: 0, step: '0.01' },
-  ];
+  // Payments and expenses: one range. A value the server would ignore is flagged and not applied (filters.js).
+  const amountRange = { name: 'amount', label: 'Amount (₱)', type: 'amountrange', keys: ['min_amount', 'max_amount'] };
+  // Amounts as the server reads them (AMOUNT_RE in src/routes/money.js).
+  const AMOUNT_PATTERN = /^\d{1,10}(\.\d{1,2})?$/;
   const voidedField = { name: 'include_voided', label: 'Voided entries', all: 'Hide voided', options: [['1', 'Include voided'], ['only', 'Voided only']] };
   const receiptField = { name: 'receipt', label: 'Receipt / proof', all: 'Any', options: [['yes', 'Attached'], ['no', 'Not attached']] };
 
@@ -291,7 +291,7 @@ export async function rentView(el, { query }) {
           unitField(f),
           { name: 'late', label: 'Days late', all: 'Any', options: [['7', 'More than 7 days late'], ['30', 'More than 30 days late'], ['60', 'More than 60 days late'], ['90', 'More than 90 days late']] },
           { name: 'lease', label: 'Tenant', all: 'Current and former', options: [['current', 'Current tenants'], ['former', 'Moved out (still owing)']] },
-          { name: 'min_amount', label: 'Amount due at least (₱)', type: 'number', min: 0, step: '0.01' },
+          { name: 'min_amount', label: 'Amount due at least (₱)', type: 'number', min: 0, step: '0.01', pattern: AMOUNT_PATTERN, patternText: 'Enter an amount of 0 or more (up to 10 digits).' },
           { name: 'sort', label: 'Sort by', all: 'Overdue first, newest due', options: [['due_asc', 'Oldest due date first'], ['amount', 'Biggest amount due'], ['rent', 'Highest monthly rent'], ['tenant', 'Tenant name'], ['unit', 'Property and unit']] },
         ],
       };
@@ -307,7 +307,7 @@ export async function rentView(el, { query }) {
           { name: 'from', label: 'Date received', type: 'daterange', keys: ['from', 'to'] },
           unitField(f),
           { name: 'tenant_id', label: 'Tenant', all: 'All tenants', options: (tenants || []).map((t) => [t.tenant_id, t.full_name]) },
-          ...amountFields, voidedField, receiptField,
+          amountRange, voidedField, receiptField,
           { name: 'sort', label: 'Sort by', all: 'Newest first', options: [['date_asc', 'Oldest first'], ['amount', 'Biggest amount'], ['amount_asc', 'Smallest amount'], ['tenant', 'Tenant name']] },
         ],
       };
@@ -322,7 +322,7 @@ export async function rentView(el, { query }) {
         { name: 'from', label: 'Expense date', type: 'daterange', keys: ['from', 'to'] },
         unitField(f, [['none', 'Whole property / common area']]),
         { name: 'vendor', label: 'Vendor', all: 'Any vendor', options: vendors.map((v) => [v, v]) },
-        ...amountFields,
+        amountRange,
         { name: 'source', label: 'Recorded from', all: 'Anywhere', options: [['maintenance', 'Maintenance repairs'], ['direct', 'Added here']] },
         voidedField, receiptField,
         { name: 'sort', label: 'Sort by', all: 'Newest first', options: [['date_asc', 'Oldest first'], ['amount', 'Biggest amount'], ['amount_asc', 'Smallest amount'], ['category', 'Category']] },

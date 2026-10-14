@@ -104,7 +104,7 @@ test('the plan panel counts only short-term listings, the way the server counts 
 test('audit details show plain labels, pesos and dates, and never ids', () => {
   const text = settings.summarize({
     booking_id: UUID, amount: '8750.00', estimated_cost: 1200, reason: 'Guest asked', role: 'manager', check_in: '2026-10-20',
-    enabled: true, method: 'bank_transfer', property_ids: [UUID], fields: ['status'], note: null,
+    enabled: true, method: 'bank_transfer', property_ids: [UUID], note: null,
   });
   assert.equal(text, 'Amount: ₱8,750.00 · Estimated cost: ₱1,200.00 · Reason: Guest asked · Role: Property manager · Check-in: Oct 20, 2026 · Turned on: Yes · Method: Bank transfer');
 });

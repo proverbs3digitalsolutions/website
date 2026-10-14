@@ -27,7 +27,9 @@ extendTranslations({
   'Choose your dates first, then apply your code.': 'Piliin muna ang dates mo, saka i-apply ang code mo.',
   'This place allows up to {n} guests.': 'Hanggang {n} guests lang ang puwede sa lugar na ito.',
   'At least 1 guest.': 'Hindi bababa sa 1 guest.',
+  'Please check the highlighted fields.': 'Pakitingnan ang mga naka-highlight.',
   "We couldn't confirm the cancellation. Your dates may stay on hold for a short while. Please try again, or contact the host.": 'Hindi namin makumpirma ang pagkansela. Puwedeng ma-hold pa nang saglit ang dates mo. Pakisubukan ulit, o i-contact ang host.',
+  "This booking link isn't valid. Check the link, or ask your host.": 'Hindi valid ang booking link na ito. Tingnan ang link, o magtanong sa host.',
 });
 
 // The same email and mobile rules the server applies (src/lib/validate.js), so both are checked on the first submit.
@@ -250,11 +252,20 @@ export async function bookListingView(el, { params, query }) {
     h('div', { class: 'bk-rules__text', tabindex: 0, role: 'region', 'aria-labelledby': 'bk-rules-h' }, l.house_rules),
     h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'accept_rules' }), h('span', null, t('I agree to the house rules'))),
     h('div', { class: 'error', role: 'alert' }));
+  // The guest-count message sits in the Guests box. Set here, not with showErrors() (which moves focus), so a quote refresh can't pull the guest back to that field.
+  const setGuestsError = (msg) => {
+    const wrap = form.querySelector('[data-field="num_guests"]');
+    const input = wrap.querySelector('input');
+    wrap.classList.toggle('field--invalid', Boolean(msg));
+    if (msg) input.setAttribute('aria-invalid', 'true'); else input.removeAttribute('aria-invalid');
+    wrap.querySelector('.error').textContent = msg;
+  };
   async function updateQuote() {
     current = null;
     submit.disabled = true;
     payChoice.querySelector('.error').textContent = '';
     codeBox.querySelector('.error').textContent = '';
+    setGuestsError('');
     if (!checkIn || !checkOut) {
       summary.replaceChildren(h('p', { class: 'muted' }, checkIn ? t('Check-in {date}. Now choose check-out.', { date: fmtDate(checkIn) }) : t('Choose your dates on the calendar to see the price.')));
       return;
@@ -291,6 +302,8 @@ export async function bookListingView(el, { params, query }) {
       !q.available && h('div', { class: 'alert alert--error' }, t('Sorry, these dates are no longer available.')));
       submit.disabled = !q.available || !host.accepting;
     } catch (err) {
+      // Over the guest limit the Guests box carries the sentence, so the summary stays quiet about it.
+      if (err.fields?.guests) { setGuestsError(tServer(err.fields.guests)); summary.replaceChildren(); return; }
       // Show the actual reason (e.g. minimum stay), not just "check the highlighted fields".
       const reason = err.fields ? Object.values(err.fields)[0] : err.message;
       summary.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, tServer(reason)));
@@ -368,9 +381,15 @@ export async function bookListingView(el, { params, query }) {
       });
       location.href = r.checkout_url;
     } catch (err) {
-      formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, err instanceof ApiError ? tServer(err.message) : t('Something went wrong. Please try again.')));
-      if (err.fields) showErrors(form, tFields(err.fields));
-      if (err.fields?.code) { codeBox.open = true; codeMsg.textContent = ''; }
+      // A code refusal goes under the code box. The quote's status line is cleared first, and loses its error class, so the message lands in the error line under the box.
+      if (err.fields?.code) { codeBox.open = true; codeMsg.textContent = ''; codeMsg.className = 'muted small'; }
+      // Each message shows once: one whose field is on the form sits at that field; the banner names only the rest.
+      const unplaced = err.fields ? showErrors(form, tFields(err.fields)) : [];
+      const banner = !(err instanceof ApiError) ? t('Something went wrong. Please try again.')
+        : unplaced.length ? unplaced.join(' ')
+        : Object.keys(err.fields || {}).length ? t('Please check the highlighted fields.')
+        : tServer(err.message);
+      formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, banner));
       if (err.code === 'DATES_TAKEN') { days = new Map(); await loadDays(monthStart); drawCal(); }
       submit.disabled = false;
       submit.textContent = t('Continue to payment');
@@ -420,8 +439,10 @@ export async function bookDoneView(el, { params }) {
   let tries = 0;
   async function check() {
     let s;
-    try { s = await get(`/public/book/status/${encodeURIComponent(params.token)}`); } catch (err) {
-      show(null, h('div', { class: 'card' }, h('h1', null, t('Booking not found')), h('p', { class: 'muted' }, err.message)));
+    try { s = await get(`/public/book/status/${encodeURIComponent(params.token)}`); } catch {
+      show(null, h('div', { class: 'card' }, h('h1', null, t('Booking not found')),
+        h('p', { class: 'muted' }, t("This booking link isn't valid. Check the link, or ask your host.")),
+        params.slug && h('p', null, h('a', { href: `#/book/${params.slug}` }, t('See all places')))));
       return;
     }
     const st = s.stay;

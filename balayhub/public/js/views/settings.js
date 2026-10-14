@@ -259,7 +259,7 @@ export function actionText(action) {
 
 // Audit detail keys in plain words. A key not listed here is still shown, as plain words.
 const DETAIL_LABELS = {
-  email: 'Email', role: 'Role', name: 'Name', title: 'Title', code: 'Code', slug: 'Page address', note: 'Note', reason: 'Reason',
+  email: 'Email', role: 'Role', name: 'Name', title: 'Title', code: 'Code', slug: 'Page address', public_slug: 'Page address', note: 'Note', reason: 'Reason',
   status: 'Status', from: 'From', to: 'To', method: 'Method', channel: 'Channel', category: 'Category', kind: 'Type', plan: 'Plan',
   amount: 'Amount', amount_paid: 'Amount paid', total_amount: 'Total', price: 'Price', unit_price: 'Unit price', monthly_rent: 'Monthly rent',
   estimated_cost: 'Estimated cost', payout: 'Payout', refund: 'Refund', deduction: 'Deduction', reserve_topup: 'Reserve top-up',
@@ -267,6 +267,8 @@ const DETAIL_LABELS = {
   month: 'Month', months: 'Months', enabled: 'Turned on', sent: 'Sent', count: 'Count', quantity: 'Quantity',
   abandoned_followup: 'Follow-up email', returning_guest_pct: 'Returning-guest discount',
   pricing: 'Pricing', adjust_pct: 'Price change',
+  vip: 'VIP', gatepass_enabled: 'Send automatically', gatepass_days_before: 'Days before check-in', gatepass_attach_ids: 'Attach IDs',
+  gatepass_authorized_by: 'Authorized by', gatepass_notes: 'Notes for the admin',
 };
 const MONEY_KEYS = new Set(['amount', 'amount_paid', 'total_amount', 'price', 'unit_price', 'monthly_rent', 'estimated_cost', 'payout', 'refund', 'deduction', 'reserve_topup']);
 // Stored codes for add-on pricing and pricing rules, in plain words.
@@ -295,13 +297,34 @@ function detailValue(k, v) {
 // "every 1 month", "every 3 months": the stored unit is plural ('days' or 'months'), so it is singular for 1.
 const repeatText = (n, unit) => `every ${n} ${Number(n) === 1 ? String(unit).replace(/s$/, '') : unit}`;
 
+// A field's plain-words name: its detail label, or the key in sentence case. A Taglish guide field says so.
+const fieldLabel = (k) => {
+  if (DETAIL_LABELS[k]) return DETAIL_LABELS[k];
+  if (k.endsWith('_tl')) return `${fieldLabel(k.slice(0, -3))} (Taglish)`;
+  return k.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
+};
+// "Changed: Arrival, Parking". Ids are left out, and labels are all it names, never the values.
+const changedText = (keys) => {
+  const names = keys.filter((k) => !k.endsWith('_id')).map(fieldLabel);
+  return names.length ? `Changed: ${names.join(', ')}` : '';
+};
+// Two saved values read the same when their text is equal, or when both are numbers of the same size ('2500.00' and 2500).
+const numeric = (x) => (typeof x === 'number' || (typeof x === 'string' && x.trim() !== '') ? Number(x) : NaN);
+const sameValue = (a, b) => String(a ?? '') === String(b ?? '') || (Number.isFinite(numeric(a)) && numeric(a) === numeric(b));
+// The keys whose value differs between the saved 'before' and the 'after' that was sent.
+const changedFields = (before, after) => [...new Set([...Object.keys(before), ...Object.keys(after)])]
+  .filter((k) => !sameValue(before[k], after[k]));
+
 // Audit details on one line. Ids (any *_id field, or any UUID value), empty values and nested data are left out.
+// A list of changed fields and a before/after pair name the fields that changed, as labels, never their values.
 export function summarize(details) {
   if (!details) return '';
   const parts = [];
   for (const [k, v] of Object.entries(details)) {
     // Turning the discount off saves null. That is shown as Off, so the row still says what changed.
     if (k === 'returning_guest_pct' && v === null) { parts.push(`${DETAIL_LABELS[k]}: Off`); continue; }
+    if (k === 'fields' && Array.isArray(v)) { const text = changedText(v); if (text) parts.push(text); continue; }
+    if (k === 'before' && v && typeof v === 'object') { const text = changedText(changedFields(v, details.after || {})); if (text) parts.push(text); continue; }
     if (v === null || v === undefined || typeof v === 'object' || k.endsWith('_id') || UUID.test(String(v))) continue;
     // A repeat schedule is two fields, the count and the unit. They read as one phrase where the count is.
     if (k === 'every_unit') continue;
@@ -310,7 +333,7 @@ export function summarize(details) {
       continue;
     }
     const text = detailValue(k, v);
-    if (text) parts.push(`${DETAIL_LABELS[k] || k.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())}: ${text}`);
+    if (text) parts.push(`${fieldLabel(k)}: ${text}`);
   }
   const text = [...new Set(parts)].join(' · ');
   // Cut long details with an ellipsis so it is clear the text goes on.

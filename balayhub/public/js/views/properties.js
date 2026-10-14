@@ -118,7 +118,7 @@ export async function propertiesView(el, { query }) {
             h('span', { class: 'small' }, `${p.unit_count} unit${p.unit_count === 1 ? '' : 's'}`),
             p.unit_count ? !stayOnly && badge(p.occupied_count === p.unit_count ? 'occupied' : 'vacant', `${p.occupied_count} occupied · ${p.unit_count - p.occupied_count} vacant`) : badge('unpaid', 'No units yet'))))))]
       : (filtered
-        ? emptyState({ title: 'No results found', text: 'No property matches these filters. Try removing a filter.', action: h('button', { class: 'btn btn--secondary', onclick: () => { Object.assign(filters, defaults, { status: filters.status }); rememberFilters('properties', filters); renderBar(); load(); } }, 'Clear filters') })
+        ? emptyState({ title: 'No results found', text: 'No property matches these filters. Try removing a filter.', action: h('button', { class: 'btn btn--secondary', onclick: () => { Object.assign(filters, defaults); rememberFilters('properties', filters); renderBar(); load(); } }, 'Clear filters') })
         : emptyState({
           iconName: 'building',
           title: filters.status === 'archived' ? 'No archived properties' : (isOwner ? 'No properties yet' : 'No properties assigned to you'),

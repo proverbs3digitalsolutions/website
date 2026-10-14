@@ -7,6 +7,7 @@ import { initFilters, filterBar, changed } from '../filters.js';
 
 const isLow = (s) => Number(s.on_hand) < Number(s.par_level);
 const MOVED = { used: 'Used', restocked: 'Added', count: 'Counted' };
+const MAX_QTY = 100000; // Matches MAX_QTY in src/routes/supplies.js.
 
 // The unit word for a count: "1 roll", "2 rolls". Units are typed freely, so the singular is a plain
 // English guess ("boxes" to "box", "batteries" to "battery"). "pcs" is an abbreviation and stays.
@@ -60,6 +61,8 @@ export async function suppliesView(el, { query = {} } = {}) {
         const quantity = Number(d.quantity);
         // The server takes whole numbers only, so say so before asking about stock (#31).
         if (!Number.isInteger(quantity)) { showErrors(form, { quantity: 'Quantity must be a whole number.' }); return; }
+        // The server refuses anything above MAX_QTY, so say so at the field before asking about stock (#21).
+        if (quantity > MAX_QTY) { showErrors(form, { quantity: `Quantity must be at most ${MAX_QTY}.` }); return; }
         if (kind === 'used' && s.on_hand > 0 && quantity > s.on_hand && !await confirmDialog({
           title: 'Not enough on hand',
           text: `You asked to record ${qtyLabel(quantity, s.unit_label)} used. On hand is ${qtyLabel(s.on_hand, s.unit_label)}, so only that much is logged as used, and on hand goes to 0.`,

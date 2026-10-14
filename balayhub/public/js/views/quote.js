@@ -46,6 +46,8 @@ extendTranslations({
   'Dates': 'Dates',
   '{n} nights': '{n} na gabi',
   '1 night': '1 gabi',
+  'Loading…': 'Naglo-load…',
+  'the host': 'ang host',
 });
 
 // Only a 404 is a bad link; a rate limit or a server error says so instead.

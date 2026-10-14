@@ -12,6 +12,12 @@ const assert = require('node:assert/strict');
 const { startServer, client, sql, ownerAccount, manilaToday } = require('./helpers');
 
 const addDays = (s, n) => new Date(Date.parse(s) + n * 86400000).toISOString().slice(0, 10);
+// "Oct 14, 2026" for a YYYY-MM-DD date: the text the balances list shows for a check-in date.
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const shortDate = (ymd) => {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return `${MONTHS[m - 1]} ${d}, ${y}`;
+};
 const PASSWORD = 'longenough1';
 const SECTION_KEYS = ['arrivals_pending', 'departures_pending', 'cleanings_open', 'payments_today',
   'balances_due', 'proofs_pending', 'damage_open', 'sync_problems'];
@@ -138,7 +144,7 @@ test('owner sees every open item for today, with money as strings', async () => 
   assert.deepEqual(balances.items.map((i) => i.text), ['Maria · 2B', 'Juan · 1A', 'Ana · 2B']);
   assert.deepEqual(balances.items.map((i) => i.amount), ['1700.00', '2000.00', '4000.00']);
   assert.equal(balances.items[0].detail, 'Staying now');
-  assert.equal(balances.items[1].detail, `Check-in ${today}`);
+  assert.equal(balances.items[1].detail, `Check-in ${shortDate(today)}`);
 
   assert.equal(section(r.data, 'proofs_pending').count, 2);
   assert.equal(section(r.data, 'damage_open').count, 2);
@@ -323,7 +329,7 @@ test('balances: a guest still staying who owes is listed; a guest who paid in fu
   assert.deepEqual(balances.items.map((i) => i.text), ['Maria · 2B', 'Lee · 1C', 'Juan · 1A', 'Ana · 2B']);
   // Ana's 4000.00 has the 100.00 cash payment from the close test on it.
   assert.deepEqual(balances.items.map((i) => i.amount), ['1700.00', '800.00', '2000.00', '3900.00']);
-  assert.deepEqual(balances.items.map((i) => i.detail), ['Staying now', 'Staying now', `Check-in ${today}`, `Check-in ${addDays(today, 2)}`]);
+  assert.deepEqual(balances.items.map((i) => i.detail), ['Staying now', 'Staying now', `Check-in ${shortDate(today)}`, `Check-in ${shortDate(addDays(today, 2))}`]);
 
   // Lee is on property A, so the manager sees Lee too, and still not the property-B guests.
   const m = await manager.get(day(today));

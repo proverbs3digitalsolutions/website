@@ -176,7 +176,7 @@ test('notification settings show each role its own types and properties', async 
   assert.deepEqual(Object.keys(c.data.types), ['cleaning']);
 });
 
-test('switching a type off stops it, an empty property list mutes property alerts, and changes are validated', async () => {
+test('switching a type off stops it, and changes are validated', async () => {
   let r = await mgrA.patch('/api/account/notify-prefs', { types: { mention: false } });
   assert.equal(r.status, 200);
   assert.equal(r.data.types.mention, false);
@@ -186,10 +186,12 @@ test('switching a type off stops it, an empty property list mutes property alert
   assert.deepEqual(off.data.mentions.map((x) => x.user_id), [mgrAU.user_id], 'the mention is still recorded');
   assert.equal(pushesTo('mgra', 'mention').length, 0);
 
-  r = await mgrA.patch('/api/account/notify-prefs', { types: { mention: true }, property_ids: [] });
-  assert.deepEqual(r.data.property_ids, []);
-  await owner.post(`/api/inbox/${convA}/messages`, { body: `Once more ${mention(mgrAU)}`, note: true });
-  assert.equal(pushesTo('mgra', 'mention').length, 0, 'no properties chosen: no property alerts');
+  r = await mgrA.patch('/api/account/notify-prefs', { types: { mention: true } });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.types.mention, true);
+  assert.equal((await mgrA.patch('/api/account/notify-prefs', { property_ids: [] })).data.fields.property_ids,
+    'Pick at least one property, or choose all properties.');
+  assert.equal((await mgrA.get('/api/account/notify-prefs')).data.property_ids, null, 'the refused empty list is not saved');
 
   r = await mgrA.patch('/api/account/notify-prefs', { property_ids: null });
   assert.equal(r.data.property_ids, null);

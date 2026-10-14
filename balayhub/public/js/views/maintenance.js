@@ -68,6 +68,7 @@ export async function maintenanceView(el, { query }) {
   let assignees = [];
 
   // "all" isn't a status the server knows, so it lists every request.
+  // A status chip narrows the empty list too, except Open & in progress and All, whose own empty text already fits.
   const isFiltered = () => Object.keys(changed(filters, defaults)).some((k) => k !== 'status' && k !== 'sort');
   async function load() {
     history.replaceState(null, '', `#/maintenance${qs(changed(filters, defaults))}`);
@@ -86,8 +87,8 @@ export async function maintenanceView(el, { query }) {
             h('span', { class: 'row__sub' }, `${m.property_name}${m.unit_name ? ` · ${unitLabel(m.unit_name)}` : ''} · reported ${fmtDate(manilaDay(m.created_at))}${m.assigned_to ? ` · ${m.assigned_to}` : ''}`),
             (Number(m.actual_cost) > 0 || m.estimated_cost) && h('span', { class: 'row__sub' }, Number(m.actual_cost) > 0 ? `Cost ${peso(m.actual_cost)}` : `Est. ${peso(m.estimated_cost)}`)),
           h('div', { class: 'row__end' }, badge(m.status), badge(m.priority), m.cleaning_task_id && taskBadge(m, true))))))]
-      : (isFiltered()
-        ? emptyState({ title: 'No results found', text: 'Nothing matches these filters. Try removing a filter.', action: h('button', { class: 'btn btn--secondary', onclick: () => { Object.assign(filters, defaults, { status: filters.status }); rememberFilters('maintenance', filters); renderBar(); load(); } }, 'Clear filters') })
+      : ((isFiltered() || !['active', 'all'].includes(filters.status))
+        ? emptyState({ title: 'No results found', text: 'Nothing matches these filters. Try removing a filter.', action: h('button', { class: 'btn btn--secondary', onclick: () => { Object.assign(filters, defaults); rememberFilters('maintenance', filters); renderBar(); load(); } }, 'Clear filters') })
         : emptyState({ iconName: 'wrench', title: filters.status === 'active' ? 'No open repair requests' : 'No requests here', text: 'Log repairs as they’re reported so nothing gets lost in chat threads.', action: h('button', { class: 'btn btn--primary', onclick: () => newMaintenanceModal() }, icon('plus'), 'New request') })));
   }
 

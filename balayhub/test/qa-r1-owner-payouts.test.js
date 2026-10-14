@@ -38,8 +38,10 @@ test('a payout that takes the month above the amount due needs confirmation', as
   assert.equal(ok.status, 201);
 });
 
-test('a payout with no month is not checked', async () => {
-  assert.equal((await owner.post(payouts(ownerId), body({ amount: '99999', month: undefined }))).status, 201);
+test('a payout with no month is refused, so it can never skip the amount-due check (QA round 6 #23)', async () => {
+  const r = await owner.post(payouts(ownerId), body({ amount: '99999', month: undefined }));
+  assert.equal(r.status, 400);
+  assert.equal(r.data.fields.month, 'Choose the statement month this payout is for.');
 });
 
 test('voided payouts do not count toward the amount paid', async () => {

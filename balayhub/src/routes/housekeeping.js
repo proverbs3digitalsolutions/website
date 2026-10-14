@@ -122,7 +122,8 @@ router.get('/cleaning-tasks', ah(async (req, res) => {
 // found items and the work orders raised from it. Owners and managers see all
 // of it (section 6.1). Staff and cleaners see only the damage reports and lost
 // items they filed, and never an amount, charge, resolution or status note
-// (D-51). Staff get no inspections; cleaners get them on their own jobs only and no work orders.
+// (D-51). Staff get no inspections; cleaners get pass or fail only (no score, items, notes or inspector), on their own
+// jobs only, and no work orders.
 router.get('/cleaning-tasks/:id', ah(async (req, res) => {
   const task = await loadTask(req.user, uuidParam(req.params.id));
   const full = ['owner', 'manager'].includes(req.user.role);
@@ -133,8 +134,9 @@ router.get('/cleaning-tasks/:id', ah(async (req, res) => {
     query(
       `SELECT file_id, file_name, mime_type, size_bytes, uploaded_at FROM files
         WHERE related_record_type = 'cleaning' AND related_record_id = $1 ORDER BY uploaded_at`, [task.task_id]),
-    (req.user.role === 'staff' || (cleaner && task.assigned_to !== req.user.user_id)) ? { rows: [] } : query(
-      `SELECT i.inspection_id, i.score, i.passed, i.items, i.notes, i.created_at, iu.full_name AS inspected_by_name
+    (!full && !(cleaner && task.assigned_to === req.user.user_id)) ? { rows: [] } : query(
+      `SELECT i.inspection_id, i.passed, i.created_at
+              ${full ? ', i.score, i.items, i.notes, iu.full_name AS inspected_by_name' : ''}
          FROM cleaning_inspections i LEFT JOIN users iu ON iu.user_id = i.inspected_by
         WHERE i.task_id = $1 ORDER BY i.created_at DESC`, [task.task_id]),
     query(
@@ -270,6 +272,13 @@ router.post('/cleaning-tasks/:id/checklist', ah(async (req, res) => {
   res.json({ task: await loadTask(req.user, task.task_id) });
 }));
 
+// A reopened or failed clean makes its unit dirty again, unless the unit has a clean finished after this one
+// (`completedAt` is when this one finished, read before it was reopened).
+const markDirty = (db, unitId, taskId, completedAt) => db.query(
+  `UPDATE units SET cleaning_status = 'dirty', cleaning_updated_at = now()
+    WHERE unit_id = $1 AND NOT EXISTS (SELECT 1 FROM cleaning_tasks o WHERE o.unit_id = $1 AND o.task_id <> $2
+                                         AND o.status = 'done' AND o.completed_at > $3)`, [unitId, taskId, completedAt]);
+
 // A cleaner starts a clean (todo to in progress) and finishes it (todo or in progress to done).
 // Nothing else: reopening a finished clean is for owners and managers.
 const CLEANER_MOVES = { todo: ['in_progress', 'done'], in_progress: ['in_progress', 'done'] };
@@ -285,7 +294,7 @@ router.post('/cleaning-tasks/:id/status', ah(async (req, res) => {
     throw new HttpError(403, 'Only owners and managers can cancel cleaning tasks.', { code: 'FORBIDDEN' });
   }
   const changed = await tx(async (db) => {
-    const { rows: [cur] } = await db.query('SELECT status, pay_status FROM cleaning_tasks WHERE task_id = $1 FOR UPDATE', [task.task_id]);
+    const { rows: [cur] } = await db.query('SELECT status, pay_status, completed_at FROM cleaning_tasks WHERE task_id = $1 FOR UPDATE', [task.task_id]);
     if (cur.pay_status === 'paid') throw new HttpError(409, "This clean is already paid, so its status can't change.", { code: 'PAID' });
     // Finishing a clean that is already finished changes nothing: its finish time, finisher and pay stay as they are.
     if (status === 'done' && cur.status === 'done') return false;
@@ -303,7 +312,7 @@ router.post('/cleaning-tasks/:id/status', ah(async (req, res) => {
     }[status];
     await db.query(`UPDATE cleaning_tasks SET ${set}${reopen ? ', pay_amount = NULL' : ''} WHERE task_id = $1`,
       status === 'done' ? [task.task_id, req.user.user_id] : [task.task_id]);
-    if (reopen) await db.query(`UPDATE units SET cleaning_status = 'dirty', cleaning_updated_at = now() WHERE unit_id = $1`, [task.unit_id]);
+    if (reopen) await markDirty(db, task.unit_id, task.task_id, cur.completed_at);
     if (status === 'done') {
       await db.query(`UPDATE units SET cleaning_status = 'clean', cleaning_updated_at = now() WHERE unit_id = $1`, [task.unit_id]);
       const pay = cleanerPay();
@@ -346,7 +355,7 @@ router.post('/cleaning-tasks/:id/inspect', managers, ah(async (req, res) => {
   const score = Math.round((passedCount / items.length) * 100);
   const passed = passedCount === items.length;
   const inspection = await tx(async (db) => {
-    const { rows: [cur] } = await db.query('SELECT status, pay_status, pay_amount FROM cleaning_tasks WHERE task_id = $1 FOR UPDATE', [task.task_id]);
+    const { rows: [cur] } = await db.query('SELECT status, pay_status, pay_amount, completed_at FROM cleaning_tasks WHERE task_id = $1 FOR UPDATE', [task.task_id]);
     if (cur.status !== 'done') throw new HttpError(409, 'Only a finished clean can be inspected.', { code: 'NOT_DONE' });
     if (!passed && cur.pay_status === 'paid') {
       throw new HttpError(409, "This clean is already paid, so a failed inspection can't reopen it.", { code: 'PAID' });
@@ -363,7 +372,7 @@ router.post('/cleaning-tasks/:id/inspect', managers, ah(async (req, res) => {
       await db.query(
         `UPDATE cleaning_tasks SET status = 'todo', started_at = NULL, completed_at = NULL, completed_by = NULL, pay_amount = NULL, checklist = $2
           WHERE task_id = $1`, [task.task_id, JSON.stringify(checklist)]);
-      await db.query(`UPDATE units SET cleaning_status = 'dirty', cleaning_updated_at = now() WHERE unit_id = $1`, [task.unit_id]);
+      await markDirty(db, task.unit_id, task.task_id, cur.completed_at);
     }
     await audit(db, req.user, 'cleaning.inspected', 'cleaning_task', task.task_id, { score, passed });
     return { ...ins, payCleared: !passed && cur.pay_amount != null };
@@ -384,6 +393,11 @@ router.get('/cleaning-board', ah(async (req, res) => {
   const where = [propertyScope(req.user, params), "u.status = 'active'", "p.status = 'active'"];
   if (req.query.property_id) { params.push(uuidParam(req.query.property_id)); where.push(`p.property_id = $${params.length}`); }
   const visible = cleanerTaskSql(req.user, params, 't');
+  // Inspection results (matrix 6.1): owners and managers all; a cleaner only on jobs assigned to her; staff none.
+  const full = ['owner', 'manager'].includes(req.user.role);
+  const cleaner = isCleaner(req.user);
+  let inspVisible = full ? 'true' : 'false';
+  if (cleaner) { params.push(req.user.user_id); inspVisible = `t.assigned_to = $${params.length}`; }
   const { rows } = await query(
     `SELECT u.unit_id, u.unit_name, p.property_id, p.property_name, u.cleaning_status, u.cleaning_updated_at,
             cs.booking_id AS stay_id, cs.check_in AS stay_check_in, cs.check_out AS stay_check_out, cs.guest_name,
@@ -411,7 +425,7 @@ router.get('/cleaning-board', ah(async (req, res) => {
        LEFT JOIN LATERAL (
          SELECT i.score, i.passed, i.created_at
            FROM cleaning_inspections i JOIN cleaning_tasks t ON t.task_id = i.task_id
-          WHERE t.unit_id = u.unit_id AND ${visible}
+          WHERE t.unit_id = u.unit_id AND ${inspVisible}
           ORDER BY i.created_at DESC LIMIT 1
        ) li ON true
       WHERE ${where.join(' AND ')}
@@ -424,10 +438,11 @@ router.get('/cleaning-board', ah(async (req, res) => {
       property_name: r.property_name,
       cleaning_status: r.cleaning_status,
       cleaning_updated_at: r.cleaning_updated_at,
-      current_stay: r.stay_id ? { check_in: r.stay_check_in, check_out: r.stay_check_out, guest_first_name: firstName(r.guest_name) } : null,
+      // A cleaner sees the guest only on a unit where she can see the open job.
+      current_stay: r.stay_id && (!cleaner || r.task_id) ? { check_in: r.stay_check_in, check_out: r.stay_check_out, guest_first_name: firstName(r.guest_name) } : null,
       next_check_in: r.next_check_in,
       open_task: r.task_id ? { task_id: r.task_id, status: r.task_status, assignee: r.assignee } : null,
-      last_inspection: r.inspected_at ? { score: r.score, passed: r.passed, at: r.inspected_at } : null,
+      last_inspection: r.inspected_at ? { ...(cleaner ? {} : { score: r.score }), passed: r.passed, at: r.inspected_at } : null,
     })),
   });
 }));

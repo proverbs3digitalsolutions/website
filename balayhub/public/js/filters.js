@@ -5,9 +5,11 @@
 //   const f = initFilters('reservations', query, { view: 'upcoming', q: '', channel: '' });
 //   const bar = filterBar({ key: 'reservations', values: f, defaults, search: {...}, fields: [...], more: [...], onChange: load });
 //
-// Field: { name, label, type: 'select' | 'date' | 'daterange' | 'number' | 'check', options: [[value, text]], all: 'All …' }
+// Field: { name, label, type: 'select' | 'date' | 'daterange' | 'amountrange' | 'number' | 'check', options: [[value, text]], all: 'All …' }
 // A daterange field uses `${name}_from` / `${name}_to` (or from/to keys given as `keys`).
 // A range that ends before it starts is flagged inline and applies nothing: both of its dates are dropped until it is fixed.
+// An amountrange field takes `keys: [min, max]` and follows the same rule for amounts. A number field may give a
+// `pattern` (RegExp) and `patternText`: a value that fails it is flagged, not applied, and gets no chip.
 // initFilters() drops text and impossible dates in from/to, and non-UUID ids, before any page fetches.
 
 import { h, fmtDate } from './ui.js';
@@ -80,8 +82,27 @@ export function changed(values, defaults) {
 }
 
 function rangeKeys(f) { return f.keys || [`${f.name}_from`, `${f.name}_to`]; }
+const isRange = (f) => f.type === 'daterange' || f.type === 'amountrange';
 
 const BACKWARDS = 'The end date is before the start date. This date filter is off until you fix it.';
+
+// Amounts as the server reads them (AMOUNT_RE in src/routes/money.js): digits, up to 10, with at most two decimals.
+const AMOUNT_RE = /^\d{1,10}(\.\d{1,2})?$/;
+const NOT_AN_AMOUNT = 'Enter an amount of 0 or more (up to 10 digits).';
+const AMOUNTS_BACKWARDS = 'The highest amount is below the lowest. This amount filter is off until you fix it.';
+
+// Which ends of an amount range can be applied. An end that doesn't read as an amount is left out, and a range whose
+// top is below its bottom applies neither end. An empty end is no filter. `flags` marks the ends to show as wrong.
+export function amountRangeCheck(lo, hi) {
+  const readable = (v) => v === '' || AMOUNT_RE.test(v);
+  const backwards = readable(lo) && readable(hi) && lo !== '' && hi !== '' && Number(hi) < Number(lo);
+  return {
+    message: !readable(lo) || !readable(hi) ? NOT_AN_AMOUNT : backwards ? AMOUNTS_BACKWARDS : '',
+    lo: readable(lo) && !backwards ? lo : '',
+    hi: readable(hi) && !backwards ? hi : '',
+    flags: { lo: !readable(lo) || backwards, hi: !readable(hi) || backwards },
+  };
+}
 
 function control(f, values, emit, defaults = {}) {
   const id = `flt-${f.name}-${Math.random().toString(36).slice(2, 6)}`;
@@ -119,15 +140,60 @@ function control(f, values, emit, defaults = {}) {
     if (invalid) { values[a] = defaults[a] ?? ''; values[b] = defaults[b] ?? ''; }
     return { el: h('div', { class: 'flt__field flt__field--range' }, h('label', { for: id }, f.label), h('div', { class: 'flt__range' }, from, h('span', { 'aria-hidden': 'true' }, '–'), to), err), sync: () => { from.value = values[a] || ''; to.value = values[b] || ''; check(); }, invalid };
   }
+  if (f.type === 'amountrange') {
+    const [a, b] = rangeKeys(f);
+    const errId = `${id}-err`;
+    const from = h('input', { class: 'input', id, type: 'number', value: values[a] || '', min: 0, step: '0.01', inputmode: 'decimal', 'aria-label': `${f.label}, from`, 'aria-describedby': errId });
+    const to = h('input', { class: 'input', type: 'number', value: values[b] || '', min: 0, step: '0.01', inputmode: 'decimal', 'aria-label': `${f.label}, to`, 'aria-describedby': errId });
+    const err = h('div', { id: errId, role: 'alert', style: { color: 'var(--red)', fontSize: '.84rem', fontWeight: '650' } });
+    // The message shows once, at the range, and the ends that are wrong are marked. The check reads the boxes, so a
+    // typed amount stays on screen while it is fixed.
+    const check = () => {
+      const r = amountRangeCheck(from.value, to.value);
+      err.hidden = !r.message;
+      err.replaceChildren(r.message || '');
+      for (const [input, bad] of [[from, r.flags.lo], [to, r.flags.hi]]) { if (bad) input.setAttribute('aria-invalid', 'true'); else input.removeAttribute('aria-invalid'); }
+      return r;
+    };
+    // Only the ends that can be applied are written; a wrong end drops back to its default, so the list reloads without it.
+    const settle = () => {
+      const r = check();
+      values[a] = r.lo || (defaults[a] ?? '');
+      values[b] = r.hi || (defaults[b] ?? '');
+      return r;
+    };
+    from.addEventListener('change', () => { settle(); emit(); });
+    to.addEventListener('change', () => { settle(); emit(); });
+    // From a shared link or an old saved filter: keep the typed amounts on screen with the message, and apply only what is readable.
+    const invalid = Boolean(settle().message);
+    return { el: h('div', { class: 'flt__field flt__field--range' }, h('label', { for: id }, f.label), h('div', { class: 'flt__range' }, from, h('span', { 'aria-hidden': 'true' }, '–'), to), err), sync: () => { from.value = values[a] || ''; to.value = values[b] || ''; check(); }, invalid };
+  }
   if (f.type === 'check') {
     const box = h('input', { type: 'checkbox', id, checked: values[f.name] === '1' });
     box.addEventListener('change', () => { values[f.name] = box.checked ? '1' : ''; emit(); });
     return { el: h('label', { class: 'check flt__check', for: id }, box, h('span', null, f.label)), sync: () => { box.checked = values[f.name] === '1'; } };
   }
   if (f.type === 'number' || f.type === 'date') {
-    const input = h('input', { class: 'input', id, type: f.type, value: values[f.name] || '', min: f.min, step: f.step, placeholder: f.placeholder, inputmode: f.type === 'number' ? 'decimal' : null });
-    input.addEventListener('change', () => { values[f.name] = input.value; emit(); });
-    return { el: h('div', { class: 'flt__field' }, h('label', { for: id }, f.label), input), sync: () => { input.value = values[f.name] || ''; } };
+    // A number with a pattern (an amount) flags a value the server would ignore and applies nothing until it is fixed,
+    // the same as a bad date range. An empty box is no filter.
+    const errId = `${id}-err`;
+    const err = f.pattern ? h('div', { id: errId, role: 'alert', hidden: true, style: { color: 'var(--red)', fontSize: '.84rem', fontWeight: '650' } }) : null;
+    const input = h('input', { class: 'input', id, type: f.type, value: values[f.name] || '', min: f.min, step: f.step, placeholder: f.placeholder, inputmode: f.type === 'number' ? 'decimal' : null, 'aria-describedby': err ? errId : null });
+    const show = (v) => {
+      const bad = Boolean(f.pattern && v !== '' && !f.pattern.test(v));
+      if (err) { err.hidden = !bad; err.replaceChildren(bad ? f.patternText : ''); }
+      if (bad) input.setAttribute('aria-invalid', 'true'); else input.removeAttribute('aria-invalid');
+      return bad;
+    };
+    input.addEventListener('change', () => {
+      const bad = show(input.value);
+      values[f.name] = bad ? (defaults[f.name] ?? '') : input.value;
+      emit();
+    });
+    // From a shared link or an old saved filter: keep the value on screen with the message, but do not apply it.
+    const invalid = show(input.value);
+    if (invalid) values[f.name] = defaults[f.name] ?? '';
+    return { el: h('div', { class: 'flt__field' }, h('label', { for: id }, f.label), input, err), sync: () => { input.value = values[f.name] || ''; show(input.value); }, invalid };
   }
   const sel = h('select', { class: 'input', id, 'aria-label': f.label },
     f.all !== false && h('option', { value: '' }, f.all || `All`),
@@ -142,6 +208,11 @@ function chipText(f, values) {
     if (!values[a] && !values[b]) return null;
     return `${f.label}: ${values[a] ? chipDate(values[a]) : '…'} – ${values[b] ? chipDate(values[b]) : '…'}`;
   }
+  if (f.type === 'amountrange') {
+    const [a, b] = rangeKeys(f);
+    if (!values[a] && !values[b]) return null;
+    return `${f.label}: ${values[a] || '…'} – ${values[b] || '…'}`;
+  }
   const v = values[f.name];
   if (!v) return null;
   if (f.type === 'check') return f.label;
@@ -150,7 +221,7 @@ function chipText(f, values) {
 }
 
 function clearField(f, values, defaults) {
-  if (f.type === 'daterange') rangeKeys(f).forEach((k) => { values[k] = defaults[k] ?? ''; });
+  if (isRange(f)) rangeKeys(f).forEach((k) => { values[k] = defaults[k] ?? ''; });
   else values[f.name] = defaults[f.name] ?? '';
 }
 
@@ -170,7 +241,7 @@ export function filterBar({ key, values, defaults, search, quick = [], more = []
   const activeMore = () => more.filter((f) => chipText(f, values)).length;
   function paint() {
     if (moreBtn) moreBtn.replaceChildren('More filters', activeMore() ? h('span', { class: 'flt__count' }, String(activeMore())) : '');
-    const active = all.map((f) => [f, chipText(f, values)]).filter(([f, t]) => t && !(f.type !== 'daterange' && String(values[f.name] ?? '') === String(defaults[f.name] ?? '')));
+    const active = all.map((f) => [f, chipText(f, values)]).filter(([f, t]) => t && (isRange(f) || String(values[f.name] ?? '') !== String(defaults[f.name] ?? '')));
     const q = search && values[search.name || 'q'];
     chips.replaceChildren(
       ...(q ? [h('button', { type: 'button', class: 'flt__chip', 'aria-label': `Remove search ${q}`, onclick: () => { values[search.name || 'q'] = ''; searchInput.value = ''; emit(); } }, `“${q}”`, h('span', { 'aria-hidden': 'true' }, ' ×'))] : []),

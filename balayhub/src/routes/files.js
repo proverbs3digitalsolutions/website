@@ -28,14 +28,19 @@ function requireCleanerRecord(user, type) {
   }
 }
 
-// A cleaner may use a damage or lost-and-found record only if they logged it
-// themselves, on a task they can see (assigned to them or to nobody).
-function cleanerOwnsRecord(user, params, alias, byColumn) {
+// Anyone but an owner or manager may use a damage or lost-and-found record only if they filed it themselves
+// (BACKEND-SCHEMA 6.1). A cleaner must also have filed it on a task they can see (assigned to them or to nobody);
+// staff may also have filed it on a stay, where there is no task.
+function ownRecordSql(user, params, alias, byColumn) {
   params.push(user.user_id);
   const i = params.length;
-  return ` AND ${alias}.${byColumn} = $${i} AND ${alias}.task_id IS NOT NULL
+  let sql = ` AND ${alias}.${byColumn} = $${i}`;
+  if (isCleaner(user)) {
+    sql += ` AND ${alias}.task_id IS NOT NULL
     AND EXISTS (SELECT 1 FROM cleaning_tasks t WHERE t.task_id = ${alias}.task_id
                  AND (t.assigned_to = $${i} OR (t.assigned_to IS NULL AND t.assignee_name IS NULL)))`;
+  }
+  return sql;
 }
 
 // Confirm the user may attach to / read files of this record.
@@ -98,21 +103,21 @@ async function checkRecord(user, type, id) {
       return row;
     }
     case 'damage': {
-      // Anyone who can see the unit. A cleaner only sees a report they filed.
+      // Owners and managers see every report on a unit they can see. Staff and cleaners only see a report they filed.
       const params = [id];
       let sql = `SELECT r.report_id FROM damage_reports r JOIN units u ON u.unit_id = r.unit_id JOIN properties p ON p.property_id = u.property_id
                   WHERE r.report_id = $1 AND ${propertyScope(user, params)}`;
-      if (isCleaner(user)) sql += cleanerOwnsRecord(user, params, 'r', 'reported_by');
+      if (!['owner', 'manager'].includes(user.role)) sql += ownRecordSql(user, params, 'r', 'reported_by');
       const row = await one(sql, params);
       if (!row) throw notFound();
       return row;
     }
     case 'lost_found': {
-      // Anyone who can see the unit. A cleaner only sees an item they logged.
+      // Owners and managers see every item on a unit they can see. Staff and cleaners only see an item they logged.
       const params = [id];
       let sql = `SELECT li.item_id FROM lost_found_items li JOIN units u ON u.unit_id = li.unit_id JOIN properties p ON p.property_id = u.property_id
                   WHERE li.item_id = $1 AND ${propertyScope(user, params)}`;
-      if (isCleaner(user)) sql += cleanerOwnsRecord(user, params, 'li', 'found_by');
+      if (!['owner', 'manager'].includes(user.role)) sql += ownRecordSql(user, params, 'li', 'found_by');
       const row = await one(sql, params);
       if (!row) throw notFound();
       return row;

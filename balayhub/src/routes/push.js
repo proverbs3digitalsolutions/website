@@ -130,7 +130,9 @@ router.patch('/account/notify-prefs', ah(async (req, res) => {
   } else if (propertyIds !== undefined) {
     const list = Array.isArray(propertyIds) ? propertyIds.map((id) => String(id).toLowerCase()) : null;
     const visible = new Set((await visibleProperties(user)).map((p) => p.property_id));
-    if (!list || list.some((id) => !UUID_RE.test(id) || !visible.has(id))) fields.property_ids = 'Choose properties you can see.';
+    // An empty list would mute every property alert (push.allowed), so a choice is required; null means all.
+    if (list && !list.length) fields.property_ids = 'Pick at least one property, or choose all properties.';
+    else if (!list || list.some((id) => !UUID_RE.test(id) || !visible.has(id))) fields.property_ids = 'Choose properties you can see.';
     else chosen = [...new Set(list)];
   }
   if (Object.keys(fields).length) throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields });

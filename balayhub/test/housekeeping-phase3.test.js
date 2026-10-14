@@ -291,11 +291,12 @@ test('the status board shows each unit for owners, and a cleaner only their own 
 
   const mine = (await cleaner.c.get(`/api/cleaning-board?property_id=${propA.property_id}`)).data.units;
   assert.equal(byName(mine, '1201').open_task, null);
-  assert.equal(byName(mine, '1201').last_inspection.score, 100);
+  assert.equal(byName(mine, '1201').last_inspection.passed, true);
+  assert.equal('score' in byName(mine, '1201').last_inspection, false, 'a cleaner sees pass or fail, never the score');
   assert.equal(byName(mine, '1202').last_inspection, null);
   assert.equal(byName(mine, '1203').open_task, null);
   assert.equal(byName(mine, '1203').last_inspection, null);
-  assert.deepEqual(byName(mine, '1203').current_stay, { check_in: d(-1), check_out: d(2), guest_first_name: 'Ana' });
+  assert.equal(byName(mine, '1203').current_stay, null, 'no job she can see on this unit, so no guest');
   assert.deepEqual((await cleaner.c.get(`/api/cleaning-board?property_id=${propB.property_id}`)).data.units, []);
 
   const grass = (await owner.get(`/api/cleaning-board?property_id=${propB.property_id}`)).data.units;

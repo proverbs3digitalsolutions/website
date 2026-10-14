@@ -118,7 +118,7 @@ function buildPanel() {
         h('button', { type: 'button', class: 'assist__icon', title: 'Close', 'aria-label': 'Close', onclick: closeAssistant }, '×'))),
     list,
     form,
-    h('p', { class: 'assist__foot' }, 'It can’t see your bookings or guests and may make mistakes. ',
+    h('p', { class: 'assist__foot' }, longTerm ? 'It can’t see your tenants, leases or rent records and may make mistakes. ' : 'It can’t see your bookings or guests and may make mistakes. ',
       h('a', { href: '#/help/new', onclick: (e) => { e.preventDefault(); if (msgs.length) toTicket(msgs); else { closeAssistant(); navigate('#/help/new'); } } }, 'Talk to a person')));
   el.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAssistant(); });
   draw();

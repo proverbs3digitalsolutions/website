@@ -2,7 +2,7 @@
 
 Every decision made on BalayHub, with the date and the reason. Newest decisions go at the bottom. When a decision changes, add a new entry and mark the old one **Superseded by D-xx**. Never delete history.
 
-Last updated: 2026-10-14 (D-81, QA round 5 calls)
+Last updated: 2026-10-14 (D-82, QA round 6 calls)
 
 ---
 
@@ -621,3 +621,50 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 - The balance after a refunded overpayment stays as D-34 and D-77 define it. Staff keep seeing reservation money while group bookings hide it. The daily close lists payments only (D-72). A lease that starts soon counts as occupied. Unknown ids in API filters are ignored (D-77). Staff may see listing prices (D-76). Add-on descriptions stay in the language they were typed in.
 
 *Why:* each call takes the safest reading of the existing decisions. A price is never applied to something it wasn't worked out for, nothing a person typed is replaced without asking, money only moves the right way, and no one is locked out of a core flow.
+
+> **D-82 · 2026-10-14 · QA round 6 calls (2026-10-14 sweep, fixed the same day).** The sixth QA sweep (12 lanes, 71 entries) found problems that needed a product decision. These are the calls made, with the default we are using until the founder says otherwise. Open questions are in BLOCKERS.MD under "Questions from QA round 6". Each call was checked against the code after the fixes landed.
+>
+> *Access*
+> - **Staff (and cleaners) see a guest's name only.** On the Guests page, a guest's page, a group's lead guest and the guest on a reservation, staff get the name and nothing else: no VIP or Do not rebook flag, no stay history, no ratings, no Returning badge and no review card. The Guests page ignores the segment and guest filters for staff, so a staff member can't learn who is VIP by filtering. Owners and managers are unchanged. *Why:* BACKEND-SCHEMA says "names only"; its own note and APP-FLOW said slightly different things, so we took the narrowest reading. Founder questions 1 and 2.
+> - **Inspection results follow the matrix everywhere.** Staff see no inspection results, on the job or on the board. A cleaner sees only whether an inspection of her own job passed or failed, and the date, never the score, the inspector's notes or the item list. *Why:* the board and the cleaner's job page sent scores (BACKEND-SCHEMA 6.1).
+> - **Photos on damage and lost-item records are for the person who filed them,** for staff as well as cleaners; owners and managers see them all. Staff can still add a photo to a report they filed themselves.
+> - **The cleaning board shows a cleaner the guest only in units where she has a job.**
+> - **My pay is for cleaners only, on the page and in the data behind it** (`/api/my-pay`). Other roles get "My pay is for cleaners." (403). A clean a cleaner finished that is paid to someone else shows without that person's name or any money. *This replaces the round-5 default in BLOCKERS question 13 ("leave it as it is"), because the data still carried other cleaners' names.*
+> - **Archiving an owner turns portal access off** and ends their sessions and unused sign-in links.
+> - **Workspace modules decide what the screens show, not what the server answers.** An owner can switch modules at any time, and only ever reads their own workspace. *Why:* recorded so later checks don't file it as a leak.
+>
+> *Money*
+> - **Longer stays never get a smaller discount.** Among the discounts that are on, weekly is at most the 14+ night discount, which is at most the monthly one. The listing form and the server both refuse an inverted ladder, with the reason at the field of the longer stay. The server checks an edit only when the edit sends a discount field, so an old listing that already has an inverted ladder can still change its name or price. *Why:* the price engine applies one discount, the longest that fits (PRD), so an inverted ladder made a month cost more per night than two weeks.
+> - **A payout must say which statement month it is for, and the month must be between 2000 and 2100.** Without a month, the "owner owes you" and over-payment checks (D-76, D-81) could be skipped. The same year range applies to the statement screens.
+> - **"Channel fees" means channel commission, and the fees inside revenue are "cleaning and extras".** Stay reports, Home and profit and loss use these words; Stay reports shows cleaning and extras as its own column.
+> - **Previews never show a figure the server refuses** (a negative charge price shows no total).
+> - **Amount filters work like date filters:** an amount that can't be used (negative, or more than 10 digits) or a backwards range ("from" above "to") says so at the field and the filter is off, with no filter chip. Payments and Expenses show one "Amount (₱)" chip.
+>
+> *Cleaning and operations*
+> - **Copy for cleaner is not offered on a cancelled job,** so a cancelled job can never read as live work.
+> - **Inspect is not offered on a paid clean,** the same as Reopen (D-81).
+> - **Reopening an older clean, or failing its inspection, doesn't mark the unit dirty when a newer clean of the same unit is already done.** Closes the gap noted in BLOCKERS round-5 question 2.
+> - **Quantities above 100,000 are refused before the "Not enough on hand" question.**
+> - **Status chips with no matches say "No results found"** and Clear filters returns to the default status (maintenance, tenants, properties). With no filter set, a chip keeps its own empty text.
+>
+> *Reviews, notifications and support*
+> - **Reviews ignore a filter id that is not a real id** (D-77: unknown ids in filters are ignored), so a bad `unit_id` or `property_id` answers the full list instead of a 404. The "matched" count and average cover all matches, not only the 200 rows sent back.
+> - **A support rating can be given once** (409 `ALREADY_RATED` the second time).
+> - **A notification setting can't be saved with an empty property list.** The server refuses it with a message at the field ("Pick at least one property, or choose all properties."). *Why:* an empty list silently muted the account.
+>
+> *Screens*
+> - **A failed portal invite says so,** and the owner card offers "Send the invite again" while access is on.
+> - **Owners with no units are left out of a month's statements** unless a statement was already saved for them.
+> - **Each problem is said once, at its field.** Banners and price summaries don't repeat a field message. This includes a taken email on Get started: one message at the email field, "This email is already registered. Log in or reset your password instead." (with the Taglish version on the landing page).
+> - **A blank or badly written id in a page address shows "Not found"** (for example `#/payments/%20`), never a raw error.
+> - **The launchpad counts skipped steps separately:** "N of 11 steps done · K skipped", and the bar shows done steps only.
+> - **The settings activity log shows "Changed: <labels>"** for edits, with the names of the fields and no values. *Why:* values can be private.
+>
+> *Why:* each call takes the narrowest reading of the access matrix, keeps money rules in one place, and stops the app offering anything it can't do.
+>
+> *Addendum 2026-10-14 (re-verify, fix C22):* The re-verify pass found staff were still getting data the access table (6.2) denies, so the narrowest reading was applied to the rest of the reservation data.
+> - **Staff no longer receive the house rules text or the time the guest accepted them** on reservations (matrix 6.2).
+> - **The payment-recording response no longer carries the guest's contact details or flags to staff.**
+> - **Internal payment idempotency keys are never returned**, to any role.
+> - **Hidden guest details now apply to every role except owner and manager.** The check is an allow-list, so a role added later sees nothing extra by default.
+> - **Empty-state rule:** a status tab with nothing in it keeps its own text (for example "No archived tenants"). "No results found" with Clear filters shows only when a search or another filter is set. In Maintenance, a non-default status chip counts as a filter. This is the rule, not a bug (it was reported as one in round 6 and closed).

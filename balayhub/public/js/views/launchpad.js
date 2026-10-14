@@ -16,6 +16,12 @@ const GUIDES = [
   ['Use BalayHub on your phone', ['Open BalayHub in your phone\'s browser and log in.', 'iPhone: Share → Add to Home Screen. Android: menu ⋮ → Add to Home screen.', 'It then opens like an app.']],
 ];
 
+// A skipped step is not done. The counts keep the two apart, so the text can say "9 of 11 steps done · 1 skipped".
+const countDone = (steps) => steps.filter((x) => x.done).length;
+const skippedNote = (steps) => { const n = steps.filter((x) => x.skipped).length; return n ? ` · ${n} skipped` : ''; };
+export const progressLine = (o) => `${countDone(o.steps)} of ${o.total} steps done${skippedNote(o.steps)}`;
+export const phaseCount = (steps) => `${countDone(steps)}/${steps.length}${skippedNote(steps)}`;
+
 function stepCard(st, isNext, rerender) {
   const status = st.done ? h('span', { class: 'lp-status lp-status--done' }, '✓ Done')
     : st.skipped ? h('span', { class: 'lp-status lp-status--skip' }, 'Skipped')
@@ -46,7 +52,7 @@ export async function launchpadView(el, { rerender }) {
   }
   const o = await get('/onboarding');
   const next = o.steps.find((x) => !x.done && !x.skipped);
-  const pct = Math.round((100 * o.done) / o.total);
+  const pct = Math.round((100 * countDone(o.steps)) / o.total);
   const first = state.user.full_name.split(' ')[0];
 
   el.replaceChildren(
@@ -59,17 +65,18 @@ export async function launchpadView(el, { rerender }) {
           : 'Follow these steps in order. Each one takes a few minutes, and they tick themselves off as you go.'),
         h('div', { class: 'lpad-progress' },
           h('div', { class: 'bar' }, h('span', { style: { width: `${pct}%` } })),
-          h('span', { class: 'small' }, `${o.done} of ${o.total} steps done`)),
+          h('span', { class: 'small' }, progressLine(o))),
         next && h('a', { class: 'btn btn--primary', href: next.href }, icon('plus'), `Next: ${next.title}`)),
       h('div', { class: 'lpad-hero__art', 'aria-hidden': 'true' }, icon('rocket'))),
     o.phases.map((ph, i) => {
       const steps = o.steps.filter((x) => x.phase === ph.key);
-      const done = steps.filter((x) => x.done || x.skipped).length;
+      // A phase ticks off once nothing in it is left to do. Its count still shows only the steps that are done.
+      const settled = steps.every((x) => x.done || x.skipped);
       return h('section', { class: 'lpad-phase card' },
         h('div', { class: 'lpad-phase__head' },
-          h('span', { class: `lpad-phase__num${done === steps.length ? ' is-done' : ''}` }, done === steps.length ? '✓' : String(i + 1)),
+          h('span', { class: `lpad-phase__num${settled ? ' is-done' : ''}` }, settled ? '✓' : String(i + 1)),
           h('div', null, h('h2', null, ph.title), h('p', { class: 'muted small' }, ph.text)),
-          h('span', { class: 'muted small lpad-phase__count' }, `${done}/${steps.length}`)),
+          h('span', { class: 'muted small lpad-phase__count' }, phaseCount(steps))),
         h('div', { class: 'lpad-steps' }, steps.map((st) => stepCard(st, st === next, rerender))));
     }),
     h('section', { class: 'card' },
@@ -90,9 +97,9 @@ export async function launchpadReminder(rerender) {
   return h('div', { class: 'card lpad-reminder' },
     h('span', { class: 'lpad-reminder__icon', 'aria-hidden': 'true' }, icon('rocket')),
     h('div', { class: 'lpad-reminder__text' },
-      h('strong', null, `Finish setting up BalayHub: ${o.done} of ${o.total} steps done`),
+      h('strong', null, `Finish setting up BalayHub: ${progressLine(o)}`),
       next && h('span', { class: 'muted small' }, `Next: ${next.title}`),
-      h('div', { class: 'bar' }, h('span', { style: { width: `${Math.round((100 * o.done) / o.total)}%` } }))),
+      h('div', { class: 'bar' }, h('span', { style: { width: `${Math.round((100 * countDone(o.steps)) / o.total)}%` } }))),
     h('div', { class: 'chips' },
       h('a', { class: 'btn btn--primary btn--sm', href: '#/launchpad' }, 'Open Launchpad'),
       h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: hide }, 'Hide')));

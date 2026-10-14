@@ -66,7 +66,7 @@ export async function dailyCloseView(el, { query, rerender }) {
       h('p', { class: 'muted small' }, `${fmtDate(date)}. ${open ? `${open} item${open === 1 ? ' is' : 's are'} still open. They are saved in the close so you can see them later.` : 'Everything on the checklist is clear.'}`),
       field({ name: 'note', label: 'Note (optional)', type: 'textarea', value: closed?.note || '', maxlength: 1000, placeholder: 'Anything the next shift should know' }),
     ],
-    onSubmit: async (d) => { await post('/daily-close', { date, note: d.note }); toast('Day closed.'); rerender(); },
+    onSubmit: async (d) => { await post('/daily-close', { date, note: d.note }); toast(closed ? 'Close updated.' : 'Day closed.'); rerender(); },
   });
 
   const closes = hist.closes;

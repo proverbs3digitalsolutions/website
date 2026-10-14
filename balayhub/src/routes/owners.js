@@ -139,7 +139,10 @@ router.patch('/unit-owners/:id', ownersOnly, ah(async (req, res) => {
 router.post('/unit-owners/:id/archive', ownersOnly, ah(async (req, res) => {
   const o = await loadOwner(req.user, uuidParam(req.params.id));
   await tx(async (db) => {
-    await db.query('UPDATE unit_owners SET archived_at = now() WHERE owner_id = $1', [o.owner_id]);
+    // Portal access ends with the owner: the same steps as portal-disable (ownerportal.js).
+    await db.query('UPDATE unit_owners SET archived_at = now(), portal_enabled = false WHERE owner_id = $1', [o.owner_id]);
+    await db.query('DELETE FROM owner_sessions WHERE owner_id = $1', [o.owner_id]);
+    await db.query('DELETE FROM owner_login_tokens WHERE owner_id = $1 AND used_at IS NULL', [o.owner_id]);
     await db.query('UPDATE units SET owner_id = NULL WHERE owner_id = $1', [o.owner_id]);
     await audit(db, req.user, 'unit_owner.archived', 'unit_owner', o.owner_id, { name: o.full_name });
   });
@@ -245,7 +248,8 @@ router.post('/unit-owners/:id/statement/send', ownersOnly, ah(async (req, res) =
   res.json({ sent: true, to: o.email });
 }));
 
-// Review list: every active owner's statement for one month. Owners with no saved row yet show as draft.
+// Review list: every active owner's statement for one month. Owners with no saved row yet show as draft,
+// unless they have no units (nothing to review).
 router.get('/owner-statements', ownersOnly, ah(async (req, res) => {
   const org = req.user.organization_id;
   const month = monthParam(req.query.month);
@@ -264,6 +268,7 @@ router.get('/owner-statements', ownersOnly, ah(async (req, res) => {
   const rows = [];
   for (const o of owners) {
     const rec = recordBy.get(o.owner_id);
+    if (!rec && !unitsBy.get(o.owner_id)) continue;
     const published = rec?.status === 'published';
     const s = published ? rec.snapshot : await ownerStatement(org, o.owner_id, month);
     rows.push({

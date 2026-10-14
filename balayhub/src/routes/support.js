@@ -194,7 +194,9 @@ router.post('/support/tickets/:id/rate', ah(async (req, res) => {
   const t = await loadTicket(req.user, uuidParam(req.params.id));
   if (!['resolved', 'closed'].includes(t.status)) throw new HttpError(409, 'You can rate the help once the ticket is resolved.', { code: 'NOT_RESOLVED' });
   const body = validate(req.body, { rating: { type: 'int', required: true, min: 1, max: 5, label: 'Rating' }, comment: { type: 'text', max: 1000, label: 'Comment' } });
-  await query('UPDATE support_tickets SET rating = $2, rating_comment = $3 WHERE ticket_id = $1', [t.ticket_id, body.rating, body.comment]);
+  // The first rating stands. The update only lands on a ticket with no rating yet, so two sends at once can't both save.
+  const saved = await one('UPDATE support_tickets SET rating = $2, rating_comment = $3 WHERE ticket_id = $1 AND rating IS NULL RETURNING ticket_id', [t.ticket_id, body.rating, body.comment]);
+  if (!saved) throw new HttpError(409, 'This ticket is already rated.', { code: 'ALREADY_RATED' });
   await addEvent(null, t.ticket_id, { kind: 'rated', actorId: req.user.user_id, actorKind: 'customer', note: `${body.rating}/5${body.comment ? ` · ${body.comment}` : ''}` });
   res.json({ ok: true });
 }));

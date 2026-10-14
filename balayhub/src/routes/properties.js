@@ -82,6 +82,21 @@ function checkPostalCode(code) {
   }
 }
 
+// Longer stays get the same or a bigger discount: weekly, then 14+ nights, then monthly. A discount
+// that is off (0) is skipped. The refused field is the longer-stay one that breaks the order.
+const DISCOUNT_ORDER = [['weekly_discount', 'weekly'], ['fortnight_discount', '14+ night'], ['monthly_discount', 'monthly']];
+function checkDiscountOrder(values) {
+  let shorter = null;
+  for (const [key, name] of DISCOUNT_ORDER) {
+    const pct = values[key];
+    if (!(pct > 0)) continue;
+    if (shorter && pct < shorter.pct) {
+      throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { [key]: `The ${name} discount (${pct}%) can't be smaller than the ${shorter.name} discount (${shorter.pct}%). Longer stays get the same or a bigger discount.` } });
+    }
+    shorter = { name, pct };
+  }
+}
+
 // Listing tags: lowercase, trimmed, 1 to 30 characters, at most 10 per listing, no repeats.
 const TAG_LIMIT = 10;
 const tagError = (msg) => new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { tags: msg } });
@@ -294,6 +309,7 @@ router.post('/properties/:id/units', managers, ah(async (req, res) => {
   if (property.status !== 'active') throw new HttpError(409, 'Restore this property before adding units.', { code: 'ARCHIVED' });
   const body = validate(req.body, unitSpec);
   checkCustomPolicy(body.cancellation_policy, body.cancellation_policy_text);
+  checkDiscountOrder(body);
   if (body.public_slug) checkSlugFormat(body.public_slug);
   const tags = parseTags(req.body?.tags);
   try {
@@ -360,6 +376,8 @@ router.patch('/units/:id', managers, ah(async (req, res) => {
     'cancellation_policy_text' in body ? body.cancellation_policy_text : unit.cancellation_policy_text);
   if ('public_slug' in body) checkSlugFormat(body.public_slug);
   settleBlanks(body);
+  // A discount change is checked against the saved values it leaves in place.
+  if (DISCOUNT_ORDER.some(([key]) => key in body)) checkDiscountOrder({ ...unit, ...body });
   // Giving a long-term unit a nightly rate turns it into a listing.
   if (body.nightly_rate && !unit.nightly_rate && unit.status === 'active') await checkListingLimit(req.user);
   const keys = Object.keys(body);

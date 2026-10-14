@@ -88,3 +88,4 @@
 - Lessons: (1) every lane uses its own TEST_DATABASE_URL (a lane wiped balayhub_test); (2) planner must check numbers against DECISIONS and code; (3) re-run the full suite after the last test edit; (4) check both client and server guards for role-only pages.
 - R6 carry: stacked-card labels 'Check-in'/'Check-out' wrap at the hyphen at 390 (SEV3 polish).
 - 2026-10-14: Round 5 complete: full suite 1378/1378, layout tests 66/66 after last CSS change, security PASS, re-verify R1-R9 held (owner portal nav unverified: token minting refused). Committing.
+- 2026-10-14: Round 5 committed (fd57d87). Round 6 started: DB restored, 12 sweep lanes dispatched.

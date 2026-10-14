@@ -158,7 +158,7 @@ extendTranslations({
   'We\'ll set up BalayHub for the way you host.': 'Ise-setup namin ang BalayHub ayon sa paraan ng pag-host mo.',
   'First name': 'Pangalan', 'Last name': 'Apelyido', 'Business name': 'Pangalan ng negosyo', 'e.g. Santos Staycations': 'hal. Santos Staycations',
   'Mobile number': 'Mobile number', 'What do you rent out?': 'Ano ang pinauupahan mo?',
-  'Short-term stays (Airbnb, staycations)': 'Short-term stays (Airbnb, staycations)', 'Long-term rentals (monthly tenants)': 'Long-term rentals (buwanang tenants)', 'Both': 'Pareho',
+  'Short-term stays (Airbnb, staycations)': 'Panandaliang stays (Airbnb, staycation)', 'Long-term rentals (monthly tenants)': 'Long-term rentals (buwanang tenants)', 'Both': 'Pareho',
   'Continue': 'Tuloy', 'Back': 'Bumalik',
   'Create your account': 'Gawin ang account mo', 'Email': 'Email', 'Password': 'Password', 'At least 8 characters.': 'Hindi bababa sa 8 characters.',
   'I agree to the ': 'Sumasang-ayon ako sa ', 'Terms of Service': 'Terms of Service', ' and have read the ': ' at nabasa ko ang ', 'Privacy Notice': 'Privacy Notice',
@@ -171,6 +171,7 @@ extendTranslations({
   'Enter your first name.': 'Ilagay ang first name mo.', 'Enter your last name.': 'Ilagay ang last name mo.', 'Enter your business name.': 'Ilagay ang business name mo.',
   'Enter a valid phone number.': 'Maglagay ng tamang numero ng telepono.',
   'Password must be at least 8 characters.': 'Dapat hindi bababa sa 8 characters ang password.',
+  'This email is already registered. Log in or reset your password instead.': 'Nakarehistro na ang email na ito. Mag-log in o i-reset ang password mo.',
   'More than 10': 'Higit 10',
   'BalayHub is made for 1 to 10 units. For more, we\'ll set up a custom plan with you after your trial.': 'Para sa 1 hanggang 10 unit ang BalayHub. Kung higit pa, gagawa tayo ng custom plan pagkatapos ng trial mo.',
   // contact fallback, used when no contact email is set: visitors sign up, then ask in Help & support
@@ -272,7 +273,8 @@ const askNodes = (pricing) => (pricing.contact_email
 function langMenu(onChange) {
   const label = guestLang() === 'tl' ? 'TL' : 'EN';
   const menu = h('details', { class: 'lp-lang' },
-    h('summary', { 'aria-label': t('Language') }, label, h('span', { 'aria-hidden': 'true' }, ' ▾')),
+    // The name carries the visible label too (WCAG 2.5.3): "Language: EN", or "Wika: TL" in Taglish.
+    h('summary', { 'aria-label': `${t('Language')}: ${label}` }, label, h('span', { 'aria-hidden': 'true' }, ' ▾')),
     h('div', { class: 'lp-lang__menu', role: 'menu' },
       [['en', 'English'], ['tl', 'Tagalog']].map(([k, name]) => h('button', {
         type: 'button', role: 'menuitemradio', 'aria-checked': String(guestLang() === k), class: guestLang() === k ? 'is-on' : '',
@@ -382,9 +384,12 @@ export function openGetStarted(preset = {}) {
           // This sheet has no confirm-password box, so the server's confirm message is left out here too.
           const fields = { ...(err.fields || {}) };
           delete fields.confirm_password;
+          // An email that already has an account gets the log-in and reset guidance at its field. The Log in link under the form stays.
+          if (err.code === 'EMAIL_TAKEN') fields.email = t('This email is already registered. Log in or reset your password instead.');
+          // A message that sits at a field is said once, there. The banner only points at the highlighted fields.
           let message = t('Please fill in the highlighted fields.');
-          if (err instanceof ApiError && err.code !== 'VALIDATION') message = err.message;
-          else if (Object.keys(fields).length) message = t('Please check the highlighted fields.');
+          if (Object.keys(fields).length) message = t('Please check the highlighted fields.');
+          else if (err instanceof ApiError && err.code !== 'VALIDATION') message = err.message;
           formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, message));
           showErrors(fields);
           submit.disabled = false; submit.textContent = t('Start my free trial');
@@ -394,11 +399,12 @@ export function openGetStarted(preset = {}) {
       input('email', t('Email'), { type: 'email', required: true, autocomplete: 'email', placeholder: 'name@example.com' }),
       h('div', { class: 'field', dataset: { field: 'password' } },
         h('label', { for: 'gs-password' }, t('Password'), h('span', { class: 'req' }, ' *')),
-        h('input', { class: 'input', id: 'gs-password', name: 'password', type: 'password', autocomplete: 'new-password', minlength: 8 }),
+        // Redrawn from the answer kept in memory (Back, then Continue). It is never written to storage.
+        h('input', { class: 'input', id: 'gs-password', name: 'password', type: 'password', autocomplete: 'new-password', minlength: 8, value: data.password || '' }),
         h('p', { class: 'hint' }, t('At least 8 characters.')),
         h('div', { class: 'error', role: 'alert' })),
       h('div', { class: 'field', dataset: { field: 'accept_privacy' } },
-        h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'accept_privacy' }),
+        h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'accept_privacy', checked: data.accept_privacy }),
           h('span', null, t('I agree to the '), h('a', { href: '#/terms', target: '_blank' }, t('Terms of Service')), t(' and have read the '),
             h('a', { href: '#/privacy', target: '_blank' }, t('Privacy Notice')), '.')),
         h('div', { class: 'error', role: 'alert' })),

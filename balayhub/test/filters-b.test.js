@@ -69,7 +69,12 @@ test('reviews: rating, listing, property, dates, comment, search, sort; staff st
   assert.equal(f.matched_average, 2.5);
   assert.deepEqual((await get('?sort=lowest')).reviews.map((r) => r.rating), [2, 3, 5]);
   assert.deepEqual((await get('?sort=oldest')).reviews.map((r) => r.rating), [5, 2, 3]);
-  assert.equal((await host.get('/api/reviews?unit_id=not-a-uuid')).status, 404);
+  // A malformed unit_id is ignored like any bad filter value (D-77), so the list is the unfiltered one.
+  const bad = await host.get('/api/reviews?unit_id=not-a-uuid');
+  assert.equal(bad.status, 200);
+  assert.deepEqual(ids(bad.data.reviews), ids((await get('')).reviews));
+  assert.equal(bad.data.matched, bad.data.count, 'matched equals the unfiltered count');
+  assert.equal(bad.data.matched_average, bad.data.average, 'matched average equals the unfiltered average');
 
   // Staff only see their property's reviews, even when filtering for another.
   assert.deepEqual(ids((await staff.get('/api/reviews')).data.reviews), ids([r1, r2]));

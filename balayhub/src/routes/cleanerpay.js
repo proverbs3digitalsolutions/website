@@ -6,7 +6,7 @@
 
 const express = require('express');
 const { query, one, tx } = require('../db');
-const { HttpError, ah, notFound } = require('../lib/http');
+const { HttpError, ah, notFound, forbidden } = require('../lib/http');
 const { validate, uuidParam } = require('../lib/validate');
 const { audit } = require('../lib/audit');
 const { requireRole } = require('../lib/auth');
@@ -276,9 +276,10 @@ router.post('/cleaner-pay/:taskId/unpay', owners, ah(async (req, res) => {
 }));
 
 // ---------------------------------------------------------------- my pay (any role)
-// The cleans assigned to the signed-in user or finished by them. A clean finished for
-// someone else is listed, but its pay is hidden (pay_visible false) because it is not theirs.
+// Cleaners only. The cleans assigned to the signed-in user or finished by them. A clean finished for
+// someone else is listed, but its pay is hidden (pay_visible false) and it names no cleaner.
 router.get('/my-pay', ah(async (req, res) => {
+  if (req.user.role !== 'cleaner') throw forbidden('My pay is for cleaners.');
   const month = req.query.month ? monthParam(req.query.month) : await currentMonth();
   const me = `user:${req.user.user_id}`;
   const params = [req.user.user_id, req.user.organization_id];
@@ -287,7 +288,9 @@ router.get('/my-pay', ah(async (req, res) => {
   const tasks = rows.map((r) => {
     const visible = r.cleaner_key === me;
     const hidden = { pay_amount: null, pay_status: null, paid_on: null, paid_method: null, paid_reference: null };
-    return { ...taskOut(visible ? r : { ...r, ...hidden }), pay_visible: visible };
+    const out = taskOut(visible ? r : { ...r, ...hidden });
+    if (!visible) { delete out.cleaner_key; delete out.cleaner_name; delete out.cleaner_user_id; }
+    return { ...out, pay_visible: visible };
   });
   res.json({ month, tasks, totals: tally(tasks) });
 }));

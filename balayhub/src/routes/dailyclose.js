@@ -35,6 +35,7 @@ function resolveDate(raw) {
 }
 
 const firstName = (name) => (name || 'Guest').trim().split(/\s+/)[0];
+const dayText = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' });
 const item = (text, link, detail = null, amount = null) => ({ text, detail, link, amount });
 const section = (key, title, items) => ({ key, title, count: items.length, items });
 
@@ -139,14 +140,14 @@ async function checklist(user, date) {
        ORDER BY r.created_at`),
     // Archived listings and properties are left out, as in GET /sync-health (src/routes/synchealth.js).
     scopedRows(user, [], (where) => `
-      SELECT f.channel, f.last_status, f.last_message, f.last_synced_at, f.created_at, u.unit_name
+      SELECT f.channel, f.last_status, f.last_message, f.last_synced_at, f.created_at, u.unit_id, u.unit_name
         FROM ical_feeds f
         JOIN units u ON u.unit_id = f.unit_id
         JOIN properties p ON p.property_id = u.property_id
        WHERE ${where} AND u.status = 'active' AND p.status = 'active'
        ORDER BY u.unit_name`),
     scopedRows(user, [], (where) => `
-      SELECT f.channel, c.check_in, c.check_out, u.unit_name
+      SELECT f.channel, c.check_in, c.check_out, u.unit_id, u.unit_name
         FROM ical_conflicts c
         JOIN ical_feeds f ON f.feed_id = c.feed_id
         JOIN units u ON u.unit_id = c.unit_id
@@ -169,7 +170,7 @@ async function checklist(user, date) {
     },
     section('balances_due', 'Balances due', balances.map((r) =>
       item(`${firstName(r.guest_name)} · ${r.unit_name}`, `#/reservations/${r.booking_id}`,
-        r.staying ? 'Staying now' : `Check-in ${r.check_in}`, r.balance))),
+        r.staying ? 'Staying now' : `Check-in ${dayText(r.check_in)}`, r.balance))),
     section('proofs_pending', 'Payment proofs to review', proofs.map((r) =>
       item(`${r.payer_name || 'Guest'} · ${r.unit_name}`, `#/reservations/${r.booking_id}`, PROOF_METHOD[r.method], r.amount))),
     section('damage_open', 'Open damage reports', damage.map((r) =>
@@ -179,11 +180,11 @@ async function checklist(user, date) {
       ...feeds.flatMap((r) => {
         const kind = feedProblem(r, cutoff);
         if (!kind) return [];
-        return [item(`${r.unit_name} · ${CHANNEL_LABEL[r.channel] || 'Channel'}`, '#/calendar',
+        return [item(`${r.unit_name} · ${CHANNEL_LABEL[r.channel] || 'Channel'}`, `#/listings?focus=${r.unit_id}`,
           problemText(r, kind).message)];
       }),
-      ...conflicts.map((r) => item(`${r.unit_name} · ${CHANNEL_LABEL[r.channel] || 'Channel'}`, '#/calendar',
-        `Overlapping dates ${r.check_in} to ${r.check_out}`)),
+      ...conflicts.map((r) => item(`${r.unit_name} · ${CHANNEL_LABEL[r.channel] || 'Channel'}`, `#/listings?focus=${r.unit_id}`,
+        `Overlapping dates ${dayText(r.check_in)} to ${dayText(r.check_out)}`)),
     ]),
   ];
 }

@@ -13,7 +13,8 @@ const { addDays } = require('../src/lib/holidays');
 
 const today = manilaToday();
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
-const payoutBody = (over = {}) => ({ amount: '1000', paid_on: today, method: 'gcash', ...over });
+// A payout names its statement month (QA round 6 #23), so the default names one too.
+const payoutBody = (over = {}) => ({ amount: '1000', paid_on: today, method: 'gcash', month: '2026-09', ...over });
 const withdrawalBody = (over = {}) => ({ amount: '100', entry_date: today, note: 'Repair', ...over });
 const payouts = (id) => `/api/unit-owners/${id}/payouts`;
 const reserve = (id) => `/api/unit-owners/${id}/reserve`;
@@ -80,13 +81,14 @@ test('record a payout: saved with its owner, method, month and who recorded it; 
   assert.equal(p.recorded_by_name, 'Maria Santos');
   assert.match(p.created_at, ISO);
 
-  const noMonth = await owner.post(payouts(ownerId), payoutBody({ amount: '90' }));
-  assert.equal(noMonth.status, 201);
-  assert.equal(noMonth.data.payout.month, null, 'the month is optional');
+  // QA round 6 (#23): a payout must name its statement month, so the owes check can't be skipped.
+  const noMonth = await owner.post(payouts(ownerId), payoutBody({ amount: '90', month: undefined }));
+  assert.equal(noMonth.status, 400);
+  assert.equal(noMonth.data.fields.month, 'Choose the statement month this payout is for.');
 
   const list = await owner.get(payouts(ownerId));
   assert.equal(list.status, 200);
-  assert.equal(list.data.payouts.length, 2);
+  assert.equal(list.data.payouts.length, 1, 'the refused payout is not saved');
   assert.ok(list.data.payouts.some((x) => x.payout_id === firstPayout && x.amount === '1500.00'));
 });
 
@@ -101,6 +103,7 @@ test('payouts reject bad input with field-level errors and no internal detail', 
     [{ paid_on: '2026-02-30' }, 'paid_on'],
     [{ method: 'paypal' }, 'method'],
     [{ month: '2026-13' }, 'month'],
+    [{ month: undefined }, 'month'],
     [{ reference_number: 'x'.repeat(101) }, 'reference_number'],
     [{ note: 'x'.repeat(501) }, 'note'],
   ]) {

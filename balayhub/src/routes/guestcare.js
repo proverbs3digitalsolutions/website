@@ -5,7 +5,7 @@
 const express = require('express');
 const { query, one } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
-const { validate, uuidParam, isValidDate } = require('../lib/validate');
+const { validate, uuidParam, isValidDate, UUID_RE } = require('../lib/validate');
 const { audit } = require('../lib/audit');
 const { requireRole, rateLimit } = require('../lib/auth');
 const { propertyScope } = require('../lib/access');
@@ -20,6 +20,8 @@ const owners = requireRole('owner');
 const validationError = (fields) => new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields });
 const manilaToday = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
 const daysBetween = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
+// A filter id that isn't a UUID is ignored (D-77), so an old or edited link still loads the list.
+const uuidOrNull = (v) => (typeof v === 'string' && UUID_RE.test(v) ? v : null);
 
 // Public review links (D-62): a name of 1–40 characters and an https address of at most 300.
 const REVIEW_LINKS_MAX = 4;
@@ -116,8 +118,8 @@ router.get('/reviews', ah(async (req, res) => {
   if (/^[1-5]$/.test(String(q.rating || ''))) { params.push(Number(q.rating)); where.push(`r.rating = $${params.length}`); }
   if (q.rating === 'low') where.push('r.rating <= 3');
   if (q.rating === 'high') where.push('r.rating >= 4');
-  if (q.unit_id) { params.push(uuidParam(q.unit_id)); where.push(`b.unit_id = $${params.length}`); }
-  if (q.property_id) { params.push(uuidParam(q.property_id)); where.push(`p.property_id = $${params.length}`); }
+  if (uuidOrNull(q.unit_id)) { params.push(q.unit_id); where.push(`b.unit_id = $${params.length}`); }
+  if (uuidOrNull(q.property_id)) { params.push(q.property_id); where.push(`p.property_id = $${params.length}`); }
   if (isValidDate(q.from)) { params.push(q.from); where.push(`(r.created_at AT TIME ZONE 'Asia/Manila')::date >= $${params.length}`); }
   if (isValidDate(q.to)) { params.push(q.to); where.push(`(r.created_at AT TIME ZONE 'Asia/Manila')::date <= $${params.length}`); }
   if (q.has_comment === '1') where.push(`COALESCE(btrim(r.comment), '') <> ''`);
@@ -127,15 +129,17 @@ router.get('/reviews', ah(async (req, res) => {
   }
   const from = `FROM guest_reviews r JOIN bookings b USING (booking_id) JOIN units u ON u.unit_id = b.unit_id JOIN properties p ON p.property_id = u.property_id
        LEFT JOIN guests g ON g.guest_id = b.guest_id`;
+  const whereSql = where.join(' AND ');
   const { rows } = await query(
     `SELECT r.review_id, r.booking_id, r.rating, r.cleanliness, r.comment, r.created_at, b.check_in, b.check_out, u.unit_name, p.property_name,
             COALESCE(g.full_name, b.guest_label) AS guest_name
-       ${from} WHERE ${where.join(' AND ')} ORDER BY ${REVIEW_SORTS[q.sort] || REVIEW_SORTS.newest} LIMIT 200`, params);
+       ${from} WHERE ${whereSql} ORDER BY ${REVIEW_SORTS[q.sort] || REVIEW_SORTS.newest} LIMIT 200`, params);
   // The headline average is always over every review you can see, filtered or not.
   const allParams = [];
   const all = await one(`SELECT COUNT(*)::int AS n, ROUND(AVG(r.rating), 1)::float AS avg ${from} WHERE ${propertyScope(req.user, allParams)}`, allParams);
-  const avg = rows.length ? Math.round((rows.reduce((s, r) => s + r.rating, 0) / rows.length) * 10) / 10 : null;
-  res.json({ reviews: rows, average: all.n ? all.avg : null, count: all.n, matched: rows.length, matched_average: avg });
+  // Matched counts every review the filters keep, not just the 200 rows listed.
+  const matched = await one(`SELECT COUNT(*)::int AS n, ROUND(AVG(r.rating), 1)::float AS avg ${from} WHERE ${whereSql}`, params);
+  res.json({ reviews: rows, average: all.n ? all.avg : null, count: all.n, matched: matched.n, matched_average: matched.n ? matched.avg : null });
 }));
 
 // ---------------------------------------------------------------- host: discount codes

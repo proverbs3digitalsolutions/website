@@ -126,7 +126,7 @@ export async function cleanerPayView(el, { query = {} } = {}) {
       markBtn.disabled = !n;
       markBtn.textContent = n ? `Mark ${n} paid · ${peso(fromCents(c))}` : 'Mark paid';
     };
-    const all = h('input', { type: 'checkbox', 'aria-label': 'Select all unpaid cleans', disabled: !payable.length,
+    const all = h('input', { type: 'checkbox', disabled: !payable.length,
       onchange: (e) => { payable.forEach((x) => (e.target.checked ? selected.add(x.task_id) : selected.delete(x.task_id))); box.querySelectorAll('input[data-task]').forEach((i) => { i.checked = selected.has(i.dataset.task); }); refresh(); } });
     const perCleaner = data.cleaners || [];
 
@@ -141,10 +141,10 @@ export async function cleanerPayView(el, { query = {} } = {}) {
           h('span', { class: 'ops-line__end' }, cleanerStatus(c), cents(c.paid) ? h('span', { class: 'muted small' }, ` · ${peso(c.paid)} paid`) : null))))),
       rows.length
         ? h('div', { class: 'card card--flush' },
-          h('div', { class: 'ops-bar' }, h('span', { class: 'muted small' }, `${rows.length} clean${rows.length === 1 ? '' : 's'}`), markBtn),
+          h('div', { class: 'ops-bar' }, h('label', { class: 'check' }, all, h('span', null, 'Select all unpaid')), h('span', { class: 'muted small' }, `${rows.length} clean${rows.length === 1 ? '' : 's'}`), markBtn),
           h('div', { class: 'table-wrap' }, h('table', { class: 'table ops-stack' },
             h('caption', { class: 'sr-only' }, `Cleaner pay for ${month()}`),
-            h('thead', null, h('tr', null, h('th', { scope: 'col', class: 'ops-check' }, all), ['Date', 'Unit', 'Cleaner'].map((c) => h('th', { scope: 'col' }, c)), h('th', { scope: 'col', class: 'num' }, 'Pay'), h('th', { scope: 'col' }, 'Status'), h('th', { scope: 'col' }, h('span', { class: 'sr-only' }, 'Actions')))),
+            h('thead', null, h('tr', null, h('th', { scope: 'col', class: 'ops-check' }, h('span', { class: 'sr-only' }, 'Select')), ['Date', 'Unit', 'Cleaner'].map((c) => h('th', { scope: 'col' }, c)), h('th', { scope: 'col', class: 'num' }, 'Pay'), h('th', { scope: 'col' }, 'Status'), h('th', { scope: 'col' }, h('span', { class: 'sr-only' }, 'Actions')))),
             h('tbody', null, rows.map((x) => {
               const canPick = x.pay_status === 'unpaid' && x.pay_amount != null;
               const box1 = h('input', { type: 'checkbox', disabled: !canPick, checked: selected.has(x.task_id), dataset: { task: x.task_id }, 'aria-label': `Select ${unitOf(x)} on ${fmtDate(doneDay(x))}`,

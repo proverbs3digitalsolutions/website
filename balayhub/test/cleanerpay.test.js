@@ -498,14 +498,11 @@ test('undo: a clean that is not paid, or not found, is refused; only owners may 
 });
 
 // ---------------------------------------------------------------- my pay
-test('my pay: a team member sees their own cleans and totals, and no one else\'s', async () => {
+// QA round 6 (C09): /my-pay is for cleaners only, so staff are refused. Their own-cleans check moved to a cleaner test.
+test('my pay: staff are refused, the page and the API are for cleaners only', async () => {
   const r = await staff.get('/api/my-pay?month=2026-08');
-  assert.equal(r.status, 200, JSON.stringify(r.data));
-  assert.equal(r.data.month, '2026-08');
-  const ids = r.data.tasks.map((t) => t.task_id).sort();
-  assert.deepEqual(ids, [aug.a1, aug.cover, aug.edge, aug.first].sort(), 'assigned to them, the Ate Lin clean is not theirs');
-  assert.deepEqual(r.data.totals, { total: '1402.00', paid: '0.00', unpaid: '1402.00' });
-  assert.ok(r.data.tasks.every((t) => t.pay_visible === true));
+  assert.equal(r.status, 403, JSON.stringify(r.data));
+  assert.equal(r.data.error, 'My pay is for cleaners.');
 });
 
 test('my pay: a cleaner with a login sees the cleans assigned to or finished by them; a clean finished for someone else shows no pay', async () => {
@@ -518,19 +515,15 @@ test('my pay: a cleaner with a login sees the cleans assigned to or finished by 
   assert.equal(byId[aug.cover].pay_amount, null, 'Staff Azure\'s pay on a clean Rosa finished');
   assert.equal(byId[aug.cover].pay_status, null);
   assert.equal(byId[aug.cover].pay_visible, false);
-  assert.equal(byId[aug.cover].cleaner_name, 'Staff Azure');
+  assert.equal('cleaner_name' in byId[aug.cover], false, 'the cleaner it is paid to is not named (QA round 6)');
   assert.deepEqual(r.data.totals, { total: '350.00', paid: '0.00', unpaid: '350.00' });
   assert.equal(JSON.stringify(r.data).includes('350.50'), false, 'no one else\'s amount appears');
 });
 
-test('my pay: the owner, who finished cleans for others, sees them with no pay in them', async () => {
+test('my pay: the owner, who finished cleans for others, is refused (QA round 6)', async () => {
   const r = await owner.get('/api/my-pay?month=2026-08');
-  assert.equal(r.status, 200);
-  const ids = r.data.tasks.map((t) => t.task_id);
-  assert.ok(ids.includes(aug.lin), 'finished by the owner');
-  assert.ok(!ids.includes(aug.cover), 'finished by Rosa');
-  assert.ok(r.data.tasks.every((t) => t.pay_visible === false && t.pay_amount === null));
-  assert.deepEqual(r.data.totals, { total: '0.00', paid: '0.00', unpaid: '0.00' });
+  assert.equal(r.status, 403, JSON.stringify(r.data));
+  assert.equal(r.data.error, 'My pay is for cleaners.');
 });
 
 test('my pay: a paid clean shows as paid with its date and method', async () => {
@@ -546,7 +539,7 @@ test('my pay: a paid clean shows as paid with its date and method', async () => 
   assert.equal(paid.data.totals.paid, '400.00');
 });
 
-test('my pay: the default month is this month, a bad month is a 400, signed-out is a 401, other workspaces see nothing', async () => {
+test('my pay: the default month is this month, a bad month is a 400, signed-out is a 401, another workspace\'s owner is refused', async () => {
   const now = await rosa.get('/api/my-pay');
   assert.equal(now.status, 200);
   assert.equal(now.data.month, manilaToday().slice(0, 7));
@@ -554,5 +547,5 @@ test('my pay: the default month is this month, a bad month is a 400, signed-out 
   assert.equal(bad.status, 400);
   assert.equal(bad.data.fields.month, 'Use the format YYYY-MM.');
   assert.equal((await client(srv.base).get('/api/my-pay?month=2026-08')).status, 401);
-  assert.equal((await other.get('/api/my-pay?month=2026-08')).data.tasks.length, 0);
+  assert.equal((await other.get('/api/my-pay?month=2026-08')).status, 403);
 });

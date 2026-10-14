@@ -8,6 +8,9 @@ import { t, tServer, guestLang, tFields, initGuestLang, langToggle, fmtDateL as 
 
 // Same peso format as the booking pages: no centavos when it's a whole amount.
 const peso = (v) => { const n = Number(v || 0); return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`; };
+// The amount box starts at what is still owed: a whole amount has no centavos (17600), a fraction keeps two (17600.50).
+// Rounding to centavos first drops float residue left by subtracting proofs from the balance.
+export const prefillAmount = (v) => { const n = Math.round(Number(v) * 100) / 100; return Number.isInteger(n) ? String(n) : n.toFixed(2); };
 
 const METHOD_TEXT = { gcash: 'GCash', maya: 'Maya', bank_transfer: 'Bank transfer', other: 'Other', cash: 'Cash', card: 'Card', channel_payout: 'Booking platform', check: 'Check' };
 const PROOF_METHODS = [['gcash', 'GCash'], ['maya', 'Maya'], ['bank_transfer', 'Bank transfer'], ['other', 'Other']];
@@ -305,7 +308,7 @@ function proofForm(d, token, onSent, left, pendingTotal) {
   };
   form.append(
     formError,
-    field({ name: 'amount', label: t('Amount paid'), type: 'money', required: true, value: left.toFixed(2) }),
+    field({ name: 'amount', label: t('Amount paid'), type: 'money', required: true, value: prefillAmount(left) }),
     field({ name: 'method', label: t('Payment method'), type: 'select', required: true, value: 'gcash', placeholderOption: false, options: PROOF_METHODS.map(([v, l]) => [v, t(l)]) }),
     field({ name: 'reference_number', label: t('Reference number'), maxlength: 100, hint: t('The reference or transaction number from your app or bank.') }),
     field({ name: 'payer_name', label: t('Name of payer'), maxlength: 120, hint: t('The name on the account you paid from.') }),

@@ -153,12 +153,15 @@ export async function newGroupModal({ onSaved } = {}) {
       try {
         const { guests } = await get(`/guests${qs({ q })}`);
         if (mine !== seq) return;
-        results.replaceChildren(...(guests.length ? guests.slice(0, 8).map((g) => h('li', null, h('button', {
+        const shown = guests.slice(0, 8);
+        // More matches than the list shows get a line saying so, so the host knows to type more.
+        const more = guests.length > shown.length ? [h('li', { class: 'muted small' }, `Showing ${shown.length} of ${guests.length}. Type more to narrow the search.`)] : [];
+        results.replaceChildren(...(guests.length ? shown.map((g) => h('li', null, h('button', {
           type: 'button', class: 'grp-guest', onclick: () => {
             picked = g; results.replaceChildren();
             chosen.replaceChildren(h('span', { class: 'badge badge--active' }, g.full_name), h('button', { type: 'button', class: 'btn btn--ghost btn--sm', onclick: () => { picked = null; chosen.replaceChildren(); } }, 'Change'));
           },
-        }, h('strong', null, g.full_name), g.email || g.phone ? h('span', { class: 'muted small' }, ` · ${g.email || g.phone}`) : null))) : [h('li', { class: 'muted small' }, 'No guest found. Switch to "New guest".')]));
+        }, h('strong', null, g.full_name), g.email || g.phone ? h('span', { class: 'muted small' }, ` · ${g.email || g.phone}`) : null))) : [h('li', { class: 'muted small' }, 'No guest found. Switch to "New guest".')]), ...more);
       } catch (err) { results.replaceChildren(h('li', { class: 'error' }, err.message)); }
     }, 300);
   });

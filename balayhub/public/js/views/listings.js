@@ -53,6 +53,21 @@ function prepUnit(d) {
   return { ...d, tags: d.tags ? d.tags.split(',').filter(Boolean) : [], min_price: d.min_price === '' ? null : d.min_price, room_type: d.room_type?.trim() || null };
 }
 
+// The same order the server keeps (src/routes/properties.js): weekly, then 14+ nights, then monthly, never
+// smaller as stays get longer. A refused field gets its message at the field, as a server refusal does.
+const DISCOUNT_ORDER = [['weekly_discount', 'weekly'], ['fortnight_discount', '14+ night'], ['monthly_discount', 'monthly']];
+function checkDiscountOrder(d) {
+  let shorter = null;
+  for (const [key, name] of DISCOUNT_ORDER) {
+    const pct = Number(d[key]) || 0;
+    if (pct <= 0) continue;
+    if (shorter && pct < shorter.pct) {
+      throw new ApiError('Please check the highlighted fields.', { status: 400, fields: { [key]: `The ${name} discount (${pct}%) can't be smaller than the ${shorter.name} discount (${shorter.pct}%). Longer stays get the same or a bigger discount.` } });
+    }
+    shorter = { name, pct };
+  }
+}
+
 // A lowest price above the usual nightly rate means every night costs at least that much, so ask first.
 // Resolves true when the save may go ahead; a cancelled question resolves false and nothing is saved.
 // makeForm has set the save button to "Saving…"; it shows the save label again while the question waits.
@@ -162,6 +177,7 @@ async function addListingModal(onSaved) {
     fields: [propSelect, newProp, h('hr', { class: 'divider' }), ...listingFields({}, roomTypes)],
     onSubmit: async (raw, { form }) => {
       const d = prepUnit(raw);
+      checkDiscountOrder(d);
       if (!await lowPriceOk(d, form, 'Save listing')) return false; // false keeps the saved draft
       let propertyId = d.property_id;
       if (!propertyId || propertyId === '__new') {
@@ -523,6 +539,7 @@ export async function listingsView(el, { query }) {
           const modal = openModal({ title: `Edit ${l.unit_name}`, body: makeForm({ submitText: 'Save changes', fields: listingFields({ ...unit, tags: unit.tags }, roomTypes),
             cancel: () => modal.close(),
             onSubmit: async (d, { form }) => {
+              checkDiscountOrder(d);
               if (!await lowPriceOk(d, form, 'Save changes')) return false;
               await patch(`/units/${l.unit_id}`, prepUnit(d)); toast('Listing updated.'); load(); modal.close();
             } }) });
@@ -563,7 +580,9 @@ export async function listingsView(el, { query }) {
 // ---------------------------------------------------------------- guests
 export async function guestsView(el, { query }) {
   const canManage = state.user.role !== 'staff';
-  const defaults = { q: '', segment: '', stay: '', channel: '', property_id: '', last_from: '', last_to: '', min_stays: '', rating: '', sort: '' };
+  // Names-only roles get only the search: the server ignores every other filter and sorts by name for them.
+  const full = ['owner', 'manager'].includes(state.user.role);
+  const defaults = full ? { q: '', segment: '', stay: '', channel: '', property_id: '', last_from: '', last_to: '', min_stays: '', rating: '', sort: '' } : { q: '' };
   const filters = initFilters('guests', query, defaults);
   const { properties } = await get('/properties');
   const box = h('div', { class: 'card' });
@@ -576,7 +595,7 @@ export async function guestsView(el, { query }) {
       filtered ? h('p', { class: 'muted small' }, `Showing ${guests.length} guest${guests.length === 1 ? '' : 's'}`) : '',
       h('ul', { class: 'list' }, guests.map((g) => h('li', null, h('a', { class: 'row', href: `#/guests/${g.guest_id}` },
         h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, g.full_name), !g.limited && h('span', { class: 'row__sub' }, [g.phone, g.email].filter(Boolean).join(' · ') || 'No contact details')),
-        h('div', { class: 'row__end' },
+        !g.limited && h('div', { class: 'row__end' },
           h('div', { class: 'chips' }, g.vip && badge('paid', 'VIP'), Number(g.stays) > 1 && badge('active', 'Repeat'), g.do_not_rebook && badge('overdue', 'Do not rebook'),
             g.in_house && badge('active', 'In house'), g.avg_rating && h('span', { class: 'rating small' }, `★ ${g.avg_rating}`)),
           h('span', { class: 'small' }, `${g.stays} stay${Number(g.stays) === 1 ? '' : 's'}${canManage && Number(g.total_spent) > 0 ? ` · ${peso(g.total_spent)}` : ''}`),
@@ -586,18 +605,18 @@ export async function guestsView(el, { query }) {
   const bar = filterBar({
     key: 'guests', values: filters, defaults, onChange: load,
     search: { placeholder: canManage ? 'Search name, mobile or email' : 'Search guests' },
-    quick: [
+    quick: full ? [
       { name: 'segment', label: 'Guest type', all: 'All guests', options: [['vip', 'VIP'], ['repeat', 'Repeat (2+ stays)'], ['first', 'One stay so far'], ['no_stays', 'No stays yet'], ['do_not_rebook', 'Do not rebook']] },
       { name: 'stay', label: 'Stay', all: 'Any stay', options: [['upcoming', 'Has an upcoming stay'], ['in_house', 'Staying now'], ['none_upcoming', 'Nothing booked ahead']] },
-    ],
-    more: [
+    ] : [],
+    more: full ? [
       { name: 'channel', label: 'Booked through', all: 'Any channel', options: Object.entries(CHANNEL_LABEL) },
       properties.length > 1 && { name: 'property_id', label: 'Stayed at', all: 'Any property', options: properties.map((p) => [p.property_id, p.property_name]) },
       { name: 'last', keys: ['last_from', 'last_to'], label: 'Latest stay between', type: 'daterange' },
       { name: 'min_stays', label: 'Stays (at least)', type: 'number', min: 1 },
       { name: 'rating', label: 'Their review', all: 'Any', options: [['4', 'Rated 4★ and up'], ['low', 'Rated under 3★'], ['none', 'No review yet']] },
       { name: 'sort', label: 'Sort by', all: 'Name (A–Z)', options: [['stays', 'Most stays'], ['recent', 'Most recent stay'], ['next', 'Next arrival'], canManage && ['spent', 'Total spent'], ['added', 'Newest guests']].filter(Boolean) },
-    ].filter(Boolean),
+    ].filter(Boolean) : [],
   });
   await load();
   el.replaceChildren(
@@ -612,12 +631,14 @@ export async function guestsView(el, { query }) {
 export async function guestDetailView(el, { params, rerender }) {
   const { guest: g, stays, reviews } = await get(`/guests/${params.id}`);
   const canManage = state.user.role !== 'staff';
+  // Names only for staff and cleaners: the server sends no contact, stays or reviews (GET /guests/:id).
+  const limitedCard = h('div', { class: 'card' }, h('p', { class: 'muted small' }, 'Guest details are limited to owners and managers.'));
   el.replaceChildren(
     h('a', { class: 'back', href: '#/guests' }, '‹ Guests'),
     h('div', { class: 'page-head' },
-      h('div', { class: 'page-head__title' }, h('h1', null, g.full_name), h('p', null, ((n) => `${n} stay${n === 1 ? '' : 's'}`)(stays.filter((s) => s.status === 'confirmed').length)),
+      h('div', { class: 'page-head__title' }, h('h1', null, g.full_name), !g.limited && h('p', null, ((n) => `${n} stay${n === 1 ? '' : 's'}`)(stays.filter((s) => s.status === 'confirmed').length)),
         h('div', { class: 'chips' }, g.vip && badge('paid', 'VIP'), g.do_not_rebook && badge('overdue', 'Do not rebook'))),
-      canManage && h('div', { class: 'page-head__actions' }, h('button', { class: 'btn btn--secondary', onclick: () => formModal({
+      canManage && !g.limited && h('div', { class: 'page-head__actions' }, h('button', { class: 'btn btn--secondary', onclick: () => formModal({
         title: 'Edit guest', submitText: 'Save',
         fields: [field({ name: 'full_name', label: 'Name', required: true, value: g.full_name }), field({ name: 'phone', label: 'Mobile', type: 'tel', value: g.phone }),
           field({ name: 'email', label: 'Email', type: 'email', value: g.email }), field({ name: 'notes', label: 'Notes', type: 'textarea', value: g.notes, hint: 'Only what you need to host them well.' }),
@@ -625,12 +646,11 @@ export async function guestDetailView(el, { params, rerender }) {
           field({ name: 'do_not_rebook', label: 'Do not rebook (you\'re warned if they book again)', type: 'checkbox', value: Boolean(g.do_not_rebook) })],
         onSubmit: async (d) => { await patch(`/guests/${g.guest_id}`, d); toast('Guest updated.'); rerender(); },
       }) }, 'Edit'))),
-    h('div', { class: 'grid grid--2' },
+    g.limited ? limitedCard : h('div', { class: 'grid grid--2' },
       h('div', { class: 'card' }, h('h2', null, 'Contact'),
-        g.limited ? h('p', { class: 'muted small' }, 'Contact details are limited to owners and managers.')
-          : h('dl', { class: 'dl', style: { marginTop: '10px' } },
-            h('dt', null, 'Mobile'), h('dd', null, g.phone || '—'), h('dt', null, 'Email'), h('dd', null, g.email || '—'),
-            g.notes && [h('dt', null, 'Notes'), h('dd', null, g.notes)])),
+        h('dl', { class: 'dl', style: { marginTop: '10px' } },
+          h('dt', null, 'Mobile'), h('dd', null, g.phone || '—'), h('dt', null, 'Email'), h('dd', null, g.email || '—'),
+          g.notes && [h('dt', null, 'Notes'), h('dd', null, g.notes)])),
       h('div', { class: 'card' }, h('h2', null, 'Stays'),
         stays.length ? h('ul', { class: 'list' }, stays.map((s) => h('li', null, h('a', { class: 'row', href: `#/reservations/${s.booking_id}` },
           h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, `${fmtDate(s.check_in)} – ${fmtDate(s.check_out)}`), h('span', { class: 'row__sub' }, `${s.unit_name} · ${CHANNEL_LABEL[s.channel]}`)),

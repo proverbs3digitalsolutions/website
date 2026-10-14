@@ -11,7 +11,12 @@ const path = require('node:path');
 const resSrc = fs.readFileSync(path.join(__dirname, '..', 'public/js/views/reservations.js'), 'utf8');
 const grpSrc = fs.readFileSync(path.join(__dirname, '..', 'public/js/views/groups.js'), 'utf8');
 const grab = (name) => resSrc.match(new RegExp(`export function ${name}[\\s\\S]*?\\n}\\n`))[0].replace('export ', '');
-const { boxValue, offerRate } = new Function(`${grab('boxValue')}\n${grab('offerRate')}\nreturn { boxValue, offerRate };`)();
+// offerRate reads the typed box with parseAmount from ui.js (QA round 6, C05), so that function and its two patterns come from ui.js too.
+const uiSrc = fs.readFileSync(path.join(__dirname, '..', 'public/js/ui.js'), 'utf8');
+const uiConst = (name) => uiSrc.match(new RegExp(`const ${name} = [^\\n]*;\\n`))[0];
+const uiGrab = (name) => uiSrc.match(new RegExp(`export function ${name}[\\s\\S]*?\\n}\\n`))[0].replace('export ', '');
+const parseAmount = new Function(`${uiConst('MONEY_RE')}${uiConst('MONEY_COMMA_RE')}${uiGrab('parseAmount')}\nreturn parseAmount;`)();
+const { boxValue, offerRate } = new Function('parseAmount', `${grab('boxValue')}\n${grab('offerRate')}\nreturn { boxValue, offerRate };`)(parseAmount);
 
 test('a typed box keeps what was typed, whatever the suggestion is', () => {
   assert.equal(boxValue({ typed: true, mode: 'unit', suggestion: '2500.00', current: '9000' }), '9000');
@@ -43,7 +48,7 @@ test('New reservation: refreshQuote no longer writes the money boxes directly', 
   assert.match(rq, /applyQuote\(q\)/);
   assert.match(resSrc, /boxValue\(/);
   assert.match(resSrc, /typed\[e\.target\.name\] = e\.target\.value\.trim\(\) !== ''/);
-  assert.match(resSrc, /Use \$\{peso\(/);
+  assert.match(resSrc, /Use \$\{parts\.join\(' \+ '\)\} from your rates/);
   assert.match(resSrc, /Each room is priced from the listing BalayHub picks/);
 });
 

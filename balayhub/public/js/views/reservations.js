@@ -2,7 +2,7 @@
 
 import { get, post, patch, qs, ApiError } from '../api.js';
 import {
-  h, icon, peso, fmtDate, fmtDateTime, badge, options, field, formModal, confirmDialog, emptyState, searchBox, toast, todayManila, manilaDay, openModal,
+  h, icon, peso, fmtDate, fmtDateTime, badge, options, field, formModal, confirmDialog, emptyState, searchBox, toast, todayManila, manilaDay, openModal, parseAmount,
 } from '../ui.js';
 import { state, navigate } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
@@ -56,9 +56,16 @@ export function boxValue({ typed, mode, suggestion, current }) {
   if (typed) return current;
   return mode === 'type' || suggestion == null ? '' : String(suggestion);
 }
-// Offer "Use ₱X from your rates" when the host's own number differs from the quote for the chosen listing.
+// Offer "Use ₱X from your rates" when the host's own number differs from the quote for the chosen listing. A number that cannot be read counts as different.
 export function offerRate({ typed, mode, suggestion, current }) {
-  return Boolean(typed) && mode !== 'type' && suggestion != null && Number(String(current).replace(/,/g, '')) !== Number(suggestion);
+  return Boolean(typed) && mode !== 'type' && suggestion != null && parseAmount(current) !== Number(suggestion);
+}
+// The offer's wording for the suggestions the click will fill. A quote with missing nightly rates has no stay suggestion, so only the cleaning fee is named.
+export function rateOfferText({ accommodation_total: stay, cleaning_fee: cleaning }) {
+  const parts = [];
+  if (stay != null) parts.push(peso(stay));
+  if (cleaning != null && (Number(cleaning) || stay == null)) parts.push(`${peso(cleaning)} cleaning`);
+  return `Use ${parts.join(' + ')} from your rates`;
 }
 // Cancelled-booking alert wording. A suggestion comes from the cancellation policy. With no policy, or a Custom one, nothing is suggested, so the text says what is still held.
 export function refundAlertText({ suggestion, refundable, paid, policy }) {
@@ -190,12 +197,12 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
   const MONEY = ['accommodation_total', 'cleaning_fee'];
   const typed = Object.fromEntries(MONEY.map((n) => [n, form.elements[n].value.trim() !== '']));
   form.addEventListener('input', (e) => { if (MONEY.includes(e.target.name)) { typed[e.target.name] = e.target.value.trim() !== ''; if (!typed[e.target.name]) refreshQuote(); } });
-  let rate = null;
+  // The suggestion for each money box from the last quote. The "Use" click fills from this, so it does what the button said.
+  let sugg = { accommodation_total: null, cleaning_fee: null };
   // Writes the quote (or nothing, when q is null) into the boxes that are not the host's, and offers the rate-card price for the rest.
   const applyQuote = (q) => {
     const mode = typeMode() ? 'type' : 'unit';
-    rate = q && !q.missing_rates ? q : null;
-    const sugg = { accommodation_total: rate ? rate.accommodation_total : null, cleaning_fee: q ? q.cleaning_fee : null };
+    sugg = { accommodation_total: q && !q.missing_rates ? q.accommodation_total : null, cleaning_fee: q ? q.cleaning_fee : null };
     let offer = false;
     for (const n of MONEY) {
       const box = form.elements[n];
@@ -203,11 +210,14 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
       box.value = boxValue({ typed: typed[n], mode, suggestion: sugg[n], current: box.value });
     }
     useRate.hidden = !offer;
-    if (offer) useRate.textContent = `Use ${peso(sugg.accommodation_total)}${Number(sugg.cleaning_fee) ? ` + ${peso(sugg.cleaning_fee)} cleaning` : ''} from your rates`;
+    if (offer) useRate.textContent = rateOfferText(sugg);
   };
   useRate.addEventListener('click', () => {
-    for (const n of MONEY) { form.elements[n].value = rate[n]; typed[n] = false; }
     useRate.hidden = true;
+    for (const n of MONEY) {
+      if (sugg[n] == null) continue;
+      form.elements[n].value = sugg[n]; typed[n] = false;
+    }
   });
   quoteBox.after(useRate);
   form.addEventListener('change', (e) => { if (e.target.name === 'channel') syncChannelFee(form, true); });
@@ -221,7 +231,7 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
     if (e?.target.name === 'check_in' && ci && (!co || co <= ci)) form.elements.check_out.value = addDays(ci, 1);
     const coNow = form.elements.check_out.value;
     if (!u) { applyQuote(null); quoteBox.textContent = typeMode() ? 'The price is not suggested for this room type. Enter the total yourself, or leave it empty to use each listing\'s price.' : 'Choose a listing to see the price.'; return; }
-    if (!ci || !coNow || coNow <= ci) { applyQuote(null); quoteBox.textContent = 'Check-out must be after check-in.'; return; }
+    if (!ci || !coNow || coNow <= ci) { applyQuote(null); quoteBox.textContent = 'The price shows once the dates are set.'; return; }
     const mySeq = ++seq;
     try {
       const q = await get(`/reservations/quote${qs({ unit_id: u, check_in: ci, check_out: coNow })}`);

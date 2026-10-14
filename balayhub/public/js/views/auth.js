@@ -143,7 +143,16 @@ export async function signupView(el, { query }) {
     onSubmit: async (data) => {
       // Checked before the request goes out, so an unticked box never uses up the sign-up limit.
       if (!data.accept_privacy) throw new ApiError('Please check the highlighted fields.', { status: 400, fields: { accept_privacy: 'Please accept the Terms of Service and read the Privacy Notice to continue.' } });
-      const res = await post('/auth/signup', { ...data, invite_token: query.invite || undefined });
+      let res;
+      try {
+        res = await post('/auth/signup', { ...data, invite_token: query.invite || undefined });
+      } catch (err) {
+        // An email that already has an account gets the log-in and reset guidance at its field. The Log in link under the form stays.
+        if (err.code === 'EMAIL_TAKEN') err.fields = { ...err.fields, email: 'This email is already registered. Log in or reset your password instead.' };
+        // A message that sits at a field is said once, there. The form's banner only points at the highlighted fields.
+        if (Object.keys(err.fields || {}).length) err.summary ||= 'Please check the highlighted fields.';
+        throw err;
+      }
       state.user = res.user;
       await refreshUser();
       if (res.devVerificationLink) {

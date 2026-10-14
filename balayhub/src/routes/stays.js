@@ -35,10 +35,19 @@ const nightsBetween = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.
 const validationError = (fields) => new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields });
 
 function redactGuest(user, g) {
-  if (!g || !['staff', 'cleaner'].includes(user.role)) return g;
-  const { email, phone, notes, guest_email: ge, guest_phone: gp, review_token: rt, pay_token: pt, checkin_token: ct, guide_token: gt, ...rest } = g;
+  if (!g || ['owner', 'manager'].includes(user.role)) return g;
+  // Staff see guest names only (matrix 6): also drop the VIP / do-not-rebook flags, rating and stay count that reservation rows carry,
+  // and the house rules the guest accepted (matrix 6.2: staff No, cleaner No).
+  const { email, phone, notes, guest_email: ge, guest_phone: gp, review_token: rt, pay_token: pt, checkin_token: ct, guide_token: gt,
+    guest_vip: gv, guest_do_not_rebook: gd, review: rv, previous_stays: ps, rules_text: rx, rules_accepted_at: ra, ...rest } = g;
   return { ...rest, limited: true };
 }
+
+// A guest as staff and cleaners see them: the name and nothing else.
+const staffGuest = (g) => ({ guest_id: g.guest_id, full_name: g.full_name, limited: true });
+
+// A payment's idempotency key is an internal retry token: no response carries it.
+const withoutIdemKey = ({ idempotency_key: idem, ...payment }) => payment;
 
 // Guests are workspace-level; non-owners see guests with stays in their
 // assigned properties, plus guests with no stays yet.
@@ -171,6 +180,12 @@ router.get('/guests', ah(async (req, res) => {
   const staff = ['staff', 'cleaner'].includes(req.user.role);
   const params = [];
   const where = [guestScope(req.user, params)];
+  if (staff) {
+    // Names only, searchable by name: no flags, stays or ratings, so no other filter applies.
+    if (qp.q) { params.push(`%${String(qp.q).slice(0, 100).replace(/[%_\\]/g, '\\$&')}%`); where.push(`g.full_name ILIKE $${params.length}`); }
+    const { rows } = await query(`SELECT g.guest_id, g.full_name FROM guests g WHERE ${where.join(' AND ')} ORDER BY g.full_name LIMIT 500`, params);
+    return res.json({ guests: rows.map(staffGuest) });
+  }
   // Bookings counted for each guest: only in properties this person can see.
   const seen = req.user.role === 'owner' ? 'true' : `ux.property_id IN (SELECT property_id FROM property_assignments WHERE user_id = $${params.push(req.user.user_id)})`;
   if (qp.q) {
@@ -213,7 +228,7 @@ router.get('/guests', ah(async (req, res) => {
          SELECT ROUND(AVG(r.rating), 1) AS avg_rating FROM guest_reviews r JOIN bookings rb ON rb.booking_id = r.booking_id JOIN units ux ON ux.unit_id = rb.unit_id
           WHERE r.guest_id = g.guest_id AND ${seen}) rv
       WHERE ${where.join(' AND ')} ORDER BY ${order} LIMIT 500`, params);
-  res.json({ guests: rows.map((g) => { const out = redactGuest(req.user, g); if (staff) delete out.total_spent; return out; }) });
+  res.json({ guests: rows });
 }));
 
 async function loadGuest(user, id) {
@@ -225,6 +240,7 @@ async function loadGuest(user, id) {
 
 router.get('/guests/:id', ah(async (req, res) => {
   const guest = await loadGuest(req.user, uuidParam(req.params.id));
+  if (['staff', 'cleaner'].includes(req.user.role)) return res.json({ guest: staffGuest(guest), stays: [], reviews: [] });
   const params = [guest.guest_id];
   const { rows: stays } = await query(
     `${BOOKING_SELECT} WHERE b.guest_id = $1 AND ${propertyScope(req.user, params)} ORDER BY b.check_in DESC`, params);
@@ -233,7 +249,7 @@ router.get('/guests/:id', ah(async (req, res) => {
     `SELECT r.booking_id, r.rating, r.cleanliness, r.comment, r.created_at
        FROM guest_reviews r JOIN bookings b ON b.booking_id = r.booking_id JOIN units u ON u.unit_id = b.unit_id JOIN properties p ON p.property_id = u.property_id
       WHERE r.guest_id = $1 AND ${propertyScope(req.user, rparams)} ORDER BY r.created_at DESC`, rparams);
-  res.json({ guest: redactGuest(req.user, guest), stays: stays.map((s) => redactGuest(req.user, s)), reviews });
+  res.json({ guest, stays, reviews });
 }));
 
 router.post('/guests', managers, ah(async (req, res) => {
@@ -293,9 +309,11 @@ function reservationQuery(req) {
   if (req.query.payment === 'paid') where.push(`b.total_amount - ${fee} <= ${paid}`);
   if (req.query.payment === 'unpaid') where.push(`b.status = 'confirmed' AND ${paid} = 0 AND b.total_amount - ${fee} > 0`);
   if (req.query.payment === 'partial') where.push(`b.status = 'confirmed' AND ${paid} > 0 AND b.total_amount - ${fee} > ${paid}`);
-  if (req.query.guest === 'vip') where.push('g.vip');
-  if (req.query.guest === 'repeat') where.push(`EXISTS (SELECT 1 FROM bookings pb WHERE pb.guest_id = b.guest_id AND pb.booking_id <> b.booking_id AND pb.status = 'confirmed' AND pb.kind = 'reservation' AND pb.check_in < b.check_in)`);
-  if (req.query.guest === 'first') where.push(`NOT EXISTS (SELECT 1 FROM bookings pb WHERE pb.guest_id = b.guest_id AND pb.booking_id <> b.booking_id AND pb.status = 'confirmed' AND pb.kind = 'reservation' AND pb.check_in < b.check_in)`);
+  // These reveal flags and stay history, which staff don't see.
+  const guestFilter = ['staff', 'cleaner'].includes(req.user.role) ? null : req.query.guest;
+  if (guestFilter === 'vip') where.push('g.vip');
+  if (guestFilter === 'repeat') where.push(`EXISTS (SELECT 1 FROM bookings pb WHERE pb.guest_id = b.guest_id AND pb.booking_id <> b.booking_id AND pb.status = 'confirmed' AND pb.kind = 'reservation' AND pb.check_in < b.check_in)`);
+  if (guestFilter === 'first') where.push(`NOT EXISTS (SELECT 1 FROM bookings pb WHERE pb.guest_id = b.guest_id AND pb.booking_id <> b.booking_id AND pb.status = 'confirmed' AND pb.kind = 'reservation' AND pb.check_in < b.check_in)`);
   if (/^\d{1,2}$/.test(String(req.query.min_nights || ''))) { params.push(Number(req.query.min_nights)); where.push(`b.check_out - b.check_in >= $${params.length}`); }
   if (/^\d{1,2}$/.test(String(req.query.min_guests || ''))) { params.push(Number(req.query.min_guests)); where.push(`b.num_guests >= $${params.length}`); }
   if (req.query.checkin_form === 'missing') where.push(`NOT EXISTS (SELECT 1 FROM guest_registrations r WHERE r.booking_id = b.booking_id AND r.submitted_at IS NOT NULL)`);
@@ -343,7 +361,7 @@ router.get('/reservations/:id', ah(async (req, res) => {
     `SELECT bp.*, u.full_name AS recorded_by_name FROM booking_payments bp LEFT JOIN users u ON u.user_id = bp.recorded_by
       WHERE bp.booking_id = $1 ORDER BY bp.payment_date DESC, bp.created_at DESC`, [booking.booking_id]);
   const group = booking.group_id ? await one('SELECT group_id, name FROM booking_groups WHERE group_id = $1', [booking.group_id]) : null;
-  res.json({ reservation: { ...redactGuest(req.user, booking), group: group ? { group_id: group.group_id, name: group.name } : null }, payments });
+  res.json({ reservation: { ...redactGuest(req.user, booking), group: group ? { group_id: group.group_id, name: group.name } : null }, payments: payments.map(withoutIdemKey) });
 }));
 
 // A room names a listing, or a room type at a property (the first free listing of that type is taken).
@@ -662,7 +680,7 @@ router.post('/reservations/:id/payments', ah(async (req, res) => {
   if (key && !/^[A-Za-z0-9_-]{8,100}$/.test(key)) throw new HttpError(400, 'Invalid Idempotency-Key header.', { code: 'BAD_REQUEST' });
   const org = req.user.organization_id;
   const existing = key && await one('SELECT payment_id FROM booking_payments WHERE organization_id = $1 AND idempotency_key = $2', [org, key]);
-  if (existing) return res.json({ duplicate: true, reservation: await loadBooking(req.user, booking.booking_id) });
+  if (existing) return res.json({ duplicate: true, reservation: redactGuest(req.user, await loadBooking(req.user, booking.booking_id)) });
   let paymentId;
   try {
     paymentId = await tx(async (db) => {
@@ -676,11 +694,11 @@ router.post('/reservations/:id/payments', ah(async (req, res) => {
     });
   } catch (err) {
     if (err.constraint !== 'booking_payments_idem_uq') throw err;
-    return res.json({ duplicate: true, reservation: await loadBooking(req.user, booking.booking_id) });
+    return res.json({ duplicate: true, reservation: redactGuest(req.user, await loadBooking(req.user, booking.booking_id)) });
   }
   await closeOpenCheckouts(booking.booking_id);
   const receipt = body.send_receipt ? await receipts.sendReceipt(paymentId, req.user) : null;
-  res.status(201).json({ reservation: await loadBooking(req.user, booking.booking_id), payment_id: paymentId, receipt });
+  res.status(201).json({ reservation: redactGuest(req.user, await loadBooking(req.user, booking.booking_id)), payment_id: paymentId, receipt });
 }));
 
 router.post('/booking-payments/:id/void', managers, ah(async (req, res) => {
@@ -717,7 +735,7 @@ async function loadBookingPayment(user, id) {
 router.get('/booking-payments/:id/receipt', ah(async (req, res) => {
   const p = await loadBookingPayment(req.user, uuidParam(req.params.id));
   const r = await receipts.receiptData(p.payment_id);
-  res.json({ receipt: redactGuest(req.user, r) });
+  res.json({ receipt: redactGuest(req.user, withoutIdemKey(r)) });
 }));
 
 router.post('/booking-payments/:id/send-receipt', managers, ah(async (req, res) => {
@@ -935,7 +953,7 @@ router.get('/booking-groups/:id', ah(async (req, res) => {
   const guest = await one('SELECT * FROM guests WHERE guest_id = $1', [group.guest_id]);
   res.json({
     group: { group_id: group.group_id, name: group.name, notes: group.notes, status: summary.status, cancelled_at: group.cancelled_at, created_at: group.created_at },
-    guest: redactGuest(req.user, guest),
+    guest: ['staff', 'cleaner'].includes(req.user.role) ? staffGuest(guest) : guest,
     rooms: rooms.map((b) => roomView(req.user, b)),
     totals: hideMoney(req.user, { rooms: summary.rooms, total: summary.total, amount_paid: summary.amount_paid, balance: summary.balance }),
   });

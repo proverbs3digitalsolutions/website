@@ -32,6 +32,7 @@ extendTranslations({
   'Notes': 'Mga tala', 'Finished': 'Natapos',
   'Add photos of the finished unit or any damage found.': 'Maglagay ng litrato ng natapos na unit o ng anumang sira.',
   'Choose a photo first.': 'Pumili muna ng litrato.', 'Upload photo': 'I-upload ang litrato', 'Photo uploaded.': 'Na-upload na ang litrato.',
+  'Choose a photo': 'Pumili ng litrato', 'No photos yet.': 'Wala pang litrato.', 'Upload a JPG, PNG or WEBP photo up to 10 MB.': 'Mag-upload ng JPG, PNG o WEBP na litrato, hanggang 10 MB.',
   'Report damage': 'I-report ang sira', 'Found an item': 'May nakitang gamit', 'Supplies used': 'Mga gamit na nagamit', 'Something broken?': 'May sira ba?',
   'Description': 'Paglalarawan', 'What happened?': 'Ano ang nangyari?', 'Send report': 'Ipadala ang report',
   'Damage reported. Thank you.': 'Na-report na ang sira. Salamat.',
@@ -52,6 +53,7 @@ extendTranslations({
   'All properties': 'Lahat ng property', 'Property': 'Property', 'Nothing here yet': 'Wala pa rito',
   'No units to show.': 'Walang unit na ipapakita.', 'Guest now': 'Guest ngayon', 'Next check-in': 'Susunod na check-in',
   'Open task': 'Bukas na gawain', 'No open cleaning task': 'Walang bukas na gawain', 'Last inspection': 'Huling inspection',
+  'Inspections': 'Mga inspection', 'Passed': 'Pasado', 'Failed': 'Hindi pasado',
   'This week': 'Ngayong linggo', 'Previous week': 'Nakaraang linggo', 'Next week': 'Susunod na linggo',
   'No cleanings': 'Walang linis', 'Something went wrong.': 'May nangyaring mali.',
   'Linked work orders': 'Mga ni-report na sira',
@@ -389,8 +391,9 @@ async function boardTab(box) {
             h('dd', null, u.open_task
               ? h('a', { href: `#/housekeeping/${u.open_task.task_id}` }, `${T(STATUS[u.open_task.status]?.[1] || 'To do')}${u.open_task.assignee ? ` · ${u.open_task.assignee}` : ''}`)
               : h('span', { class: 'muted' }, T('No open cleaning task'))),
+            // A cleaner is sent no score, so her line is "Passed · date"; the score is printed only when it is there.
             u.last_inspection && [h('dt', null, T('Last inspection')),
-              h('dd', null, `${u.last_inspection.score}% · ${u.last_inspection.passed ? 'Passed' : 'Failed'} · ${fmtDate(manilaDay(u.last_inspection.at))}`)]))))
+              h('dd', null, metaLine(u.last_inspection.score != null && `${u.last_inspection.score}%`, T(u.last_inspection.passed ? 'Passed' : 'Failed'), fmtDate(manilaDay(u.last_inspection.at))))]))))
         : h('div', { class: 'card' }, emptyState({ title: T('No units to show.'), iconName: 'home' })));
   }
   box.replaceChildren(pick && h('div', { class: 'hk-toolbar' }, pick), grid);
@@ -655,7 +658,7 @@ export async function housekeepingDetailView(el, { params, rerender }) {
   const progress = h('span', { class: 'muted small' }, T('{n} of {total} done', { n: t.done_count, total: t.item_count }));
   const statusSlot = h('span', null, statusBadge(t.status));
   const startBtn = t.status === 'todo' ? h('button', { class: 'btn btn--secondary', onclick: () => setStatus('in_progress', T('Started.')) }, T('Start')) : null;
-  const upload = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', class: 'input', capture: 'environment', 'aria-label': T('Upload photo') });
+  const upload = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', class: 'input', capture: 'environment', 'aria-label': T('Choose a photo') });
   const actionBtn = (text, fn) => h('button', { class: 'btn btn--secondary hk-action', type: 'button', onclick: () => fn(t, rerender) }, text);
 
   // The link to Cleaner pay only where the route is open to this role; staff get the same words as plain text.
@@ -681,8 +684,9 @@ export async function housekeepingDetailView(el, { params, rerender }) {
           ? h('span', { class: 'small muted' }, T('Paid.'))
           : h('span', { class: 'small muted' }, undoPaidLead(state.user.role), payLink, ' first.')),
         canReopen(t, state.user.role) && h('button', { class: 'btn btn--secondary', onclick: reopen }, T('Reopen')),
-        isManager && t.status === 'done' && t.checklist.length > 0 && h('button', { class: 'btn btn--primary', onclick: () => inspectModal(t, rerender) }, 'Inspect'),
-        isManager && h('button', { class: 'btn btn--secondary', onclick: () => copyText(taskText(t)) }, 'Copy for cleaner'),
+        // No Inspect on a paid clean (the server refuses it, as with Reopen), and no Copy for cleaner on a cancelled job.
+        isManager && t.status === 'done' && t.checklist.length > 0 && !isPaidClean(t) && h('button', { class: 'btn btn--primary', onclick: () => inspectModal(t, rerender) }, 'Inspect'),
+        isManager && t.status !== 'cancelled' && h('button', { class: 'btn btn--secondary', onclick: () => copyText(taskText(t)) }, 'Copy for cleaner'),
         isManager && open && h('button', { class: 'btn btn--ghost', onclick: async () => {
           if (await confirmDialog({ title: 'Cancel this cleaning task?', text: 'Use this if the cleaning is no longer needed.', confirmText: 'Cancel task', danger: true })) setStatus('cancelled', 'Task cancelled.');
         } }, 'Cancel task'))),
@@ -697,11 +701,11 @@ export async function housekeepingDetailView(el, { params, rerender }) {
           actionBtn(T('Supplies used'), suppliesModal),
           actionBtn(T('Something broken?'), workOrderModal)),
         inspections.length > 0 && h('div', { class: 'card' },
-          h('div', { class: 'card__head' }, h('h2', null, 'Inspections')),
+          h('div', { class: 'card__head' }, h('h2', null, T('Inspections'))),
           h('ul', { class: 'hk-history' }, inspections.map((i) => h('li', null,
             h('div', { class: 'hk-card__top' },
               i.score != null && h('strong', null, `${i.score}%`),
-              typeof i.passed === 'boolean' && badge(i.passed ? 'paid' : 'overdue', i.passed ? 'Passed' : 'Failed')),
+              typeof i.passed === 'boolean' && badge(i.passed ? 'paid' : 'overdue', T(i.passed ? 'Passed' : 'Failed'))),
             h('div', { class: 'small muted' }, metaLine(i.created_at && fmtDateTime(i.created_at), i.inspected_by_name)),
             (i.items || []).some((x) => !x.pass) && h('div', { class: 'small' }, `Failed: ${i.items.filter((x) => !x.pass).map((x) => x.text).join(', ')}`),
             i.notes && h('div', { class: 'small', style: { whiteSpace: 'pre-wrap' } }, i.notes))))),
@@ -736,13 +740,13 @@ export async function housekeepingDetailView(el, { params, rerender }) {
         h('div', { class: 'card' },
           h('div', { class: 'card__head' }, h('h2', null, T('Photos'))),
           h('p', { class: 'muted small' }, T('Add photos of the finished unit or any damage found.')),
-          filesList(files),
+          files?.length ? filesList(files) : h('p', { class: 'muted small' }, T('No photos yet.')),
           h('div', { class: 'form', style: { marginTop: '12px' } }, upload,
             h('button', {
               class: 'btn btn--secondary', onclick: async (e) => {
                 if (!upload.files[0]) { toast(T('Choose a photo first.'), 'error'); return; }
                 e.target.disabled = true;
-                try { await uploadFile('cleaning', t.task_id, upload.files[0]); toast(T('Photo uploaded.')); rerender(); } catch (err) { toast(err.message, 'error'); e.target.disabled = false; }
+                try { await uploadFile('cleaning', t.task_id, upload.files[0]); toast(T('Photo uploaded.')); rerender(); } catch (err) { toast(err.code === 'UNSUPPORTED_FILE' || err.status === 413 ? T('Upload a JPG, PNG or WEBP photo up to 10 MB.') : err.message, 'error'); e.target.disabled = false; }
               },
             }, T('Upload photo')))))));
 }

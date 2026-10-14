@@ -152,17 +152,17 @@ export async function stayReportsView(el, { query = {} }) {
     box.replaceChildren(
       h('div', { class: 'card' },
         h('div', { class: 'grid grid--4 stats' },
-          stat('Revenue', peso(t.revenue), `${t.stays} stay${t.stays === 1 ? '' : 's'} · ${t.nights} nights`),
+          stat('Revenue', peso(t.revenue), [`${t.stays} stay${t.stays === 1 ? '' : 's'} · ${t.nights} nights`, h('br'), `Rooms ${peso(t.accommodation)} · cleaning and extras ${peso(t.fees)}`]),
           stat('Occupancy', pct(t.occupancy), 'booked nights ÷ open nights'),
           stat('Avg nightly rate', peso(t.adr), `RevPAR ${peso(t.revpar)}`),
-          stat('Net (before refunds)', peso(t.net), r.expenses_excluded ? `${peso(t.channel_fees)} fees · expenses not split by channel` : `${peso(t.channel_fees)} fees · ${peso(t.expenses)} expenses`)),
+          stat('Net (before refunds)', peso(t.net), r.expenses_excluded ? `${peso(t.channel_fees)} channel fees · expenses not split by channel` : `${peso(t.channel_fees)} channel fees · ${peso(t.expenses)} expenses`)),
         h('p', { class: 'muted small' }, `Average stay ${t.avg_stay} nights${t.cancelled ? ` · ${t.cancelled} cancelled` : ''}.`),
         h('p', { class: 'muted small' }, 'Refunds aren\'t deducted here. Profit and loss shows the net after refunds.')),
       h('div', { class: 'grid grid--2' },
         h('div', { class: 'card' }, h('h2', null, 'Revenue by channel'),
           shareBars(r.channels, (c) => c.revenue, (c) => c.label),
           h('div', { class: 'table-wrap' }, h('table', { class: 'table table--compact' },
-            h('thead', null, h('tr', null, ['Channel', 'Stays', 'Nights', 'Avg rate', 'Fees'].map((x, i) => h('th', { class: i ? 'num' : null }, x)))),
+            h('thead', null, h('tr', null, ['Channel', 'Stays', 'Nights', 'Avg rate', 'Channel fees'].map((x, i) => h('th', { class: i ? 'num' : null }, x)))),
             h('tbody', null, r.channels.map((c) => h('tr', null, h('td', null, c.label), h('td', { class: 'num' }, String(c.stays)), h('td', { class: 'num' }, String(c.nights)),
               h('td', { class: 'num' }, peso(c.adr)), h('td', { class: 'num' }, peso(c.channel_fees)))))))),
         h('div', { class: 'card' }, h('h2', null, 'Expenses'),
@@ -179,12 +179,12 @@ export async function stayReportsView(el, { query = {} }) {
       h('div', { class: 'card card--flush' },
         h('div', { class: 'card__head', style: { padding: '16px 16px 0' } }, h('h2', null, 'By listing')),
         h('div', { class: 'table-wrap' }, h('table', { class: 'table table--compact' },
-          h('thead', null, h('tr', null, ['Listing', 'Nights', 'Occupancy', 'Avg rate', 'Revenue', 'Fees', 'Expenses', 'Net'].map((x, i) => h('th', { class: i ? 'num' : null }, x)))),
+          h('thead', null, h('tr', null, ['Listing', 'Nights', 'Occupancy', 'Avg rate', 'Revenue', 'Cleaning & extras', 'Channel fees', 'Expenses', 'Net'].map((x, i) => h('th', { class: i ? 'num' : null }, x)))),
           h('tbody', null, r.units.map((u) => h('tr', null,
             h('td', null, u.unit_name, h('div', { class: 'muted small' }, u.property_name)),
             h('td', { class: 'num' }, String(u.nights)), h('td', { class: 'num' }, pct(u.occupancy)), h('td', { class: 'num' }, peso(u.adr)),
-            h('td', { class: 'num' }, peso(u.revenue)), h('td', { class: 'num' }, peso(u.channel_fees)), h('td', { class: 'num' }, peso(u.expenses)), h('td', { class: 'num' }, peso(u.net)))),
-          Number(r.building_expenses) > 0 && h('tr', null, h('td', { colspan: 6 }, 'Building-level expenses (dues etc.)'), h('td', { class: 'num' }, peso(r.building_expenses)), h('td', null, '')))))));
+            h('td', { class: 'num' }, peso(u.revenue)), h('td', { class: 'num' }, peso(u.fees)), h('td', { class: 'num' }, peso(u.channel_fees)), h('td', { class: 'num' }, peso(u.expenses)), h('td', { class: 'num' }, peso(u.net)))),
+          Number(r.building_expenses) > 0 && h('tr', null, h('td', { colspan: 7 }, 'Building-level expenses (dues etc.)'), h('td', { class: 'num' }, peso(r.building_expenses)), h('td', null, '')))))));
   }
   const bar = filterBar({
     key: 'stay-reports', values: filters, defaults, onChange: load,
