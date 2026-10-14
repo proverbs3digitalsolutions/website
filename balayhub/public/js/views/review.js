@@ -1,7 +1,7 @@
 // Guest's private review page, opened from the thank-you message after their stay.
 
 import { get, post } from '../api.js';
-import { h, brand, toast } from '../ui.js';
+import { h, brand, toast, showErrors, clearErrors } from '../ui.js';
 import { t, tServer, initGuestLang, langToggle, keepFormValues, restoreFormValues, fmtDateL as fmtDate, extendTranslations } from '../i18n.js';
 
 extendTranslations({
@@ -73,7 +73,8 @@ export async function guestReviewView(el, { params }, snap) {
   const btn = h('button', { class: 'btn btn--primary btn--block', type: 'submit' }, t('Send feedback'));
   const form = h('form', { class: 'form', novalidate: true, onsubmit: async (e) => {
     e.preventDefault();
-    if (!overall.get()) { toast(t('Please choose a star rating first.'), 'error'); return; }
+    clearErrors(form);
+    if (!overall.get()) { showErrors(form, { rating: t('Please choose a star rating first.') }); return; }
     btn.disabled = true;
     try {
       const res = await post(`/public/review/${encodeURIComponent(token)}`, { rating: overall.get(), cleanliness: clean.get(), comment: comment.value.trim() || undefined });

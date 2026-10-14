@@ -20,6 +20,12 @@ export function returnLine(typedText, deposit) {
   return `Return to guest: ${peso(Number(deposit.amount) - typed)}`;
 }
 
+// Returning a deposit before the stay checks out is allowed (a cancelled or shortened stay needs it), but the form asks first:
+// damage is usually checked after check-out. A cancelled stay, or one already checked out, never asks.
+export function askEarlyReturn(r, today) {
+  return r.status !== 'cancelled' && !r.checked_out_at && r.check_out > today;
+}
+
 export async function depositCard(r, rerender) {
   let d;
   try { d = await get(`/reservations/${r.booking_id}/deposit`); } catch { return null; }
@@ -60,7 +66,10 @@ export async function depositCard(r, rerender) {
         h('p', { class: 'muted small' }, 'Damage photos: use "Add photo" on the deposit card (before or after saving).'),
         (r.guest_email || r.guest_has_email) && field({ name: 'send_receipt', label: r.guest_email ? `Email the summary to ${r.guest_email}` : 'Email the summary to the guest', type: 'checkbox', value: true }),
       ],
-      onSubmit: async (v) => { sent(await post(`/reservations/${r.booking_id}/deposit/settle`, v), 'Deposit settled.'); rerender(); },
+      onSubmit: async (v) => {
+        if (askEarlyReturn(r, todayManila()) && !await confirmDialog({ title: 'Return the deposit before check-out?', text: `The stay ends ${fmtDate(r.check_out)}. Damage is usually checked after check-out.`, confirmText: 'Return deposit' })) return false;
+        sent(await post(`/reservations/${r.booking_id}/deposit/settle`, v), 'Deposit settled.'); rerender();
+      },
     });
   };
   const reopen = async () => {

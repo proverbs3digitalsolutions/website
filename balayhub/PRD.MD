@@ -2,7 +2,7 @@
 
 BalayHub is a web app that helps Filipino hosts run 1 to 10 rental units from one place. It covers condo staycations listed on Airbnb, Booking.com and Agoda, and long-term monthly rentals such as apartments, boarding houses, dorms and bedspaces. Hosts get one calendar for every channel, a direct booking page with GCash, Maya and card payments, a guest inbox, cleaning tasks, condo gate passes, deposits, reports and owner statements. Long-term landlords get properties, tenants, leases, rent, expenses and repairs. This document describes what is **actually built** today, feature by feature, and lists what is planned. It was written from the code (`src/routes`, `src/lib`, `public/js`, `db/migrations`) and the existing docs.
 
-Last updated: 2026-10-14 (QA round 9; D-85)
+Last updated: 2026-10-15 (QA round 11; D-87)
 
 *2026-10-14 (D-85): the alpha targets owners of 1 to 3 properties; the Guesty-inspired ideas are on hold as reference only. QA puts small-host friction first.*
 
@@ -324,7 +324,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 
 **What it does:**
 - **Record deposit** on a reservation (amount suggested from the listing). Kept apart from booking income.
-- After check-out it appears on Home under **Deposits to return**.
+- After check-out it appears on Home under **Deposits to return**. *2026-10-15 (D-87): a return before check-out is allowed after a question ("Return the deposit before check-out?").*
 - **Return deposit**: all, or with a deduction and a reason the guest sees, plus photos. Optional acknowledgement and summary emails.
 - Reports → Deposits tab lists every deposit with filters.
 
@@ -389,7 +389,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 **For:** Landlords with monthly tenants. All roles, with limits.
 
 **What it does:**
-- **Dashboard:** properties, occupied and vacant units, rent collected this month, outstanding and overdue rent, this month's rent status, recent payments, and "Needs attention" (overdue, leases ending, open repairs).
+- **Dashboard:** properties, occupied and vacant units, rent collected this month, outstanding and overdue rent, this month's rent status, recent payments, and "Needs attention" (overdue, leases ending, open repairs). The property page and its **Rent roll** use each occupied unit's lease rent (the list rent shows beside it when different), D-87.
 - **Properties and units:** add (owner), edit, archive and restore. Occupancy comes from leases.
 - **Tenants and leases:** profiles with duplicate warning, assign a unit (creates a lease), change terms, end or cancel a lease, lease documents, payment history, owner-only data export.
 - **Rent:** monthly charges generated from each lease. Statuses paid, partial, unpaid, overdue. Payments go to the oldest charge first (the Record form names that month; the row's Record box is filled with that month's own amount).
@@ -695,7 +695,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 **For:** Owners (rates, undo) and owners and managers (mark paid). Cleaners see their own pay.
 
 **What it does:**
-- A rate per cleaner (a team member, or an outside cleaner typed by name): per clean, or per hour.
+- A rate per cleaner (a team member, or an outside cleaner typed by name): per clean, or per hour. A rate is at most ₱10,000.00 per clean or ₱1,000.00 per hour, and the pay typed on one clean is at most ₱10,000.00 (D-87).
 - When a job is marked done, its pay is set from the rate. Per hour: time from start to finish, rounded up to 15 minutes, capped at 12 hours.
 - Mark paid: several finished cleans at once, with a date, a method (cash, GCash, Maya, bank transfer) and a reference.
 - Optional: record one cleaning expense per unit, so it shows on profit and loss and owner statements.
@@ -921,6 +921,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - The checklist: arrivals not checked in, departures not checked out, cleanings not done, payments recorded that day by method with totals, balances due within 2 days (including guests staying now), payment proofs waiting, open damage reports, and calendar sync problems. Each line links to where it can be fixed.
 - **Close the day** saves a snapshot of the counts and totals, with an optional note. One close per workspace per date; closing again updates it, and every save is audited. History lists past closes.
 - Home shows "Today isn't closed yet. Close the day." after 9 PM (Manila time) until the day is closed.
+- A day can be reopened (D-87): owners any close, managers only a close covering just their own properties. A past day's checklist shows what was open at the end of that day.
 
 **Done looks like:** A close is a record of what was open at the time, not a live view.
 
@@ -977,6 +978,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 
 ## Known gaps and open questions
 
+- QA round 11: a printed rent acknowledgement has no balance-after line (needs a rule for advance credit and months paid oldest first; BLOCKERS round 11, decide with rent receipt numbers).
 - After a **new** Google sign-up the server redirects to `#/`, the landing page. The app does not send the user on to workspace setup from there. Unverified in a browser; worth checking.
 - The Inbox API returns `ai_needs_upgrade` for Starter plans, but the app does not use it. Starter users see no AI button and no upgrade hint.
 - `welcomeView` in `public/js/views/auth.js` is no longer routed (the landing page replaced it).

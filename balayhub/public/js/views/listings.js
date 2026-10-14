@@ -111,8 +111,8 @@ function holds(u, keys) {
     ? Number(u[k]) !== START[k] : String(u[k]).replace(/^(\d\d:\d\d):00$/, '$1') !== String(START[k])));
 }
 
-// The basics are what a new listing needs. Building details (Add only, passed in as `building`), room type and tags sit in
-// More details, closed; the deposit is under Booking page and payments.
+// The basics are what a new listing needs. The new building's property type (Add only, passed in as `building`), room type
+// and tags sit in More details, closed; the deposit is under Booking page and payments.
 function listingFields(u = {}, roomTypes = [], building = null) {
   return [
     h('div', { class: 'form-row form-row--2' },
@@ -190,16 +190,20 @@ async function addListingModal(onSaved) {
   const [{ properties }, roomTypes] = await Promise.all([get('/properties'), roomTypeNames()]);
   const isOwner = state.user.role === 'owner';
   let savedPropertyId = null; // the building this form saved, reused if the listing save fails and is retried
+  // The new building's name and address are asked for in Basics, marked required. A hidden building is not required:
+  // makeForm's quick check reads every required field, so a blank hidden one would stop a save on an existing building.
   const newProp = h('div', { class: 'form', hidden: properties.length > 0 },
-    field({ name: 'property_name', label: 'Building / property name', placeholder: 'e.g. Azure Urban Residences', maxlength: 120 }));
-  // A new building's other details sit in More details with the listing's own extras, and show only with a new building.
-  const newPropMore = h('div', { class: 'form', hidden: properties.length > 0 },
-    field({ name: 'property_type', label: 'Property type', type: 'select', value: 'condominium', placeholderOption: false, options: options(PROPERTY_TYPES) }),
-    field({ name: 'address', label: 'Street address', maxlength: 250 }),
+    field({ name: 'property_name', label: 'Building / property name', required: true, placeholder: 'e.g. Azure Urban Residences', maxlength: 120 }),
+    field({ name: 'address', label: 'Street address', required: true, maxlength: 250 }),
     h('div', { class: 'form-row form-row--2' },
-      field({ name: 'city', label: 'City / municipality', maxlength: 80 }),
-      field({ name: 'province', label: 'Province', maxlength: 80, placeholder: 'e.g. Metro Manila' })));
-  const showNewBuilding = (show) => { newProp.hidden = !show; newPropMore.hidden = !show; };
+      field({ name: 'city', label: 'City / municipality', required: true, maxlength: 80 }),
+      field({ name: 'province', label: 'Province', required: true, maxlength: 80, placeholder: 'e.g. Metro Manila' })));
+  // The property type is the only new-building field left in More details.
+  const newPropMore = h('div', { class: 'form', hidden: properties.length > 0 },
+    field({ name: 'property_type', label: 'Property type', type: 'select', value: 'condominium', placeholderOption: false, options: options(PROPERTY_TYPES) }));
+  const buildingInputs = [...newProp.querySelectorAll('input')];
+  const showNewBuilding = (show) => { newProp.hidden = !show; newPropMore.hidden = !show; for (const el of buildingInputs) el.required = show; };
+  showNewBuilding(!properties.length);
   const propSelect = properties.length ? field({
     name: 'property_id', label: 'Building / property', type: 'select', required: true, value: properties.length === 1 ? properties[0].property_id : '',
     options: [...properties.map((p) => [p.property_id, p.property_name]), ...(isOwner ? [['__new', '+ Add a new building / property']] : [])],

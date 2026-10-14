@@ -29,6 +29,8 @@ const DATE_MAX = '2100-12-31';
 // The one wording for a year outside that window, shared with the stay reports' custom dates.
 export const OUT_OF_WINDOW = 'Enter a year from 2000 to 2100.';
 export const outOfWindow = (v) => v !== '' && (v < DATE_MIN || v > DATE_MAX);
+// A YYYY-MM-DD date outside that window: the one kind of link date the bar drops with its own message.
+export const dateOutsideWindow = (v) => DATE_RE.test(v) && outOfWindow(v);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // True for a real calendar day. 2026-02-30 and 2026-13-01 are not.
@@ -225,22 +227,26 @@ function control(f, values, emit, defaults = {}) {
     return { el: h('label', { class: 'check flt__check', for: id }, box, h('span', null, f.label)), sync: () => { box.checked = values[f.name] === '1'; } };
   }
   if (f.type === 'number' || f.type === 'date') {
-    // A number with a pattern (an amount) flags a value the server would ignore and applies nothing until it is fixed,
-    // the same as a bad date range. An empty box is no filter.
+    // A number with a pattern (an amount) flags a value the server would ignore, and a date outside 2000 to 2100 gets the
+    // window message. Either applies nothing until it is fixed, the same as a bad date range. An empty box is no filter.
     const errId = `${id}-err`;
-    const err = f.pattern ? h('div', { id: errId, role: 'alert', hidden: true, style: { color: 'var(--red)', fontSize: '.84rem', fontWeight: '650' } }) : null;
+    const err = f.pattern || f.type === 'date' ? h('div', { id: errId, role: 'alert', hidden: true, style: { color: 'var(--red)', fontSize: '.84rem', fontWeight: '650' } }) : null;
     const input = h('input', { class: 'input', id, type: f.type, value: values[f.name] || '', min: f.min, step: f.step, placeholder: f.placeholder, inputmode: f.type === 'number' ? 'decimal' : null, 'aria-describedby': err ? errId : null });
     const show = (v) => {
-      const bad = Boolean(f.pattern && v !== '' && !f.pattern.test(v));
-      if (err) { err.hidden = !bad; err.replaceChildren(bad ? f.patternText : ''); }
+      const outside = f.type === 'date' && outOfWindow(v);
+      const bad = outside || Boolean(f.pattern && v !== '' && !f.pattern.test(v));
+      const text = outside ? OUT_OF_WINDOW : bad ? f.patternText : '';
+      if (err) { err.hidden = !bad; err.replaceChildren(text); }
       if (bad) input.setAttribute('aria-invalid', 'true'); else input.removeAttribute('aria-invalid');
       return bad;
     };
     input.addEventListener('change', () => {
-      if (f.type === 'date' && outOfWindow(input.value)) return;
+      const outside = f.type === 'date' && outOfWindow(input.value);
+      const before = values[f.name];
       const bad = show(input.value);
       values[f.name] = bad ? (defaults[f.name] ?? '') : input.value;
-      emit();
+      // A half-typed year (0202 on the way to 2026) that leaves the applied date as it was does not reload the list.
+      if (!outside || values[f.name] !== before) emit();
     });
     // From a shared link or an old saved filter: keep the value on screen with the message, but do not apply it.
     const invalid = show(input.value);

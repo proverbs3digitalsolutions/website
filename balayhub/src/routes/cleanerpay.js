@@ -121,6 +121,12 @@ router.get('/cleaner-rates', owners, ah(async (req, res) => {
   res.json({ rates: rows });
 }));
 
+// The most a rate can be, in centavos, with the words for it. Above that it is almost always an extra zero (D-87).
+const RATE_CEILING = {
+  per_clean: { cents: 1000000, text: '₱10,000.00 per clean' },
+  per_hour: { cents: 100000, text: '₱1,000.00 per hour' },
+};
+
 // Add or change the rate for a team member (user_id) or an outside cleaner (assignee_name).
 router.put('/cleaner-rates', owners, ah(async (req, res) => {
   const body = validate(req.body, {
@@ -129,6 +135,8 @@ router.put('/cleaner-rates', owners, ah(async (req, res) => {
     rate_type: { type: 'enum', values: ['per_clean', 'per_hour'], required: true, label: 'Paid' },
     amount: { type: 'money', required: true, positive: true, label: 'Amount' },
   });
+  const ceiling = RATE_CEILING[body.rate_type];
+  if (cents(body.amount) > ceiling.cents) throw validationError({ amount: `That's more than ${ceiling.text}. Check for an extra zero.` });
   if (Boolean(body.user_id) === Boolean(body.assignee_name)) {
     throw validationError({ assignee_name: body.user_id ? 'Pick a team member or type a name, not both.' : 'Choose a team member or type a name for an outside cleaner.' });
   }

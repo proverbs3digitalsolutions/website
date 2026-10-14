@@ -27,6 +27,8 @@ extendTranslations({
   'Choose your dates first, then apply your code.': 'Piliin muna ang dates mo, saka i-apply ang code mo.',
   'This place allows up to {n} guests.': 'Hanggang {n} guests lang ang puwede sa lugar na ito.',
   'At least 1 guest.': 'Hindi bababa sa 1 guest.',
+  'Enter a whole number of guests, 1 or more.': 'Maglagay ng buong bilang ng guests, 1 o higit pa.',
+  "This listing is not available. It may have been removed, or it isn't open for online booking.": 'Hindi available ang listing na ito. Baka natanggal na ito, o hindi bukas para sa online booking.',
   'Please check the highlighted fields.': 'Pakitingnan ang mga naka-highlight.',
   "We couldn't confirm the cancellation. Your dates may stay on hold for a short while. Please try again, or contact the host.": 'Hindi namin makumpirma ang pagkansela. Puwedeng ma-hold pa nang saglit ang dates mo. Pakisubukan ulit, o i-contact ang host.',
   "This booking link isn't valid. Check the link, or ask your host.": 'Hindi valid ang booking link na ito. Tingnan ang link, o magtanong sa host.',
@@ -117,7 +119,7 @@ export async function bookListingView(el, { params, query }) {
   initGuestLang(host.guest_language);
   const l = data.listings.find((x) => x.unit_id === params.unitId);
   if (!l) {
-    el.replaceChildren(shell(host.name, slug, h('div', { class: 'card' }, h('h1', null, t('Not available')), h('p', { class: 'muted' }, t("This place isn't taking online bookings right now.")), h('p', null, h('a', { href: `#/book/${slug}` }, t('See all places'))))));
+    el.replaceChildren(shell(host.name, slug, h('div', { class: 'card' }, h('h1', null, t('Not available')), h('p', { class: 'muted' }, t("This listing is not available. It may have been removed, or it isn't open for online booking.")), h('p', null, h('a', { href: `#/book/${slug}` }, t('See all places'))))));
     return;
   }
   document.title = `${l.unit_name} — ${host.name}`;
@@ -271,6 +273,8 @@ export async function bookListingView(el, { params, query }) {
   // True only while the Guests message is the server's guest-limit text (set in the quote's catch below).
   let guestsFromServer = false;
   const guestCountOk = () => { const n = Number(form.elements.num_guests.value); return Number.isInteger(n) && n >= 1; };
+  // A fraction (2.5) is not "at least 1": ask for a whole number.
+  const guestCountMsg = () => (Number.isInteger(Number(form.elements.num_guests.value)) ? t('At least 1 guest.') : t('Enter a whole number of guests, 1 or more.'));
   async function updateQuote() {
     current = null;
     submit.disabled = true;
@@ -357,7 +361,7 @@ export async function bookListingView(el, { params, query }) {
   // The count message: a count below 1 (or not a whole number) is said at once and stays until the count is fixed. It makes no quote request.
   form.elements.num_guests?.addEventListener('change', () => {
     guestsFromServer = false;
-    setGuestsError(guestCountOk() ? '' : t('At least 1 guest.'));
+    setGuestsError(guestCountOk() ? '' : guestCountMsg());
   });
   // A new guest count is quoted again, so an over-limit count shows the refusal and no Total. Wait for it to settle, so one change makes one request.
   let guestTimer;
@@ -377,7 +381,7 @@ export async function bookListingView(el, { params, query }) {
     const phone = String(d.phone).trim();
     const errors = {};
     if (!String(d.name).trim()) errors.name = tServer('Full name is required.');
-    if (!Number.isInteger(guests) || guests < 1) errors.num_guests = t('At least 1 guest.');
+    if (!Number.isInteger(guests) || guests < 1) errors.num_guests = guestCountMsg();
     else if (guests > (l.max_guests || 50)) errors.num_guests = t('This place allows up to {n} guests.', { n: l.max_guests || 50 });
     if (!email) errors.email = tServer('Email is required.');
     else if (!EMAIL_RE.test(email)) errors.email = tServer('Enter a valid email address.');
@@ -441,7 +445,7 @@ export async function bookListingView(el, { params, query }) {
       const qty = kept.addons.get(r.a.id || r.a.addon_id);
       if (qty) { r.box.checked = true; r.qtyInput.value = String(qty); r.sync(); }
     }
-    setGuestsError(guestCountOk() ? '' : t('At least 1 guest.'));
+    setGuestsError(guestCountOk() ? '' : guestCountMsg());
   }
   // From here a language switch keeps the guest's entries.
   redraw = () => {

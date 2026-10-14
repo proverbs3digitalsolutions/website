@@ -45,6 +45,7 @@ This project follows the Proverbs3 toolkit (github.com/proverbs3digitalsolutions
   - Use the colour tokens from `public/css/app.css` (light and dark) and never hard-code colours.
   - List pages use the shared `filterBar()` from `public/js/filters.js`.
   - Guest-facing text goes through `public/js/i18n.js` (English and Taglish).
+  - Guest pages: money owed or paid shows two decimals; advertised prices may be short (D-86).
 - **Claude API code:** use the official `@anthropic-ai/sdk`, following the existing `src/routes/assistant.js`.
 
 ## Testing and checks

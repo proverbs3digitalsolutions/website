@@ -210,7 +210,7 @@ export const ACTIONS = {
   'cleaning.task_todo': 'Set a cleaning task back to to-do', 'cleaning.task_in_progress': 'Started a cleaning task', 'cleaning.task_done': 'Finished a cleaning task', 'cleaning.task_cancelled': 'Cancelled a cleaning task',
   'cleaning.clean': 'Marked a listing clean', 'cleaning.dirty': 'Marked a listing dirty',
   'cleaner_rate.saved': 'Saved a cleaner rate', 'cleaner_rate.deleted': 'Removed a cleaner rate', 'cleaner_pay.paid': 'Marked a cleaner’s pay as paid', 'cleaner_pay.unpaid': 'Marked a cleaner’s pay as unpaid',
-  'daily_close.saved': 'Saved a daily close',
+  'daily_close.saved': 'Saved a daily close', 'daily_close.reopened': 'Reopened a closed day',
   'guest.created': 'Added a guest', 'guest.updated': 'Updated a guest', 'checkin.link_replaced': 'Made a new check-in link',
   'file.uploaded': 'Uploaded a file', 'file.downloaded': 'Downloaded a file',
   'guide.link_shared': 'Shared a guest guide link', 'guide.updated': 'Edited the guest guide',
@@ -373,6 +373,8 @@ export function summarize(details, action) {
 // ---------------------------------------------------------------- plan
 // Plans count short-term listings only: units with a nightly rate (D-03), the same count the server checks.
 export const shortTermCount = (listings) => listings.filter((l) => l.nightly_rate != null).length;
+// A listing with no nightly rate is a monthly unit, which plans do not count. The plan card says so only then.
+export const monthlyNote = (listings) => listings.some((l) => l.nightly_rate == null);
 
 async function planCard(u) {
   const p = u.plan;
@@ -392,7 +394,7 @@ async function planCard(u) {
     h('dl', { class: 'dl', style: { marginTop: '12px' } },
       h('dt', null, 'Current plan'), h('dd', null, p.price ? `${p.name} — ₱${p.price.toLocaleString('en-PH')} / month` : p.name),
       h('dt', null, 'Short-term listings'), h('dd', null, `${shortTermCount(listings)} of ${p.listing_limit >= 1000 ? 'unlimited' : p.listing_limit}`,
-        u.business_type !== 'short_term' && h('div', { class: 'muted small' }, 'Monthly units are not counted.')),
+        monthlyNote(listings) && h('div', { class: 'muted small' }, 'Monthly units are not counted.')),
       p.paid_until && [h('dt', null, 'Paid until'), h('dd', null, p.paid_until)]),
     bill.online ? payOnline(p, bill) : [
       pub.plans.length > 0 && h('div', { class: 'plan-mini' }, pub.plans.map((x) => h('div', { class: `plan-mini__item${x.key === p.plan ? ' is-current' : ''}` },
@@ -498,13 +500,26 @@ export function changePassword() {
 }
 
 // ---------------------------------------------------------------- your data
+// The records a workspace holds, named by its modules: the delete warning and the download text use these. A short-term
+// workspace reads as before; a long-term one names its properties, tenants and leases; both names both sets.
+export function deleteText(type) {
+  const names = type === 'long_term' ? 'properties, units, tenants, leases, rent payments, expenses, maintenance requests'
+    : type === 'both' ? 'listings, reservations, guests, messages, payments, properties, units, tenants, leases, rent payments, expenses, maintenance requests'
+      : 'listings, reservations, guests, messages, payments';
+  return `all ${names}, files and team accounts`;
+}
+export function exportText(type) {
+  return type === 'long_term' ? 'properties, units, tenants, leases, rent payments, expenses, maintenance and more'
+    : type === 'both' ? 'listings, reservations, guests, messages, payments, properties, units, tenants, leases, rent payments, expenses, maintenance and more'
+      : 'listings, reservations, guests, messages, payments, expenses and more';
+}
 function dataCard(u, rerender) {
   const del = () => formModal({
     title: 'Delete this workspace?',
     submitText: 'Delete workspace',
     fields: [
       h('div', { class: 'alert alert--error' },
-        'This permanently deletes all listings, reservations, guests, messages, payments, files and team accounts in ',
+        `This permanently deletes ${deleteText(u.business_type)} in `,
         h('strong', null, u.organization_name), '. You have 14 days to change your mind; after that it cannot be undone. Download an export first if you want a copy.'),
       field({ name: 'confirm_name', label: `Type the workspace name to confirm: ${u.organization_name}`, required: true, autocomplete: 'off' }),
     ],
@@ -518,7 +533,7 @@ function dataCard(u, rerender) {
   });
   return h('div', { class: 'card' },
     h('div', { class: 'card__head' }, h('h2', null, 'Your data')),
-    h('p', { class: 'small' }, 'Download everything in this workspace (listings, reservations, guests, messages, payments, expenses and more) as a file you can keep or move to another system. ID photos and uploaded files are listed but not included.'),
+    h('p', { class: 'small' }, `Download everything in this workspace (${exportText(u.business_type)}) as a file you can keep or move to another system. ID photos and uploaded files are listed but not included.`),
     h('div', { class: 'chips', style: { marginTop: '10px' } },
       h('a', { class: 'btn btn--secondary btn--sm', href: '/api/workspace/export', download: '' }, 'Download all data'),
       !u.plan?.deletion_scheduled_at && h('button', { class: 'btn btn--danger btn--sm', type: 'button', onclick: del }, 'Delete workspace')));

@@ -174,7 +174,7 @@ router.post('/quotes', managers, ah(async (req, res) => {
     unit_id: { type: 'uuid', required: true, label: 'Listing' },
     check_in: { type: 'date', required: true, label: 'Check-in' },
     check_out: { type: 'date', required: true, label: 'Check-out' },
-    num_guests: { type: 'int', required: true, min: 1, max: 50, label: 'Guests' },
+    num_guests: { type: 'int', required: true, min: 1, max: 50, label: 'Guests', message: 'Enter a whole number of guests, 1 or more.' },
     guest_name: { type: 'string', required: true, max: 120, label: 'Guest name' },
     guest_email: { type: 'email', label: 'Guest email' },
     guest_phone: { type: 'phone', label: 'Guest mobile' },

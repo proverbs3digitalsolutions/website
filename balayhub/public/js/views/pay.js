@@ -23,8 +23,8 @@ extendTranslations({
   'Already on your bill': 'Nasa bill mo na',
   '{n} already on your bill': '{n} na ang nasa bill mo',
   'Upload a JPG, PNG, WEBP or PDF file up to 10 MB.': 'Mag-upload ng JPG, PNG, WEBP o PDF na file na hanggang 10 MB.',
-  'Accommodation (1 night)': 'Tirahan (1 gabi)',
-  'Accommodation ({n} nights)': 'Tirahan ({n} na gabi)',
+  'Accommodation (1 night)': 'Tuluyan (1 gabi)',
+  'Accommodation ({n} nights)': 'Tuluyan ({n} na gabi)',
   'Cleaning fee': 'Bayad sa paglilinis',
   'Other fees': 'Iba pang bayarin',
   'There are already 5 payment proofs waiting for the host to check. Please wait for the host to review them before you send another.':
@@ -32,7 +32,7 @@ extendTranslations({
   'Payment received': 'Bayad na natanggap',
   'Balance due': 'Babayaran pa',
   'Adjustments': 'Mga adjustment',
-  'Refunded to you': 'Ibinalik sa iyo',
+  'Refunded to you, added back to the balance': 'Ibinalik sa iyo, idinagdag ulit sa babayaran',
   'Pay by GCash, Maya or bank transfer': 'Magbayad gamit ang GCash, Maya o bank transfer',
   'Pay the amount, then send the proof below. {host} checks each payment and confirms it.': 'Bayaran ang halaga, tapos ipadala ang patunay sa ibaba. Titingnan ni {host} ang bayad at kukumpirmahin ito.',
   'Amount paid': 'Halagang binayad',
@@ -213,7 +213,7 @@ function billSection(d) {
     }),
     line(t('Total'), h('strong', null, peso(b.total))),
     b.payments.map((p) => line(`${t('Payment received')} · ${fmtDate(p.payment_date)} · ${METHOD_TEXT[p.payment_method] || p.payment_method}`, `−${peso(p.amount)}`)),
-    (b.refunds || []).map((r) => line(`${t('Refunded to you')} · ${fmtDate(r.refund_date)}`, `+${peso(r.amount)}`)),
+    (b.refunds || []).map((r) => line(`${t('Refunded to you, added back to the balance')} · ${fmtDate(r.refund_date)}`, `+${peso(r.amount)}`)),
     Number(b.adjustments) > 0 && line(t('Adjustments'), `−${peso(b.adjustments)}`),
     // A cancelled booking owes nothing (APP-FLOW 6.4), so there is no balance line.
     !d.cancelled && line(t('Balance due'), h('strong', null, peso(d.balance))));

@@ -31,7 +31,7 @@ const SUPPLY_FIELDS = {
 };
 const MOVEMENT_FIELDS = {
   kind: { type: 'enum', values: ['used', 'restocked', 'count'], required: true, label: 'Movement' },
-  quantity: { type: 'int', required: true, min: 0, max: MAX_QTY, label: 'Quantity' },
+  quantity: { type: 'int', required: true, max: MAX_QTY, label: 'Quantity' },
   note: { type: 'string', max: MAX_NOTE, label: 'Note' },
 };
 // What a cleaner (or anyone working a task) may record: use or restock, at least one. record_on_hand is
@@ -190,7 +190,9 @@ router.post('/supplies/:id/archive', managers, ah(async (req, res) => {
 router.post('/supplies/:id/movements', managers, ah(async (req, res) => {
   const id = uuidParam(req.params.id);
   const body = validate(req.body, MOVEMENT_FIELDS);
+  // The floor depends on the kind: a use or restock is at least 1, a count may set zero.
   if (body.kind !== 'count' && body.quantity < 1) throw validationError({ quantity: 'Enter a quantity of at least 1.' });
+  if (body.quantity < 0) throw validationError({ quantity: 'Quantity must be at least 0.' });
   await tx(async (db) => {
     const supply = await lockSupply(db, req.user, id);
     if (!supply) throw notFound();
@@ -214,7 +216,8 @@ router.get('/supplies/:id/movements', managers, ah(async (req, res) => {
 
 // Cleaners record what they used or restocked on a task. Supplies must belong to the task's
 // property. Rows are locked in id order so two tasks can't deadlock each other. A used item with
-// nothing on hand is skipped and named back, so the rest of the job's supplies still save.
+// nothing on hand is skipped and named back, so the rest of the job's supplies still save. A use above
+// what is on hand saves what is there and is named back in `short`.
 // Owners and managers are asked first (D-77): a use with nothing on hand is refused, and a use above
 // what is on hand is refused unless the item sets record_on_hand. Refusals are keyed `qty-<supply id>`,
 // the job screen's row for that item (housekeeping.js), so the message lands on the row.
@@ -225,6 +228,7 @@ router.post('/cleaning-tasks/:id/supplies', ah(async (req, res) => {
   const items = raw.map((x) => validate(x, TASK_ITEM_FIELDS)).sort((a, b) => (a.supply_id < b.supply_id ? -1 : 1));
   const asksFirst = ['owner', 'manager'].includes(req.user.role);
   const skipped = [];
+  const short = [];
   await tx(async (db) => {
     for (const item of items) {
       const supply = await lockSupply(db, req.user, item.supply_id);
@@ -239,10 +243,13 @@ router.post('/cleaning-tasks/:id/supplies', ah(async (req, res) => {
       if (asksFirst && item.kind === 'used' && item.quantity > supply.on_hand && !item.record_on_hand) {
         throw validationError({ [`qty-${item.supply_id}`]: askedFor(item.quantity, supply.on_hand) });
       }
+      if (!asksFirst && item.kind === 'used' && item.quantity > supply.on_hand) {
+        short.push({ name: supply.name, unit_label: supply.unit_label, asked: item.quantity, recorded: supply.on_hand });
+      }
       await applyMovement(db, req.user, supply, { ...item, taskId: task.task_id });
     }
   });
-  res.json({ supplies: await listSupplies(req.user, { ids: items.map((i) => i.supply_id) }), skipped });
+  res.json({ supplies: await listSupplies(req.user, { ids: items.map((i) => i.supply_id) }), skipped, short });
 }));
 
 module.exports = router;

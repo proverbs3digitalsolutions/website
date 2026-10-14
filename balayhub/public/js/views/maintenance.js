@@ -9,8 +9,8 @@ import { initFilters, filterBar, rememberFilters, changed } from '../filters.js'
 
 const PRIORITIES = ['low', 'medium', 'high', 'urgent'];
 const STATUSES = ['open', 'in_progress', 'resolved', 'cancelled'];
-// The status buttons a request offers. A resolved request can be reopened or cancelled, a cancelled one only reopened.
-export const nextStatuses = (status) => ({ resolved: ['open', 'cancelled'], cancelled: ['open'] })[status] || STATUSES.filter((s) => s !== status);
+// The status buttons a request offers. A resolved or cancelled request can only be reopened.
+export const nextStatuses = (status) => ({ resolved: ['open'], cancelled: ['open'] })[status] || STATUSES.filter((s) => s !== status);
 
 // Filter values a link may carry. Any other value is dropped before the list shows, so no chip shows for it (D-77).
 const FILTER_CHOICES = {
@@ -94,7 +94,8 @@ export async function maintenanceView(el, { query }) {
     history.replaceState(null, '', `#/maintenance${qs(changed(filters, defaults))}`);
     tabs.replaceChildren(...[['active', 'Open & in progress'], ['open', 'Open'], ['in_progress', 'In progress'], ['resolved', 'Resolved'], ['cancelled', 'Cancelled'], ['all', 'All']].map(([s, t]) =>
       h('button', { role: 'tab', 'aria-selected': String(filters.status === s), onclick: () => { filters.status = s; rememberFilters('maintenance', filters); load(); } }, t)));
-    const res = await get(`/maintenance${qs(changed(filters, defaults))}`);
+    // The status is always sent: the default "active" is dropped from the address but the server lists every status without it.
+    const res = await get(`/maintenance${qs({ ...changed(filters, defaults), status: filters.status })}`);
     // A name no request is assigned to (typed into a link) is dropped, and the list loads again without it.
     if (filters.assigned && filters.assigned !== 'none' && !res.assignees.includes(filters.assigned)) {
       filters.assigned = defaults.assigned; rememberFilters('maintenance', filters); renderBar(); return load();
@@ -224,7 +225,7 @@ export async function maintenanceDetailView(el, { params, rerender }) {
       e.target.disabled = true;
       try { await patch(`/maintenance/${m.request_id}`, { status: s }); toast(`Marked ${label(s).toLowerCase()}.`); rerender(); } catch (err) { toast(err.message, 'error'); e.target.disabled = false; }
     },
-  }, s === 'resolved' ? 'Mark resolved' : s === 'in_progress' ? 'Start work' : s === 'open' ? 'Reopen' : 'Cancel request'));
+  }, s === 'resolved' ? 'Mark resolved' : s === 'in_progress' ? 'Start work' : s === 'open' ? (m.status === 'in_progress' ? 'Back to open' : 'Reopen') : 'Cancel request'));
 
   const edit = () => formModal({
     title: 'Edit request', submitText: 'Save changes',

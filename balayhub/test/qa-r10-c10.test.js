@@ -52,7 +52,7 @@ test('#15: the cleaning category is titled for monthly rentals too', () => {
 
 test('#17: the Rent roll caption describes the number', () => {
   const src = read('properties.js');
-  assert.ok(src.includes("'Monthly rent from occupied units'"), 'the new caption is in the property detail');
+  assert.ok(src.includes("'Monthly rent from current leases'"), 'the new caption is in the property detail (round 11: lease rent)');
   assert.ok(!src.includes('list rent of occupied units'), 'the instruction-style caption is gone');
 });
 

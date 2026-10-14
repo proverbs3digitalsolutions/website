@@ -29,6 +29,19 @@ const lastDayOf = (month) => { const [y, m] = month.split('-').map(Number); retu
 // Drafts that can be published now. The list is for one month, so its drafts are all ready or none are.
 const readyCount = (rows, month, today) => (monthHasEnded(month, today) ? rows.filter((r) => r.status !== 'published').length : 0);
 
+// The Publish dialog's text. The owner sees a statement in the portal only when the portal is on; otherwise it goes by email.
+export function publishText(monthLabel, portalOn) {
+  const later = "Later changes won't show until you unpublish and publish again.";
+  return portalOn
+    ? `The ${monthLabel} numbers are frozen and the owner can see them in their portal. ${later}`
+    : `The ${monthLabel} numbers are frozen. The owner's portal is off, so send the statement by email. ${later}`;
+}
+
+// The Unpublish dialog's text. `emailedOn` is the send date of a statement that was emailed, or null.
+export function unpublishText(emailedOn) {
+  return `The owner can no longer see this statement.${emailedOn ? ` It was emailed on ${emailedOn}. The owner keeps that copy.` : ''} Make your corrections, then publish it again.`;
+}
+
 function unitChecks(units, owner) {
   return h('fieldset', { class: 'field', dataset: { field: 'unit_ids' }, style: { border: 0, padding: 0, margin: 0 } },
     h('legend', null, 'Their units'),
@@ -257,12 +270,15 @@ export async function ownerStatementView(el, { params, query = {}, rerender }) {
   const published = record?.status === 'published' ? detail.published : null;
   const s = published || live; // published = the frozen copy (snapshot) the owner sees
   const t = s.totals;
-  const [payoutsRes, reserveRes] = await Promise.all([
+  const [payoutsRes, reserveRes, ownersRes] = await Promise.all([
     get(`${base}/payouts${qs({ month })}`).catch(() => null),
     get(`${base}/reserve`).catch(() => null),
+    get('/unit-owners').catch(() => null),
   ]);
   const payouts = payoutsRes?.payouts || null;
   const reserve = reserveRes;
+  // The portal flag is on the owner list; the statement payload doesn't carry it. An owner not on the list (archived) has no portal.
+  const portalOn = Boolean(ownersRes?.owners?.find((o) => o.owner_id === id)?.portal_enabled);
   const paid = (payouts || []).filter((p) => !p.voided).reduce((a, p) => a + Math.round(Number(p.amount) * 100), 0) / 100;
   const payoutDue = Number(t.payout);
   const owes = payoutDue < 0; // flat fee with no stays: the owner owes the host
@@ -275,11 +291,11 @@ export async function ownerStatementView(el, { params, query = {}, rerender }) {
     try { await post(`${base}/statement/${path}`, body); toast(okText); rerender(); } catch (err) { toast(err.message, 'error'); }
   };
   const publish = async () => {
-    if (!await confirmDialog({ title: 'Publish this statement?', text: `The ${s.month_label} numbers are frozen and the owner can see them in their portal. Later changes won't show until you unpublish and publish again.`, confirmText: 'Publish' })) return;
+    if (!await confirmDialog({ title: 'Publish this statement?', text: publishText(s.month_label, portalOn), confirmText: 'Publish' })) return;
     act('publish', { month }, 'Statement published.');
   };
   const unpublish = async () => {
-    if (!await confirmDialog({ title: 'Unpublish to correct?', text: `The owner can no longer see this statement.${record.sent_at ? ` They already have the copy you emailed on ${manilaDay(record.sent_at)}, and unpublishing does not take that back.` : ''} Make your corrections, then publish it again.`, confirmText: 'Unpublish', danger: true })) return;
+    if (!await confirmDialog({ title: 'Unpublish to correct?', text: unpublishText(record.sent_at ? fmtDate(manilaDay(record.sent_at)) : null), confirmText: 'Unpublish', danger: true })) return;
     act('unpublish', { month }, 'Statement is a draft again.');
   };
   // The server emails the owner's current address (live), so the button and the message use that, not the frozen copy.

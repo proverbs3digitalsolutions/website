@@ -35,11 +35,12 @@ function parseMoney(raw) {
 /**
  * Validate `body` against `spec`. Each field:
  *   { type: 'string'|'text'|'email'|'money'|'date'|'enum'|'uuid'|'int'|'bool'|'uuids',
- *     required, max, min, values, positive, label }
+ *     required, max, min, values, positive, label, message }  (`message` replaces the int min / whole-number text)
+ * `check(out, fields)` runs after the field pass and returns null or { field: message }; its messages join the same 400.
  * Returns cleaned values (only keys present in spec; absent optionals -> null,
  * unless `partial` is set, in which case absent keys are omitted).
  */
-function validate(body, spec, { partial = false } = {}) {
+function validate(body, spec, { partial = false, check } = {}) {
   body = body && typeof body === 'object' ? body : {};
   const out = {};
   const fields = {};
@@ -114,8 +115,8 @@ function validate(body, spec, { partial = false } = {}) {
         break;
       case 'int': {
         const n = typeof v === 'number' ? v : Number(v);
-        if (!Number.isInteger(n)) { fields[key] = `${label} must be a whole number.`; break; }
-        if (rule.min !== undefined && n < rule.min) { fields[key] = `${label} must be at least ${rule.min}.`; break; }
+        if (!Number.isInteger(n)) { fields[key] = rule.message || `${label} must be a whole number.`; break; }
+        if (rule.min !== undefined && n < rule.min) { fields[key] = rule.message || `${label} must be at least ${rule.min}.`; break; }
         if (rule.max !== undefined && n > rule.max) { fields[key] = `${label} must be at most ${rule.max}.`; break; }
         out[key] = n;
         break;
@@ -127,6 +128,7 @@ function validate(body, spec, { partial = false } = {}) {
         throw new Error(`unknown rule type ${rule.type}`);
     }
   }
+  if (check) for (const [k, m] of Object.entries(check(out, fields) || {})) if (!fields[k]) fields[k] = m;
   if (Object.keys(fields).length) {
     throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields });
   }

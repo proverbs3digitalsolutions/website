@@ -5,6 +5,7 @@ import { get, post, ApiError } from '../api.js';
 import { h, brand, field, makeForm, badge, toast } from '../ui.js';
 import { state, navigate, refreshUser, afterLogin } from '../app.js';
 import { tryDemo } from './landing.js';
+import { t, initGuestLang, extendTranslations } from '../i18n.js';
 
 function publicPage(...children) {
   return h('div', { class: 'public' },
@@ -220,33 +221,57 @@ export async function resetView(el, { query }) {
 }
 
 // ---------------------------------------------------------------- email verification
+// Taglish for the two verification screens. The language chosen on the landing page carries here (initGuestLang reads it).
+extendTranslations({
+  'Verifying your email…': 'Vine-verify ang email mo…',
+  "Couldn't verify": 'Hindi ma-verify',
+  'This verification link is missing or incomplete. Log in to request a new one.': 'Kulang o sira ang verification link na ito. Mag-log in para humingi ng bagong link.',
+  'Request a new link': 'Humingi ng bagong link',
+  'Email verified.': 'Verified na ang email mo.',
+  'Email verified': 'Verified na ang email mo',
+  'You can now log in.': 'Puwede ka nang mag-log in.',
+  'Log in': 'Mag-log in',
+  'Check your email': 'Tingnan ang email mo',
+  'We sent a verification link to {email}. Open it on this device to continue setting up BalayHub.': 'Nagpadala kami ng verification link sa {email}. Buksan ito sa device na ito para magpatuloy sa pag-set up ng BalayHub.',
+  "Your account was created, but we couldn't send the verification email. The BalayHub administrator needs to check the server's email settings. Try “Resend” once that's fixed.": 'Nagawa na ang account mo, pero hindi namin naipadala ang verification email. Kailangang i-check ng BalayHub administrator ang email settings ng server. Subukan ang “Ipadala ulit” kapag naayos na.',
+  'Verify my email': 'I-verify ang email ko',
+  'Resend verification email': 'Ipadala ulit ang verification email',
+  'A new verification email is on its way.': 'Papunta na ang bagong verification email.',
+  "I've verified — continue": 'Na-verify ko na — tuloy',
+  'Not verified yet. Open the link we sent to {email}, then press this again.': 'Hindi pa verified. Buksan ang link na ipinadala namin sa {email}, saka pindutin ulit ito.',
+  'Use a different account': 'Gumamit ng ibang account',
+});
+
 export async function verifyView(el, { query }) {
-  const card = authCard('Verifying your email…', null);
+  initGuestLang();
+  const card = authCard(t('Verifying your email…'), null);
   el.append(publicPage(card));
-  const fail = (message) => card.replaceChildren(h('h1', null, "Couldn't verify"), h('div', { class: 'alert alert--error' }, message),
-    h('p', { class: 'auth-card__foot' }, h('a', { href: state.user ? '#/verify-pending' : '#/login' }, 'Request a new link')));
+  const fail = (message) => card.replaceChildren(h('h1', null, t("Couldn't verify")), h('div', { class: 'alert alert--error' }, message),
+    h('p', { class: 'auth-card__foot' }, h('a', { href: state.user ? '#/verify-pending' : '#/login' }, t('Request a new link'))));
   // A link with no token can't be checked. Say so, rather than sending an empty token and showing the server's generic message.
-  if (!query.token) { fail('This verification link is missing or incomplete. Log in to request a new one.'); return; }
+  if (!query.token) { fail(t('This verification link is missing or incomplete. Log in to request a new one.')); return; }
   try {
     await post('/auth/verify-email', { token: query.token || '' });
     try { sessionStorage.removeItem('bh-dev-verify'); } catch { /* ignore */ }
     await refreshUser();
-    toast('Email verified.');
+    toast(t('Email verified.'));
     if (state.user) afterLogin();
-    else card.replaceChildren(h('h1', null, 'Email verified'), h('p', { class: 'lead' }, 'You can now log in.'), h('a', { class: 'btn btn--primary btn--block', href: '#/login' }, 'Log in'));
+    else card.replaceChildren(h('h1', null, t('Email verified')), h('p', { class: 'lead' }, t('You can now log in.')), h('a', { class: 'btn btn--primary btn--block', href: '#/login' }, t('Log in')));
   } catch (err) {
     fail(err.message);
   }
 }
 
 export async function verifyPendingView(el) {
+  initGuestLang();
   if (state.user.email_verified || !state.requireEmailVerification) { afterLogin(); return; }
+  const email = state.user.email;
   let stored = null;
   try { stored = sessionStorage.getItem('bh-dev-verify'); } catch { /* ignore */ }
   let emailFailed = false;
   try { emailFailed = sessionStorage.getItem('bh-email-failed') === '1'; sessionStorage.removeItem('bh-email-failed'); } catch { /* ignore */ }
-  const msg = h('div', null, devLink(stored, 'Verify my email'),
-    emailFailed && h('div', { class: 'alert alert--error' }, "Your account was created, but we couldn't send the verification email. The BalayHub administrator needs to check the server's email settings. Try “Resend” once that's fixed."));
+  const msg = h('div', null, devLink(stored, t('Verify my email')),
+    emailFailed && h('div', { class: 'alert alert--error' }, t("Your account was created, but we couldn't send the verification email. The BalayHub administrator needs to check the server's email settings. Try “Resend” once that's fixed.")));
   const resend = h('button', {
     class: 'btn btn--secondary btn--block',
     onclick: async () => {
@@ -254,17 +279,26 @@ export async function verifyPendingView(el) {
       try {
         const r = await post('/auth/resend-verification');
         if (r.alreadyVerified) { await refreshUser(); afterLogin(); return; }
-        msg.replaceChildren(h('div', { class: 'alert alert--ok' }, 'A new verification email is on its way.'), devLink(r.devVerificationLink, 'Verify my email'));
+        msg.replaceChildren(h('div', { class: 'alert alert--ok' }, t('A new verification email is on its way.')), devLink(r.devVerificationLink, t('Verify my email')));
       } catch (err) { msg.replaceChildren(h('div', { class: 'alert alert--error' }, err.message)); }
       resend.disabled = false;
     },
-  }, 'Resend verification email');
-  el.append(publicPage(authCard('Check your email',
-    `We sent a verification link to ${state.user.email}. Open it on this device to continue setting up BalayHub.`,
+  }, t('Resend verification email'));
+  // Stays in the page (role="status", so a screen reader hears it) while the email is not verified yet.
+  const status = h('div', { role: 'status' });
+  el.append(publicPage(authCard(t('Check your email'),
+    t('We sent a verification link to {email}. Open it on this device to continue setting up BalayHub.', { email }),
     msg,
     h('div', { class: 'form' }, resend,
-      h('button', { class: 'btn btn--ghost btn--block', onclick: async () => { await refreshUser(); afterLogin(); } }, "I've verified — continue"),
-      h('button', { class: 'link-btn', onclick: async () => { try { localStorage.removeItem('bh-setup'); } catch { /* ignore */ } await post('/auth/logout'); state.user = null; navigate('#/login', { replace: true }); } }, 'Use a different account')))));
+      h('div', null,
+        h('button', { class: 'btn btn--ghost btn--block', onclick: async () => {
+          await refreshUser();
+          if (!state.user || state.user.email_verified || !state.requireEmailVerification) { afterLogin(); return; }
+          status.replaceChildren(h('div', { class: 'alert alert--warn', style: { marginTop: '8px' } },
+            t('Not verified yet. Open the link we sent to {email}, then press this again.', { email })));
+        } }, t("I've verified — continue")),
+        status),
+      h('button', { class: 'link-btn', onclick: async () => { try { localStorage.removeItem('bh-setup'); } catch { /* ignore */ } await post('/auth/logout'); state.user = null; navigate('#/login', { replace: true }); } }, t('Use a different account'))))));
 }
 
 // ---------------------------------------------------------------- workspace setup

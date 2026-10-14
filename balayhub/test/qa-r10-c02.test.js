@@ -19,12 +19,12 @@ const refundOwedAfter = new Function(`${grab(refSrc, 'refundOwedAfter')}\nreturn
 const refundCapProblem = new Function(`${grab(refSrc, 'refundCapProblem')}\nreturn refundCapProblem;`)();
 const askNewPrice = new Function(`${grab(resSrc, 'askNewPrice')}\nreturn askNewPrice;`)();
 
-test('#1 refundOwedAfter asks only when overpaid before and owing after', () => {
-  assert.equal(refundOwedAfter({ status: 'confirmed', balance: 5200 }, 100), 0);
+test('#1 refundOwedAfter asks whenever the stay would owe after (round 11 #6 widened it)', () => {
+  assert.equal(refundOwedAfter({ status: 'confirmed', balance: 5200 }, 100), 5300); // r11: was 0
   assert.equal(refundOwedAfter({ status: 'confirmed', balance: -400 }, 1000), 600);
   assert.equal(refundOwedAfter({ status: 'confirmed', balance: -800 }, 500), 0);
   assert.equal(refundOwedAfter({ status: 'cancelled', balance: -400 }, 1000), 0);
-  assert.equal(refundOwedAfter({ status: 'confirmed', balance: 0 }, 100), 0);
+  assert.equal(refundOwedAfter({ status: 'confirmed', balance: 0 }, 100), 100); // r11: was 0
 });
 
 test('#1 the question names both numbers', () => {
@@ -41,7 +41,7 @@ test('#2 refundCapProblem repeats the server sentence', () => {
 
 test('#2 the cap check comes before the question and before the post, shown at the amount field', () => {
   const cap = refSrc.indexOf('refundCapProblem(amount, data)');
-  const ask = refSrc.indexOf('await confirmDialog({ title: \'Refund more than');
+  const ask = refSrc.indexOf('await confirmDialog(over');
   const send = refSrc.indexOf('await post(`/reservations/${reservation.booking_id}/refunds`');
   assert.ok(cap > 0 && cap < ask && ask < send);
   assert.match(refSrc, /fields: \{ amount: tooMuch \}/);

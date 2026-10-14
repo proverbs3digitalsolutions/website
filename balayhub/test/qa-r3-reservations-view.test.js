@@ -101,7 +101,7 @@ test('on-screen receipt shows the adjustments line between total and remaining b
   assert.match(rec, /Number\(r\.adjustments\) > 0 && \[h\('dt', null, 'Adjustments \(settled through the booking channel\)'\), h\('dd', null, `-\$\{peso\(r\.adjustments\)\}`\)\]/);
   const total = rec.indexOf("'Booking total'");
   const adj = rec.indexOf("'Adjustments (settled through the booking channel)'");
-  const remaining = rec.indexOf("'Remaining balance'");
+  const remaining = rec.indexOf('receiptBalanceLine(r.balance_after)');
   assert.ok(total < adj && adj < remaining, 'order: Booking total, Adjustments, Remaining balance');
 });
 

@@ -2,7 +2,7 @@
 
 import { get, qs } from '../api.js';
 import { h, icon, peso, fmtDate, fmtMonth, label, emptyState, pageHead, todayManila } from '../ui.js';
-import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
+import { initFilters, filterBar, rememberFilters, changed, dateOutsideWindow } from '../filters.js';
 
 // An archived tenant reads "(archived)"; one who has moved out reads "(former)".
 const tenantTag = (x) => (x.tenant_status === 'archived' ? ' (archived)' : x.lease_status !== 'active' ? ' (former)' : '');
@@ -27,6 +27,8 @@ export async function reportsView(el, { query }) {
   // The period is remembered by name ("This month" stays current); dates only for a custom range.
   const defaults = { period: 'this_month', from: '', to: '', property_id: '', property_type: '' };
   const filters = initFilters('reports', query, defaults);
+  // The bar drops a from or to outside 2000 to 2100 before this page reads the link, so the note names that until the person changes the bar.
+  let windowNote = dateOutsideWindow(query.from) || dateOutsideWindow(query.to);
   // Old links carry only from/to: match them to a preset, or treat them as a custom range.
   if ((query.from || query.to) && !query.period) {
     const match = Object.entries(P).find(([, [, f, t]]) => f === query.from && t === query.to);
@@ -50,6 +52,7 @@ export async function reportsView(el, { query }) {
     barBox.replaceChildren(filterBar({
       key: 'reports', values: filters, defaults,
       onChange: () => {
+        windowNote = false;
         // Picking dates makes the period "Custom"; picking a preset clears the dates.
         let rebuild = false;
         if (filters.from !== last.from || filters.to !== last.to) { if (filters.from || filters.to) filters.period = 'custom'; rebuild = filters.period !== last.period; }
@@ -81,7 +84,9 @@ export async function reportsView(el, { query }) {
     const one = filters.period === 'custom' && Boolean(filters.from) !== Boolean(filters.to);
     if (neither || one) {
       exportLink.removeAttribute('href');
-      body.replaceChildren(h('div', { class: 'card' }, h('p', { class: 'muted' }, 'Pick both dates to see this range.')));
+      body.replaceChildren(h('div', { class: 'card' }, h('p', { class: 'muted' }, windowNote
+        ? 'The dates in this link must be between 2000 and 2100. Pick both dates to see this range.'
+        : 'Pick both dates to see this range.')));
       return;
     }
     exportLink.href = `/api/reports/export${qs(apiParams())}`;

@@ -44,8 +44,8 @@ test('a decimal quantity is refused before the not-enough-on-hand question, and 
   assert.match(supplies, /showErrors\(form, \{ quantity:/, 'the message shows at the quantity field');
 });
 
-test('a resolved request offers Reopen and Cancel request; a cancelled one offers only Reopen', () => {
-  assert.deepEqual(maint.nextStatuses('resolved'), ['open', 'cancelled']);
+test('a resolved request offers Reopen; a cancelled one offers only Reopen', () => {
+  assert.deepEqual(maint.nextStatuses('resolved'), ['open']);
   assert.deepEqual(maint.nextStatuses('cancelled'), ['open']);
 });
 

@@ -121,7 +121,7 @@ test('when every used item is out of stock nothing is recorded, and restocking a
 
 test('the cleaner supplies form names skipped items in a plain note', () => {
   const src = fs.readFileSync(path.join(__dirname, '../public/js/views/housekeeping.js'), 'utf8');
-  assert.ok(src.includes('const { skipped } = await post(`/cleaning-tasks/${task.task_id}/supplies`, { items });'), 'reads the skipped names from the save');
+  assert.ok(src.includes('const { skipped, short: shortfall = [] } = await post(`/cleaning-tasks/${task.task_id}/supplies`, { items });'), 'reads the skipped names from the save');
   assert.ok(src.includes("T('{name} was out of stock, so it wasn\\'t recorded.', { name })"), 'says which item was skipped');
   assert.ok(src.includes("T('Tell your manager.')"), 'tells the cleaner to tell the manager');
 });

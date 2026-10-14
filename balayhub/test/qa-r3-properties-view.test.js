@@ -32,7 +32,7 @@ test('a short-term workspace gets no Assign Tenant button on a vacant unit', () 
 test('unit rows show the monthly rent only outside short-term workspaces; the deposit line is unchanged', () => {
   const line = lineWith(unitRow, '/month');
   assert.ok(line, 'the unit subtitle is in the unit row');
-  assert.match(line, /\$\{stayOnly \? '' : ` · \$\{peso\(u\.monthly_rent\)\}\/month`\}/);
+  assert.match(line, /\$\{stayOnly \? '' : u\.lease_rent == null \? ` · \$\{peso\(u\.monthly_rent\)\}\/month` : /);
   assert.match(line, /deposit \$\{peso\(u\.security_deposit_amount\)\}/);
 });
 

@@ -25,6 +25,9 @@ const managers = requireRole('owner', 'manager');
 const owners = requireRole('owner');
 const DAY_MS = 24 * 3600 * 1000;
 const validationError = (fields) => new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields });
+// The most one clean can be paid, in centavos, with the words for it. It is the same ceiling as a per-clean rate (D-87):
+// above it is almost always an extra zero.
+const PER_CLEAN_CEILING = { cents: 1000000, text: '₱10,000.00 per clean' };
 
 // Cleaner pay is worked out by src/lib/cleanerpay.js when that module exists.
 // Until then a finished clean simply has no pay yet.
@@ -235,6 +238,9 @@ router.patch('/cleaning-tasks/:id', managers, ah(async (req, res) => {
     notes: { type: 'text', max: 1000, label: 'Notes' },
     pay_amount: { type: 'money', positive: true, label: 'Pay' },
   }, { partial: true });
+  if (body.pay_amount != null && Math.round(Number(body.pay_amount) * 100) > PER_CLEAN_CEILING.cents) {
+    throw validationError({ pay_amount: `That's more than ${PER_CLEAN_CEILING.text}. Check for an extra zero.` });
+  }
   // A task goes to either a team member or a named cleaner, not both.
   if (body.assigned_to && body.assignee_name) throw validationError({ assignee_name: 'Pick a team member or type a name, not both.' });
   if (body.assigned_to) body.assignee_name = null;

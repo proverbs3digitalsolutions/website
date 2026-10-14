@@ -2,7 +2,7 @@
 
 Things only the founder can do or decide before related work can go ahead. Automated runs add items here. The founder clears them by doing the item and ticking it, or by writing the decision in DECISIONS.MD.
 
-Last updated: 2026-10-15 (QA round 10 questions added; earlier rounds unchanged)
+Last updated: 2026-10-15 (QA round 11 questions added; earlier rounds unchanged)
 
 ## Security — do first
 
@@ -275,3 +275,18 @@ Each has the default already applied. Earlier open questions are not repeated he
 - [ ] **Price format on guest pages.** Amounts owed show two decimals; advertised prices show whole pesos when exact, and calendar tiles show ₱2.8k with the exact price in the tile's name. OK? *Default: yes.*
 - [ ] **Taglish "Guests".** The Taglish pages keep the word "Guests" and use "Petsa" for Dates. OK, or use "Bisita"? *Default: Guests.*
 - [ ] **Inbound email before the alpha (founder action).** Guest replies reach the app only after the one-time inbound email setup on the server. Set it up before inviting alpha hosts so messaging is a full loop. *Default: the inbox banner tells hosts replies go to their email.*
+
+## Questions from QA round 11 (2026-10-15)
+
+Every question has its default already applied in the app; nothing waits on the answer.
+
+- [ ] **Rent roll.** An occupied unit now shows the tenant's lease rent, and the Rent roll adds up lease rents (the list rent shows beside it when different). OK, or should it show the list rent? *Default: lease rent.*
+- [ ] **Refund that leaves money owed.** Any refund that leaves the guest owing now asks first, even when the guest had paid exactly. OK? *Default: ask.*
+- [ ] **Deposit returned before check-out.** Returning a deposit before the stay ends now asks first, but is allowed. Should it be refused instead? *Default: ask, allow.*
+- [ ] **Cleaner rate ceiling.** A cleaner rate is now at most ₱10,000 per clean or ₱1,000 per hour, and the pay typed on one clean is at most ₱10,000. Different limits? *Default: those limits.*
+- [ ] **Rates saved before the ceiling.** A rate saved above the new ceiling still prices a clean when it is marked done. Should those be cut down or refused at that point? *Default: leave finishing a clean alone; the owner corrects the rate.*
+- [ ] **Hourly pay can pass ₱10,000.** A rate of ₱1,000 an hour over a long job works out to as much as ₱12,000 (12 hours is the cap), above the ₱10,000 limit on one clean. Cap the worked-out pay too? *Default: leave it.*
+- [ ] **Reopening a closed day.** Closing a day is one click and now has "Reopen day". Owners can reopen any close; managers only a close covering just their own properties. OK? *Default: yes.*
+- [ ] **Housekeeping on the phone's bottom bar.** Housekeeping is under More on phones. Should it take a bottom-bar slot, or should owners pick the four items? *Default: unchanged.*
+- [ ] **Taglish check (native speaker).** Please check: "Tuluyan" for the room charge; "{pct}% na deposit"; "Hindi available ang online payment ngayon. Subukan ulit pagkalipas ng ilang minuto, o kontakin ang host."; "Ibinalik sa iyo, idinagdag ulit sa babayaran"; the Check your email and verify screens; and the other new sentences (the guest-count message and the not-available listing message). *Default: as written.*
+- [ ] **Rent acknowledgement balance.** Should a printed rent acknowledgement show the tenant's balance after the payment? It needs a rule for advance credit and months paid oldest first. Decide together with rent receipt numbers (round 10 question 4). *Default: no balance line.*

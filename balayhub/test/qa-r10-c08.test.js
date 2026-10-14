@@ -3,11 +3,12 @@
 // QA round 10, lane C08 (listings-settings). Frontend-only: no database. Source scans, plus the holds() helper of
 // listings.js run on its own (listings.js imports app.js, so the helper is read as text, as qa-r9-c16 does).
 // #21: the channel link error is announced, marks the link field and moves focus to that field.
-// #23: the first Add listing screen shows the basics; the building details, room type and tags sit in a closed
-//      "More details" section; the deposit moves to "Booking page and payments" and is not required.
+// #23: the first Add listing screen shows the basics (and, for a new building, its name and address, QA round 11 K10);
+//      the property type, room type and tags sit in a closed "More details" section; the deposit moves to
+//      "Booking page and payments" and is not required.
 // K17: a default time (14:00 or 14:00:00) does not open Guest info on Edit; a changed time does.
 // #22: Turn on is disabled, with a line saying why, while no listing is ticked for the booking page.
-// #16: the plan card counts "Short-term listings", and says monthly units are not counted for a long-term workspace.
+// #16: the plan card counts "Short-term listings", and says monthly units are not counted when a listing has no nightly rate (QA round 11, K5).
 // node --test --test-concurrency=1 test/qa-r10-c08.test.js
 
 const test = require('node:test');
@@ -63,27 +64,28 @@ test('#23: the basics are the listing name, type, nightly rate, cleaning fee and
   assert.ok(!basics.includes('tagsField('), 'tags are not in the basics');
 });
 
-test('#23: More details is a closed section holding the building details, room type and tags', () => {
+test('#23: More details is a closed section holding the property type, room type and tags', () => {
   const text = fieldsFn();
   assert.match(text, /h\('details', \{ class: 'form-section', open: holds\(u, \['room_type', 'tags'\]\) \},\s*h\('summary', null, 'More details'\),\s*building,/,
     'More details opens only when the listing holds a room type or tags, and takes the building fields first');
   const more = between(text, "h('summary', null, 'More details')", "h('summary', null, 'Price extras')");
   assert.ok(more.includes("name: 'room_type'"), 'room type is in More details');
   assert.ok(more.includes('tagsField(u.tags)'), 'tags are in More details');
-  // The new-building fields other than the name: they move out of the top of the form into the building block.
+  // QA round 11 (K10, N6): the building name and address move into Basics, required; only the property type stays in More details.
   const addText = addModal();
   const nameBlock = between(addText, 'const newProp = h(', 'const newPropMore = h(');
-  assert.ok(nameBlock.includes("name: 'property_name'"), 'the building name stays at the top, with the building choice');
-  for (const name of ['property_type', 'address', 'city', 'province']) {
-    assert.ok(!nameBlock.includes(`name: '${name}'`), `${name} is not at the top`);
+  for (const name of ['property_name', 'address', 'city', 'province']) {
+    assert.ok(nameBlock.includes(`name: '${name}'`), `${name} is at the top, with the building choice`);
   }
+  assert.ok(!nameBlock.includes("name: 'property_type'"), 'property type is not at the top');
   const buildingBlock = between(addText, 'const newPropMore = h(', 'const showNewBuilding');
-  for (const name of ['property_type', 'address', 'city', 'province']) {
-    assert.ok(buildingBlock.includes(`name: '${name}'`), `${name} is in the building block (More details)`);
+  assert.ok(buildingBlock.includes("name: 'property_type'"), 'property type is in the building block (More details)');
+  for (const name of ['property_name', 'address', 'city', 'province']) {
+    assert.ok(!buildingBlock.includes(`name: '${name}'`), `${name} is not in More details`);
   }
   assert.match(addText, /\.\.\.listingFields\(\{\}, roomTypes, newPropMore\)/, 'the Add form passes the building block into More details');
   // Choosing a building (or a new one) shows or hides both parts of the building fields together.
-  assert.match(addText, /const showNewBuilding = \(show\) => \{ newProp\.hidden = !show; newPropMore\.hidden = !show; \};/);
+  assert.match(addText, /const showNewBuilding = \(show\) => \{ newProp\.hidden = !show; newPropMore\.hidden = !show; for \(const el of buildingInputs\) el\.required = show; \};/);
   assert.match(addText, /showNewBuilding\(e\.target\.value === '__new'\)/);
   assert.match(addText, /showNewBuilding\(false\);/, 'a saved building hides its fields too');
 });
@@ -145,10 +147,11 @@ test('#22: Turn on is disabled, with a line under it, while no listing is ticked
 
 // ---- #16: the plan card's listing count
 test('#16: the plan card counts short-term listings and notes that monthly units are not counted', () => {
+  // The note's condition changed in QA round 11 (K5): see the monthlyNote assertion below.
   const card = planCard();
   assert.match(card, /h\('dt', null, 'Short-term listings'\)/, 'the count is labelled for what it counts');
   assert.doesNotMatch(card, /h\('dt', null, 'Listings'\)/, 'the old label is gone');
   assert.match(card, /h\('dd', null, `\$\{shortTermCount\(listings\)\} of /, 'the count is still the short-term count');
-  assert.match(card, /u\.business_type !== 'short_term' && h\('div', \{ class: 'muted small' \}, 'Monthly units are not counted\.'\)/,
-    'the note shows under the count for a workspace with long-term rentals');
+  assert.match(card, /monthlyNote\(listings\) && h\('div', \{ class: 'muted small' \}, 'Monthly units are not counted\.'\)/,
+    'the note shows under the count when a listing has no nightly rate (QA round 11, K5: the workspace type no longer decides it)');
 });

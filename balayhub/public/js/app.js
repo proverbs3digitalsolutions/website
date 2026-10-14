@@ -1,7 +1,7 @@
 // BalayHub single-page app: routing, session state and the app shell.
 
 import { get, post, onAuthLost, ApiError } from './api.js';
-import { h, icon, brand, toast, errorState, skeleton } from './ui.js';
+import { h, icon, brand, toast, errorState, skeleton, FOCUS_CHECKS } from './ui.js';
 import * as authViews from './views/auth.js';
 import { dashboardView } from './views/dashboard.js';
 import { propertiesView, propertyDetailView } from './views/properties.js';
@@ -651,7 +651,7 @@ document.addEventListener('click', (e) => {
   const index = [...list.querySelectorAll('[role="tab"]')].indexOf(oldTab);
   const listIndex = [...document.querySelectorAll('[role="tablist"]')].indexOf(list);
   let done = false;
-  for (const ms of [0, 40, 100, 200, 350, 500, 800, 1200, 1600, 2000]) setTimeout(() => { if (!done) done = restoreTabFocus(list, index, oldTab, document, listIndex); }, ms);
+  for (const ms of FOCUS_CHECKS) setTimeout(() => { if (!done) done = restoreTabFocus(list, index, oldTab, document, listIndex); }, ms);
 }, true);
 
 (async function boot() {

@@ -35,9 +35,23 @@ export function knownFilters(values, options) {
   return out;
 }
 
+// A start date from the link is kept only when it is a complete date from 2000 to 2100 (D-84); anything else is dropped, so the grid
+// opens on this week (the D-77 pattern). A date that does not exist (2026-02-30) is kept: the server answers that it was not valid.
+export function calendarStart(raw) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw || '')) return null;
+  const year = Number(raw.slice(0, 4));
+  return year >= 2000 && year <= 2100 ? raw : null;
+}
+
+// The booking or block that covers this night of this listing, or null. A night runs from check-in up to check-out, so the
+// night of the check-out morning is open for a new check-in.
+export function nightTaken(bookings, unitId, date) {
+  return bookings.find((b) => b.unit_id === unitId && b.check_in <= date && date < b.check_out) || null;
+}
+
 export async function calendarView(el, { query }) {
   const canManage = state.user.role !== 'staff';
-  const view = { start: query.start || null, days: Number(query.days) === 30 ? 30 : 14 };
+  const view = { start: calendarStart(query.start), days: Number(query.days) === 30 ? 30 : 14 };
   // Filters only hide rows (client-side); the grid itself is unchanged.
   const defaults = { q: '', property_id: '', unit_type: '', cleaning: '', avail: '', tag: '' };
   const filters = initFilters('calendar', query, defaults);
@@ -156,7 +170,7 @@ export async function calendarView(el, { query }) {
           class: `cal-bar cal-bar--${isBlock ? 'block' : b.channel}${startIdx + 0.5 < 0 ? ' cut-left' : ''}${endIdx + 0.5 > data.days ? ' cut-right' : ''}`,
           style: { left: `calc(${from} * var(--cal-col))`, width: `calc(${to - from} * var(--cal-col) - 3px)` },
           title: isBlock ? `Blocked: ${b.block_reason || ''}` : `${b.guest_name} · ${b.check_in} → ${b.check_out}${locked ? ` · From ${CHANNEL_LABEL[b.channel] || 'a channel'}: change it there` : canManage ? ' · Drag to another listing to move it' : ''}`,
-          onclick: (e) => { e.stopPropagation(); if (isBlock) blockMenu(b); else navigate(`#/reservations/${b.booking_id}`); },
+          onclick: (e) => { e.stopPropagation(); openBar(b); },
         }, isBlock ? `🔒 ${b.block_reason || 'Blocked'}` : `${b.guest_name || 'Guest'}${b.num_guests ? ` · ${b.num_guests}` : ''}`);
       });
       const warn = problems.get(l.unit_id) || [];
@@ -192,6 +206,9 @@ export async function calendarView(el, { query }) {
 
   function cellMenu(listing, date, price, rule, overridden) {
     if (!canManage) { toast('Only owners and managers can change the calendar.'); return; }
+    // A night under a booking or block opens that booking or block, never the new-booking sheet.
+    const taken = nightTaken(lastData.bookings, listing.unit_id, date);
+    if (taken) { openBar(taken); return; }
     const m = openModal({
       title: `${listing.unit_name} · ${fmtDate(date)}`,
       body: h('div', { class: 'form' },
@@ -249,6 +266,11 @@ export async function calendarView(el, { query }) {
     if (!canManage) return;
     if (!await confirmDialog({ title: 'Remove this block?', text: `${b.block_reason || 'Blocked'}: ${addDays(b.check_in, 1) === b.check_out ? `the night of ${fmtDate(b.check_in)}` : `${fmtDate(b.check_in)} to ${fmtDate(addDays(b.check_out, -1))}`}. ${addDays(b.check_in, 1) === b.check_out ? 'The night becomes' : 'The nights become'} available again.`, confirmText: 'Remove block' })) return;
     try { await post(`/blocks/${b.booking_id}/remove`); toast('Block removed.'); load(); } catch (err) { toast(err.message, 'error'); }
+  }
+
+  // A bar, or a price cell under one, opens the same action: the block menu, or the reservation.
+  function openBar(b) {
+    if (b.kind === 'block') blockMenu(b); else navigate(`#/reservations/${b.booking_id}`);
   }
 
   // An emptied box shows the date the grid is on again, so the box and the grid never disagree. A year still being typed

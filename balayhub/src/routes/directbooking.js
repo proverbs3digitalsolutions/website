@@ -142,6 +142,12 @@ router.patch('/direct-booking', owners, ah(async (req, res) => {
     if (body.enabled) {
       const willHaveKey = Boolean(cur.paymongo_key_hint || body.paymongo_secret_key) && req.body?.disconnect_paymongo !== true;
       if (!willHaveKey) throw new HttpError(409, 'Connect your PayMongo account first, so guests can pay you.', { code: 'NO_PAYMONGO' });
+      // The same listings the public page shows (PUBLIC_UNIT), so the page is never on with nothing to book.
+      const bookable = await one(
+        `SELECT 1 FROM units u JOIN properties p USING (property_id)
+          WHERE p.organization_id = $1 AND u.bookable_online AND u.status = 'active' AND p.status = 'active' AND u.nightly_rate IS NOT NULL`,
+        [req.user.organization_id]);
+      if (!bookable) throw new HttpError(409, 'Tick at least one listing for your booking page first.', { code: 'NO_LISTING' });
       if (!cur.booking_slug && !('slug' in body)) {
         let slug = slugify(req.user.organization_name) || 'stays';
         if (slug.length < 3) slug = `${slug}-stays`;
@@ -315,6 +321,12 @@ async function priceStay(u, checkIn, checkOut, promo = {}) {
   };
 }
 
+// The guest count's problem, if any: the listing's own limit, or 50 when the listing has none.
+function guestLimitProblem(u, guests) {
+  if (u.max_guests) return guests > u.max_guests ? `This place allows up to ${u.max_guests} guests.` : null;
+  return guests > 50 ? 'Guests must be at most 50.' : null;
+}
+
 async function isFree(unitId, checkIn, checkOut, exceptRef, db) {
   const sql = `SELECT
       EXISTS (SELECT 1 FROM bookings b WHERE b.unit_id = $1 AND b.status = 'confirmed' AND daterange(b.check_in, b.check_out) && daterange($2::date, $3::date))
@@ -331,9 +343,10 @@ publicRouter.get('/public/book/:slug/units/:unitId/quote', ah(async (req, res) =
   const u = await loadPublicUnit(host, req.params.unitId);
   const { promo_code_id: _id, ...p } = await priceStay(u, req.query.check_in, req.query.check_out,
     { orgId: host.organization_id, code: req.query.code ? String(req.query.code).slice(0, 40) : null });
-  const guests = validate(req.query, { guests: { type: 'int', min: 1, max: 50, label: 'Guests' } }).guests ?? 1;
+  const guests = validate(req.query, { guests: { type: 'int', min: 1, label: 'Guests' } }).guests ?? 1;
   // Same limit as checkout, so a quote never says a place is available for more guests than it takes.
-  if (u.max_guests && guests > u.max_guests) throw validationError({ guests: `This place allows up to ${u.max_guests} guests.` });
+  const guestsProblem = guestLimitProblem(u, guests);
+  if (guestsProblem) throw validationError({ guests: guestsProblem });
   const addons = await priceAddonSelections({ orgId: host.organization_id, unitId: u.unit_id, nights: p.nights, guests,
     selections: parseSelections(req.query.addons), context: 'booking' });
   // The total includes add-ons; the deposit is on the stay only (add-ons are paid in full when booked).
@@ -360,7 +373,7 @@ publicRouter.post('/public/book/:slug/units/:unitId/checkout', checkoutLimiter, 
     body = validate(req.body, {
       check_in: { type: 'date', required: true, label: 'Check-in' },
       check_out: { type: 'date', required: true, label: 'Check-out' },
-      num_guests: { type: 'int', required: true, min: 1, max: 50, label: 'Guests' },
+      num_guests: { type: 'int', required: true, min: 1, label: 'Guests' },
       name: { type: 'string', required: true, max: 120, label: 'Full name' },
       email: { type: 'email', required: true, label: 'Email' },
       phone: { type: 'phone', required: true, label: 'Mobile number' },
@@ -373,7 +386,8 @@ publicRouter.post('/public/book/:slug/units/:unitId/checkout', checkoutLimiter, 
     Object.assign(fields, err.extra.fields);
   }
   if (Object.keys(fields).length) throw validationError(fields);
-  if (u.max_guests && body.num_guests > u.max_guests) throw validationError({ num_guests: `This place allows up to ${u.max_guests} guests.` });
+  const guestsProblem = guestLimitProblem(u, body.num_guests);
+  if (guestsProblem) throw validationError({ num_guests: guestsProblem });
   const price = await priceStay(u, body.check_in, body.check_out, { orgId: host.organization_id, code: body.code, email: body.email, name: body.name, strict: true });
   if ((body.pay === 'deposit' && !price.deposit_allowed) || (body.pay === 'full' && !price.full_allowed)) {
     throw validationError({ pay: body.pay === 'deposit' && u.payment_option !== 'full'

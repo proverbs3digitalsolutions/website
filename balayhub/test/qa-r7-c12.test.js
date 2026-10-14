@@ -27,13 +27,13 @@ const quoteBeforeTry = () => { const body = quoteFn(); return body.slice(0, body
 // The Guests change listener that sets the count message. The timer listener below it re-quotes and has no message.
 const countListener = () => {
   const listeners = [...src.matchAll(/form\.elements\.num_guests\?\.addEventListener\('change', \(\) => \{[\s\S]*?\n {2}\}\);/g)].map((m) => m[0]);
-  return listeners.find((l) => /At least 1 guest/.test(l)) || '';
+  return listeners.find((l) => /guestCountMsg/.test(l)) || '';
 };
 
 test('#41: a Guests count below 1 is said on change, at once, with no quote request', () => {
   const listener = countListener();
   assert.ok(listener, 'the Guests change listener that sets the count message is found');
-  assert.match(listener, /setGuestsError\(guestCountOk\(\) \? '' : t\('At least 1 guest\.'\)\)/);
+  assert.match(listener, /setGuestsError\(guestCountOk\(\) \? '' : guestCountMsg\(\)\)/);
   assert.doesNotMatch(listener, /updateQuote|\bget\(/, 'the listener makes no quote request');
   assert.match(src, /const guestCountOk = \(\) => \{[\s\S]*?Number\.isInteger\(n\) && n >= 1[\s\S]*?\};/);
 });

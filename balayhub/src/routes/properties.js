@@ -149,7 +149,7 @@ const UNIT_SELECT = `
          u.weekend_rate, u.holiday_rate, u.weekly_discount, u.monthly_discount,
          u.cancellation_policy, u.cancellation_policy_text, u.deposit_pct,
          u.tags, u.room_type, u.min_price, u.fortnight_discount,
-         l.lease_id AS active_lease_id, l.end_date AS lease_end_date, t.tenant_id, t.full_name AS tenant_name,
+         l.lease_id AS active_lease_id, l.end_date AS lease_end_date, l.monthly_rent AS lease_rent, t.tenant_id, t.full_name AS tenant_name,
          CASE WHEN u.status = 'archived' THEN 'archived'
               WHEN l.lease_id IS NOT NULL THEN 'occupied'
               WHEN u.availability = 'unavailable' THEN 'unavailable'

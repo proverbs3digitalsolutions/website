@@ -83,9 +83,9 @@ test('pay: add-on choices are named so they are kept, refunds are drawn, and eve
   const src = js('views/pay.js');
   assert.match(src, /name: `addon-qty-/);
   assert.match(src, /name: `addon-pick-/);
-  assert.match(src, /t\('Refunded to you'\)/);
+  assert.match(src, /t\('Refunded to you, added back to the balance'\)/);
   assert.match(src, /`\+\$\{peso\(r\.amount\)\}`/);
-  assert.match(src, /'Refunded to you': 'Ibinalik sa iyo'/);
+  assert.match(src, /'Refunded to you, added back to the balance': 'Ibinalik sa iyo, idinagdag ulit sa babayaran'/);
   assert.match(src, /const peso = .*minimumFractionDigits: 2, maximumFractionDigits: 2/);
   assert.doesNotMatch(src, /Number\.isInteger\(n\) \? 0 : 2/);
 });

@@ -277,7 +277,14 @@ dialog.morenav::backdrop { background: var(--scrim); }
     background: var(--surface); color: var(--text); padding: 20px 14px; border-right: 1px solid var(--line);
   }
   .sidebar .brand { padding: 4px 8px 18px; }
-  .sidebar nav { display: grid; gap: 2px; align-content: start; flex: 1 1 auto; min-height: 0; overflow-y: auto; margin: 0 -6px; padding: 0 6px; }
+  /* Scroll cue (QA round 11): a fade along the bottom edge while more links are below. The cover is the sidebar's
+     own surface and moves with the links, so it hides the fade once the list is scrolled to its end. */
+  .sidebar nav {
+    display: grid; gap: 2px; align-content: start; flex: 1 1 auto; min-height: 0; overflow-y: auto; margin: 0 -6px; padding: 0 6px;
+    background-image: linear-gradient(var(--surface), var(--surface)), linear-gradient(to top, var(--line), transparent);
+    background-size: 100% 24px; background-repeat: no-repeat; background-position: bottom;
+    background-attachment: local, scroll; scrollbar-width: thin;
+  }
   .sidebar nav a {
     display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px;
     color: var(--muted); text-decoration: none; font-weight: 600; font-size: .95rem;
@@ -538,7 +545,8 @@ img.file-thumb { display: block; flex: none; width: 96px; max-width: 96px; aspec
 .chart-swatch--dashed { border-style: dashed; height: 0; width: 14px; border-width: 2px 0 0; border-radius: 0; }
 .chart-tip { position: absolute; z-index: 5; min-width: 160px; background: var(--surface); border: 1px solid var(--line-2); border-radius: 10px; box-shadow: var(--shadow); padding: 8px 10px; font-size: .84rem; pointer-events: none; }
 .chart-tip__row { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
-.chart-foot { text-align: right; margin-top: 4px; }
+/* The toggle sits at the left edge: the floating Ask button covers the right edge on desktop (QA round 11). */
+.chart-foot { display: flex; justify-content: flex-start; margin-top: 4px; }
 @media (max-width: 480px) {
   .chart-foot .link-btn { min-height: 32px; }
 }

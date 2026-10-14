@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-14 (QA round 9, section 22; D-85)
+Last updated: 2026-10-15 (QA round 11, section 24; D-87)
 
 ---
 
@@ -249,6 +249,7 @@ All guest pages have an English / Tagalog toggle (Taglish text). The default is 
 ### 6.5 Guest check-in form `#/checkin/<token>`
 - Shows stay, times and booking code.
 - Main guest (name, mobile, email), **+ Add guest** (up to the listing's max; more shows an error toast), arrival time, plate, notes, ID photos, consent.
+- *2026-10-15 (D-87): the form starts with no extra guest row; **+ Add guest** adds one. An empty added row is still refused.*
 - **Submit registration** → uploads IDs one by one ("Uploading ID photo 1 of 2…") → "Thank you! You're registered." → **Review or change my answers**.
 - Already submitted → green "Received …" note and **Save changes**.
 - Stay ended or cancelled → "This stay has ended or was cancelled, so the form is closed." Bad link → "Link not found". Offline → answers kept.
@@ -741,7 +742,7 @@ Spec: `docs/specs/PHASE-5-PRICING-TEAM.md`. Decisions D-66 to D-74. Staff and cl
 - **Reservation, Edit:** a blank cleaning fee, other fees or channel fee saves as 0 (the hints say "Leave blank for 0."). A blank accommodation total is refused: "Accommodation total is required. Type 0 for a free stay." A save that changes nothing says "No changes to save." instead of "Reservation updated." This replaces the round 3 rule that a blank channel fee does nothing.
 - **Reservation, Record payment:** a direct booking's method list has no Channel payout. When the guest has paid more than the balance, the dialog says "Guest overpaid by ₱X." instead of showing a negative balance.
 - **Refunds card and cancelled alert, after a partial refund:** the suggestion counts refunds already recorded. The alert reads "Cancelled: policy suggests refunding ₱5,000.00 of ₱5,000.00 paid. ₱2,000.00 is already refunded, so ₱3,000.00 more." When nothing more is suggested it ends "so nothing more is suggested." Record refund starts at the amount still left to suggest, and is blank when none is left.
-- **Inbox, Insert template:** the template goes below what you typed, after a blank line, and the toast says "Template added below your message." A typed subject stays; an empty subject takes the template's subject. If the result would pass 10,000 characters, nothing is inserted: "Adding this template would go over the 10,000-character limit."
+- **Inbox, Insert template:** the template goes below what you typed, after a blank line, and the toast says "Template added below your message." A typed subject stays; an empty subject takes the template's subject. If the result would pass 10,000 characters, nothing is inserted: "Adding this template would go over the 10,000-character limit." *2026-10-15: a subject filled by a template counts as empty for the next template, so a second template replaces it.*
 - **Inbox, switching conversations:** the subject you typed is kept with that conversation's message draft.
 - **Inbox, opening an unread conversation:** the row loses its unread look, and the header count and the menu badge update at once.
 - **Inbox, template names:** saving a template with the same name as another active template (case and end spaces ignored) is refused: "You already have a template called ..." on the name box. Archived templates don't count.
@@ -938,3 +939,31 @@ Decision D-86. The alpha is still for owners of 1 to 3 properties, so these chan
 - **Reports:** headline money tiles say how they count (Performance Revenue: "Rooms counted by night; cleaning and extras by check-in."; Income summary Revenue earned: "Nights counted in their month; cleaning and extras at check-in."). Profit and loss with a bad month in the link (`2026-13`, `1999-12`) shows "That month isn't valid, so this is <this month>." and the address is rewritten. Custom dates in Stay reports, and any list date filter, accept years 2000 to 2100: a bad box shows "Enter a year from 2000 to 2100.", a valid side is still applied, and a backwards range never puts back an out-of-window date.
 - **Focus kept after slow redraws:** after any save, toggle (Mark clean / Mark dirty, Undo paid / Mark paid, Start / Mark done, Disposed / Back to held), void, archive or dialog action, focus stays on the same control, its renamed replacement in the same place, or the page heading, for up to 2 seconds. Tab rows (Stay reports, status tabs) wait for the new row. Focus is never moved away from something the person already chose.
 - **Calendar link (channels dialog):** a bad link shows its message as an alert, the link field is marked invalid and has focus.
+
+## 24. QA round 11 flow changes (2026-10-15)
+
+Decision D-87. Still for owners of 1 to 3 properties: less friction, true money on every document, nothing removed.
+
+- **Receipt (page and email):** an overpaid booking shows "Overpaid by ₱800.00" where "Remaining balance" would be; otherwise "Remaining balance" as before.
+- **Refunds:** any refund on a live stay that leaves the guest owing asks "Refund leaves money owed?" ("After this ₱100.00 refund the guest will owe ₱100.00. Record it?"). When the guest was overpaid before, the round 10 question "Refund more than the overpayment?" is unchanged. A refund on a cancelled booking never asks. A refund above what is left is refused once, at the Amount field (the top of the form says "Please check the highlighted fields.").
+- **New or edited reservation:** "Where did they book?" shows only while Booked through is Direct. Every wrong field (dates in the wrong order, a negative total) shows on the first Save.
+- **Deposit:** Return deposit on a stay that has not checked out and is not cancelled asks "Return the deposit before check-out?" ("The stay ends <date>. Damage is usually checked after check-out."). Cancel posts nothing.
+- **Property page (long-term):** an occupied unit reads "Apartment · ₱9,500.00/month (lease)", with " · listed ₱12,000.00" when the list rent differs. The Rent roll adds up lease rents ("Monthly rent from current leases").
+- **Rent payment page:** a voided payment has no Print receipt button, and its printed block starts "VOID: this payment was voided on <date>. It is not a receipt."
+- **Daily close:** the Close dialog adds "Closing saves this checklist as the record for <date>. You can reopen it later." A closed day has a secondary **Reopen day** beside Update close; it asks "Reopen <date>?" ("The saved close (by <name>, <time>) is removed. You can close the day again."), then the toast "Day reopened." Managers can reopen only a close covering just their properties; otherwise the existing "already closed for more properties" sentence shows. For a day before today, arrivals, departures and cleanings are listed as they stood at the end of that day.
+- **Maintenance:** the default tab "Open & in progress" lists only those two statuses. A resolved request offers only Reopen; an in-progress one offers "Back to open".
+- **Housekeeping:** an owner's own finished clean with no amount reads "Done by you, no pay" on the task (Set pay stays). The owner's and manager's "Something broken?" submits as **Log repair** (toast says it is on the Maintenance list); cleaners and staff still see "Send to host". A cleaner who records more of a supply than is on hand sees "Only {recorded} of {name} was on hand, so {recorded} was recorded." then "Tell your manager." Supplies: a use or restock below 1 reads "Enter a quantity of at least 1."
+- **Cleaner pay:** a rate above ₱10,000.00 per clean or ₱1,000.00 per hour is refused at Amount with "That's more than ₱10,000.00 per clean. Check for an extra zero." (or per hour). Set pay on one clean refuses more than ₱10,000.00 the same way.
+- **Lost and found:** the first box is "Item" (placeholder "e.g. Blue umbrella"); empty reads "Item is required."
+- **Inbox:** a second template replaces the subject the first one filled (a typed subject stays); no "Draft reply with AI" in Internal note mode; Snooze 1 week wakes at 9:00 AM Manila; template fields show "Up to 80 characters.", "Up to 200 characters." and "Up to 5,000 characters."
+- **Guest pages:** Taglish room charge is "Tuluyan"; the deposit line is "{pct}% na deposit"; the payment-unavailable sentences are in Taglish; the pay page's refund line reads "Refunded to you, added back to the balance". The booking page's guest count says "Enter a whole number of guests, 1 or more." (a count above the listing's limit says "This place allows up to N guests."). A bad listing link says "This listing is not available…" with See all places. The review page's star message shows under the stars and is gone once the review is sent. The check-in form starts with no extra guest row.
+- **Booking page (Settings):** the server refuses Turn on with no bookable listing (a ticked listing with a nightly rate): "Tick at least one listing for your booking page first." Turning off is never refused.
+- **Check your email page:** follows the chosen language; "I've verified, continue" before verifying shows "Not verified yet. Open the link we sent to <email>, then press this again."
+- **Add listing:** choosing New building (always when the workspace has none) shows "Building / property name", Street address, City and Province in the first section, marked required; they stay under More details only for an existing building.
+- **Settings:** "Monthly units are not counted." shows only when there is a monthly-only unit. Delete workspace and Download data name tenants, leases and rent payments for a long-term owner, and both sets for a mixed workspace.
+- **Focus:** a dialog opened by a link (`?new=1`, `?assign=1`) hands focus to the page heading when it closes; after a redraw BalayHub watches for up to 10 seconds (slow networks) and never moves focus off something the person chose.
+- **Calendar:** a start date outside 2000 to 2100 is dropped (the calendar opens on this week). A click on the price cell under a booking or block opens that booking or block, not New reservation. The stay quote also refuses dates outside 2000 to 2100.
+- **Groups:** an empty room row reads "Choose a listing for room 3." and that Listing box is marked.
+- **Reports:** a link with years outside 2000 to 2100 says "The dates in this link must be between 2000 and 2100. Pick both dates to see this range." A single date filter shows "Enter a year from 2000 to 2100." at the box. The performance occupancy total counts only listings that have capacity.
+- **Charts and shell:** an empty account's chart axes show one 0 label; no two neighbouring axis labels repeat. "Show as table" sits at the left of the chart card, clear of the Ask button. The sidebar fades at its bottom edge while more is below, with a thin scrollbar.
+- **Owner statements:** the Publish dialog says to send the statement by email when the owner's portal is off; unpublishing a statement that was sent adds "It was emailed on <date>. The owner keeps that copy."

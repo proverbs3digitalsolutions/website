@@ -1,6 +1,6 @@
 # BalayHub design brief
 
-Last updated: 2026-10-14 (QA round 9: patterns in section 18; D-85)
+Last updated: 2026-10-15 (QA round 11: patterns in section 20; D-87)
 
 **Summary.** BalayHub is a phone-first web app (also an installable PWA) for Filipino rental and staycation hosts. It is built with plain CSS, one stylesheet (`public/css/app.css`), and small JavaScript helpers (`public/js/ui.js`). There is no framework and no CSS preprocessor. The look is calm and practical: Forest Green on soft off-white, Sand and Sun as warm accents, Poppins for headings, Inter for text, rounded cards, and large touch targets. Colours come from CSS custom properties on `:root`. A dark theme redefines the same tokens, so any component that uses tokens gets dark mode automatically. This brief records what is **actually built**. Every value below comes from the code. Where the code doesn't define a token (spacing, type sizes), the brief lists the values in use and says so.
 
@@ -548,3 +548,12 @@ Printable views are built from `.receipt` (with a 2px `--navy` rule under the he
 - **A form's own field checks** run in the same first pass as the required check (`makeForm({ check })` returns `{ field: message }`), so every problem shows at once and a required message is never replaced.
 - **Language switch keeps typed input:** a guest page that redraws itself calls `keepFormValues(root)` before and `restoreFormValues(root, snapshot)` after (`i18n.js`). File inputs can't be kept, and the page says so when a file was chosen.
 - **Report tiles say their basis** in the tile's sub-line.
+
+## 20. Patterns added in QA round 11 (2026-10-15)
+
+- **Focus with no opener:** a dialog opened by a link (`?new=1`, `?assign=1`) has no button to return to, so when it closes focus goes to the page heading (`h1`, given `tabindex="-1"`) at once. *Extends section 19's watcher.*
+- **The focus watcher keeps checking up to 10 seconds** (`FOCUS_WATCH_MS` in `ui.js`), every 500 ms after the first 2 seconds, so a redraw on a slow network still gets focus back. It never moves focus off something the person chose. Views add no focus code for redraws.
+- **Chart axes never repeat a label,** and an all-zero chart shows one 0 label (`axisLabels` in `charts.js`).
+- **Chart "Show as table" sits at the left** of the chart footer, clear of the floating Ask button.
+- **Sidebar scroll cue:** the scrolling nav fades at its bottom edge while more is below, with a thin scrollbar, in token colours.
+- **A money document shows an overpayment and a void,** never a clamp: "Overpaid by ₱800.00", and a voided payment prints "VOID" and offers no receipt.

@@ -398,7 +398,7 @@ export async function paymentDetailView(el, { params, rerender }) {
     back: { href: '#/rent?tab=payments', label: 'Payments' },
     actions: [
       h('a', { class: 'btn btn--secondary', href: `#/tenants/${p.tenant_id}` }, 'View tenant'),
-      h('button', { class: 'btn btn--secondary', onclick: () => window.print() }, 'Print receipt'),
+      !p.voided_at && h('button', { class: 'btn btn--secondary', onclick: () => window.print() }, 'Print receipt'),
       canVoid && h('button', {
         class: 'btn btn--danger',
         onclick: async () => {
@@ -438,6 +438,7 @@ export async function paymentDetailView(el, { params, rerender }) {
           }, 'Upload attachment')))),
     h('div', { class: 'card print-only' },
       h('h2', null, state.user.organization_name),
+      p.voided_at && h('p', { class: 'alert alert--error' }, `VOID: this payment was voided on ${fmtDate(p.voided_at)}. It is not a receipt.`),
       h('p', { class: 'muted' }, 'Acknowledgement receipt (not a BIR official receipt)'),
       h('dl', { class: 'dl' },
         h('dt', null, 'Tenant'), h('dd', null, p.tenant_name),

@@ -19,6 +19,20 @@ function niceMax(v) {
   return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p;
 }
 
+// Value-axis labels for a 0 to `max` scale in four equal steps, as { v, text } pairs. A label is left out when it
+// reads the same as the one below it (a 0 to 1 scale in whole percent would print 0%, 0%, 1%, 1%, 1%). A `max` of 0
+// (no data) keeps only the 0 label.
+export function axisLabels(max, fmt) {
+  const ticks = max > 0 ? [0, 1, 2, 3, 4].map((i) => (max / 4) * i) : [0];
+  let below = null;
+  return ticks.flatMap((v) => {
+    const text = fmt(v, true);
+    const same = text === below;
+    below = text;
+    return same ? [] : [{ v, text }];
+  });
+}
+
 function legend(series) {
   if (series.length < 2) return null;
   return h('div', { class: 'chart-legend' }, series.map((s, i) => h('span', { class: 'chart-legend__item' },
@@ -55,8 +69,11 @@ function frame({ labels, series, fmt, height = 220, draw, ariaLabel, integer = f
     const root = svg('svg', { viewBox: `0 0 ${width} ${height}`, width: '100%', height, role: 'img', 'aria-label': ariaLabel });
     for (let i = 0; i <= 4; i += 1) {
       const v = (max / 4) * i;
-      root.append(svg('line', { x1: m.l, x2: width - m.r, y1: y(v), y2: y(v), stroke: '#e2e7ee', 'stroke-width': 1, class: 'chart-grid' }),
-        svg('text', { x: m.l - 8, y: y(v) + 4, 'text-anchor': 'end', 'font-size': 11, fill: '#5b6878', class: 'chart-axis' }, fmt(v, true)));
+      root.append(svg('line', { x1: m.l, x2: width - m.r, y1: y(v), y2: y(v), stroke: '#e2e7ee', 'stroke-width': 1, class: 'chart-grid' }));
+    }
+    // With no data (raw 0) only the 0 label is drawn; the gridlines are unchanged.
+    for (const { v, text } of axisLabels(raw > 0 ? max : 0, fmt)) {
+      root.append(svg('text', { x: m.l - 8, y: y(v) + 4, 'text-anchor': 'end', 'font-size': 11, fill: '#5b6878', class: 'chart-axis' }, text));
     }
     const step = w / labels.length;
     const every = Math.ceil(labels.length / Math.max(1, Math.floor(w / 64)));

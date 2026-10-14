@@ -28,6 +28,13 @@ const inbound = require('../src/lib/inbound');
 let srv; let owner; let prop; let prop2; let unit; let unit2; let resA; let resNoEmail; let resOther;
 const today = manilaToday();
 const d = (n) => ical.addDays(today, n);
+// Puts a stay on the Manila calendar as it is when the test runs. The file takes a few seconds, and a run that
+// crosses Manila midnight would otherwise compare the stays with yesterday's date.
+async function placeStay(booking, checkInDays, nights) {
+  const base = manilaToday();
+  await sql('UPDATE bookings SET check_in = $2, check_out = $3 WHERE booking_id = $1',
+    [booking.booking_id, ical.addDays(base, checkInDays), ical.addDays(base, checkInDays + nights)]);
+}
 
 test.before(async () => {
   srv = await startServer();
@@ -66,6 +73,8 @@ test('start a conversation from a reservation, templates are filled in', async (
   assert.ok(t.data.templates.length >= 4);
   assert.ok(t.data.variables.includes('wifi_password'));
   const checkin = t.data.templates.find((x) => x.system_key === 'checkin');
+  // Two days before check-in, so the Wi-Fi password is not shared yet.
+  await placeStay(resA, 2, 2);
   const r = await owner.get(`/api/message-templates/${checkin.template_id}/render?booking_id=${resA.booking_id}`);
   assert.equal(r.status, 200);
   assert.match(r.data.body, /Hi Rafael/);
@@ -219,7 +228,8 @@ test('automatic messages: only for stays due in the last day, once each, when tu
   const autos = (await owner.get('/api/automations')).data.automations;
   assert.equal(autos.length, 4);
   assert.ok(autos.every((a) => !a.enabled), 'defaults start off');
-  const checkin = autos.find((a) => a.trigger_event === 'before_check_in');
+  // Two automations are "before check-in"; the defaults were made together, so their list order is random. Pick by name.
+  const checkin = autos.find((a) => a.name.startsWith('Send check-in instructions'));
   assert.equal(await messaging.runAutomations(), 0);
 
   // resOther checks in tomorrow: a "1 day before at 00:00" automation is due now.
@@ -227,6 +237,9 @@ test('automatic messages: only for stays due in the last day, once each, when tu
   assert.equal(p.status, 200);
   // Pretend it was turned on yesterday so today's send time counts.
   await sql(`UPDATE automations SET created_at = now() - interval '2 days' WHERE automation_id = $1`, [checkin.automation_id]);
+  // resOther is due by the Manila date now; resA is placed where it is not due.
+  await placeStay(resOther, 1, 2);
+  await placeStay(resA, 5, 2);
   const sent = await messaging.runAutomations();
   assert.equal(sent, 1);
   assert.equal(outbox[0].to, 'other@example.com');

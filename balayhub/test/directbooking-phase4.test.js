@@ -241,12 +241,13 @@ test('follow-up: only an attempt that reached the payment page counts; a failed 
 
 test('follow-up: one email per address per 30 days across all workspaces; a month later another is allowed', async () => {
   const other = await ownerAccount(srv.base, 'second-host@example.com', 'Second Host Stays');
+  // The page can't be turned on until it has a bookable listing (C06, K4), so the listing comes first.
+  const prop2 = (await other.post('/api/properties', { property_name: 'Second Tower', property_type: 'condominium', address: 'Ortigas', city: 'Pasig', province: 'Metro Manila' })).data.property;
+  const unit2 = (await other.post(`/api/properties/${prop2.property_id}/units`, { unit_name: 'Second 1', unit_type: 'studio', nightly_rate: '2000', bookable_online: true })).data.unit;
   const r2 = await other.patch('/api/direct-booking', { paymongo_secret_key: 'sk_test_hostKEY9876543210', enabled: true });
   assert.equal(r2.status, 200, JSON.stringify(r2.data));
   const slug2 = r2.data.url.split('/#/book/')[1];
   await sql('UPDATE organizations SET abandoned_followup = true WHERE booking_slug = $1', [slug2]);
-  const prop2 = (await other.post('/api/properties', { property_name: 'Second Tower', property_type: 'condominium', address: 'Ortigas', city: 'Pasig', province: 'Metro Manila' })).data.property;
-  const unit2 = (await other.post(`/api/properties/${prop2.property_id}/units`, { unit_name: 'Second 1', unit_type: 'studio', nightly_rate: '2000', bookable_online: true })).data.unit;
 
   await sql(`UPDATE direct_checkouts SET status = 'expired' WHERE status = 'pending'`);
   await abandon(`/api/public/book/${slug}/units/${plain.unit_id}/checkout`, 'twice@example.com', 100);

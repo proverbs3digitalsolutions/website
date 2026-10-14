@@ -55,7 +55,7 @@ test('Insert template adds the template below what the host typed, and keeps a t
   assert.doesNotMatch(src, /^\s*body\.value = r\.body;$/m, 'the body is no longer overwritten');
   assert.doesNotMatch(src, /^\s*subject\.value = r\.subject;$/m, 'the subject is no longer overwritten');
   assert.match(src, /const next = insertBelow\(body\.value, r\.body\);/);
-  assert.match(src, /if \(!subject\.value\.trim\(\)\) subject\.value = r\.subject;/);
+  assert.match(src, /const subjectNext = nextSubject\(subject\.value, filledSubject, r\.subject\);/);
   assert.match(src, /toast\('Template added below your message\.'\)/);
 });
 
@@ -77,7 +77,7 @@ test('the subject draft is kept per conversation, restored on open, and cleared 
   assert.match(src, /const subjKey = `bh-draft:subj:\$\{c\.conversation_id\}`;/);
   assert.match(src, /try \{ subject\.value = sessionStorage\.getItem\(subjKey\) \|\| ''; \} catch \{ \/\* ignore \*\/ \}/);
   assert.match(src, /subject\.addEventListener\('input', \(\) => \{ try \{ sessionStorage\.setItem\(subjKey, subject\.value\); \} catch \{ \/\* ignore \*\/ \} \}\);/);
-  assert.match(src, /try \{ sessionStorage\.removeItem\(draftKey\); sessionStorage\.removeItem\(modeKey\); sessionStorage\.removeItem\(subjKey\); \} catch \{ \/\* ignore \*\/ \}/);
+  assert.match(src, /try \{ sessionStorage\.removeItem\(draftKey\); sessionStorage\.removeItem\(modeKey\); sessionStorage\.removeItem\(subjKey\); sessionStorage\.removeItem\(subjTplKey\); \} catch \{ \/\* ignore \*\/ \}/);
 });
 
 test('opening a thread clears its unread look, the header count, the view counts and the menu badge', () => {

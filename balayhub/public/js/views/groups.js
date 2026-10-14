@@ -16,14 +16,16 @@ export const roomsLine = (rooms, cancelled) => {
 };
 
 // ---------------------------------------------------------------- one room row (used by "new group" and "add a room")
-function roomRow({ listings, roomTypes, defaults, onRemove, number = 1 }) {
+function roomRow({ listings, roomTypes, defaults, onRemove, number = 0 }) {
   const uid = Math.random().toString(36).slice(2, 7);
+  // The room's number in a new group (0 in the add-a-room dialog, which shows no number). setNumber keeps it current after a removal.
+  let num = number;
   const propName = new Map(listings.map((l) => [l.property_id, l.property_name]));
   const mk = (name, lbl, input) => h('div', { class: 'field' }, h('label', { for: `gr-${name}-${uid}` }, lbl), input);
   const mode = h('select', { class: 'input', id: `gr-mode-${uid}`, 'aria-label': 'Room choice' },
     h('option', { value: 'unit' }, 'A specific listing'),
     roomTypes.length > 0 && h('option', { value: 'type' }, 'Any free room of a type'));
-  const unit = h('select', { class: 'input', id: `gr-unit-${uid}` },
+  const unit = h('select', { class: 'input', id: `gr-unit-${uid}`, 'aria-describedby': `gr-unit-${uid}-err` },
     h('option', { value: '' }, 'Choose a listing…'),
     listings.map((l) => h('option', { value: l.unit_id }, `${l.unit_name} — ${l.property_name}`)));
   const type = h('select', { class: 'input', id: `gr-type-${uid}` },
@@ -49,7 +51,9 @@ function roomRow({ listings, roomTypes, defaults, onRemove, number = 1 }) {
 
   const typeBox = mk('type', 'Room type', type);
   const countBox = mk('count', 'How many', count);
-  const unitBox = mk('unit', 'Listing', unit);
+  // The listing box is a field the form can mark, so a row with no listing shows its message on this row (see rooms()).
+  const unitKey = `unit_id-${uid}`;
+  const unitBox = h('div', { class: 'field', dataset: { field: unitKey } }, h('label', { for: `gr-unit-${uid}` }, 'Listing'), unit, h('div', { class: 'error', id: `gr-unit-${uid}-err`, role: 'alert' }));
   const sync = () => {
     const t = mode.value === 'type';
     unitBox.hidden = t; typeBox.hidden = !t; countBox.hidden = !t;
@@ -98,7 +102,7 @@ function roomRow({ listings, roomTypes, defaults, onRemove, number = 1 }) {
   return {
     el,
     // Renumbers the row after a room above it is removed.
-    setNumber(n) { removeBtn?.setAttribute('aria-label', `Remove this room, room ${n}`); },
+    setNumber(n) { num = n; removeBtn?.setAttribute('aria-label', `Remove this room, room ${n}`); },
     // The check-out message for a stay that runs no night, keyed to this row's check-out box. A blank date is rooms()'s job.
     dateProblem() { return ci.value && co.value && co.value <= ci.value ? { [coKey]: 'Check-out must be after check-in.' } : null; },
     // Returns the rooms to send (a room type with a count becomes that many rows), or throws a message.
@@ -121,7 +125,11 @@ function roomRow({ listings, roomTypes, defaults, onRemove, number = 1 }) {
         if (!Number.isInteger(n) || n < 1 || n > 20) throw new Error('Count must be a whole number from 1 to 20.');
         return Array.from({ length: n }, () => ({ ...base, property_id, room_type: rt.join('|') }));
       }
-      if (!unit.value) throw new Error('Choose a listing for each room row.');
+      if (!unit.value) {
+        // The message names the room and sits on this row's listing box; the summary is the generic one, as for the refund cap.
+        const msg = num ? `Choose a listing for room ${num}.` : 'Choose a listing for this room.';
+        throw new ApiError('Please check the highlighted fields.', { status: 400, fields: { [unitKey]: msg } });
+      }
       return [{ ...base, unit_id: unit.value }];
     },
   };

@@ -75,7 +75,7 @@ function receiptText(r) {
     ...charges,
     `Booking total: ${messaging.fmtPeso(r.total_amount)}`,
     ...adjustment,
-    `Remaining balance: ${messaging.fmtPeso(Math.max(0, Number(r.balance_after)))}`,
+    Number(r.balance_after) < 0 ? `Overpaid by: ${messaging.fmtPeso(-Number(r.balance_after))}` : `Remaining balance: ${messaging.fmtPeso(r.balance_after)}`,
     '',
     'Thank you for your payment!',
     '',

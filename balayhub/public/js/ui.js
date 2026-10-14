@@ -236,14 +236,20 @@ export function findReplacement(snap, doc = document) {
   return null;
 }
 
-// Watches 0 to 2000 ms (views redraw after their await) and puts focus where the person was working. While focus is still on the
-// old control it keeps waiting (the redraw has not happened). Never takes focus the person (or the view) has put on something else;
-// from 800 ms with no replacement it falls back to the page heading, and a replacement that shows up later still takes over.
-export function keepFocus(old, { refocusOld = true, stop = () => false, snap } = {}) {
+// Checks at these times after the action: dense at first, then every 500 ms to 10 s (a slow connection redraws late).
+export const FOCUS_WATCH_MS = 10000;
+export const FOCUS_CHECKS = [0, 40, 100, 200, 350, 500, 800, 1200, 1600, 2000];
+for (let ms = 2500; ms <= FOCUS_WATCH_MS; ms += 500) FOCUS_CHECKS.push(ms);
+
+// Watches up to FOCUS_WATCH_MS (views redraw after their await) and puts focus where the person was working. While focus is still on
+// the old control it keeps waiting (the redraw has not happened). Never takes focus the person (or the view) has put on something else;
+// from headingAfter ms with no replacement it falls back to the page heading (and to a new heading if a redraw replaced it), and a
+// replacement that shows up later still takes over.
+export function keepFocus(old, { refocusOld = true, stop = () => false, snap, headingAfter = 800 } = {}) {
   const taken = old?.tagName ? (snap || snapshotControl(old)) : null;
   let done = false;
   let heading = null;
-  [0, 40, 100, 200, 350, 500, 800, 1200, 1600, 2000].forEach((ms) => setTimeout(() => {
+  FOCUS_CHECKS.forEach((ms) => setTimeout(() => {
     if (done) return;
     if (stop()) { done = true; return; }
     const a = document.activeElement;
@@ -255,9 +261,9 @@ export function keepFocus(old, { refocusOld = true, stop = () => false, snap } =
     }
     const next = findReplacement(taken);
     if (next && !next.disabled) { done = true; next.focus(); return; }
-    if (ms >= 800 && a !== heading) {
-      heading = document.querySelector('h1');
-      if (heading) { heading.setAttribute('tabindex', '-1'); heading.focus(); }
+    if (ms >= headingAfter) {
+      const h1 = document.querySelector('#app h1') || document.querySelector('h1');
+      if (h1 && a !== h1) { heading = h1; h1.setAttribute('tabindex', '-1'); h1.focus(); }
     }
   }, ms));
 }
@@ -277,7 +283,7 @@ if (typeof document !== 'undefined' && typeof document.addEventListener === 'fun
 // ---------------------------------------------------------------- modal
 export function openModal({ title, body, onClose, wide }) {
   const opener = document.activeElement;
-  const openerSnap = opener?.tagName && opener !== document.body ? snapshotControl(opener) : null;
+  const openerSnap = opener?.tagName && opener !== document.body && opener.isConnected !== false ? snapshotControl(opener) : null;
   const dlg = h('dialog', { class: 'modal', 'aria-label': title });
   if (wide) dlg.classList.add('modal--wide');
   const close = () => dlg.close();
@@ -285,7 +291,7 @@ export function openModal({ title, body, onClose, wide }) {
     h('div', { class: 'modal__head' }, h('h2', null, title), h('button', { class: 'modal__close', type: 'button', 'aria-label': 'Close', onclick: close }, '×')),
     h('div', { class: 'modal__body' }, body),
   );
-  dlg.addEventListener('close', () => { dlg.remove(); onClose?.(); if (openerSnap) keepFocus(opener, { snap: openerSnap }); });
+  dlg.addEventListener('close', () => { dlg.remove(); onClose?.(); if (openerSnap) keepFocus(opener, { snap: openerSnap }); else keepFocus(null, { headingAfter: 0 }); });
   dlg.addEventListener('click', (e) => { if (e.target === dlg) close(); });
   document.body.append(dlg);
   dlg.showModal();

@@ -38,6 +38,12 @@ function shortWhen(ts) {
     : { timeZone: 'Asia/Manila', month: 'short', day: 'numeric' });
 }
 
+// "1 week" wakes at 9 AM Manila, seven days after today's Manila date (built the same way as "Tomorrow 9 AM").
+export function weekLater(now = new Date()) {
+  const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date(now.getTime() + 7 * 86400000));
+  return new Date(`${day}T09:00:00+08:00`);
+}
+
 function stayLabel(c) {
   const today = todayManila();
   if (c.booking_status === 'cancelled') return badge('voided', 'Cancelled');
@@ -202,7 +208,7 @@ async function renderThread(pane, id, { status, back, rerender }) {
       ['3 hours', new Date(Date.now() + 3 * 3600000)],
       ['Tomorrow 9 AM', new Date(`${new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(tomorrow)}T09:00:00+08:00`)],
       ['Day before check-in', new Date(`${c.check_in}T09:00:00+08:00`)],
-      ['1 week', new Date(Date.now() + 7 * 86400000)],
+      ['1 week', weekLater()],
     ].map(([t, d]) => [t, new Date(d.getTime() - 86400000 * (t === 'Day before check-in' ? 1 : 0))]).filter(([, d]) => d > new Date());
     const m = openModal({
       title: 'Snooze until…',
@@ -383,6 +389,12 @@ export function insertBelow(typed, templateBody) {
   return next.length > 10000 ? null : next;
 }
 
+// The subject a template puts in: it fills an empty subject, or replaces the one an earlier template put in
+// (`filled`). A subject the host typed stays.
+export function nextSubject(current, filled, templateSubject) {
+  return !current.trim() || current === filled ? templateSubject : current;
+}
+
 function composer(c, templates, status, rerender, assignees = []) {
   const draftKey = `bh-draft:msg:${c.conversation_id}`;
   const modeKey = `bh-draft:mode:${c.conversation_id}`;
@@ -414,6 +426,10 @@ function composer(c, templates, status, rerender, assignees = []) {
   const subjKey = `bh-draft:subj:${c.conversation_id}`;
   try { subject.value = sessionStorage.getItem(subjKey) || ''; } catch { /* ignore */ }
   subject.addEventListener('input', () => { try { sessionStorage.setItem(subjKey, subject.value); } catch { /* ignore */ } });
+  // The subject the last template filled in. A later template replaces it, but never a subject the host typed.
+  const subjTplKey = `bh-draft:subjtpl:${c.conversation_id}`;
+  let filledSubject = null;
+  try { filledSubject = sessionStorage.getItem(subjTplKey); } catch { /* ignore */ }
 
   const tplSelect = h('select', {
     class: 'input input--sm', 'aria-label': 'Insert template',
@@ -428,7 +444,12 @@ function composer(c, templates, status, rerender, assignees = []) {
         if (next === null) { toast('Adding this template would go over the 10,000-character limit.', 'error'); return; }
         if (body.value.trim()) toast('Template added below your message.');
         body.value = next;
-        if (!subject.value.trim()) subject.value = r.subject;
+        const subjectNext = nextSubject(subject.value, filledSubject, r.subject);
+        if (subjectNext !== subject.value) {
+          subject.value = subjectNext;
+          filledSubject = subjectNext;
+          try { sessionStorage.setItem(subjTplKey, subjectNext); } catch { /* ignore */ }
+        }
         body.dispatchEvent(new Event('input'));
         subject.dispatchEvent(new Event('input'));
         body.focus();
@@ -463,8 +484,9 @@ function composer(c, templates, status, rerender, assignees = []) {
     try { sessionStorage.setItem(modeKey, k); } catch { /* ignore */ }
     [...modeTabs.children].forEach((b, i) => b.setAttribute('aria-pressed', String(i === (k === 'note' ? 1 : 0))));
     form.classList.toggle('composer--note', mode === 'note');
-    // Guest templates don't belong in a staff note, so the template picker is only offered for a guest message.
+    // Guest templates and AI drafts don't belong in a staff note, so both are only offered for a guest message.
     tplSelect.hidden = mode === 'note';
+    if (aiBtn) aiBtn.hidden = mode === 'note';
     sendBtn.textContent = mode === 'note' ? 'Save note' : 'Send';
     if (mode !== 'note') picker.close();
     body.placeholder = mode === 'note' ? 'Only your team sees notes.' : `Write to ${c.guest_name}…`;
@@ -503,7 +525,7 @@ function composer(c, templates, status, rerender, assignees = []) {
           if (scheduleFor) payload.send_at = scheduleFor.toISOString();
         }
         const r = await post(`/inbox/${c.conversation_id}/messages`, payload);
-        try { sessionStorage.removeItem(draftKey); sessionStorage.removeItem(modeKey); sessionStorage.removeItem(subjKey); } catch { /* ignore */ }
+        try { sessionStorage.removeItem(draftKey); sessionStorage.removeItem(modeKey); sessionStorage.removeItem(subjKey); sessionStorage.removeItem(subjTplKey); } catch { /* ignore */ }
         if (r.message.status === 'failed') toast(`Saved, but the email was not sent: ${r.message.error}`, 'error');
         else if (r.mentions.length) toast(`Note saved. ${r.mentions.map((x) => x.full_name).join(', ')} mentioned.`);
         else toast({ note: 'Note saved.', scheduled: `Scheduled for ${fmtDateTime(r.message.scheduled_at)}.`, sent: 'Sent.' }[r.message.status] || 'Saved.');
@@ -593,9 +615,9 @@ export async function inboxSettingsView(el, { rerender }) {
     title: t ? 'Edit template' : 'New template',
     submitText: 'Save template',
     fields: [
-      field({ name: 'name', label: 'Template name', required: true, value: t?.name, maxlength: 80 }),
-      field({ name: 'subject', label: 'Email subject', required: true, value: t?.subject, maxlength: 200 }),
-      field({ name: 'body', label: 'Message', type: 'textarea', required: true, value: t?.body, maxlength: 5000 }),
+      field({ name: 'name', label: 'Template name', required: true, value: t?.name, maxlength: 80, hint: 'Up to 80 characters.' }),
+      field({ name: 'subject', label: 'Email subject', required: true, value: t?.subject, maxlength: 200, hint: 'Up to 200 characters.' }),
+      field({ name: 'body', label: 'Message', type: 'textarea', required: true, value: t?.body, maxlength: 5000, hint: 'Up to 5,000 characters.' }),
       h('div', { class: 'hint' }, 'You can use these and they are filled in for each guest: ',
         variables.map((v) => h('code', { class: 'var' }, `{{${v}}}`))),
     ],

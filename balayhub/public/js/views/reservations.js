@@ -39,6 +39,11 @@ function nightsNote(q) {
 export function overpaid(balance) {
   return Math.max(0, Math.round(-Number(balance) * 100) / 100);
 }
+// The receipt's last line: a negative balance_after is shown as what the guest overpaid, never clamped to 0.
+export function receiptBalanceLine(balanceAfter) {
+  const n = Number(balanceAfter);
+  return n < 0 ? ['Overpaid by', peso(-n)] : ['Remaining balance', peso(n)];
+}
 // The line at the top of the payment dialog. Exactly 0 is settled; below 0 the guest is still overpaid after any refunds.
 export function paymentInfo(balance, total, feeNote = '') {
   if (Number(balance) < 0) return `Guest overpaid by ${peso(overpaid(balance))}.`;
@@ -136,6 +141,7 @@ const VIEWS = [
 function syncChannelFee(form, switched) {
   const direct = form.elements.channel.value === 'direct';
   if (switched && direct) form.elements.channel_fee.value = '';
+  if (switched && !direct && form.elements.source) form.elements.source.value = '';
   form.querySelector('[data-field=channel_fee]').hidden = direct;
   const src = form.querySelector('[data-field=source]');
   if (src) src.hidden = !direct;
@@ -768,7 +774,7 @@ export async function receiptView(el, { params }) {
         h('dt', null, 'For'), h('dd', null, `${r.unit_name}, ${fmtDate(r.check_in)} – ${fmtDate(r.check_out)} (booking ${r.confirmation_code})`),
         h('dt', null, 'Booking total'), h('dd', null, peso(r.total_amount)),
         Number(r.adjustments) > 0 && [h('dt', null, 'Adjustments (settled through the booking channel)'), h('dd', null, `-${peso(r.adjustments)}`)],
-        h('dt', null, 'Remaining balance'), h('dd', null, peso(Math.max(0, Number(r.balance_after)))),
+        receiptBalanceLine(r.balance_after).map((t, i) => h(i ? 'dd' : 'dt', null, t)),
         h('dt', null, 'Received by'), h('dd', null, r.recorded_by_name || '—')),
       h('p', { class: 'muted small', style: { marginTop: '18px' } }, 'This is an acknowledgement receipt for your records, not a BIR official receipt.')));
 }

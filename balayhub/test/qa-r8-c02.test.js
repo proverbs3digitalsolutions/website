@@ -71,6 +71,10 @@ test('a booking-page save names only what changed, and the PayMongo key never ap
   const text = JSON.stringify(rows.at(-1).details);
   assert.ok(!text.includes('c02auditKEY') && !text.includes('1234') && !text.includes('sk_'), text);
 
+  // Turning the page on needs a bookable listing first (C06, K4).
+  const prop = (await owner.post('/api/properties', { property_name: 'Azure', property_type: 'condominium', address: 'Bicutan Ave', city: 'Parañaque', province: 'Metro Manila' })).data.property;
+  await owner.post(`/api/properties/${prop.property_id}/units`, { unit_name: 'Paris 1208', unit_type: 'studio', nightly_rate: '2500', bookable_online: true });
+
   // Turning the page on names the switch (and the address it creates, since there was none yet).
   assert.equal((await owner.patch('/api/direct-booking', { enabled: true })).status, 200);
   rows = await rowsFor('direct_booking.settings_changed');

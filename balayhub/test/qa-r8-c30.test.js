@@ -130,7 +130,7 @@ test('"Tell your manager." is said to cleaners only', async () => {
 // Source-level rules the handler test cannot reach.
 test('the rows carry the owner-and-manager flag from the role check, and the save still posts the same request', () => {
   assert.match(src, /askFirst: canManage\(\)/);
-  assert.match(src, /const \{ skipped \} = await post\(`\/cleaning-tasks\/\$\{task\.task_id\}\/supplies`, \{ items \}\);/);
+  assert.match(src, /const \{ skipped, short: shortfall = \[\] \} = await post\(`\/cleaning-tasks\/\$\{task\.task_id\}\/supplies`, \{ items \}\);/);
   assert.match(src, /\.\.\.\(isCleaner\(\) \? \[T\('Tell your manager\.'\)\] : \[\]\)/);
   assert.ok(src.includes("T('{name} was out of stock, so it wasn\\'t recorded.', { name })"), 'the skipped-item line keeps its wording');
 });

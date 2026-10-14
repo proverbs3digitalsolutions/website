@@ -166,7 +166,7 @@ test('(h) restoreTabFocus keeps polling until the new tablist and its tab exist'
   fresh.tabs = mk('Status', 3).tabs.map((x) => ({ ...x, focus() { doc.activeElement = this; } }));
   assert.equal(restore(old, 1, old.tabs[1], doc, 0), true);
   assert.equal(doc.activeElement, fresh.tabs[1]);
-  assert.match(appSrc, /for \(const ms of \[0, 40, 100, 200, 350, 500, 800, 1200, 1600, 2000\]\) setTimeout/);
+  assert.match(appSrc, /for \(const ms of FOCUS_CHECKS\) setTimeout/); // r11: same schedule as keepFocus, to 10 s
 });
 
 test('(i) makeForm check hook runs in the quick pass, before onSubmit, and never replaces a required message', () => {

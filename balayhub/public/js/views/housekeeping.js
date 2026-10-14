@@ -45,6 +45,7 @@ extendTranslations({
   'Enter a quantity for at least one item.': 'Maglagay ng dami sa kahit isang gamit.', 'Supplies saved.': 'Na-save ang supplies.',
   'Quantity must be a whole number.': 'Dapat buong bilang ang dami.', 'Quantity can\'t be negative.': 'Hindi puwedeng negatibo ang dami.',
   '{name} was out of stock, so it wasn\'t recorded.': 'Ubos na ang {name}, kaya hindi ito na-record.', 'Tell your manager.': 'Sabihan ang manager mo.',
+  'Only {recorded} of {name} {verb} on hand, so {count} {verb} recorded.': '{recorded} lang ng {name} ang nasa stock, kaya {count} ang na-record.',
   'Title': 'Pamagat', 'What needs fixing?': 'Ano ang kailangang ayusin?', 'Priority': 'Prayoridad',
   'Low': 'Mababa', 'Medium': 'Katamtaman', 'High': 'Mataas', 'Urgent': 'Madalian',
   'Send to host': 'Ipadala sa host', 'Sent to the host. Thank you.': 'Naipadala na sa host. Salamat.',
@@ -263,6 +264,12 @@ export function canReopen(t, role) {
 // Cleaner pay opens for owners and managers only: routeaccess.js blocks staff, and cleaners never see it.
 export function canOpenCleanerPay(role) {
   return role === 'owner' || role === 'manager';
+}
+
+// The Cleaner pay card's line while a clean has no amount (#33): the owner's own finished clean reads "Done by you, no pay", as Cleaner pay does; any other reads "Pay not set".
+export function payText(t, viewer) {
+  const own = viewer?.role === 'owner' && t.status === 'done' && t.completed_by === viewer.user_id;
+  return own && t.pay_amount == null ? 'Done by you, no pay' : 'Pay not set. Use Set pay.';
 }
 
 // Attach a photo to a record just created. A failed upload never loses the record.
@@ -581,23 +588,29 @@ async function suppliesModal(task, onSaved) {
         // Cancel returns false: the form stays open and nothing is recorded.
         if (!await confirmDialog({ title: 'Not enough on hand', text: `You asked to record ${asked} used. On hand is ${onHand}, so only that much is logged as used, and on hand goes to 0.`, confirmText: 'Record what is on hand' })) return false;
       }
-      const { skipped } = await post(`/cleaning-tasks/${task.task_id}/supplies`, { items });
+      const { skipped, short: shortfall = [] } = await post(`/cleaning-tasks/${task.task_id}/supplies`, { items });
+      // A partial shortfall (#34) is named the way a zero stock is: what was on hand and what was recorded.
+      const problems = [
+        ...shortfall.map((s) => { const n = Number(s.recorded); return T('Only {recorded} of {name} {verb} on hand, so {count} {verb} recorded.', { recorded: qtyLabel(n, s.unit_label), name: s.name, count: n, verb: n === 1 ? 'was' : 'were' }); }),
+        ...skipped.map((name) => T('{name} was out of stock, so it wasn\'t recorded.', { name })),
+      ];
       // Only cleaners are told to tell their manager.
-      toast(skipped.length ? [...skipped.map((name) => T('{name} was out of stock, so it wasn\'t recorded.', { name })), ...(isCleaner() ? [T('Tell your manager.')] : [])].join(' ') : T('Supplies saved.'), skipped.length ? 'error' : 'info');
+      toast(problems.length ? [...problems, ...(isCleaner() ? [T('Tell your manager.')] : [])].join(' ') : T('Supplies saved.'), problems.length ? 'error' : 'info');
       onSaved();
     },
   });
 }
 
+// An owner or manager is the host, so their repair goes onto their own Maintenance list, not to a host (#36).
 function workOrderModal(task, onSaved) {
   formModal({
-    title: T('Something broken?'), submitText: T('Send to host'),
+    title: T('Something broken?'), submitText: canManage() ? 'Log repair' : T('Send to host'),
     fields: [
       field({ name: 'title', label: T('Title'), required: true, maxlength: 150, placeholder: 'e.g. Aircon is leaking' }),
       field({ name: 'description', label: T('What needs fixing?'), type: 'textarea', maxlength: 1000 }),
       field({ name: 'priority', label: T('Priority'), type: 'select', value: 'medium', placeholderOption: false, options: PRIORITIES.map(([k, l]) => [k, T(l)]) }),
     ],
-    onSubmit: async (d) => { await post(`/cleaning-tasks/${task.task_id}/work-order`, d); toast(T('Sent to the host. Thank you.')); onSaved(); },
+    onSubmit: async (d) => { await post(`/cleaning-tasks/${task.task_id}/work-order`, d); toast(canManage() ? 'Repair logged. It\'s on your Maintenance list.' : T('Sent to the host. Thank you.')); onSaved(); },
   });
 }
 
@@ -701,7 +714,7 @@ export async function housekeepingDetailView(el, { params, rerender }) {
   const payCard = isManager
     ? (t.status === 'done' || t.pay_amount != null) && h('div', { class: 'card' },
       h('div', { class: 'card__head' }, h('h2', null, 'Cleaner pay'), t.pay_status && badge(t.pay_status === 'paid' ? 'paid' : 'unpaid', t.pay_status === 'paid' ? 'Paid' : 'Unpaid')),
-      h('p', null, t.pay_amount != null ? h('strong', null, peso(t.pay_amount)) : h('span', { class: 'muted' }, 'Pay not set. Use Set pay.')),
+      h('p', null, t.pay_amount != null ? h('strong', null, peso(t.pay_amount)) : h('span', { class: 'muted' }, payText(t, state.user))),
       t.pay_status !== 'paid' && h('button', { class: 'btn btn--secondary', onclick: () => payModal(t, rerender) }, t.pay_amount != null ? 'Edit pay' : 'Set pay'))
     : t.pay_amount != null && h('div', { class: 'card' },
       h('div', { class: 'card__head' }, h('h2', null, T('Your pay for this clean')), badge(t.pay_status === 'paid' ? 'paid' : 'unpaid', T(t.pay_status === 'paid' ? 'Paid' : 'Not paid yet'))),

@@ -104,8 +104,8 @@ export async function guestCheckinView(el, { params }, kept) {
   // House rules: shown when the listing has some; the box is required until they were accepted once.
   const rules = String(s.house_rules || '').trim();
   const rulesAt = s.rules_accepted_at;
-  const initial = r?.guests?.length ? r.guests : Array.from({ length: Math.max(0, (s.num_guests || 1) - 1) }, () => '');
-  initial.forEach((g) => addGuest(g));
+  // No blank row to start with: a solo guest submits as is, and "+ Add guest" adds one.
+  (r?.guests || []).forEach((g) => addGuest(g));
   // After a language switch the guest may have added rows: make as many as were there before the values go back.
   for (let n = kept?.snap?.guest?.length || 0; others.children.length < n && others.children.length + 1 < s.guests_allowed;) addGuest();
 

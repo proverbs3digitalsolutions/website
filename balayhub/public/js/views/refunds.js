@@ -17,11 +17,11 @@ export function suggestionText(s, cancelled) {
   return `${lead}: ${peso(s.amount)} (${s.percent}%). ${s.rule}.${done}`;
 }
 
-// What the guest would owe again after this refund. The balance already counts refunds, so only a refund past the overpayment on a live stay leaves money owed; a booking that already owes is not asked. A cancelled booking owes nothing (D-77).
+// What the guest would owe after this refund, so the host is asked first. The balance already counts refunds: any refund that leaves the balance above 0 on a live stay is asked, including a paid-up stay (D-86). A cancelled booking owes nothing (D-77).
 export function refundOwedAfter(reservation, amount) {
   if (reservation.status === 'cancelled') return 0;
   const before = Number(reservation.balance); const typed = Number(amount);
-  if (!Number.isFinite(typed) || !(before < 0)) return 0;
+  if (!Number.isFinite(typed)) return 0;
   const after = Math.round((before + typed) * 100) / 100;
   return after > 0 ? after : 0;
 }
@@ -55,9 +55,16 @@ export async function refundsCard(reservation, rerender) {
       // Check the cap first, so no question is asked about a save that cannot succeed. Cancel returns false: nothing is posted and the form stays open with no message.
       const amount = parseAmount(d.amount);
       const tooMuch = refundCapProblem(amount, data);
-      if (tooMuch) throw new ApiError(tooMuch, { status: 400, fields: { amount: tooMuch } });
+      // The sentence shows once, at the field; the banner only points to it.
+      if (tooMuch) throw new ApiError('Please check the highlighted fields.', { status: 400, fields: { amount: tooMuch } });
       const owed = refundOwedAfter(reservation, amount);
-      if (owed > 0 && !await confirmDialog({ title: 'Refund more than the overpayment?', text: `The guest overpaid by ${peso(-Number(reservation.balance))}. After this ${peso(amount)} refund they will owe ${peso(owed)}. Record it?`, confirmText: 'Record refund' })) return false;
+      if (owed > 0) {
+        const over = Number(reservation.balance) < 0;
+        const ok = await confirmDialog(over
+          ? { title: 'Refund more than the overpayment?', text: `The guest overpaid by ${peso(-Number(reservation.balance))}. After this ${peso(amount)} refund they will owe ${peso(owed)}. Record it?`, confirmText: 'Record refund' }
+          : { title: 'Refund leaves money owed?', text: `After this ${peso(amount)} refund the guest will owe ${peso(owed)}. Record it?`, confirmText: 'Record refund' });
+        if (!ok) return false;
+      }
       await post(`/reservations/${reservation.booking_id}/refunds`, d, { idempotencyKey }); toast('Refund recorded.'); rerender();
     },
   });

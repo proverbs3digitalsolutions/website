@@ -202,7 +202,7 @@ export async function propertyDetailView(el, { params, query, rerender }) {
     return h('li', null, h('div', { class: 'row' },
       h('div', { class: 'row__main' },
         h('span', { class: 'row__title' }, unitLabel(u.unit_name), ' ', !(stayOnly && ['vacant', 'occupied'].includes(u.occupancy_status)) && badge(u.occupancy_status)),
-        h('span', { class: 'row__sub' }, `${label(u.unit_type)}${stayOnly ? '' : ` · ${peso(u.monthly_rent)}/month`}${Number(u.security_deposit_amount) ? ` · deposit ${peso(u.security_deposit_amount)}` : ''}`),
+        h('span', { class: 'row__sub' }, `${label(u.unit_type)}${stayOnly ? '' : u.lease_rent == null ? ` · ${peso(u.monthly_rent)}/month` : ` · ${peso(u.lease_rent)}/month (lease)${Number(u.lease_rent) !== Number(u.monthly_rent) ? ` · listed ${peso(u.monthly_rent)}` : ''}`}${Number(u.security_deposit_amount) ? ` · deposit ${peso(u.security_deposit_amount)}` : ''}`),
         u.tenant_name && h('span', { class: 'row__sub' }, 'Tenant: ', h('a', { href: `#/tenants/${u.tenant_id}` }, u.tenant_name))),
       h('div', { class: 'row__end' }, h('div', { class: 'chips' }, actions))));
   };
@@ -264,7 +264,7 @@ export async function propertyDetailView(el, { params, query, rerender }) {
       h('div', { class: 'stat' }, h('div', { class: 'stat__label' }, 'Units'), h('div', { class: 'stat__value' }, active.length)),
       !stayOnly && h('div', { class: 'stat' }, h('div', { class: 'stat__label' }, 'Occupied'), h('div', { class: 'stat__value' }, occupied)),
       !stayOnly && h('div', { class: 'stat' }, h('div', { class: 'stat__label' }, 'Vacant'), h('div', { class: 'stat__value' }, active.filter((u) => u.occupancy_status === 'vacant').length)),
-      !stayOnly && h('a', { class: 'stat', href: `#/rent?property_id=${property.property_id}&status=outstanding` }, h('div', { class: 'stat__label' }, 'Rent roll'), h('div', { class: 'stat__value' }, peso(active.filter((u) => u.occupancy_status === 'occupied').reduce((s, u) => s + Number(u.monthly_rent), 0))), h('div', { class: 'stat__sub' }, 'Monthly rent from occupied units'))),
+      !stayOnly && h('a', { class: 'stat', href: `#/rent?property_id=${property.property_id}&status=outstanding` }, h('div', { class: 'stat__label' }, 'Rent roll'), h('div', { class: 'stat__value' }, peso(active.filter((u) => u.occupancy_status === 'occupied').reduce((s, u) => s + Number(u.lease_rent ?? u.monthly_rent), 0))), h('div', { class: 'stat__sub' }, 'Monthly rent from current leases'))),
     h('div', { class: 'card' },
       h('div', { class: 'card__head' }, h('h2', null, 'Units')),
       unitBar,

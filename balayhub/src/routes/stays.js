@@ -364,7 +364,8 @@ router.get('/reservations/quote', ah(async (req, res) => {
   const byType = !req.query.unit_id && req.query.room_type;
   const room = byType ? { property_id: uuidParam(req.query.property_id), room_type: String(req.query.room_type).slice(0, 40), check_in: ci, check_out: co } : null;
   const unit = byType ? null : await loadUnit(req.user, uuidParam(req.query.unit_id));
-  if (!isValidDate(ci) || !isValidDate(co) || co <= ci) throw validationError({ check_out: 'Check-out must be after check-in.' });
+  validate({ check_in: ci, check_out: co }, { check_in: { type: 'date', required: true, label: 'Check-in' }, check_out: { type: 'date', required: true, label: 'Check-out' } });
+  if (co <= ci) throw validationError({ check_out: 'Check-out must be after check-in.' });
   if (nightsBetween(ci, co) > 366) throw validationError({ check_out: 'Stays are limited to one year.' });
   const picked = byType ? await pickListing(req.user, room) : unit;
   const q = await quote(picked.unit_id, ci, co);
@@ -413,6 +414,9 @@ function checkDates(body) {
   if (body.check_out <= body.check_in) throw validationError({ check_out: 'Check-out must be after check-in.' });
   if (nightsBetween(body.check_in, body.check_out) > 366) throw validationError({ check_out: 'Stays are limited to one year.' });
 }
+
+// For validate()'s `check` option: the order rule joins the other field errors in one 400.
+const orderCheck = (b) => (b.check_in && b.check_out && b.check_out <= b.check_in ? { check_out: 'Check-out must be after check-in.' } : null);
 
 function checkStay(body, unit) {
   checkDates(body);
@@ -560,7 +564,7 @@ async function cancelBooking(user, booking, reason, { db = { query }, action = '
 }
 
 router.post('/reservations', managers, ah(async (req, res) => {
-  const body = validate(req.body, reservationSpec);
+  const body = validate(req.body, reservationSpec, { check: orderCheck });
   checkListingChoice(body);
   const unit = body.unit_id ? await loadUnit(req.user, body.unit_id) : await pickListing(req.user, body);
   if (unit.status !== 'active' || unit.property_status !== 'active') throw new HttpError(409, 'This listing is archived.', { code: 'ARCHIVED' });
@@ -580,6 +584,9 @@ router.post('/reservations', managers, ah(async (req, res) => {
   checkChannelFee({ ...body, accommodation_total: accommodation, cleaning_fee: body.cleaning_fee ?? unit.cleaning_fee });
   try {
     const id = await tx(async (db) => {
+      // Lock the unit row, then re-check for a lease: a lease created at the same instant waits for this booking.
+      await db.query('SELECT 1 FROM units WHERE unit_id = $1 FOR UPDATE', [unit.unit_id]);
+      await assertStayAllowed(req.user, unit.unit_id, body.check_in, body.check_out, db);
       const guestId = await resolveGuest(db, req.user, body);
       const b = await insertReservation(db, req.user, unit, body, { guestId, accommodation });
       // Claim the "on booking" automation now, so it can't also send the confirmation.
@@ -603,7 +610,7 @@ router.patch('/reservations/:id', managers, ah(async (req, res) => {
     num_guests: reservationSpec.num_guests, channel: reservationSpec.channel, accommodation_total: reservationSpec.accommodation_total,
     cleaning_fee: reservationSpec.cleaning_fee, other_fees: reservationSpec.other_fees, channel_fee: reservationSpec.channel_fee, notes: reservationSpec.notes,
     source: reservationSpec.source,
-  }, { partial: true });
+  }, { partial: true, check: orderCheck });
   // A blank fee means 0, the same as unit edits. A blank accommodation total is refused: a blank there is more likely a slip than a free stay.
   if ('accommodation_total' in body && body.accommodation_total === null) {
     throw validationError({ accommodation_total: 'Accommodation total is required. Type 0 for a free stay.' });
@@ -621,7 +628,8 @@ router.patch('/reservations/:id', managers, ah(async (req, res) => {
   const unit = await loadUnit(req.user, merged.unit_id);
   checkStay(merged, unit);
   // Only a move (other listing or other dates) is checked; notes, guests and fees stay editable.
-  if (['unit_id', 'check_in', 'check_out'].some((k) => k in body && String(body[k]) !== String(booking[k]))) {
+  const moved = ['unit_id', 'check_in', 'check_out'].some((k) => k in body && String(body[k]) !== String(booking[k]));
+  if (moved) {
     await assertStayAllowed(req.user, merged.unit_id, merged.check_in, merged.check_out);
   }
   // Only values that really change are written and audited (money compares by amount: '2000' is '2000.00').
@@ -634,6 +642,10 @@ router.patch('/reservations/:id', managers, ah(async (req, res) => {
   if (keys.includes('source') || keys.includes('channel')) checkSource(merged.channel, merged.source);
   try {
     await tx(async (db) => {
+      if (moved) {
+        await db.query('SELECT 1 FROM units WHERE unit_id = $1 FOR UPDATE', [merged.unit_id]);
+        await assertStayAllowed(req.user, merged.unit_id, merged.check_in, merged.check_out, db);
+      }
       await db.query(`UPDATE bookings SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')}, updated_at = now() WHERE booking_id = $1`,
         [booking.booking_id, ...keys.map((k) => body[k])]);
       await audit(db, req.user, 'reservation.updated', 'booking', booking.booking_id, {

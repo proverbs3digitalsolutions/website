@@ -28,7 +28,7 @@ export async function lostFoundView(el, { query = {} } = {}) {
       title: 'Add lost item', submitText: 'Save item',
       fields: [
         field({ name: 'unit_id', label: 'Listing', type: 'select', required: true, options: listings.map((l) => [l.unit_id, `${unitLabel(l.unit_name)} · ${l.property_name}`]) }),
-        field({ name: 'description', label: 'What is it', required: true, maxlength: 300, placeholder: 'e.g. Blue umbrella' }),
+        field({ name: 'description', label: 'Item', required: true, maxlength: 300, placeholder: 'e.g. Blue umbrella' }),
         field({ name: 'found_where', label: 'Where found', maxlength: 200, placeholder: 'e.g. Lobby, under the sofa' }),
         field({ name: 'found_on', label: 'Date found', type: 'date', value: todayManila() }),
       ],

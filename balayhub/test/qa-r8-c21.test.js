@@ -31,5 +31,5 @@ test('K4: Book direct goes through t() and has a Taglish entry', () => {
 });
 
 test('K5: the not-available card says why', () => {
-  assert.ok(src.includes(`t("This place isn't taking online bookings right now.")`));
+  assert.ok(src.includes(`t("This listing is not available. It may have been removed, or it isn't open for online booking.")`));
 });

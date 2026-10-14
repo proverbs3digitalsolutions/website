@@ -136,8 +136,9 @@ async function performance(user, { from, to }, f = {}) {
     net: m2(u.acc + u.fees - u.chFees - u.expenses),
   }));
   const channels = [...byChannel.values()].sort((a, b) => b.acc + b.fees - (a.acc + a.fees)).map((c) => ({ channel: c.channel, label: c.label, ...fmt(c), avg_stay: c.stays ? Math.round((10 * c.stayNights) / c.stays) / 10 : 0 }));
-  const tot = [...byUnit.values()].reduce((a, u) => ({ nights: a.nights + u.nights, acc: a.acc + u.acc, fees: a.fees + u.fees, chFees: a.chFees + u.chFees, stays: a.stays + u.stays, cancelled: a.cancelled + u.cancelled, capacity: a.capacity + u.capacity, expenses: a.expenses + u.expenses }),
-    { nights: 0, acc: 0, fees: 0, chFees: 0, stays: 0, cancelled: 0, capacity: 0, expenses: 0 });
+  // capNights and capAcc: nights and accommodation of listings that have capacity, the only figures occupancy and RevPAR are measured against.
+  const tot = [...byUnit.values()].reduce((a, u) => ({ nights: a.nights + u.nights, capNights: a.capNights + (u.capacity ? u.nights : 0), capAcc: a.capAcc + (u.capacity ? u.acc : 0), acc: a.acc + u.acc, fees: a.fees + u.fees, chFees: a.chFees + u.chFees, stays: a.stays + u.stays, cancelled: a.cancelled + u.cancelled, capacity: a.capacity + u.capacity, expenses: a.expenses + u.expenses }),
+    { nights: 0, capNights: 0, capAcc: 0, acc: 0, fees: 0, chFees: 0, stays: 0, cancelled: 0, capacity: 0, expenses: 0 });
   const totalExpenses = tot.expenses + propertyExpenses;
   const revenue = tot.acc + tot.fees;
   return {
@@ -145,8 +146,8 @@ async function performance(user, { from, to }, f = {}) {
     totals: {
       revenue: m2(revenue), accommodation: m2(tot.acc), fees: m2(tot.fees), channel_fees: m2(tot.chFees), expenses: m2(totalExpenses),
       net: m2(revenue - tot.chFees - totalExpenses), nights: tot.nights, stays: tot.stays, cancelled: tot.cancelled,
-      occupancy: tot.capacity ? Math.round((100 * tot.nights) / tot.capacity) : 0,
-      adr: tot.nights ? m2(tot.acc / tot.nights) : '0.00', revpar: tot.capacity ? m2(tot.acc / tot.capacity) : '0.00',
+      occupancy: tot.capacity ? Math.round((100 * tot.capNights) / tot.capacity) : 0,
+      adr: tot.nights ? m2(tot.acc / tot.nights) : '0.00', revpar: tot.capacity ? m2(tot.capAcc / tot.capacity) : '0.00',
       avg_stay: tot.stays ? Math.round((10 * stayNights) / tot.stays) / 10 : 0,
     },
     channels, units,

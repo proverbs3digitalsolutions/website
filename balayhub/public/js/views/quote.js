@@ -12,7 +12,7 @@ extendTranslations({
   'Please enter a valid email address.': 'Maglagay ng tamang email address.',
   'Your quote': 'Quote mo',
   'Quote from {host}': 'Quote mula kay {host}',
-  'Accommodation': 'Tirahan',
+  'Accommodation': 'Tuluyan',
   'Discount': 'Discount',
   'Add-ons': 'Mga add-on',
   'Total': 'Kabuuan',

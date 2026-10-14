@@ -1,7 +1,7 @@
 // Daily close: an end-of-day checklist for owners and managers (D-72).
 
 import { get, post, qs } from '../api.js';
-import { h, peso, fmtDate, fmtDateTime, field, formModal, emptyState, toast, todayManila } from '../ui.js';
+import { h, peso, fmtDate, fmtDateTime, field, formModal, emptyState, toast, todayManila, confirmDialog } from '../ui.js';
 import { addDays } from './reservations.js';
 
 const METHOD = { cash: 'Cash', bank_transfer: 'Bank transfer', gcash: 'GCash', maya: 'Maya', card: 'Card', channel_payout: 'Channel payout', other: 'Other' };
@@ -63,17 +63,24 @@ export async function dailyCloseView(el, { query, rerender }) {
   const closeDay = () => formModal({
     title: closed ? 'Update the daily close' : 'Close the day', submitText: closed ? 'Update close' : 'Close the day',
     fields: [
+      !closed && h('p', { class: 'muted small' }, `Closing saves this checklist as the record for ${fmtDate(date)}. You can reopen it later.`),
       h('p', { class: 'muted small' }, `${fmtDate(date)}. ${open ? `${open} item${open === 1 ? ' is' : 's are'} still open. They are saved in the close so you can see them later.` : 'Everything on the checklist is clear.'}`),
       field({ name: 'note', label: 'Note (optional)', type: 'textarea', value: closed?.note || '', maxlength: 1000, placeholder: 'Anything the next shift should know' }),
     ],
     onSubmit: async (d) => { await post('/daily-close', { date, note: d.note }); toast(closed ? 'Close updated.' : 'Day closed.'); rerender(); },
   });
 
+  const reopen = async (e) => {
+    if (!await confirmDialog({ title: `Reopen ${fmtDate(date)}?`, text: `The saved close (by ${closed.closed_by_name || 'a team member'}, ${fmtDateTime(closed.closed_at)}) is removed. You can close the day again.`, confirmText: 'Reopen day' })) return;
+    e.target.disabled = true;
+    try { await post('/daily-close/reopen', { date }); toast('Day reopened.'); rerender(); } catch (err) { toast(err.message, 'error'); e.target.disabled = false; }
+  };
+
   const closes = hist.closes;
   el.replaceChildren(
     h('div', { class: 'page-head' },
       h('div', { class: 'page-head__title' }, h('h1', null, 'Daily close'), h('p', null, 'Check the day is wrapped up, then close it')),
-      h('div', { class: 'page-head__actions' }, picker, h('button', { class: 'btn btn--primary', onclick: closeDay }, closed ? 'Update close' : 'Close the day'))),
+      h('div', { class: 'page-head__actions' }, picker, closed && h('button', { class: 'btn btn--secondary', onclick: reopen }, 'Reopen day'), h('button', { class: 'btn btn--primary', onclick: closeDay }, closed ? 'Update close' : 'Close the day'))),
     message && h('div', { class: 'alert alert--warn', id: 'dc-date-msg', role: 'alert' }, message),
     closed
       ? h('div', { class: 'alert alert--ok', role: 'status' }, `Closed ${fmtDateTime(closed.closed_at)} by ${closed.closed_by_name || 'a team member'}${closed.note ? `: ${closed.note}` : ''}`)

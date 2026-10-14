@@ -116,6 +116,7 @@ test('updating an existing close says "Close updated."; a first close still says
       'export const field = () => ({});',
       'export const formModal = (opts) => { globalThis.__c06Modal = opts; };',
       'export const emptyState = () => ({});',
+      'export const confirmDialog = async () => true;',
       'export const toast = (m) => { globalThis.__c06Toasts.push(m); };',
       "export const todayManila = () => '2026-10-14';",
     ].join('\n'));
@@ -132,7 +133,7 @@ test('updating an existing close says "Close updated."; a first close still says
       const el = { nodes: [], replaceChildren(...nodes) { this.nodes = nodes; } };
       await dailyclose.dailyCloseView(el, { query: {}, rerender() {} });
       let button = null;
-      for (const n of el.nodes) walk(n, (x) => { if (!button && x.tag === 'button') button = x; });
+      for (const n of el.nodes) walk(n, (x) => { if (x.tag === 'button' && /btn--primary/.test(x.attrs.class || '')) button = x; });
       assert.ok(button, 'the page has the close button');
       button.attrs.onclick();
       await globalThis.__c06Modal.onSubmit({ note: '' });

@@ -225,6 +225,8 @@ router.post('/leases', managers, ah(async (req, res) => {
   if (unit.availability === 'unavailable') throw new HttpError(409, 'This unit is marked unavailable. Change its availability first.', { code: 'UNIT_UNAVAILABLE' });
   try {
     const lease = await tx(async (db) => {
+      // Lock the unit so a stay created at the same instant waits and is then checked against this lease.
+      await db.query('SELECT unit_id FROM units WHERE unit_id = $1 FOR UPDATE', [unit.unit_id]);
       const stays = await stayClashes(unit.unit_id, body.start_date, body.end_date || null, db);
       if (stays.length) throw leaseOverStays(stays);
       const { rows: [l] } = await db.query(
@@ -281,6 +283,7 @@ router.patch('/leases/:id', managers, ah(async (req, res) => {
     // An end date moved later, or cleared, must not run the lease over booked stays.
     const curEnd = cur.end_date && String(cur.end_date).slice(0, 10);
     if (keys.includes('end_date') && curEnd && (!body.end_date || body.end_date > curEnd)) {
+      await db.query('SELECT unit_id FROM units WHERE unit_id = $1 FOR UPDATE', [cur.unit_id]);
       const stays = await stayClashes(cur.unit_id, String(cur.start_date).slice(0, 10), body.end_date || null, db);
       if (stays.length) throw leaseOverStays(stays);
     }

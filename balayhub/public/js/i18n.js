@@ -55,7 +55,7 @@ const TL = {
   '{n} nights': '{n} gabi',
   '1 night': '1 gabi',
   'Cleaning fee': 'Cleaning fee',
-  '{pct}% deposit': '{pct}% deposit',
+  '{pct}% deposit': '{pct}% na deposit',
   '{now} now, {rest} due by {date}': '{now} ngayon, {rest} bayaran hanggang {date}',
   'Sorry, these dates are no longer available.': 'Pasensya na, hindi na available ang mga petsang ito.',
   'Guests': 'Guests',
@@ -105,7 +105,8 @@ const TL = {
   'This booking was cancelled.': 'Na-cancel ang booking na ito.',
   'Thank you! Nothing more to pay. See you soon.': 'Salamat po! Wala nang babayaran. Kita-kits!',
   'GCash, Maya, cards and GrabPay. You get an email receipt.': 'GCash, Maya, card at GrabPay. May email receipt ka.',
-  'Online payment is not available for this booking. Please contact your host.': 'Hindi puwedeng magbayad online para sa booking na ito. Paki-contact ang host mo.',
+  'Online payment is not available for this booking. Please contact your host.': 'Hindi available ang online payment para sa booking na ito. Kontakin ang iyong host.',
+  "Online payment isn't available right now. Please try again in a few minutes, or contact the host.": 'Hindi available ang online payment ngayon. Subukan ulit pagkalipas ng ilang minuto, o kontakin ang host.',
   // check-in form
   'Hi {name}! Please register before you arrive': 'Hi {name}! Paki-register bago ka dumating',
   'Guest registration': 'Guest registration',

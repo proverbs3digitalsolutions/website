@@ -67,6 +67,7 @@ test.before(async () => {
     'export const formModal = () => {};',
     'export const emptyState = () => ({});',
     'export const toast = () => {};',
+    'export const confirmDialog = () => {};',
     "export const todayManila = () => '2026-10-14';",
   ].join('\n'));
   // The real addDays, copied from reservations.js so the test cannot drift from it.

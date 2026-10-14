@@ -65,6 +65,14 @@ async function assignedIds(user) {
 
 // The checklist sections for one day, scoped to the caller. Money stays as strings.
 async function checklist(user, date) {
+  // A past day lists what was true at the end of that day (K3), so a stay checked in or a clean done the next
+  // morning still shows. Today and tomorrow use current status. Cancelled cleanings carry no time, so they stay out.
+  const past = date < manilaToday();
+  const onDay = (col) => `(${col} AT TIME ZONE 'Asia/Manila')::date > $1::date`;
+  const stayOpen = (inCol, outCol) => (past
+    ? `b.status IN ('confirmed', 'cancelled') AND (b.status = 'confirmed' OR ${onDay('b.cancelled_at')}) AND (${outCol} IS NULL OR ${onDay(outCol)})`
+    : `b.status = 'confirmed' AND ${outCol} IS NULL`);
+  const cleanOpen = past ? `(t.status IN ('todo', 'in_progress') OR (t.status = 'done' AND ${onDay('t.completed_at')}))` : "t.status IN ('todo', 'in_progress')";
   const cutoff = new Date(Date.now() - STALE_MS);
   const [arrivals, departures, cleanings, payByMethod, payTotal, balances, proofs, damage, feeds, conflicts] = await Promise.all([
     scopedRows(user, [date], (where) => `
@@ -73,7 +81,7 @@ async function checklist(user, date) {
         JOIN units u ON u.unit_id = b.unit_id
         JOIN properties p ON p.property_id = u.property_id
         LEFT JOIN guests g ON g.guest_id = b.guest_id
-       WHERE b.kind = 'reservation' AND b.status = 'confirmed' AND b.checked_in_at IS NULL
+       WHERE b.kind = 'reservation' AND ${stayOpen('b.check_in', 'b.checked_in_at')}
          AND b.check_in = $1::date AND ${where}
        ORDER BY u.unit_name`),
     scopedRows(user, [date], (where) => `
@@ -82,7 +90,7 @@ async function checklist(user, date) {
         JOIN units u ON u.unit_id = b.unit_id
         JOIN properties p ON p.property_id = u.property_id
         LEFT JOIN guests g ON g.guest_id = b.guest_id
-       WHERE b.kind = 'reservation' AND b.status = 'confirmed' AND b.checked_out_at IS NULL
+       WHERE b.kind = 'reservation' AND ${stayOpen('b.check_out', 'b.checked_out_at')}
          AND b.check_out = $1::date AND ${where}
        ORDER BY u.unit_name`),
     scopedRows(user, [date], (where) => `
@@ -91,7 +99,7 @@ async function checklist(user, date) {
         JOIN units u ON u.unit_id = t.unit_id
         JOIN properties p ON p.property_id = u.property_id
         LEFT JOIN users au ON au.user_id = t.assigned_to
-       WHERE t.status IN ('todo', 'in_progress') AND t.due_date <= $1::date AND ${where}
+       WHERE ${cleanOpen} AND t.due_date <= $1::date AND ${where}
        ORDER BY t.due_date, u.unit_name`),
     scopedRows(user, [date], (where) => `
       SELECT bp.payment_method AS method, COUNT(*)::int AS count, SUM(bp.amount)::numeric(12,2)::text AS total
@@ -255,6 +263,27 @@ router.post('/daily-close', managers, ah(async (req, res) => {
   res.json({
     closed: { close_date: saved.close_date, closed_at: saved.closed_at, closed_by_name: user.full_name, note: saved.note, summary: saved.summary },
   });
+}));
+
+// Removes a stored close so the day can be closed again. An owner may reopen any close; a manager only one
+// that covers just their properties (the same rule as replacing it in POST /daily-close).
+router.post('/daily-close/reopen', managers, ah(async (req, res) => {
+  const { date } = validate(req.body, { date: { type: 'date', required: true, label: 'Date' } });
+  const user = req.user;
+  const mine = await assignedIds(user);
+  await tx(async (db) => {
+    const { rows: [row] } = await db.query(
+      'SELECT close_id, note, closed_by, closed_at, property_ids::text[] AS property_ids, summary FROM daily_closes WHERE organization_id = $1 AND close_date = $2::date FOR UPDATE',
+      [user.organization_id, date],
+    );
+    if (!row) throw new HttpError(404, 'This day is not closed.', { code: 'NOT_FOUND' });
+    if (!isOwner(user) && !(row.property_ids.length > 0 && row.property_ids.every((id) => mine.includes(id)))) {
+      throw new HttpError(409, 'This day was already closed for more properties than you manage. Only an owner can change that close.', { code: 'ALREADY_CLOSED' });
+    }
+    await db.query('DELETE FROM daily_closes WHERE close_id = $1', [row.close_id]);
+    await audit(db, user, 'daily_close.reopened', 'daily_close', row.close_id, { date, counts: row.summary?.counts, note: row.note, closed_by: row.closed_by, closed_at: row.closed_at, property_ids: row.property_ids, summary: row.summary });
+  });
+  res.json({ closed: null });
 }));
 
 router.get('/daily-closes', managers, ah(async (req, res) => {
