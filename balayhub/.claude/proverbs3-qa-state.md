@@ -82,3 +82,4 @@
 - 2026-10-14: Founder: start round 6 as soon as round 5 is committed (round 5 re-verify R1-R8 + D01 running).
 - R5: owner portal nav check NOT done: minting a local sign-in token was refused by the permission check (creates a usable login credential). Carried to round 6 / founder: allow it, or check the portal on the live site with a real invite.
 - R6 carry: setup page (#/setup) is English-only; after a Taglish Get started the phone message shows in English.
+- R6 carry: pay page money format: list/limit show whole pesos ('₱500'), server limit text shows '₱500.00' (only on a race). Default: keep page convention (whole pesos); align server text if cheap.
