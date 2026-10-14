@@ -5,7 +5,7 @@
 
 const express = require('express');
 const config = require('../config');
-const { one, query } = require('../db');
+const { one, query, tx } = require('../db');
 const { HttpError, ah } = require('../lib/http');
 const { validate } = require('../lib/validate');
 const { audit } = require('../lib/audit');
@@ -33,10 +33,15 @@ router.post('/auth/change-password', requireAuth, pwLimiter, ah(async (req, res)
     const hint = u.google_sub ? ' If you signed up with Google and never set a password, log out and use "Forgot password" to set one.' : '';
     throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { current_password: `That's not your current password.${hint}` } });
   }
-  await query('UPDATE users SET password_hash = $2 WHERE user_id = $1', [req.user.user_id, await hashPassword(body.new_password)]);
-  // Sign out every other device; keep this one.
-  await query('DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2', [req.user.user_id, req.user.token_hash]);
-  await query(`UPDATE auth_tokens SET used_at = now() WHERE user_id = $1 AND purpose = 'reset_password' AND used_at IS NULL`, [req.user.user_id]);
+  const passwordHash = await hashPassword(body.new_password);
+  // Change the password, sign out every other device, and retire open reset links, all in one transaction.
+  // Same per-user lock as the reset route, so a reset and this change can't deadlock.
+  await tx(async (db) => {
+    await db.query(`SELECT pg_advisory_xact_lock(hashtext('reset:' || $1))`, [req.user.user_id]);
+    await db.query('UPDATE users SET password_hash = $2 WHERE user_id = $1', [req.user.user_id, passwordHash]);
+    await db.query('DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2', [req.user.user_id, req.user.token_hash]);
+    await db.query(`UPDATE auth_tokens SET used_at = now() WHERE user_id = $1 AND purpose = 'reset_password' AND used_at IS NULL`, [req.user.user_id]);
+  });
   await audit(null, req.user, 'auth.password_changed', 'user', req.user.user_id);
   await sendMail({
     to: req.user.email,

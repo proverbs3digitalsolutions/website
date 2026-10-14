@@ -556,7 +556,7 @@ Spec: `docs/specs/PHASE-4-GUESTS.md`. Decisions D-57 to D-64. Both the English a
 - A switch between English and Taglish. Sections without a Taglish version show English.
 - Wi-Fi and door code appear as cards with a Copy button, only inside the window. Outside it, a note says "For your safety, the Wi-Fi password and door code appear the day before check-in."
 - After check-out day, the page says the stay has ended and hides both codes.
-- A link that doesn't work (wrong, cancelled, or outside its period) shows "Guidebook not available" with a note to ask the host for a new link.
+- A link that doesn't work (wrong or cancelled) shows "Guidebook not available" with a note to ask the host for a new link. Before the window opens, the page says "Your guidebook opens on <date>. Come back then; this same link will work." (D-78). After the window it says the stay has ended.
 
 ### 13.4 Pay page: add-ons before arrival (changes to 6.4)
 
@@ -716,3 +716,17 @@ Spec: `docs/specs/PHASE-5-PRICING-TEAM.md`. Decisions D-66 to D-74. Staff and cl
 - **Guest check-in:** the heading changes after check-in; the form stays editable until check-out. Guest error pages have a heading by cause.
 - **Gate pass:** the header drops a repeat of the property name or city.
 - **Sign-up band:** the smallest plan reads "1–2 units".
+
+## 16. QA round 3 flow changes (2026-10-14)
+
+- **New and edit reservation:** the channel fee box shows only when Booked through is not Direct. Switching to Direct clears it. A direct booking that already carries a fee shows a warning on its page ("Direct bookings don't have one, so the guest is asked for the full amount"); the Edit dialog says that saving removes the stored fee. On a channel booking, blanking the fee does nothing; type 0.
+- **Cancelled booking alert:** with no cancellation policy it reads "No cancellation policy is set, so no refund is suggested. See the Refunds card." A Custom policy says it has no automatic suggestion.
+- **Groups, add rooms:** a room count outside 1 to 20 shows "Count must be between 1 and 20." and nothing is sent. A blank date says "Enter the check-in and check-out dates." A backwards pair says "Check-out must be after check-in." A price of 0 is refused. A clash reads "Only N <type> rooms are free on these dates (you asked for M). Nothing was saved."
+- **Guest pay page:** if the screenshot is refused, the guest can choose a different file and send again (the saved details are withdrawn first). The host is told only after the screenshot is saved.
+- **Owner statements:** the banner counts only drafts for months that have ended. "Send to owner" is disabled with "Add an email for this owner first." when there is no email.
+- **Stay reports:** an invalid month shows "That month isn't valid. Showing <Month YYYY>." and the month box shows the month used. An empty source reads "Not tagged".
+- **Filters:** a backwards date range turns that date filter off entirely and shows "The end date is before the start date. This date filter is off until you fix it." Reports with a custom range and no dates asks for both dates.
+- **Add and Edit listing:** a lowest price above the usual nightly price asks "Save anyway?" first. Cancel keeps the form open.
+- **Property detail:** a short-term workspace sees no Assign Tenant, monthly rent, Rent roll, Occupied/Vacant, lease-ending filter or monthly rent field in the unit editor.
+- **Profit and loss:** a note says cancelled stays are left out.
+- **Phones:** the Ask button is in the top bar (below 960px) instead of floating over the page. The reservations list shows Total and Balance next to the dates and hides Channel and Code.

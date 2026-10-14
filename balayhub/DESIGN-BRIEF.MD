@@ -459,6 +459,16 @@ Printable views are built from `.receipt` (with a 2px `--navy` rule under the he
 - **Scroll cues.** `.table-wrap` and `.tabs` show a faint edge fade only on the side where more content is hidden (`background-attachment: local` over `scroll`). Use it on any new wide table or tab strip.
 - **Focus ring token.** `--focus-ring` replaces the old translucent ring (see section 6).
 - **Muted text instead of opacity.** Cancelled messages use `var(--muted)` with a dashed border rather than `opacity`, so contrast holds. Mentions use `--teal-ink`; today's calendar day and the Airbnb bar colour were darkened for contrast.
-- **Compact Ask button on phones.** Below 560px the assistant button is a 48px icon-only circle (its `aria-label` stays), and the page gets extra bottom padding so it never covers the last line.
+- **Compact Ask button on phones (superseded in round 3: the Ask button is now in the top bar below 960px, see section 12).** Below 560px the assistant button is a 48px icon-only circle (its `aria-label` stays), and the page gets extra bottom padding so it never covers the last line.
 - **Stat values** no longer break mid-number: they stay on one line and the font shrinks (`clamp(1rem, 4.2vw, 1.45rem)`).
 - **Logo exemption.** The light-green "HUB" in the wordmark keeps its colour. WCAG exempts logo text from the contrast rule (founder question in BLOCKERS).
+
+## 12. Patterns added in QA round 3 (2026-10-14)
+
+- **Ask button in the top bar on phones.** Below 960px the assistant button is a 40px round icon button in the top bar (`.topbar__assist` slot, `.assist-fab--bar`), placed before the account avatar, with the same `aria-label`. It never floats over content. On desktop (960px and up) it stays a floating button. This supersedes the section 11 compact floating button.
+- **Table edge cue.** `.table-wrap` shows a real shade on the clipped edge while the box can still scroll, and it shows over solid cell backgrounds (the section 11 fade did not). Use it on any new wide table.
+- **Wrapping tabs.** At 560px and narrower, `.tabs` wrap onto as many lines as they need instead of scrolling, so every tab and chip shows.
+- **`.col-sm-hide`.** Put it on the header and cells of a low-priority column; it is hidden at 480px and narrower. The reservations list uses it for Channel and Code and shows Total and Balance right after the dates.
+- **Alerts wrap long words** (`overflow-wrap: anywhere`), so a long unbroken note can't push the page sideways.
+- **Focus clear of the bottom bar (WCAG 2.4.11).** Below 960px the page has bottom scroll padding the height of the bottom bar, and a small focus guard in the app shell scrolls a focused control up if the bar still covers it.
+- **Toolbars.** Children can shrink (`min-width: 0`), and selects go full width at 480px and narrower. The Get started sheet follows the phone sheet width at 560px and narrower.

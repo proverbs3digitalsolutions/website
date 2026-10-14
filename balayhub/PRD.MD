@@ -991,3 +991,5 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - Phase 5: fixed — a manager with no assigned properties can't open or save the daily close (D-75).
 - Phase 5: a mention in a note on a conversation with no reservation can only reach owners, because the property check has nothing to test.
 - Phase 5: notification settings let any team member choose among the properties they can see. The spec limited this to owners.
+- QA round 3: a channel fee exists only on channel bookings (D-78). Older direct bookings may still hold a stored fee; it is ignored for what the guest owes and still counted as a cost in reports until the founder decides.
+- QA round 3: the guidebook link shows "Your guidebook opens on <date>" before its 14-day window (D-57, D-78).

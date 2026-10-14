@@ -39,7 +39,7 @@ const TL = {
   'Later ›': 'Susunod ›',
   'Now choose your check-out date': 'Piliin na ang check-out date mo',
   'Choose your check-in date': 'Piliin ang check-in date mo',
-  'S M T W T F S': 'L L M M H B S',
+  'S M T W T F S': 'Lin Lun Mar Miy Huw Biy Sab',
   'Payment': 'Bayad',
   'Pay in full now': 'Bayaran nang buo ngayon',
   'Pay a {pct}% deposit now, the rest before check-in': '{pct}% deposit ngayon, ang natitira bago mag-check-in',

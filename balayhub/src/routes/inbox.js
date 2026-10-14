@@ -252,7 +252,7 @@ router.get('/inbox/:id', ah(async (req, res) => {
       WHERE m.conversation_id = $1 ORDER BY COALESCE(m.sent_at, m.scheduled_at, m.created_at), m.created_at`, [conv.conversation_id]);
   const booking = await one(
     `SELECT b.num_guests, b.total_amount,
-            (b.total_amount - b.channel_fee - COALESCE((SELECT SUM(amount) FROM booking_payments bp WHERE bp.booking_id = b.booking_id AND bp.voided_at IS NULL), 0))::numeric(12,2) AS balance,
+            (b.total_amount - CASE WHEN b.channel = 'direct' THEN 0 ELSE b.channel_fee END - COALESCE((SELECT SUM(amount) FROM booking_payments bp WHERE bp.booking_id = b.booking_id AND bp.voided_at IS NULL), 0))::numeric(12,2) AS balance,
             g.phone AS guest_phone
        FROM bookings b LEFT JOIN guests g ON g.guest_id = b.guest_id WHERE b.booking_id = $1`, [conv.booking_id]);
   if (conv.unread) await query('UPDATE conversations SET unread = false WHERE conversation_id = $1', [conv.conversation_id]);

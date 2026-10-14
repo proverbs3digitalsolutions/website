@@ -261,7 +261,7 @@ async function bookingContext(bookingId) {
             o.name AS workspace_name, o.paymongo_key_hint, o.manual_payments_enabled, o.guest_language, o.plan, o.trial_ends_at, o.paid_until, o.is_demo, o.deletion_scheduled_at,
             (SELECT full_name FROM users WHERE organization_id = b.organization_id AND role = 'owner' ORDER BY created_at LIMIT 1) AS owner_name,
             EXISTS (SELECT 1 FROM guest_reviews r WHERE r.booking_id = b.booking_id) AS reviewed,
-            (b.total_amount - b.channel_fee - COALESCE((SELECT SUM(amount) FROM booking_payments bp WHERE bp.booking_id = b.booking_id AND bp.voided_at IS NULL), 0))::numeric(12,2) AS balance
+            (b.total_amount - CASE WHEN b.channel = 'direct' THEN 0 ELSE b.channel_fee END - COALESCE((SELECT SUM(amount) FROM booking_payments bp WHERE bp.booking_id = b.booking_id AND bp.voided_at IS NULL), 0))::numeric(12,2) AS balance
        FROM bookings b
        JOIN units u ON u.unit_id = b.unit_id
        JOIN properties p ON p.property_id = u.property_id

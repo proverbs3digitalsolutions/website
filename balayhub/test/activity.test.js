@@ -146,12 +146,14 @@ test('deposits, damage, cleaning, lost and found and online bookings read from t
     [{ action: 'reservation.booked_online', details: { amount: '1000.00', pay_type: 'deposit' } }, 'booking', 'Booked online and paid ₱1,000.00 now'],
     [{ action: 'reservation.balance_paid_online', details: { amount: '500.00', booking_id: 'b' } }, 'payment', 'Paid ₱500.00 of the balance online'],
     [{ action: 'payment_proof.submitted', details: { booking_id: 'b', amount: '1000', method: 'gcash' } }, 'payment', 'Sent a payment proof of ₱1,000.00 by GCash'],
+    [{ action: 'payment_proof.withdrawn', details: { booking_id: 'b' } }, 'payment', 'Withdrew a payment proof'],
     [{ action: 'gatepass.sent', details: { to: 'ana@example.com', ok: false } }, 'guest', 'Could not send the gate pass by email'],
   ];
   for (const [row, kind, text] of cases) {
     assert.deepEqual(activity.describe(row), { kind, text }, row.action);
   }
   assert.equal(activity.whoOf({ action: 'reservation.booked_online', actor_name: null }), 'Guest');
+  assert.equal(activity.whoOf({ action: 'payment_proof.withdrawn', actor_name: null }), 'Guest', 'a guest withdrawing a proof is the Guest');
 });
 
 test('unknown actions read as a sentence; unsigned rows say who did them', () => {

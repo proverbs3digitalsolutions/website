@@ -106,3 +106,18 @@ Each one has the default already applied. None of them stops the work.
 - [ ] **Logo colour.** The light green "HUB" is hard to read on white. *Default: keep it (logos are exempt).*
 - [ ] **Sharing booking links.** `#/book/...` links show the home card; `/stay/...` links show the listing. *Default: no change; recommend sharing the `/stay/` address.*
 - [ ] **Check-in form after arrival.** *Default: editable until check-out; only the heading changes.*
+
+## Questions from QA round 3 (2026-10-14)
+
+Each one has the default already applied. None of them stops the work.
+
+- [ ] **Direct-booking channel fees already stored.** A channel fee is what Airbnb or Booking.com keeps. We now stop anyone typing one on a direct booking, and the guest is always asked for the full amount. Some existing direct bookings may already carry a fee. Should we clear them all in one go, or leave them for you to fix one by one? To count them on the server: `SELECT count(*) FROM bookings WHERE channel='direct' AND channel_fee > 0`. *Default: leave the stored numbers alone, ignore them for what the guest owes, and warn on each booking (any Edit save clears it). Profit and loss, owner statements and stay reports keep counting them as a cost until you answer.*
+- [ ] **Profit and loss and cancelled stays.** Money you kept from a cancelled stay, and any refund on it, is left out of profit and loss. The tax summary counts both because it follows the money. Should profit and loss count them too, in the month they happened? *Default: leave them out, and the page now says so. Counting them would also change owner statements.*
+- [ ] **Guidebook wording before the window opens.** A guest who opens the link more than 14 days before check-in now sees "Your guidebook opens on <date>". Is that the wording you want, or should the guidebook open earlier? *Default: show the opening date; the window stays 14 days before check-in to 2 days after check-out.*
+- [ ] **Lowest price above the usual price.** If the lowest price is higher than the usual nightly price, every night costs at least the lowest price. Should Add listing and Edit listing ask first? *Default: yes, they ask "Save anyway?" and Cancel keeps the form open.*
+- [ ] **Duplicate-email sign-up message.** Still open from round 1 ("Sign-up and taken emails" above, asked again). Keep the friendly "already registered" message, or use a neutral one? *Default: keep it.*
+- [ ] **Maintenance estimate of 0.** Is 0 a useful answer ("no cost expected"), or should it be refused like a 0 price? *Default: allowed; blank means no estimate yet.*
+- [ ] **Typed markup in names.** If someone types something like `<b>` into a tenant or vendor name, we store it as typed and show it as plain text. Fine, or should we remove such characters when saving? *Default: stored as typed and shown as text.*
+- [ ] **Free stays on manual reservations.** A group room can no longer be saved at 0, but a single manual reservation still can (for example a free stay for family). Keep that? *Default: keep it for single reservations.*
+- [ ] **Taglish check.** These drafts need a Taglish speaker to read them: "Nagamit o nadagdag", the guidebook line, and the 8-character password message. *Default: keep the drafts.*
+- [ ] **Blanking a channel fee on Edit.** On a channel booking, clearing the fee box does nothing; the host must type 0. Logged for round 4. *Default: leave as is.*

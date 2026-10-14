@@ -142,8 +142,8 @@ router.post('/bulk/prices', managers, ah(async (req, res) => {
   const body = validate(req.body, {
     ...targetSpec,
     action: { type: 'enum', values: PRICE_ACTIONS, required: true, label: 'Action' },
-    price: { type: 'money', positive: true, label: 'Nightly price' },
-    percent: { type: 'int', min: -90, max: 300, label: 'Change by' },
+    price: { type: 'money', positive: true, label: 'New price per night' },
+    percent: { type: 'int', min: -90, max: 300, label: 'Change (%)' },
   });
   checkTargets(body);
   if (body.action === 'set' && !body.price) throw validationError({ price: 'Enter the nightly price to set.' });

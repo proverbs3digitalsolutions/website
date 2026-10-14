@@ -7,7 +7,7 @@
 //
 // Field: { name, label, type: 'select' | 'date' | 'daterange' | 'number' | 'check', options: [[value, text]], all: 'All …' }
 // A daterange field uses `${name}_from` / `${name}_to` (or from/to keys given as `keys`).
-// A range that ends before it starts is flagged inline and never applied.
+// A range that ends before it starts is flagged inline and applies nothing: both of its dates are dropped until it is fixed.
 // initFilters() drops impossible dates and non-UUID ids before any page fetches.
 
 import { h, fmtDate } from './ui.js';
@@ -77,7 +77,7 @@ export function changed(values, defaults) {
 
 function rangeKeys(f) { return f.keys || [`${f.name}_from`, `${f.name}_to`]; }
 
-const BACKWARDS = 'The end date is before the start date.';
+const BACKWARDS = 'The end date is before the start date. This date filter is off until you fix it.';
 
 function control(f, values, emit, defaults = {}) {
   const id = `flt-${f.name}-${Math.random().toString(36).slice(2, 6)}`;
@@ -93,7 +93,8 @@ function control(f, values, emit, defaults = {}) {
     const from = h('input', { class: 'input', type: 'date', id, value: shownA || '', 'aria-label': `${f.label} from`, 'aria-describedby': errId });
     const to = h('input', { class: 'input', type: 'date', value: shownB || '', 'aria-label': `${f.label} to`, 'aria-describedby': errId });
     const err = h('div', { id: errId, role: 'alert', style: { color: 'var(--red)', fontSize: '.84rem', fontWeight: '650' } });
-    // Dates are YYYY-MM-DD, so string order is calendar order. A backwards range is flagged, never written.
+    // Dates are YYYY-MM-DD, so string order is calendar order. A backwards range is flagged and applies nothing: the
+    // side that was already applied drops back to its default too, so the list reloads without this range.
     // The message text is set only while the range is backwards, so the alert is empty otherwise.
     const check = () => {
       const bad = Boolean(from.value && to.value && to.value < from.value);
@@ -102,7 +103,11 @@ function control(f, values, emit, defaults = {}) {
       for (const input of [from, to]) { if (bad) input.setAttribute('aria-invalid', 'true'); else input.removeAttribute('aria-invalid'); }
       return bad;
     };
-    const apply = () => { if (!check()) { values[a] = from.value; values[b] = to.value; emit(); } };
+    const apply = () => {
+      if (check()) { values[a] = defaults[a] ?? ''; values[b] = defaults[b] ?? ''; }
+      else { values[a] = from.value; values[b] = to.value; }
+      emit();
+    };
     from.addEventListener('change', apply);
     to.addEventListener('change', apply);
     // From a shared link or an old saved filter: keep the dates on screen with the message, but do not apply them.

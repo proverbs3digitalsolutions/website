@@ -12,6 +12,7 @@ import { CHANNEL_LABEL, SOURCE_LABEL } from './reservations.js';
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const CATEGORY = { repairs: 'Repairs', utilities: 'Utilities', taxes: 'Taxes', insurance: 'Insurance', association_dues: 'Association dues', supplies: 'Supplies', salaries: 'Salaries', cleaning: 'Cleaning', other: 'Other' };
 const pct = (n) => (n === null || n === undefined ? '—' : `${n}%`);
+const monthName = (ym) => new Date(`${ym}-01T00:00:00Z`).toLocaleDateString('en-PH', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
 function stat(label, value, sub) {
   return h('div', { class: 'stat stat--flat' }, h('div', { class: 'stat__value' }, value), h('div', { class: 'stat__label' }, label), sub && h('div', { class: 'muted small' }, sub));
@@ -104,6 +105,7 @@ export async function stayReportsView(el, { query = {} }) {
   if (!filters.period && filters.year && !query.month) filters.period = 'year'; // old links: ?year=2026
   const periodBox = h('div', { class: 'chips' });
   const status = h('span', { class: 'muted small' });
+  const notice = h('div');
   const setPeriod = (patch) => { Object.assign(filters, patch); rememberFilters('stay-reports', filters); load(); };
 
   function drawPeriod() {
@@ -136,6 +138,9 @@ export async function stayReportsView(el, { query = {} }) {
     exportLink.href = `/api/stay-reports/export${apiQ}`;
     let r;
     try { r = await get(`/stay-reports${apiQ}`); } catch (err) { fail(err); return; }
+    // A month that isn't valid is replaced by the month used, here and in the month box, and the page says so.
+    if (r.month_invalid) { filters.month = r.period; drawPeriod(); setUrl(changed(filters, defaults)); }
+    notice.replaceChildren(r.month_invalid ? h('div', { class: 'alert alert--warn', role: 'alert' }, `That month isn't valid. Showing ${monthName(r.period)}.`) : '');
     if (r.partial && !status.textContent) status.textContent = 'Includes upcoming confirmed stays.';
     const t = r.totals;
     const narrowed = filters.property_id || filters.unit_id || filters.channel;
@@ -168,8 +173,9 @@ export async function stayReportsView(el, { query = {} }) {
       Array.isArray(r.by_source) && r.by_source.length > 0 && h('div', { class: 'card' }, h('h2', null, 'Direct bookings by source'),
         h('div', { class: 'table-wrap' }, h('table', { class: 'table table--compact' },
           h('thead', null, h('tr', null, ['Source', 'Stays', 'Nights', 'Booked total (check-in basis)'].map((x, i) => h('th', { class: i ? 'num' : null }, x)))),
-          h('tbody', null, r.by_source.map((s) => h('tr', null, h('td', null, s.source ? (SOURCE_LABEL[s.source] || s.source) : 'No source'),
-            h('td', { class: 'num' }, String(s.stays)), h('td', { class: 'num' }, String(s.nights)), h('td', { class: 'num' }, peso(s.revenue)))))))),
+          h('tbody', null, r.by_source.map((s) => h('tr', null, h('td', null, s.source ? (SOURCE_LABEL[s.source] || s.source) : 'Not tagged'),
+            h('td', { class: 'num' }, String(s.stays)), h('td', { class: 'num' }, String(s.nights)), h('td', { class: 'num' }, peso(s.revenue))))))),
+        r.by_source.some((s) => !s.source) && h('p', { class: 'muted small' }, 'Booked without a ?src= link, or entered by hand.')),
       h('div', { class: 'card card--flush' },
         h('div', { class: 'card__head', style: { padding: '16px 16px 0' } }, h('h2', null, 'By listing')),
         h('div', { class: 'table-wrap' }, h('table', { class: 'table table--compact' },
@@ -186,5 +192,5 @@ export async function stayReportsView(el, { query = {} }) {
     quick: scopeFields,
   });
   await load();
-  el.replaceChildren(pageHead({ title: 'Reports', sub: 'Short-term rentals', actions: exportLink }), tabs, bar, status, box);
+  el.replaceChildren(pageHead({ title: 'Reports', sub: 'Short-term rentals', actions: exportLink }), tabs, bar, status, notice, box);
 }

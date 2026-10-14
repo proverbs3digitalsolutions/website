@@ -39,7 +39,8 @@ function period(q) {
     if (daysBetween(q.from, q.to) > 731) throw validationError({ to: 'Choose up to two years.' });
     return { from: q.from, to: new Date(Date.parse(`${q.to}T00:00:00Z`) + 86400000).toISOString().slice(0, 10), label: `${q.from} to ${q.to}` };
   }
-  return period({ month: t.slice(0, 7) });
+  // A month that isn't a real YYYY-MM falls back to this month, and the answer says so (month_invalid).
+  return { ...period({ month: t.slice(0, 7) }), month_invalid: Boolean(q.month) };
 }
 
 // Report filters: property, listing and channel (validated; unknown values are ignored).
@@ -170,7 +171,7 @@ async function bySource(user, { from, to }, f = {}) {
 router.get('/stay-reports', managers, ah(async (req, res) => {
   const p = period(req.query);
   const f = reportFilters(req.query);
-  res.json({ period: p.label, ...(await performance(req.user, p, f)), by_source: await bySource(req.user, p, f) });
+  res.json({ period: p.label, month_invalid: Boolean(p.month_invalid), ...(await performance(req.user, p, f)), by_source: await bySource(req.user, p, f) });
 }));
 
 // Yearly income summary: per month, earned revenue, money received, channel fees, expenses.

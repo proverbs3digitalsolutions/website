@@ -78,7 +78,12 @@ async function createReport(user, { unit_id, booking_id = null, task_id = null }
      VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING report_id`,
     [user.organization_id, unit_id, booking_id, task_id, body.description, body.estimated_cost, user.user_id]);
   await audit(null, user, 'damage.reported', 'damage_report', r.report_id, { unit_id, booking_id, task_id, estimated_cost: body.estimated_cost });
-  return loadReport(user, r.report_id);
+  const report = await loadReport(user, r.report_id);
+  if (['owner', 'manager'].includes(user.role)) return report;
+  // Staff and cleaners get back the same fields the job detail shows them for their own reports (BACKEND-SCHEMA 6.1a).
+  // Photos are added in a second request, so a new report has none yet.
+  const { report_id, description, created_at, reported_by_name } = report;
+  return { report_id, description, created_at, reported_by_name, files: [] };
 }
 
 // From a cleaning task (the booking is the task's departing stay, if it has one).

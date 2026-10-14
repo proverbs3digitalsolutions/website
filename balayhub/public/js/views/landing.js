@@ -4,7 +4,7 @@
 import { get, post, ApiError } from '../api.js';
 import { h, brand, icon, toast, openModal } from '../ui.js';
 import { refreshUser, navigate, homeRoute, state, afterLogin } from '../app.js';
-import { t, initGuestLang, setGuestLang, guestLang, extendTranslations } from '../i18n.js';
+import { t, tServer, initGuestLang, setGuestLang, guestLang, extendTranslations } from '../i18n.js';
 import { themeSwitch } from '../themeswitch.js';
 
 extendTranslations({
@@ -167,6 +167,7 @@ extendTranslations({
   'Sign up with Google': 'Mag-sign up gamit ang Google',
   'Please fill in the highlighted fields.': 'Pakisagutan ang mga naka-highlight.',
   'Enter your first name.': 'Ilagay ang first name mo.', 'Enter your last name.': 'Ilagay ang last name mo.', 'Enter your business name.': 'Ilagay ang business name mo.',
+  'Password must be at least 8 characters.': 'Dapat hindi bababa sa 8 characters ang password.',
   'More than 10': 'Higit 10',
   'BalayHub is made for 1 to 10 units. For more, we\'ll set up a custom plan with you after your trial.': 'Para sa 1 hanggang 10 unit ang BalayHub. Kung higit pa, gagawa tayo ng custom plan pagkatapos ng trial mo.',
   // contact fallback, used when no contact email is set: visitors sign up, then ask in Help & support
@@ -278,6 +279,8 @@ function langMenu(onChange) {
 }
 
 // ---------------------------------------------------------------- "Get started" (3 steps)
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
 export function openGetStarted(preset = {}) {
   const data = { units_band: preset.units_band || null, business_type: 'short_term' };
   let step = data.units_band ? 2 : 1;
@@ -286,7 +289,7 @@ export function openGetStarted(preset = {}) {
   m.el.classList.add('gs-modal');
 
   const steps = () => h('ol', { class: 'gs-steps', 'aria-label': `${t('Step')} ${step} / 3` },
-    [1, 2, 3].map((n) => h('li', { class: n < step ? 'is-done' : n === step ? 'is-on' : '' }, h('span', null, String(n)), h('small', null, t('Step')))));
+    [1, 2, 3].map((n) => h('li', { class: n < step ? 'is-done' : n === step ? 'is-on' : '' }, h('span', null, String(n)))));
   const input = (name, label, attrs = {}) => h('div', { class: 'field', dataset: { field: name } },
     h('label', { for: `gs-${name}` }, label, attrs.required ? h('span', { class: 'req' }, ' *') : null),
     h('input', { class: 'input', id: `gs-${name}`, name, value: data[name] || '', ...attrs }),
@@ -339,6 +342,17 @@ export function openGetStarted(preset = {}) {
       const form = h('form', { class: 'form', novalidate: true, onsubmit: async (e) => {
         e.preventDefault(); read();
         showErrors({}); formError.replaceChildren();
+        // Email and password are checked here, so the banner only names fields that are on this sheet.
+        const errs = {};
+        if (!data.email) errs.email = tServer('Email is required.');
+        else if (!EMAIL_RE.test(data.email)) errs.email = tServer('Enter a valid email address.');
+        if (!data.password) errs.password = tServer('Password is required.');
+        else if (data.password.length < 8) errs.password = t('Password must be at least 8 characters.');
+        if (Object.keys(errs).length) {
+          showErrors(errs);
+          formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, Object.values(errs).join(' ')));
+          return;
+        }
         submit.disabled = true; submit.textContent = t('Creating your account…');
         try {
           const res = await post('/auth/signup', {
@@ -356,8 +370,13 @@ export function openGetStarted(preset = {}) {
           m.close();
           afterLogin();
         } catch (err) {
-          formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, err instanceof ApiError ? err.message : t('Please fill in the highlighted fields.')));
-          showErrors(err.fields);
+          // This sheet has no confirm-password box, so the server's confirm message is left out of the banner too.
+          const fields = { ...(err.fields || {}) };
+          delete fields.confirm_password;
+          let message = t('Please fill in the highlighted fields.');
+          if (err instanceof ApiError) message = err.code === 'VALIDATION' ? Object.values(fields).join(' ') || message : err.message;
+          formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, message));
+          showErrors(fields);
           submit.disabled = false; submit.textContent = t('Start my free trial');
         }
       } },

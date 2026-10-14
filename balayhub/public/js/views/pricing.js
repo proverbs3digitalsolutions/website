@@ -27,20 +27,32 @@ const prices = (s) => s.nightly_rate !== null || s.adjust_pct !== null;
 // Which season prices a shared night (D-66, D-76): a listing season beats an all-listings season on that listing;
 // within one scope the season that starts later wins, and on equal starts the one created later.
 // Returns the seasons that overlap `s` with who wins (`wins` is null when it is not a price clash). `on` names the
-// listing when the overlap is with an all-listings season, so it only touches that one listing.
+// listing when the overlap is with an all-listings season, so it only touches that one listing. `takeovers` names the
+// third seasons that beat both on some of the nights they share, so the winner does not win all of them.
+const beats = (a, b) => (Boolean(a.unit_id) !== Boolean(b.unit_id) ? Boolean(a.unit_id) : (a.start_date !== b.start_date ? a.start_date > b.start_date : a.created_at > b.created_at));
 export function seasonClashes(s, seasons) {
   return seasons.filter((o) => o !== s && o.start_date <= s.end_date && o.end_date >= s.start_date && (!s.unit_id || !o.unit_id || o.unit_id === s.unit_id))
     .map((o) => {
       const mixed = Boolean(s.unit_id) !== Boolean(o.unit_id);
       let wins = null;
+      let takeovers = [];
       if (prices(s) && prices(o)) {
-        if (mixed) wins = s.unit_id ? 'this' : 'other';
-        else wins = (s.start_date !== o.start_date ? s.start_date > o.start_date : s.created_at > o.created_at) ? 'this' : 'other';
+        wins = beats(s, o) ? 'this' : 'other';
+        const listing = s.unit_id || o.unit_id;
+        const from = s.start_date > o.start_date ? s.start_date : o.start_date;
+        const to = s.end_date < o.end_date ? s.end_date : o.end_date;
+        takeovers = seasons.filter((t) => t !== s && t !== o && prices(t) && (!t.unit_id || !listing || t.unit_id === listing)
+          && t.start_date <= to && t.end_date >= from && beats(t, s) && beats(t, o)).map((t) => t.name);
       }
-      return { name: o.name, on: mixed ? (s.unit_id ? s.unit_name : o.unit_name) : null, wins };
+      return { name: o.name, on: mixed ? (s.unit_id ? s.unit_name : o.unit_name) : null, wins, takeovers };
     });
 }
-export const clashText = (c) => `Overlaps ${c.name}${c.on ? ` on ${c.on}` : ''}${c.wins === 'this' ? ': this season wins the shared nights' : c.wins === 'other' ? `: ${c.name} wins the shared nights` : ''}.`;
+export const clashText = (c) => {
+  const head = `Overlaps ${c.name}${c.on ? ` on ${c.on}` : ''}`;
+  if (c.wins === null) return `${head}.`;
+  if (c.takeovers.length) return `${head}: ${c.wins === 'this' ? `this season beats ${c.name}` : `${c.name} beats this season`} on the nights they share, except where ${c.takeovers.join(' or ')} takes over.`;
+  return `${head}: ${c.wins === 'this' ? 'this season' : c.name} wins the shared nights.`;
+};
 const pctNum = (v) => (v === '' || v === undefined || v === null ? v : Number(v));
 
 export async function pricingView(el, { rerender }) {
@@ -71,7 +83,7 @@ export async function pricingView(el, { rerender }) {
       else body.adjust_pct = pctNum(body.adjust_pct);
       if (body.adjust_pct === '') delete body.adjust_pct;
       const { overlaps } = await post('/pricing/seasons', body);
-      const clash = overlaps.map((o) => `${o.name}${o.on ? ` on ${o.on}` : ''}${o.wins === 'new' ? ' (this season wins)' : o.wins === 'existing' ? ' (that one wins)' : ''}`);
+      const clash = overlaps.map((o) => `${o.name}${o.on ? ` on ${o.on}` : ''}`);
       toast(clash.length ? `Season saved. It overlaps ${clash.join(', ')}.` : 'Season saved.'); rerender();
     },
   }));
@@ -193,7 +205,7 @@ export async function pricingView(el, { rerender }) {
     h('div', { class: 'card' },
       h('div', { class: 'card__head' }, h('h2', null, 'Seasons')),
       seasons.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'table' },
-        h('thead', null, h('tr', null, ['Season', 'Nights', 'Listing', 'Price', 'Min. nights', ''].map((t) => h('th', null, t)))),
+        h('thead', null, h('tr', null, ['Season', 'Nights', 'Listing', 'Price', 'Min. nights'].map((t) => h('th', null, t)), h('th', null, h('span', { class: 'sr-only' }, 'Actions')))),
         h('tbody', null, seasons.map((s) => h('tr', null,
           h('td', null, s.name, seasonClashes(s, seasons).map((c) => h('div', { class: 'muted small' }, clashText(c)))),
           h('td', null, `${fmtDate(s.start_date)} – ${fmtDate(s.end_date)}`),

@@ -55,12 +55,13 @@ export function newPropertyModal({ onSaved } = {}) {
 }
 
 function unitFields(u = {}) {
+  const stayOnly = state.user.business_type === 'short_term';
   return [
     h('div', { class: 'form-row form-row--2' },
       field({ name: 'unit_name', label: 'Unit name or number', required: true, value: u.unit_name, placeholder: 'e.g. 101 or Room A', maxlength: 60 }),
       field({ name: 'unit_type', label: 'Unit type', type: 'select', required: true, value: u.unit_type, options: options(UNIT_TYPES) })),
-    h('div', { class: 'form-row form-row--2' },
-      field({ name: 'monthly_rent', label: 'Monthly rent', type: 'money', required: true, value: u.monthly_rent, placeholder: '8,000' }),
+    h('div', { class: stayOnly ? 'form-row' : 'form-row form-row--2' },
+      !stayOnly && field({ name: 'monthly_rent', label: 'Monthly rent', type: 'money', required: true, value: u.monthly_rent, placeholder: '8,000' }),
       field({ name: 'security_deposit_amount', label: 'Security deposit', type: 'money', value: u.security_deposit_amount, placeholder: '16,000' })),
     h('div', { class: 'form-row form-row--2' },
       field({ name: 'availability', label: 'Availability', type: 'select', value: u.availability || 'available', placeholderOption: false, options: [['available', 'Available to rent'], ['unavailable', 'Not available (renovation, owner use)']] }),
@@ -154,6 +155,7 @@ export async function propertyDetailView(el, { params, query, rerender }) {
   const role = state.user.role;
   const canManage = role !== 'staff';
   const isOwner = role === 'owner';
+  const stayOnly = state.user.business_type === 'short_term';
   const archived = property.status === 'archived';
   const active = units.filter((u) => u.status === 'active');
   const occupied = active.filter((u) => u.occupancy_status === 'occupied').length;
@@ -174,7 +176,7 @@ export async function propertyDetailView(el, { params, query, rerender }) {
   const unitRow = (u) => {
     const actions = [];
     if (canManage && u.status === 'active' && !archived) {
-      if (u.occupancy_status === 'vacant') actions.push(h('button', { class: 'btn btn--primary', onclick: () => assignTenantModal({ unit: { ...u, property_name: property.property_name }, onSaved: rerender }) }, 'Assign Tenant'));
+      if (!stayOnly && u.occupancy_status === 'vacant') actions.push(h('button', { class: 'btn btn--primary', onclick: () => assignTenantModal({ unit: { ...u, property_name: property.property_name }, onSaved: rerender }) }, 'Assign Tenant'));
       actions.push(h('button', { class: 'btn btn--ghost btn--sm', onclick: () => unitModal(property, u, rerender) }, 'Edit'));
       if (u.occupancy_status !== 'occupied') {
         actions.push(h('button', {
@@ -191,8 +193,8 @@ export async function propertyDetailView(el, { params, query, rerender }) {
     }
     return h('li', null, h('div', { class: 'row' },
       h('div', { class: 'row__main' },
-        h('span', { class: 'row__title' }, unitLabel(u.unit_name), ' ', badge(u.occupancy_status)),
-        h('span', { class: 'row__sub' }, `${label(u.unit_type)} · ${peso(u.monthly_rent)}/month${Number(u.security_deposit_amount) ? ` · deposit ${peso(u.security_deposit_amount)}` : ''}`),
+        h('span', { class: 'row__title' }, unitLabel(u.unit_name), ' ', !(stayOnly && ['vacant', 'occupied'].includes(u.occupancy_status)) && badge(u.occupancy_status)),
+        h('span', { class: 'row__sub' }, `${label(u.unit_type)}${stayOnly ? '' : ` · ${peso(u.monthly_rent)}/month`}${Number(u.security_deposit_amount) ? ` · deposit ${peso(u.security_deposit_amount)}` : ''}`),
         u.tenant_name && h('span', { class: 'row__sub' }, 'Tenant: ', h('a', { href: `#/tenants/${u.tenant_id}` }, u.tenant_name))),
       h('div', { class: 'row__end' }, h('div', { class: 'chips' }, actions))));
   };
@@ -226,9 +228,9 @@ export async function propertyDetailView(el, { params, query, rerender }) {
   }
   const unitBar = showUnitFilters && filterBar({
     key: 'property-units', values: uf, defaults: unitDefaults, onChange: renderUnits,
-    search: { name: 'uq', placeholder: 'Search unit or tenant' },
+    search: { name: 'uq', placeholder: stayOnly ? 'Search unit' : 'Search unit or tenant' },
     quick: [
-      { name: 'occupancy', label: 'Status', all: 'All units', options: [['vacant', 'Vacant'], ['occupied', 'Occupied'], ['ending', 'Lease ends within 60 days'], ['unavailable', 'Not available'], ['archived', 'Archived']] },
+      { name: 'occupancy', label: 'Status', all: 'All units', options: [...(stayOnly ? [] : [['vacant', 'Vacant'], ['occupied', 'Occupied'], ['ending', 'Lease ends within 60 days']]), ['unavailable', 'Not available'], ['archived', 'Archived']] },
     ],
     more: [
       { name: 'unit_type', label: 'Unit type', all: 'All types', options: UNIT_TYPES.map((t) => [t, label(t)]) },
@@ -252,9 +254,9 @@ export async function propertyDetailView(el, { params, query, rerender }) {
     archived && h('div', { class: 'alert alert--warn', style: { marginBottom: '16px' } }, 'This property is archived. Restore it to add units or tenants.'),
     h('div', { class: 'stats' },
       h('div', { class: 'stat' }, h('div', { class: 'stat__label' }, 'Units'), h('div', { class: 'stat__value' }, active.length)),
-      h('div', { class: 'stat' }, h('div', { class: 'stat__label' }, 'Occupied'), h('div', { class: 'stat__value' }, occupied)),
-      h('div', { class: 'stat' }, h('div', { class: 'stat__label' }, 'Vacant'), h('div', { class: 'stat__value' }, active.filter((u) => u.occupancy_status === 'vacant').length)),
-      h('a', { class: 'stat', href: `#/rent?property_id=${property.property_id}&status=outstanding` }, h('div', { class: 'stat__label' }, 'Rent roll'), h('div', { class: 'stat__value' }, peso(active.filter((u) => u.occupancy_status === 'occupied').reduce((s, u) => s + Number(u.monthly_rent), 0))), h('div', { class: 'stat__sub' }, 'list rent of occupied units'))),
+      !stayOnly && h('div', { class: 'stat' }, h('div', { class: 'stat__label' }, 'Occupied'), h('div', { class: 'stat__value' }, occupied)),
+      !stayOnly && h('div', { class: 'stat' }, h('div', { class: 'stat__label' }, 'Vacant'), h('div', { class: 'stat__value' }, active.filter((u) => u.occupancy_status === 'vacant').length)),
+      !stayOnly && h('a', { class: 'stat', href: `#/rent?property_id=${property.property_id}&status=outstanding` }, h('div', { class: 'stat__label' }, 'Rent roll'), h('div', { class: 'stat__value' }, peso(active.filter((u) => u.occupancy_status === 'occupied').reduce((s, u) => s + Number(u.monthly_rent), 0))), h('div', { class: 'stat__sub' }, 'list rent of occupied units'))),
     h('div', { class: 'card' },
       h('div', { class: 'card__head' }, h('h2', null, 'Units')),
       unitBar,

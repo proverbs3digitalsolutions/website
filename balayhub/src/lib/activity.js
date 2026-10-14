@@ -16,7 +16,7 @@ const CATEGORIES = {
 
 // Actions with no signed-in user are a guest's own actions. Any other unsigned action is automatic.
 const GUEST_ACTIONS = new Set([
-  'payment_proof.submitted', 'payment_proof.image_added', 'reservation.charge_added',
+  'payment_proof.submitted', 'payment_proof.image_added', 'payment_proof.withdrawn', 'reservation.charge_added',
   'reservation.booked_online', 'reservation.balance_paid_online',
 ]);
 
@@ -75,6 +75,7 @@ const PLAIN = {
   'reservation.receipt_sent': ['payment', 'Emailed the payment receipt to the guest'],
   'reservation.confirmation_sent': ['message', 'Emailed the booking confirmation to the guest'],
   'payment_proof.image_added': ['payment', 'Attached a screenshot to a payment proof'],
+  'payment_proof.withdrawn': ['payment', 'Withdrew a payment proof'],
   'checkin.link_replaced': ['guest', 'Replaced the guest check-in link'],
   'guide.link_shared': ['guest', 'Shared the guidebook link with the guest'],
   'quote.sent': ['message', 'Emailed the quote to the guest'],

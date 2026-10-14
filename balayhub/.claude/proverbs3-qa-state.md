@@ -55,3 +55,10 @@
 - R3 candidates: two different reset links used at the same instant can deadlock (500 instead of 400); take the per-user advisory lock first in the reset transaction (security re-check, Low, auth.js:258-267).
 - 2026-10-14: Round 2 COMMITTED af38514 and pushed. Full suite 951/951, security PASS, 7 re-verify lanes held (3 new findings fixed). local_clean_streak stays 0 (round 2 had findings). Next: round 3 local sweep from restored dev DB.
 - R3 notes: public lane created local test user qa2-public-1@balayhub.test (unverified, no workspace) — cleared by the next DB restore. BLOCKERS needs a founder question: sign-up with an existing email says 'An account with this email already exists' (reveals the account) — keep or make generic?
+- R4 candidates: money.js:63 drops the month filter silently for an invalid month; stays.js:1210 /stays/revenue silently uses current month for a bad month (C10 audit).
+- R4 candidates: on a channel booking, blanking the channel fee on Edit does nothing (PATCH treats blank money as not provided); host must type 0 (C05 note).
+- R4 candidates: ui.js openModal wide sets inline style.width; switch to a modal--wide class and drop the !important in the Get started phone rule (C07 note).
+- R4 candidates: proofs image upload can leave an orphan file on disk if audit/commit fails after saveFile (pre-existing, security Low); pending proofs with no screenshot still listed for host (consider label/hide).
+- R4 check: owner-portal nav now wraps (C07) — not browser-checked yet; tab rows wrap at all widths.
+- R4 candidates: property LIST page in short-term still shows 'N occupied · N vacant' badge and 'Has vacant units/Fully occupied' filter (C17 note).
+- 2026-10-14: Round 3 fixes done. Full suite 1107/1107, security PASS, 4 re-verify lanes held (3 follow-ups fixed). Committing.

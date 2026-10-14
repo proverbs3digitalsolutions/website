@@ -254,6 +254,13 @@ router.post('/auth/reset-password', authLimiter, ah(async (req, res) => {
   });
   const passwordHash = await hashPassword(body.password);
   await tx(async (db) => {
+    // Two reset links for one user used at the same moment would each lock its own token and then wait on
+    // the other. Take the same per-user lock sendReset uses, so the second one waits and then finds its link used.
+    const { rows: [peek] } = await db.query(
+      `SELECT user_id FROM auth_tokens WHERE token_hash = $1 AND purpose = 'reset_password'`,
+      [hashToken(body.token)],
+    );
+    if (peek) await db.query(`SELECT pg_advisory_xact_lock(hashtext('reset:' || $1))`, [peek.user_id]);
     const { rows: [row] } = await db.query(
       `UPDATE auth_tokens SET used_at = now()
         WHERE token_hash = $1 AND purpose = 'reset_password' AND used_at IS NULL AND expires_at > now()

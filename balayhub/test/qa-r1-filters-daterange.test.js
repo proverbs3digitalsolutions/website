@@ -11,7 +11,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
-const MSG = 'The end date is before the start date.';
+const MSG = 'The end date is before the start date. This date filter is off until you fix it.';
 const SAVED_KEY = 'bh-filters:1:reservations';
 
 // Just enough DOM for h(), ui.js and filters.js: elements, text, attributes, listeners.
@@ -94,8 +94,8 @@ test('a backwards range typed into the bar is flagged inline and not applied', (
 
   b.to.value = '2026-10-10';
   b.to.dispatch('change');
-  assert.equal(b.calls.n, 1, 'the backwards range does not reload the list');
-  assert.equal(values.from, '2026-10-20');
+  assert.equal(b.calls.n, 2, 'the list reloads without the backwards range');
+  assert.equal(values.from, '', 'the start date that was applied is dropped too');
   assert.equal(values.to, '', 'the end date is not written to the filters');
   assert.equal(JSON.parse(store.get(SAVED_KEY)).to, '', 'the end date is not remembered either');
 
@@ -116,7 +116,7 @@ test('correcting the pair clears the message and applies the range', () => {
 
   b.from.value = '2026-10-01';
   b.from.dispatch('change');
-  assert.equal(b.calls.n, 2);
+  assert.equal(b.calls.n, 3);
   assert.equal(values.from, '2026-10-01');
   assert.equal(values.to, '2026-10-10');
   assert.equal(b.alert().hidden, true);

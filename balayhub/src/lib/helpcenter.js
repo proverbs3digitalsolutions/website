@@ -30,25 +30,14 @@ const ARTICLES = [
     keywords: 'new update changes whats new what is new news release latest',
     body: [
       "Read the lines that match your role. Owners see everything. Managers see most of it, except owner-only settings. Staff see stays and check-ins without money details. Cleaners see only their own cleaning jobs, their own pay and the help pages.",
-      "Owners:",
-      "Owner portal: unit owners sign in with an emailed link to see their statements, payouts and bookings. See “Give unit owners their own portal”.",
-      "Fee types: percent of net (the default), percent of gross, or a flat monthly fee. See “Fee types: percent of net, percent of gross, or flat monthly”.",
-      "Owner statements: review the numbers, publish (which freezes them), then send. See “Owner statements (managing units for owners)”.",
-      "Payouts and the repairs reserve: record payouts and reserve top-ups and withdrawals. See “Record payouts and the repairs reserve”.",
-      "Profit and loss per unit, with a CSV download. See “Profit and loss per unit”.",
       "Cleaning and operations (owners and managers, and cleaners where it says so):",
-      "Cleaner role: cleaners sign in to a short menu and see only their own jobs and pay. Owners invite them. See “Invite a cleaner and what they can see”.",
-      "Damage reports: charge the guest, deduct from the deposit, or waive. Cleaners report damage from a job. See “Damage reports: charge the guest, deduct from deposit, or waive” and “Report damage from a cleaning job”.",
       "Cleaners see their own pay. See “See your pay”.",
-      "Supplies with par levels and low-stock alerts; cleaners record what they used. See “Supplies, par levels and low stock”.",
-      "Lost and found, and work orders raised from a cleaning job. See “Lost and found: log an item and return it” and “Raise a work order from a cleaning job”.",
       "Recurring maintenance, such as aircon cleaning every three months. See “Recurring maintenance, such as aircon cleaning every 3 months”.",
       "Earlier this week (everyone):",
       "My account page: your name, password, notifications and language in one place, with Log out always visible. See “Choose which alerts you get”.",
       "Help center and support tickets: search these articles, and follow a ticket from Received to Resolved. See “Contact support”.",
       "Filters on every list page. See “Getting started with BalayHub”.",
       "Light and dark mode. See “Dark mode and language”.",
-      "Launchpad setup checklist. See “Getting started with BalayHub”.",
       "Plan payments by PayMongo. See “Plans, free trial and paying for BalayHub”.",
       "Installable app and push notifications on your phone. See “Use BalayHub on your phone and get notifications”.",
       "Security deposits. See “Security deposits”.",
@@ -91,6 +80,17 @@ const ARTICLES = [
       "Online payments for guests. See “Take payments online (PayMongo, GCash, Maya)”.",
       "Condo gate passes. See “Send the gate pass to the condo admin”.",
       "Reviews, repeat guests and discount codes. See “Guest reviews, repeat guests, VIP and Do not rebook” and “Discount codes for your booking page”.",
+      "Owners, cleaning and operations (owners and managers, and cleaners where it says so):",
+      "Owner portal: unit owners sign in with an emailed link to see their statements, payouts and bookings. See “Give unit owners their own portal”.",
+      "Fee types: percent of net (the default), percent of gross, or a flat monthly fee. See “Fee types: percent of net, percent of gross, or flat monthly”.",
+      "Owner statements: review the numbers, publish (which freezes them), then send. See “Owner statements (managing units for owners)”.",
+      "Payouts and the repairs reserve: record payouts and reserve top-ups and withdrawals. See “Record payouts and the repairs reserve”.",
+      "Profit and loss per unit, with a CSV download. See “Profit and loss per unit”.",
+      "Cleaner role: cleaners sign in to a short menu and see only their own jobs and pay. Owners invite them. See “Invite a cleaner and what they can see”.",
+      "Damage reports: charge the guest, deduct from the deposit, or waive. Cleaners report damage from a job. See “Damage reports: charge the guest, deduct from deposit, or waive” and “Report damage from a cleaning job”.",
+      "Supplies with par levels and low-stock alerts; cleaners record what they used. See “Supplies, par levels and low stock”.",
+      "Lost and found, and work orders raised from a cleaning job. See “Lost and found: log an item and return it” and “Raise a work order from a cleaning job”.",
+      "Launchpad setup checklist. See “Getting started with BalayHub”.",
     ],
   },
   {
@@ -254,7 +254,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'housekeeping', category: 'operations', roles: CREW, title: 'Cleaning tasks and housekeeping',
+    slug: 'housekeeping', category: 'operations', roles: CREW, module: 'stay', title: 'Cleaning tasks and housekeeping',
     keywords: 'cleaning housekeeping cleaner checklist task dirty clean turnover photos',
     body: [
       'A cleaning task is created for every check-out, with your checklist. Housekeeping lists today\'s cleanings and the next arrival.',
@@ -263,7 +263,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'cleaner-role', category: 'business', roles: OWNER, title: 'Invite a cleaner and what they can see',
+    slug: 'cleaner-role', category: 'business', roles: OWNER, module: 'stay', title: 'Invite a cleaner and what they can see',
     keywords: 'cleaner invite role team cleaning jobs only no money access outside cleaner name without login',
     body: [
       'Settings → Team & permissions → Invite. Choose Cleaner and the buildings they clean. They get an email with a sign-in link, like any team member.',
@@ -287,7 +287,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'damage-reports-resolve', category: 'operations', roles: MANAGERS, title: 'Damage reports: charge the guest, deduct from deposit, or waive',
+    slug: 'damage-reports-resolve', category: 'operations', roles: MANAGERS, module: 'stay', title: 'Damage reports: charge the guest, deduct from deposit, or waive',
     keywords: 'damage report charge guest deduct deposit waive broken repair cost estimate photos found',
     body: [
       'Damage reported from a cleaning job or a stay is listed on the reservation and in the damage list. Only owners and managers see the amounts.',
@@ -299,7 +299,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'damage-report-field', category: 'operations', roles: CREW, title: 'Report damage from a cleaning job',
+    slug: 'damage-report-field', category: 'operations', roles: CREW, module: 'stay', title: 'Report damage from a cleaning job',
     keywords: 'damage broken report photo cleaner found stain crack missing item cleaning job',
     body: [
       'Open the cleaning job and press Report damage. Say what you saw, add a cost estimate if you know it, and add photos.',
@@ -308,7 +308,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'lost-and-found', category: 'operations', roles: CREW, title: 'Lost and found: log an item and return it',
+    slug: 'lost-and-found', category: 'operations', roles: CREW, module: 'stay', title: 'Lost and found: log an item and return it',
     keywords: 'lost found item left behind returned disposed photo held guest left found where cleaner',
     body: [
       'From a cleaning job, press Found an item. Describe it, say where you found it, pick the date and add a photo.',
@@ -340,7 +340,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'supplies', category: 'operations', roles: CREW, title: 'Supplies, par levels and low stock',
+    slug: 'supplies', category: 'operations', roles: CREW, module: 'stay', title: 'Supplies, par levels and low stock',
     keywords: 'supplies stock par level low stock restock used count inventory cleaner record toilet paper soap',
     body: [
       'Owners and managers: Supplies → add an item for a property with its name, unit (pcs, rolls, bottles), par level (how many you want on hand) and an opening count.',
@@ -352,7 +352,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'work-orders', category: 'operations', roles: CREW, title: 'Raise a work order from a cleaning job',
+    slug: 'work-orders', category: 'operations', roles: CREW, module: 'stay', title: 'Raise a work order from a cleaning job',
     keywords: 'work order repair broken aircon leak fix maintenance request cleaner from job priority',
     body: [
       'From a cleaning job, press Something broken? Give the issue, details and priority.',
@@ -398,7 +398,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'owner-statements', category: 'business', roles: OWNER, title: 'Owner statements (managing units for owners)',
+    slug: 'owner-statements', category: 'business', roles: OWNER, module: 'stay', title: 'Owner statements (managing units for owners)',
     keywords: 'owner statement management fee payout unit owner managed review publish unpublish send email print pdf',
     body: [
       'Unit owners → Add owner: email, fee type, cleaning fees kept or not, repairs reserve, and their units.',
@@ -410,7 +410,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'owner-portal', category: 'business', roles: OWNER, title: 'Give unit owners their own portal',
+    slug: 'owner-portal', category: 'business', roles: OWNER, module: 'stay', title: 'Give unit owners their own portal',
     keywords: 'owner portal login sign in link invite turn off access unit owner bookings block dates statements payouts',
     body: [
       'Unit owners → open the owner → Invite to owner portal. The owner needs an email address first. They get an email with a sign-in link.',
@@ -421,7 +421,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'owner-fee-types', category: 'business', roles: OWNER, title: 'Fee types: percent of net, percent of gross, or flat monthly',
+    slug: 'owner-fee-types', category: 'business', roles: OWNER, module: 'stay', title: 'Fee types: percent of net, percent of gross, or flat monthly',
     keywords: 'fee type management fee net gross flat monthly percent owner statement loss owes',
     body: [
       'Each owner has one fee type, set on the owner form. The default is % of net, which is how BalayHub worked before.',
@@ -432,7 +432,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'owner-payouts-reserve', category: 'business', roles: OWNER, title: 'Record payouts and the repairs reserve',
+    slug: 'owner-payouts-reserve', category: 'business', roles: OWNER, module: 'stay', title: 'Record payouts and the repairs reserve',
     keywords: 'payout paid gcash maya bank cash reference record void repairs reserve withdrawal top-up owner money',
     body: [
       'Open the owner\'s statement and press Record payout: the amount, the date paid, the method (GCash, Maya, bank transfer, cash or other), and a reference number if you have one. The statement shows "Paid ₱X of ₱Y" for that month.',
@@ -444,7 +444,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'profit-loss', category: 'business', roles: MANAGERS, title: 'Profit and loss per unit',
+    slug: 'profit-loss', category: 'business', roles: MANAGERS, module: 'stay', title: 'Profit and loss per unit',
     keywords: 'profit loss pnl per unit income expenses net gross report month property csv download',
     body: [
       'Open Profit and loss from the menu (owners and managers). Pick a month and, if you want, one property.',

@@ -35,6 +35,7 @@ extendTranslations({
   'This guidebook has no details yet. Please message your host if you need anything.': 'Wala pang laman ang guidebook na ito. Mag-message sa host kung may kailangan ka.',
   'Try again': 'Subukan ulit',
   'Your stay has ended, so the Wi-Fi password and door code are no longer shown.': 'Tapos na ang stay mo, kaya hindi na ipinapakita ang Wi-Fi password at door code.',
+  'Your guidebook opens on {date}. Come back then; this same link will work.': 'Magbubukas ang guidebook mo sa {date}. Bumalik ka sa araw na iyon; gagana pa rin ang parehong link.',
 });
 
 // Section order, the field names (English; Taglish is `${key}_tl`) and the icon for each.
@@ -87,8 +88,11 @@ export async function guideView(el, { params }) {
   el.replaceChildren(page(h('div', { class: 'card', role: 'status', 'aria-live': 'polite' }, h('p', { class: 'muted' }, t('Loading your guidebook…')), h('div', { class: 'skeleton' }))));
   let d;
   try { d = await get(`/public/guide/${encodeURIComponent(token)}`); } catch (err) {
+    // Before the window the same link works later, so the page says the date it opens.
+    const early = err.code === 'GUIDE_NOT_YET';
     el.replaceChildren(page(h('div', { class: 'card' },
-      h('h1', null, t('Guidebook not available')), h('p', { class: 'muted' }, err.message),
+      h('h1', null, early ? t('Your guidebook') : t('Guidebook not available')),
+      h('p', { class: 'muted' }, early ? t('Your guidebook opens on {date}. Come back then; this same link will work.', { date: fmtDate(err.data?.opens_on) }) : err.message),
       err.offline && h('button', { class: 'btn btn--secondary', type: 'button', onclick: () => guideView(el, { params }) }, t('Try again')))));
     return;
   }

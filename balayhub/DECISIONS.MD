@@ -475,3 +475,48 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 - **Check-in form after arrival** stays editable until check-out as built; only the heading changes.
 
 *Why:* each call picks the safest reading of the existing decisions and keeps the founder's money rules exact. The open questions are in BLOCKERS.MD under "Questions from QA round 2".
+
+**D-78 · 2026-10-14 · QA round 3 calls (2026-10-14 sweep, fixed the same day).** The third QA sweep (12 lanes, 45 entries) found problems that needed a product decision. These are the calls made, with the default we are using until the founder says otherwise. Open questions are in BLOCKERS.MD under "Questions from QA round 3".
+
+*Money*
+- **A channel fee exists only on a booking that came through a channel.** A direct booking can't take one: creating it is refused, and moving a booking to Direct while it carries a fee is refused unless the same edit clears the fee. This amends D-34 and the guest balance rule in BACKEND-SCHEMA, and D-38's Adjustments line now shows only for channel bookings.
+- **Old fees on direct bookings count as 0 for what is owed.** The stored number is not rewritten (it is live money data). Everywhere the app works out what is owed it is ignored: the guest pay page, payment links, checkout, payment proofs, receipts, the `{{balance}}` placeholder in guest messages, the inbox guest panel, AI drafts, daily close, and the host Payment card including "You keep".
+- **The host is warned, and any Edit save clears it.** The reservation page shows a warning on such a booking. Any Edit save on it sets the fee to 0, and the Edit dialog says so. On a channel booking, blanking the fee on Edit still changes nothing; the host must type 0 (logged for round 4).
+- **Reports still count a stored fee as a cost** (P&L, owner statements, stay reports) until the founder decides whether to clear them (BLOCKERS).
+- **Receipts for a channel booking show an "Adjustments (settled through the booking channel)" line,** so the total, the adjustment, the payments and the remaining balance add up.
+- **No policy, no suggestion (follows D-33).** A cancelled booking with no cancellation policy or a Custom policy says how much is held and that no refund is suggested.
+- **Zero is refused for a group room's accommodation total** (extends D-77): "Accommodation total must be greater than zero. Leave it blank to use the listing's price." Blank still means the listing's price. Manual single reservations at 0 are still allowed (a deliberate free stay); the question is in BLOCKERS.
+- **P&L leaves cancelled stays out completely** (money kept and refunds), and says so on the page. The Income summary (for taxes) is the cash view and counts both. The founder may choose otherwise.
+- **Statements:** the "ready to publish" banner counts only months that have ended. "Send to owner" is disabled with the reason "Add an email for this owner first." when the owner has no email, and Send uses the owner's current email.
+- **Stay reports "By source":** an empty source reads "Not tagged" (not "No source"), with a note that it was booked without a `?src=` link or entered by hand.
+- **Maintenance estimate of 0 is allowed** (no cost expected); blank means no estimate yet.
+
+*Groups, listings and prices*
+- **Group room count must be a whole number from 1 to 20 and is never adjusted silently.** A clash or a short count reads "Only N <type> rooms are free on these dates (you asked for M). Nothing was saved." Blank dates and a backwards pair now have separate messages.
+- **A lowest price above the usual nightly price asks first,** on both Add listing and Edit listing ("Save anyway?"). Cancel keeps the form open and saves nothing.
+- **Pricing season clash notes name a third season** that takes over some of the shared nights, and the save toast no longer shows win labels.
+- **Bulk-change errors use the on-screen field names** (for example "Change (%)").
+
+*Guests*
+- **A payment proof tells the host only once its screenshot is saved.** A guest can withdraw a pending proof that has no file (same refusal rules as the upload: only pending, only with no file, only their own booking). The activity log reads "Withdrew a payment proof" by Guest.
+- **The guidebook link before its window opens** answers 409 `GUIDE_NOT_YET` and says "Your guidebook opens on <date>". The D-57 window is unchanged. Wrong, cancelled and ended links keep the "not available" text.
+- **The Tagalog weekday header reads Lin Lun Mar Miy Huw Biy Sab** (Sunday first).
+
+*Access and accounts*
+- **Damage report create response for staff and cleaners** has the same trimmed shape as the job detail (D-77, BACKEND-SCHEMA 6.1a), with photos under `files`. Owners and managers keep the full row.
+- **Password reset and password change both take a per-user lock.** A password change saves the new password, signs out other devices and retires open reset links in one transaction, so a reset and a change can't deadlock.
+- **Short-term workspaces don't see the property page's long-term parts:** Assign Tenant, monthly rent, Rent roll, Occupied/Vacant, the lease-ending filter, and the monthly rent field in the unit editor. Monthly rent stays required for long-term and both-type workspaces.
+- **Free text is stored as typed and shown as text.** Markup typed into names is not stripped (nothing runs on screen; no email is sent as HTML).
+- **Sign-up with a taken email keeps its message** (round 1 default; still open).
+
+*Help*
+- **More guides are tagged stay-only** (housekeeping, damage reports, lost and found, supplies, profit and loss, work orders), and the shared "What's new" guide lists no stay-only items. Long-term cleaners lose cleaning guides; this is accepted because long-term workspaces can't add cleaners.
+
+*Phones, filters and wording*
+- **The Ask button sits in the top bar below 960px** and floats on desktop. This replaces the round 2 compact floating button.
+- **Focus scrolls clear of the bottom bar** (scroll padding plus a focus guard). Tabs wrap onto more lines, wide tables show an edge shade, and Channel and Code are hidden in the reservations list on phones, which shows Total and Balance next to the dates.
+- **A backwards date range turns that date filter off entirely,** including a side that was valid a moment ago, with the message "The end date is before the start date. This date filter is off until you fix it." (completes D-77). Reports with a custom range and no dates asks for both dates.
+- **An invalid month on Stay reports warns** and shows the month used (same as P&L, D-77).
+- **Audit labels:** "Follow-up email" On/Off, "Returning-guest discount" N% or Off, and "Repeats: every N month(s)".
+
+*Why:* each call picks the safest reading of the existing decisions and keeps the founder's money rules exact: nothing stored is rewritten, and the guest is never asked for less than they owe. The open questions are in BLOCKERS.MD under "Questions from QA round 3".

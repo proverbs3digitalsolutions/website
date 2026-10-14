@@ -242,11 +242,12 @@ publicRouter.post('/public/pay/:token/proofs', proofLimiter, express.json({ limi
       { booking_id: b.booking_id, amount: body.amount, method: body.method });
     return p.proof_id;
   });
-  await tellHost(b, body.amount, body.method);
   res.status(201).json({ ok: true, proof_id: proofId });
 }));
 
 // Step 2: the screenshot or receipt for a proof just sent (JPG, PNG, WEBP or PDF, up to 10 MB).
+// The host is told about the proof here, once it is complete. A refused screenshot leaves the
+// details saved, so the guest can take the proof back with the DELETE below and send it again.
 publicRouter.post('/public/pay/:token/proofs/:proofId/image', proofUploadLimiter,
   express.raw({ type: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'], limit: config.maxUploadBytes }), ah(async (req, res) => {
     const b = await loadByToken(req.params.token);
@@ -257,8 +258,8 @@ publicRouter.post('/public/pay/:token/proofs/:proofId/image', proofUploadLimiter
     if (!storage.checkUpload(mime, req.body)) {
       throw new HttpError(415, 'Upload a JPG, PNG, WEBP or PDF file up to 10 MB.', { code: 'UNSUPPORTED_FILE' });
     }
-    const file = await tx(async (db) => {
-      const { rows: [p] } = await db.query('SELECT proof_id, status FROM payment_proofs WHERE proof_id = $1 AND booking_id = $2 FOR UPDATE', [proofId, b.booking_id]);
+    const { file, proof } = await tx(async (db) => {
+      const { rows: [p] } = await db.query('SELECT proof_id, status, amount, method FROM payment_proofs WHERE proof_id = $1 AND booking_id = $2 FOR UPDATE', [proofId, b.booking_id]);
       if (!p) throw notFound('This payment proof was not found. Please send it again.');
       if (p.status !== 'pending') throw new HttpError(409, 'This payment proof has already been reviewed.', { code: 'NOT_PENDING' });
       const { rows: [{ n }] } = await db.query(`SELECT COUNT(*)::int AS n FROM files WHERE related_record_type = 'payment_proof' AND related_record_id = $1`, [proofId]);
@@ -268,10 +269,30 @@ publicRouter.post('/public/pay/:token/proofs/:proofId/image', proofUploadLimiter
         fileName: `payment-proof.${storage.ALLOWED[mime].ext}`, db,
       });
       await audit(db, { organization_id: b.organization_id }, 'payment_proof.image_added', 'payment_proof', proofId, { file_id: saved.file_id });
-      return saved;
+      return { file: saved, proof: p };
     });
+    await tellHost(b, proof.amount, proof.method);
     res.status(201).json({ ok: true, file_id: file.file_id });
   }));
+
+// Take back a proof that has no screenshot yet, so the guest can correct it and send it again.
+// Refused once a screenshot is in or the host has reviewed it.
+publicRouter.delete('/public/pay/:token/proofs/:proofId', proofUploadLimiter, ah(async (req, res) => {
+  const b = await loadByToken(req.params.token);
+  const refusal = manualRefusal(b);
+  if (refusal) throw refusal;
+  const proofId = uuidParam(req.params.proofId);
+  await tx(async (db) => {
+    const { rows: [p] } = await db.query('SELECT proof_id, status FROM payment_proofs WHERE proof_id = $1 AND booking_id = $2 FOR UPDATE', [proofId, b.booking_id]);
+    if (!p) throw notFound('This payment proof was not found.');
+    if (p.status !== 'pending') throw new HttpError(409, 'This payment proof has already been reviewed.', { code: 'NOT_PENDING' });
+    const { rows: [{ n }] } = await db.query(`SELECT COUNT(*)::int AS n FROM files WHERE related_record_type = 'payment_proof' AND related_record_id = $1`, [proofId]);
+    if (n >= 1) throw new HttpError(409, 'This payment proof already has a screenshot, so the host has it to check.', { code: 'HAS_FILE' });
+    await db.query('DELETE FROM payment_proofs WHERE proof_id = $1', [proofId]);
+    await audit(db, { organization_id: b.organization_id }, 'payment_proof.withdrawn', 'payment_proof', proofId, { booking_id: b.booking_id });
+  });
+  res.json({ ok: true });
+}));
 
 // Tell the host a proof came in: a push notification and a note in the reservation's inbox.
 async function tellHost(b, amount, method) {

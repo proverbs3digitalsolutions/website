@@ -63,7 +63,8 @@ export async function pnlView(el, { query = {} } = {}) {
         h('tbody', null, r.rows.map((x) => h('tr', null,
           h('td', null, x.unit_id ? x.unit_name : 'Not linked to a unit', x.unit_id && x.property_name && h('div', { class: 'muted small' }, x.property_name)),
           cells(x)))),
-        h('tfoot', null, h('tr', { class: 'is-total' }, h('td', null, 'Total'), cells(t)))))));
+        h('tfoot', null, h('tr', { class: 'is-total' }, h('td', null, 'Total'), cells(t)))))),
+      h('p', { class: 'muted small' }, 'Cancelled stays are left out, including money kept or refunded on them. The Income summary (for taxes) counts all money received and refunded.'));
   }
 
   const bar = filterBar({

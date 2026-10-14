@@ -14,7 +14,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
-const MSG = 'The end date is before the start date.';
+const MSG = 'The end date is before the start date. This date filter is off until you fix it.';
 const SAVED_KEY = 'bh-filters:1:reservations';
 const UUID = '6f1c2e7a-3b4d-4e5f-8a9b-0c1d2e3f4a5b';
 

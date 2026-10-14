@@ -115,7 +115,7 @@ async function checklist(user, date) {
         JOIN properties p ON p.property_id = u.property_id
         LEFT JOIN guests g ON g.guest_id = b.guest_id
         CROSS JOIN LATERAL (
-          SELECT (b.total_amount - b.channel_fee - COALESCE((SELECT SUM(bp.amount) FROM booking_payments bp
+          SELECT (b.total_amount - CASE WHEN b.channel = 'direct' THEN 0 ELSE b.channel_fee END - COALESCE((SELECT SUM(bp.amount) FROM booking_payments bp
                    WHERE bp.booking_id = b.booking_id AND bp.voided_at IS NULL), 0))::numeric(12,2) AS balance
         ) bal
        WHERE b.kind = 'reservation' AND b.status = 'confirmed'

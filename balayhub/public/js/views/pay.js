@@ -45,6 +45,7 @@ extendTranslations({
   'Enter the amount you paid.': 'Ilagay ang halagang binayad mo.',
   'This is more than the balance of {amount}.': 'Mas malaki ito sa balanseng {amount}.',
   'Choose a screenshot or receipt.': 'Pumili ng screenshot o resibo.',
+  'Choose a different file and send again.': 'Pumili ng ibang file at ipadala ulit.',
   'Uploading the screenshot…': 'Ina-upload ang screenshot…',
   'Thank you! Your proof was sent.': 'Salamat! Naipadala na ang patunay.',
   '{host} will check the payment and confirm it. You will get an email when it is confirmed.': 'Titingnan ni {host} ang bayad at kukumpirmahin ito. Makakatanggap ka ng email kapag kumpirmado na.',
@@ -214,8 +215,9 @@ function manualCard(d, token) {
 }
 
 // The proof form: amount, method, reference, payer name and a screenshot. It goes in two steps,
-// the details first and then the screenshot. If the screenshot fails, trying again only re-sends
-// the screenshot, so the payment is never recorded twice.
+// the details first and then the screenshot. If the screenshot is refused, the saved proof is taken
+// back so the guest can correct the details and send again. If it can't be taken back, trying again
+// only re-sends the screenshot, so the payment is never recorded twice.
 function proofForm(d, token, onSent) {
   let proofId = null;
   const form = h('form', { class: 'form', novalidate: true });
@@ -224,6 +226,18 @@ function proofForm(d, token, onSent) {
   const photo = h('input', { type: 'file', id: 'proof-file', accept: PROOF_TYPES.join(','), class: 'input' });
   const submit = h('button', { class: 'btn btn--primary btn--block', type: 'submit' }, t('Send proof'));
   const alertBox = (msg) => h('div', { class: 'alert alert--error', role: 'alert' }, msg);
+  // The server only lets a pending proof with no file go. If that fails too, the details stay locked.
+  const withdraw = async () => {
+    try {
+      await api('DELETE', `/public/pay/${encodeURIComponent(token)}/proofs/${encodeURIComponent(proofId)}`);
+    } catch {
+      return false;
+    }
+    proofId = null;
+    form.querySelectorAll('[name]').forEach((el) => { el.disabled = false; });
+    photo.value = '';
+    return true;
+  };
   form.append(
     formError,
     field({ name: 'amount', label: t('Amount paid'), type: 'money', required: true, value: Number(d.balance).toFixed(2) }),
@@ -267,7 +281,10 @@ function proofForm(d, token, onSent) {
       onSent();
     } catch (err) {
       const msg = err instanceof ApiError ? tServer(err.message) : (err.message || t('Something went wrong. Please try again.'));
-      formError.replaceChildren(alertBox(err.offline ? t("You're offline. Please try again when you're connected.") : msg));
+      // Only a failed screenshot comes after a saved proof, so only then is there one to take back.
+      const taken = proofId && await withdraw();
+      formError.replaceChildren(alertBox(err.offline ? t("You're offline. Please try again when you're connected.")
+        : taken ? `${msg} ${t('Choose a different file and send again.')}` : msg));
       if (err.fields) showErrors(form, tFields(err.fields));
       progress.textContent = '';
       submit.disabled = false;

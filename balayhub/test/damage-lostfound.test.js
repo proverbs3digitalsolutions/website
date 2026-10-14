@@ -114,28 +114,20 @@ test('a cleaner logs damage on a task they can see, and nowhere else', async () 
   const a = await cleanerX.c.post(`/api/cleaning-tasks/${tMine.task_id}/damage`, { description: 'Cracked tile by the sink', estimated_cost: '250' });
   assert.equal(a.status, 201, JSON.stringify(a.data));
   rep.A = a.data.report;
-  assert.equal(rep.A.status, 'open');
-  assert.equal(rep.A.estimated_cost, '250.00');
-  assert.equal(rep.A.booking_id, stay.booking_id, 'the report is for the task\'s stay');
-  assert.equal(rep.A.task_id, tMine.task_id);
-  assert.equal(rep.A.unit_name, '1201');
-  assert.equal(rep.A.property_name, 'Azure');
+  assert.equal(rep.A.description, 'Cracked tile by the sink');
   assert.equal(rep.A.reported_by_name, 'Xavier Cleaner');
-  assert.equal(rep.A.photo_count, 0);
-  assert.equal(rep.A.charge_id, null);
+  assert.equal('estimated_cost' in rep.A, false, 'the filer does not get the amount back; the manager sees it in the list');
   assert.equal(typeof rep.A.created_at, 'string', 'dates come back as ISO text');
 
   const b = await cleanerX.c.post(`/api/cleaning-tasks/${tFree.task_id}/damage`, { description: 'Scuffed wall', estimated_cost: '100' });
   assert.equal(b.status, 201, 'an unassigned task is visible to a cleaner');
   rep.B = b.data.report;
-  assert.equal(rep.B.estimated_cost, '100.00');
-  assert.equal(rep.B.booking_id, stayD.booking_id);
+  assert.equal(rep.B.description, 'Scuffed wall');
 
   const c = await cleanerX.c.post(`/api/cleaning-tasks/${tNoStay.task_id}/damage`, { description: 'Broken towel rail' });
   assert.equal(c.status, 201);
   rep.C = c.data.report;
-  assert.equal(rep.C.booking_id, null, 'a task with no stay gives a report with no stay');
-  assert.equal(rep.C.estimated_cost, null);
+  assert.equal(rep.C.description, 'Broken towel rail');
 
   for (const t of [tOther, tOutside, tPlaceB]) {
     assert.equal((await cleanerX.c.post(`/api/cleaning-tasks/${t.task_id}/damage`, { description: 'x' })).status, 404, 'not theirs, or not their property');
@@ -155,18 +147,17 @@ test('staff and managers log damage on a stay or a unit; out-of-scope units are 
   const d1 = await staff.post(`/api/reservations/${stay.booking_id}/damage`, { description: 'Smashed mirror' });
   assert.equal(d1.status, 201, JSON.stringify(d1.data));
   rep.D = d1.data.report;
-  assert.equal(rep.D.estimated_cost, null, 'the estimate is optional');
+  assert.equal(rep.D.description, 'Smashed mirror');
   assert.equal(rep.D.reported_by_name, 'staff@example.com');
 
   const e = await staff.post(`/api/units/${unitA.unit_id}/damage`, { description: 'Ceiling stain', estimated_cost: '1200.5' });
   assert.equal(e.status, 201, JSON.stringify(e.data));
   rep.E = e.data.report;
-  assert.equal(rep.E.estimated_cost, '1200.50');
-  assert.equal(rep.E.booking_id, null);
+  assert.equal(rep.E.description, 'Ceiling stain');
 
   rep.F = (await staff.post(`/api/reservations/${stay.booking_id}/damage`, { description: 'Broken lamp', estimated_cost: '80' })).data.report;
   rep.G = (await staff.post(`/api/reservations/${stay.booking_id}/damage`, { description: 'Old stain', estimated_cost: '999' })).data.report;
-  assert.equal(rep.G.status, 'open');
+  assert.equal(rep.G.description, 'Old stain');
 
   assert.equal((await staff.post(`/api/units/${unitB.unit_id}/damage`, { description: 'x' })).status, 404, 'a unit in another property');
   assert.equal((await staff.post(`/api/reservations/${stay.booking_id}/damage`, {})).status, 400);
@@ -180,6 +171,23 @@ test('the damage lists: owners and managers only, filtered and scoped to the wor
   assert.equal(row.unit_name, '1201');
   assert.equal(row.property_name, 'Azure');
   assert.equal(row.reported_by_name, 'Xavier Cleaner');
+
+  // The manager's copy of each report has the amounts and links that the filer's create response leaves out.
+  const copy = (r) => all.data.reports.find((x) => x.report_id === r.report_id);
+  assert.equal(copy(rep.A).estimated_cost, '250.00');
+  assert.equal(copy(rep.A).status, 'open');
+  assert.equal(copy(rep.A).booking_id, stay.booking_id, 'the report is for the task\'s stay');
+  assert.equal(copy(rep.A).task_id, tMine.task_id);
+  assert.equal(copy(rep.A).photo_count, 0);
+  assert.equal(copy(rep.A).charge_id, null);
+  assert.equal(copy(rep.B).estimated_cost, '100.00');
+  assert.equal(copy(rep.B).booking_id, stayD.booking_id);
+  assert.equal(copy(rep.C).booking_id, null, 'a task with no stay gives a report with no stay');
+  assert.equal(copy(rep.C).estimated_cost, null);
+  assert.equal(copy(rep.D).estimated_cost, null, 'the estimate is optional');
+  assert.equal(copy(rep.E).estimated_cost, '1200.50');
+  assert.equal(copy(rep.E).booking_id, null);
+  assert.equal(copy(rep.G).status, 'open');
 
   assert.equal((await owner.get('/api/damage-reports?status=open')).data.reports.length, 7, 'all seven are still open here');
   assert.equal((await owner.get('/api/damage-reports?status=charged')).data.reports.length, 0);

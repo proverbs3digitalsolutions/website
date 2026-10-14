@@ -46,7 +46,7 @@ import { quotesView, quoteDetailView } from './views/quotes.js';
 import { routeAllowed } from './routeaccess.js';
 import { registerServiceWorker, forgetThisDevice } from './notifications.js';
 import { themeSwitch } from './themeswitch.js';
-import { assistantButton, resetAssistant } from './assistant.js';
+import { assistantButton, placeAssistantButton, resetAssistant } from './assistant.js';
 
 export const state = { user: null, requireEmailVerification: true };
 
@@ -328,7 +328,7 @@ function buildShell(path) {
           h('span', null, h('strong', null, u.full_name), h('span', null, `${u.organization_name} · ${({ owner: 'Owner', manager: 'Manager', staff: 'Staff', cleaner: 'Cleaner' })[u.role]}`))),
         themeSwitch({ compact: true }),
         h('button', { class: 'btn btn--secondary btn--sm btn--block', onclick: logout }, 'Log out'))),
-    h('header', { class: 'topbar' }, brand(homeRoute()),
+    h('header', { class: 'topbar' }, brand(homeRoute()), h('span', { class: 'topbar__assist' }),
       h('a', { class: 'topbar__me', href: '#/account', 'aria-label': 'My account' }, h('span', { class: 'topbar__org' }, u.organization_name), h('span', { class: 'acct-avatar acct-avatar--sm', 'aria-hidden': 'true' }, initials(u.full_name)))),
     h('div', { class: 'shell__main' }, planBanner(), content),
     h('nav', { class: 'bottomnav', 'aria-label': 'Main' },
@@ -375,6 +375,7 @@ export async function render() {
     if (!path.startsWith('/help')) state.lastPage = location.hash;
     shell = buildShell(path);
     app.replaceChildren(shell.el);
+    placeAssistantButton();
     const mount = shell.content;
     mount.replaceChildren(skeleton());
     try {
@@ -445,6 +446,17 @@ function updateOnline() {
 window.addEventListener('online', () => { updateOnline(); toast('Back online.'); });
 window.addEventListener('offline', updateOnline);
 window.addEventListener('hashchange', render);
+
+// Below 960px the bottom bar covers the lower edge of the screen, and the browser only scrolls a focused control to that edge, so Tab can
+// reach a control hidden under the bar (WCAG 2.4.11). Scroll such a control clear of the bar.
+document.addEventListener('focusin', (e) => {
+  const bar = document.querySelector('.bottomnav');
+  if (!bar || !window.matchMedia('(max-width: 959px)').matches || !(e.target instanceof Element)) return;
+  // The bar's own controls and the layers above the page (chat panel, More sheet, dialogs) don't move with the page, so scrolling would only shift the page.
+  if (e.target.closest('.bottomnav, .assist, .morenav, dialog')) return;
+  const hidden = e.target.getBoundingClientRect().bottom - bar.getBoundingClientRect().top;
+  if (hidden > 0) window.scrollBy(0, hidden + 16);
+});
 
 (async function boot() {
   updateOnline();

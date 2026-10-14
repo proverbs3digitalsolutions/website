@@ -21,6 +21,11 @@ const lastMonth = () => {
   return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
 };
 
+// A statement can be published only once its month has ended (the server applies the same rule).
+const monthHasEnded = (month, today) => month < today.slice(0, 7);
+// Drafts that can be published now. The list is for one month, so its drafts are all ready or none are.
+const readyCount = (rows, month, today) => (monthHasEnded(month, today) ? rows.filter((r) => r.status !== 'published').length : 0);
+
 function unitChecks(units, owner) {
   return h('fieldset', { class: 'field', dataset: { field: 'unit_ids' }, style: { border: 0, padding: 0, margin: 0 } },
     h('legend', null, 'Their units'),
@@ -168,7 +173,8 @@ export async function ownerStatementsView(el, { query = {} }) {
   const status = (r) => (r.status === 'published'
     ? (r.sent_at ? badge('unpaid', 'Sent') : badge('paid', 'Published'))
     : badge('partial', 'Draft'));
-  const ready = list.filter((r) => r.status !== 'published').length;
+  const drafts = list.filter((r) => r.status !== 'published').length;
+  const ready = readyCount(list, month, todayManila());
   el.replaceChildren(
     pageHead({
       title: 'Owner statements', sub: 'Review each owner\'s statement, publish it, then send it.',
@@ -176,7 +182,8 @@ export async function ownerStatementsView(el, { query = {} }) {
       actions: monthInput,
     }),
     invalid ? badMonthAlert(query) : list.length
-      ? [ready > 0 && h('div', { class: 'alert alert--info' }, `${ready} statement${ready === 1 ? ' is' : 's are'} still a draft. Open each one, check the numbers, then publish.`),
+      ? [ready > 0 && h('div', { class: 'alert alert--info' }, `${ready} statement${ready === 1 ? ' is' : 's are'} ready to publish. Open each one, check the numbers, then publish.`),
+        !ready && drafts > 0 && h('div', { class: 'alert alert--info' }, `${drafts} ${drafts === 1 ? 'draft' : 'drafts'} can be published once the month ends.`),
         h('div', { class: 'card card--flush' }, h('div', { class: 'table-wrap' }, h('table', { class: 'table own-list' },
           h('thead', null, h('tr', null, ['Owner', 'Units', 'Status', 'Payout', 'Sent', ''].map((x, i) => h('th', { class: i === 3 ? 'num' : null }, x)))),
           h('tbody', null, list.map((r) => h('tr', null,
@@ -220,7 +227,7 @@ export async function ownerStatementView(el, { params, query = {}, rerender }) {
   const overpaid = owes ? 0 : Math.max(0, Math.round((paid - payoutDue) * 100) / 100);
   const remaining = owes ? 0 : Math.max(0, Math.round((payoutDue - paid) * 100) / 100);
   const topup = Number(s.reserve?.topup) || 0;
-  const monthEnded = month < todayManila().slice(0, 7);
+  const monthEnded = monthHasEnded(month, todayManila());
 
   const act = async (path, body, okText) => {
     try { await post(`${base}/statement/${path}`, body); toast(okText); rerender(); } catch (err) { toast(err.message, 'error'); }
@@ -233,9 +240,10 @@ export async function ownerStatementView(el, { params, query = {}, rerender }) {
     if (!await confirmDialog({ title: 'Unpublish to correct?', text: `The owner can no longer see this statement.${record.sent_at ? ` They already have the copy you emailed on ${manilaDay(record.sent_at)}, and unpublishing does not take that back.` : ''} Make your corrections, then publish it again.`, confirmText: 'Unpublish', danger: true })) return;
     act('unpublish', { month }, 'Statement is a draft again.');
   };
+  // The server emails the owner's current address (live), so the button and the message use that, not the frozen copy.
   const send = async () => {
-    if (!await confirmDialog({ title: 'Email this statement?', text: `Send the ${s.month_label} statement to ${s.owner.email}?`, confirmText: 'Send' })) return;
-    act('send', { month }, `Statement sent to ${s.owner.email}.`);
+    if (!await confirmDialog({ title: 'Email this statement?', text: `Send the ${s.month_label} statement to ${live.owner.email}?`, confirmText: 'Send' })) return;
+    act('send', { month }, `Statement sent to ${live.owner.email}.`);
   };
   const monthInput = h('input', { class: 'input input--sm', type: 'month', value: month, 'aria-label': 'Month',
     onchange: (e) => { if (e.target.value) navigate(`#/owners/${id}/statement?month=${e.target.value}`); } });
@@ -247,11 +255,12 @@ export async function ownerStatementView(el, { params, query = {}, rerender }) {
     : 'Draft. The owner can\'t see it until you publish.';
   const drift = published && Number(live.totals.payout) !== Number(published.totals.payout);
   const statusBar = h('div', { class: 'own-status no-print' },
-    h('div', { class: 'own-status__text' }, published ? badge(record.sent_at ? 'unpaid' : 'paid', record.sent_at ? 'Sent' : 'Published') : badge('partial', 'Draft'), h('span', null, statusText)),
+    h('div', { class: 'own-status__text' }, published ? badge(record.sent_at ? 'unpaid' : 'paid', record.sent_at ? 'Sent' : 'Published') : badge('partial', 'Draft'), h('span', null, statusText),
+      published && !live.owner.email && h('span', { class: 'muted small' }, 'Add an email for this owner first.')),
     h('div', { class: 'chips' },
       !published && h('button', { class: 'btn btn--primary btn--sm', type: 'button', disabled: !monthEnded, title: monthEnded ? null : 'You can publish once the month has ended.', onclick: publish }, 'Publish'),
       published && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: unpublish }, 'Unpublish to correct'),
-      published && s.owner.email && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: send }, record.sent_at ? 'Send again' : 'Send to owner'),
+      published && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', disabled: !live.owner.email, title: live.owner.email ? null : 'Add an email for this owner first.', onclick: send }, record.sent_at ? 'Send again' : 'Send to owner'),
       h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => window.print() }, 'Print / save as PDF')));
 
   // Payouts card.

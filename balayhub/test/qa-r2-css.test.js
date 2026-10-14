@@ -50,9 +50,10 @@ test('global focus-visible uses the solid ring', () => {
   assert.match(css, /^:focus-visible \{ outline: 2px solid var\(--focus-ring\)/m);
 });
 
-test('scroll cues on .table-wrap and .tabs use local attachment', () => {
-  const m = css.match(/^\.table-wrap, \.tabs \{[^}]*\}/m);
+test('scroll cue on .table-wrap uses local attachment; tab strips have none (they wrap)', () => {
+  const m = css.match(/^\.table-wrap \{\n  --cue[^}]*\}/m);
   assert.ok(m && /no-repeat local/.test(m[0]) && /no-repeat scroll/.test(m[0]));
+  assert.doesNotMatch(css, /\.table-wrap, \.tabs/);
 });
 
 test('money values do not break mid-number; long words wrap in rows', () => {
@@ -65,7 +66,7 @@ test('money values do not break mid-number; long words wrap in rows', () => {
 test('phone rules: stacked row actions, icon-only Ask button, wrapping date range', () => {
   assert.match(css, /max-width: 480px\) \{ \.row:has\(/);
   assert.match(css, /row--stack-sm/);
-  assert.match(css, /max-width: 559px\) \{\s*\.assist-fab \{ width: 48px; height: 48px/);
-  assert.match(css, /body:has\(\.assist-fab:not\(\[hidden\]\)\) \.content/);
+  assert.match(css, /\.assist-fab--bar \{[^}]*width: 40px; height: 40px/);
+  assert.doesNotMatch(css, /body:has\(\.assist-fab:not\(\[hidden\]\)\) \.content/);
   assert.match(rule('.flt__range'), /flex-wrap: wrap/);
 });

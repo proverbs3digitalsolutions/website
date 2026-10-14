@@ -45,6 +45,16 @@ export function changedFields(orig, d) {
     : (!isNaN(a) && !isNaN(b) ? Number(a) === Number(b) : String(a) === String(b));
   return Object.fromEntries(Object.entries(d).filter(([k, v]) => !same(orig[k], v)));
 }
+// The channel fee to send on save. The server refuses a fee on a direct booking and ignores a blank one, so a direct booking that still has a stored fee is sent as 0 to clear it.
+export function channelFeeToSave(channel, storedFee, typedFee) {
+  return channel === 'direct' && Number(storedFee) > 0 ? '0' : typedFee;
+}
+// Cancelled-booking alert wording. A suggestion comes from the cancellation policy. With no policy, or a Custom one, nothing is suggested, so the text says what is still held.
+export function refundAlertText({ suggestion, refundable, paid, policy }) {
+  if (suggestion) return `Cancelled: policy suggests refunding ${peso(suggestion.amount)} of ${peso(paid)} paid.`;
+  const note = policy?.key === 'custom' ? 'A Custom policy has no automatic suggestion.' : 'No cancellation policy is set, so no refund is suggested.';
+  return `Cancelled: ${peso(refundable)} of ${peso(paid)} paid is still held. ${note}`;
+}
 
 export const CHANNEL_LABEL = { direct: 'Direct', airbnb: 'Airbnb', booking: 'Booking.com', agoda: 'Agoda', vrbo: 'Vrbo', expedia: 'Expedia', tripcom: 'Trip.com', other: 'Other' };
 export const SOURCE_LABEL = { facebook: 'Facebook', instagram: 'Instagram', messenger: 'Messenger', viber: 'Viber', tiktok: 'TikTok', google: 'Google', whatsapp: 'WhatsApp', email: 'Email', referral: 'Referral', quote: 'Quote', other: 'Other' };
@@ -70,6 +80,13 @@ const VIEWS = [
   ['recent', 'Recently created'],
   ['all', 'All reservations'],
 ];
+
+// A direct booking has no channel fee, so the fee box is hidden while Booked through is Direct. Switching to Direct empties it.
+function syncChannelFee(form, switched) {
+  const direct = form.elements.channel.value === 'direct';
+  if (switched && direct) form.elements.channel_fee.value = '';
+  form.querySelector('[data-field=channel_fee]').hidden = direct;
+}
 
 // ---------------------------------------------------------------- new reservation
 export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
@@ -110,7 +127,7 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
         field({ name: 'cleaning_fee', label: 'Cleaning fee', type: 'money' })),
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'other_fees', label: 'Other fees', type: 'money', placeholder: '0' }),
-        field({ name: 'channel_fee', label: 'Channel fee / commission', type: 'money', placeholder: '0', hint: 'What Airbnb, Booking.com or Agoda keeps. Used in owner statements.' })),
+        field({ name: 'channel_fee', label: 'Channel fee / commission', type: 'money', placeholder: '0', hint: 'What Airbnb, Booking.com, Agoda or another channel keeps.' })),
       field({ name: 'notes', label: 'Notes', type: 'textarea', maxlength: 1000, placeholder: 'Arrival time, special requests…' }),
       field({ name: 'send_confirmation', label: 'Email a booking confirmation to the guest (needs their email)', type: 'checkbox', value: true }),
     ],
@@ -147,6 +164,8 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
     form.elements.room_pick.required = t;
   };
   syncMode();
+  form.addEventListener('change', (e) => { if (e.target.name === 'channel') syncChannelFee(form, true); });
+  syncChannelFee(form, false);
   let seq = 0;
   async function refreshQuote(e) {
     if (e?.target.name === 'pick_mode') syncMode();
@@ -210,16 +229,22 @@ export async function reservationsView(el, { query }) {
     listBox.replaceChildren(
       h('p', { class: 'muted small' }, `Showing ${reservations.length} reservation${reservations.length === 1 ? '' : 's'}${canManage ? ` · ${peso(total)} booked · ${peso(due)} still to collect` : ''}`),
       h('div', { class: 'table-wrap res-table' }, h('table', { class: 'table' },
-        h('thead', null, h('tr', null, ['Check-in', 'Check-out', 'Guest', 'Listing', 'Channel', 'Code'].map((t) => h('th', null, t)), h('th', { class: 'num' }, 'Total'), h('th', { class: 'num' }, 'Balance'))),
+        // Money sits right after the dates so it stays on screen at phone width. Check-out, Listing, Channel and Code hide below 480px.
+        h('thead', null, h('tr', null,
+          h('th', null, 'Check-in'), h('th', { class: 'col-sm-hide' }, 'Check-out'),
+          h('th', { class: 'num' }, 'Total'), h('th', { class: 'num' }, 'Balance'),
+          h('th', null, 'Guest'), h('th', { class: 'col-sm-hide' }, 'Listing'),
+          h('th', { class: 'col-sm-hide' }, 'Channel'), h('th', { class: 'col-sm-hide' }, 'Code'))),
         h('tbody', null, reservations.map((r) => h('tr', { class: 'row-link', tabindex: 0, onclick: () => navigate(`#/reservations/${r.booking_id}`), onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`#/reservations/${r.booking_id}`); } } },
           h('td', null, fmtDate(r.check_in), h('div', { class: 'muted small' }, `${r.nights} night${r.nights > 1 ? 's' : ''}`)),
-          h('td', null, fmtDate(r.check_out)),
-          h('td', null, h('strong', null, r.guest_name || r.guest_label || 'Guest'), r.guest_vip ? ' ⭐' : null, r.num_guests ? h('div', { class: 'muted small' }, `${r.num_guests} guest${r.num_guests > 1 ? 's' : ''}`) : null),
-          h('td', null, r.unit_name, h('div', { class: 'muted small' }, r.property_name)),
-          h('td', null, channelBadge(r.channel), r.status === 'cancelled' ? [' ', badge('voided', 'Cancelled')] : null),
-          h('td', { class: 'small' }, r.confirmation_code),
+          h('td', { class: 'col-sm-hide' }, fmtDate(r.check_out)),
           h('td', { class: 'num' }, peso(r.total_amount)),
-          h('td', { class: `num${Number(r.balance) > 0 && r.status === 'confirmed' ? ' amount--neg' : ''}` }, r.status === 'confirmed' ? peso(r.balance) : '—')))))));
+          h('td', { class: `num${Number(r.balance) > 0 && r.status === 'confirmed' ? ' amount--neg' : ''}` }, r.status === 'confirmed' ? peso(r.balance) : '—'),
+          h('td', null, h('strong', null, r.guest_name || r.guest_label || 'Guest'), r.guest_vip ? ' ⭐' : null, r.status === 'cancelled' ? [' ', badge('voided', 'Cancelled')] : null,
+            r.num_guests ? h('div', { class: 'muted small' }, `${r.num_guests} guest${r.num_guests > 1 ? 's' : ''}`) : null),
+          h('td', { class: 'col-sm-hide' }, r.unit_name, h('div', { class: 'muted small' }, r.property_name)),
+          h('td', { class: 'col-sm-hide' }, channelBadge(r.channel)),
+          h('td', { class: 'small col-sm-hide' }, r.confirmation_code)))))));
   }
   viewSelect.addEventListener('change', () => { filters.view = viewSelect.value; rememberFilters('reservations', filters); load(); });
   const bar = filterBar({
@@ -378,7 +403,7 @@ export async function reservationDetailView(el, { params, rerender }) {
   const recordPayment = () => formModal({
     title: 'Record payment', submitText: 'Save payment', idempotent: true,
     fields: [
-      h('div', { class: 'alert alert--info' }, `Balance: ${peso(r.balance)} of ${peso(r.total_amount)}${Number(r.channel_fee) > 0 ? ` (after the ${peso(r.channel_fee)} channel fee)` : ''}`),
+      h('div', { class: 'alert alert--info' }, `Balance: ${peso(r.balance)} of ${peso(r.total_amount)}${Number(r.channel_fee) > 0 && !r.channel_fee_ignored ? ` (after the ${peso(r.channel_fee)} channel fee)` : ''}`),
       field({ name: 'amount', label: 'Amount received', type: 'money', required: true, value: Number(r.balance) > 0 ? r.balance : '' }),
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'payment_date', label: 'Date received', type: 'date', required: true, value: today, max: today }),
@@ -396,30 +421,37 @@ export async function reservationDetailView(el, { params, rerender }) {
     },
   });
 
-  const editDetails = () => formModal({
-    title: 'Edit reservation', submitText: 'Save changes',
-    fields: [
-      r.ical_feed_id && h('p', { class: 'muted small' }, `Dates come from ${CHANNEL_LABEL[r.channel]} and update automatically. You can add the amounts here.`),
-      !r.ical_feed_id && h('div', { class: 'form-row form-row--2' },
-        field({ name: 'check_in', label: 'Check-in', type: 'date', required: true, value: r.check_in }),
-        field({ name: 'check_out', label: 'Check-out', type: 'date', required: true, value: r.check_out })),
-      h('div', { class: 'form-row form-row--2' },
-        field({ name: 'num_guests', label: 'Number of guests', type: 'number', min: 1, max: 50, value: r.num_guests }),
-        field({ name: 'channel', label: 'Booked through', type: 'select', value: r.channel, placeholderOption: false, options: Object.entries(CHANNEL_LABEL) })),
-      h('div', { class: 'form-row form-row--2' },
-        field({ name: 'accommodation_total', label: 'Accommodation total', type: 'money', value: r.accommodation_total }),
-        field({ name: 'cleaning_fee', label: 'Cleaning fee', type: 'money', value: r.cleaning_fee })),
-      h('div', { class: 'form-row form-row--2' },
-        field({ name: 'other_fees', label: 'Other fees', type: 'money', value: r.other_fees }),
-        field({ name: 'channel_fee', label: 'Channel fee / commission', type: 'money', value: r.channel_fee, hint: 'What the channel keeps. Used in owner statements.' })),
-      field({ name: 'notes', label: 'Notes', type: 'textarea', value: r.notes, maxlength: 1000 }),
-    ],
-    onSubmit: async (d) => {
-      const changes = changedFields(r, d);
-      if (Object.keys(changes).length) await patch(`/reservations/${r.booking_id}`, changes);
-      toast(Object.keys(changes).length ? 'Reservation updated.' : 'No changes to save.'); rerender();
-    },
-  });
+  const editDetails = () => {
+    const modal = formModal({
+      title: 'Edit reservation', submitText: 'Save changes',
+      fields: [
+        r.ical_feed_id && h('p', { class: 'muted small' }, `Dates come from ${CHANNEL_LABEL[r.channel]} and update automatically. You can add the amounts here.`),
+        r.channel_fee_ignored && h('p', { class: 'muted small' }, `Direct bookings have no channel fee. Saving this form removes the ${peso(r.channel_fee)} fee that is stored on it.`),
+        !r.ical_feed_id && h('div', { class: 'form-row form-row--2' },
+          field({ name: 'check_in', label: 'Check-in', type: 'date', required: true, value: r.check_in }),
+          field({ name: 'check_out', label: 'Check-out', type: 'date', required: true, value: r.check_out })),
+        h('div', { class: 'form-row form-row--2' },
+          field({ name: 'num_guests', label: 'Number of guests', type: 'number', min: 1, max: 50, value: r.num_guests }),
+          field({ name: 'channel', label: 'Booked through', type: 'select', value: r.channel, placeholderOption: false, options: Object.entries(CHANNEL_LABEL) })),
+        h('div', { class: 'form-row form-row--2' },
+          field({ name: 'accommodation_total', label: 'Accommodation total', type: 'money', value: r.accommodation_total }),
+          field({ name: 'cleaning_fee', label: 'Cleaning fee', type: 'money', value: r.cleaning_fee })),
+        h('div', { class: 'form-row form-row--2' },
+          field({ name: 'other_fees', label: 'Other fees', type: 'money', value: r.other_fees }),
+          field({ name: 'channel_fee', label: 'Channel fee / commission', type: 'money', value: r.channel_fee, hint: 'What the channel keeps. Used in owner statements.' })),
+        field({ name: 'notes', label: 'Notes', type: 'textarea', value: r.notes, maxlength: 1000 }),
+      ],
+      onSubmit: async (d) => {
+        d.channel_fee = channelFeeToSave(d.channel, r.channel_fee, d.channel_fee);
+        const changes = changedFields(r, d);
+        if (Object.keys(changes).length) await patch(`/reservations/${r.booking_id}`, changes);
+        toast(Object.keys(changes).length ? 'Reservation updated.' : 'No changes to save.'); rerender();
+      },
+    });
+    const form = modal.el.querySelector('form');
+    form.addEventListener('change', (e) => { if (e.target.name === 'channel') syncChannelFee(form, true); });
+    syncChannelFee(form, false);
+  };
 
   const cancel = async () => {
     const reason = await confirmDialog({ title: 'Cancel this reservation?', text: 'The dates become available again. Payments stay on record. Record any money you give back in the Refunds card.', confirmText: 'Cancel reservation', cancelText: 'Keep reservation', danger: true, reason: true });
@@ -450,9 +482,11 @@ export async function reservationDetailView(el, { params, rerender }) {
   const overpaid = canManage && confirmed && heldInfo ? overpaidAfterRefunds(r.balance, heldInfo.refunded) : 0;
   // A cancelled booking owes back what the cancellation policy suggests, not everything paid.
   const sug = heldInfo?.suggestion;
-  const stillToRefund = heldInfo && !confirmed && Number(heldInfo.refundable) > 0 ? Number(sug ? sug.amount : heldInfo.refundable) : 0;
+  // With no suggestion (no policy, or Custom) the alert still says what is held, so it shows then too.
+  const showRefundAlert = heldInfo && !confirmed && Number(heldInfo.refundable) > 0 && (!sug || Number(sug.amount) > 0);
   const nonRefundable = heldInfo && !confirmed && Number(heldInfo.refundable) > 0 && sug && !(Number(sug.amount) > 0);
-  const keep = Number(r.total_amount) - Number(r.channel_fee);
+  // A stored fee on a direct booking is ignored here too, so "You keep" matches the balance.
+  const keep = Number(r.total_amount) - (r.channel_fee_ignored ? 0 : Number(r.channel_fee));
   const feeSaved = r.channel === 'direct' ? Math.round(Number(r.accommodation_total) * 15) / 100 : 0;
 
   // Scrolls to the Refunds card; the links keep the #refunds-card anchor.
@@ -525,9 +559,11 @@ export async function reservationDetailView(el, { params, rerender }) {
           overpaid > 0 && h('div', { class: 'alert alert--warn', role: 'alert', style: { marginBottom: '12px' } },
             `Guest overpaid by ${peso(overpaid)} — `,
             h('a', { href: '#refunds-card', onclick: goRefunds }, 'record a refund')),
-          stillToRefund > 0 && h('div', { class: 'alert alert--warn', role: 'alert', style: { marginBottom: '12px' } },
-            `Cancelled: policy suggests refunding ${peso(stillToRefund)} of ${peso(heldInfo.paid)} paid — `,
-            h('a', { href: '#refunds-card', onclick: goRefunds }, 'see the Refunds card')),
+          confirmed && r.channel_fee_ignored && h('div', { class: 'alert alert--warn', role: 'alert', style: { marginBottom: '12px' } },
+            `This direct booking has a ${peso(r.channel_fee)} channel fee. Direct bookings don't have one, so the guest is asked for the full amount. Edit the booking to clear it, or change Booked through.`),
+          showRefundAlert && h('div', { class: 'alert alert--warn', role: 'alert', style: { marginBottom: '12px' } },
+            `${refundAlertText({ suggestion: sug, refundable: heldInfo.refundable, paid: heldInfo.paid, policy: heldInfo.policy })} `,
+            h('a', { href: '#refunds-card', onclick: goRefunds }, 'See the Refunds card.')),
           nonRefundable && h('div', { class: 'alert alert--info', style: { marginBottom: '12px' } }, 'Cancelled: non-refundable, nothing is due back.'),
           h('div', { class: 'card__head' }, h('h2', null, 'Payment'), h('div', { class: 'chips' },
             canManage && confirmed && Number(r.balance) > 0 && h('button', { class: 'btn btn--secondary btn--sm', onclick: copyPayLink }, 'Copy payment link'),
@@ -538,7 +574,7 @@ export async function reservationDetailView(el, { params, rerender }) {
             Number(r.other_fees) > 0 && [h('dt', null, 'Other fees'), h('dd', null, peso(r.other_fees))],
             Number(r.extras_total) > 0 && [h('dt', null, 'Extras'), h('dd', null, peso(r.extras_total))],
             h('dt', null, 'Total'), h('dd', null, h('strong', null, peso(r.total_amount))),
-            Number(r.channel_fee) > 0 && [h('dt', null, 'Channel fee'), h('dd', { class: 'muted' }, `− ${peso(r.channel_fee)}`)],
+            Number(r.channel_fee) > 0 && !r.channel_fee_ignored && [h('dt', null, 'Channel fee'), h('dd', { class: 'muted' }, `− ${peso(r.channel_fee)}`)],
             h('dt', null, 'Paid'), h('dd', null, peso(r.amount_paid)),
             confirmed ? [h('dt', null, 'Balance'), h('dd', { class: Number(r.balance) > 0 ? 'amount--neg' : '' }, h('strong', null, peso(r.balance)))]
               : [h('dt', null, 'Balance'), h('dd', { class: 'muted' }, 'Cancelled — not owed')]),
@@ -580,6 +616,7 @@ export async function receiptView(el, { params }) {
         h('dt', null, 'Payment method'), h('dd', null, `${METHOD_LABEL[r.payment_method] || r.payment_method}${r.reference_number ? ` · Ref. ${r.reference_number}` : ''}`),
         h('dt', null, 'For'), h('dd', null, `${r.unit_name}, ${fmtDate(r.check_in)} – ${fmtDate(r.check_out)} (booking ${r.confirmation_code})`),
         h('dt', null, 'Booking total'), h('dd', null, peso(r.total_amount)),
+        Number(r.adjustments) > 0 && [h('dt', null, 'Adjustments (settled through the booking channel)'), h('dd', null, `-${peso(r.adjustments)}`)],
         h('dt', null, 'Remaining balance'), h('dd', null, peso(Math.max(0, Number(r.balance_after)))),
         h('dt', null, 'Received by'), h('dd', null, r.recorded_by_name || '—')),
       h('p', { class: 'muted small', style: { marginTop: '18px' } }, 'This is an acknowledgement receipt for your records, not a BIR official receipt.')));

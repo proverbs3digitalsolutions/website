@@ -76,14 +76,19 @@ function roomRow({ listings, roomTypes, defaults, onRemove }) {
     el,
     // Returns the rooms to send (a room type with a count becomes that many rows), or throws a message.
     rooms() {
-      if (!ci.value || !co.value || co.value <= ci.value) throw new Error('Each room needs a check-out after its check-in.');
+      if (!ci.value || !co.value) throw new Error('Enter the check-in and check-out dates.');
+      if (co.value <= ci.value) throw new Error('Check-out must be after check-in.');
       const base = { check_in: ci.value, check_out: co.value, num_guests: Number(guests.value) || 1 };
+      // A typed 0 would make the night free. A blank total still means "use the listing's price".
+      if (price.value.trim() && Number(price.value) === 0) throw new Error("Accommodation total must be greater than zero. Leave it blank to use the listing's price.");
       if (price.value.trim()) base.accommodation_total = price.value.trim();
       if (cleaning.value.trim()) base.cleaning_fee = cleaning.value.trim();
       if (mode.value === 'type') {
         if (!type.value) throw new Error('Choose a room type for each room row.');
         const [property_id, ...rt] = type.value.split('|');
-        const n = Math.min(Math.max(Number(count.value) || 1, 1), 20);
+        // Never adjusted into range: a count the owner did not mean would book real rooms.
+        const n = Number(count.value);
+        if (!Number.isInteger(n) || n < 1 || n > 20) throw new Error('Count must be between 1 and 20.');
         return Array.from({ length: n }, () => ({ ...base, property_id, room_type: rt.join('|') }));
       }
       if (!unit.value) throw new Error('Choose a listing for each room row.');

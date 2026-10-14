@@ -125,10 +125,25 @@ function buildPanel() {
   return el;
 }
 
-// The floating button, added to the app shell.
+// The Ask button, added to the app shell. Below 960px it sits in the top bar (the slot app.js leaves for it), so it never covers
+// page content on a phone. From 960px up it floats over the page.
+const PHONE = '(max-width: 959px)';
+
 export function assistantButton() {
   const btn = h('button', { class: 'assist-fab', type: 'button', 'aria-label': 'Ask the BalayHub assistant', 'aria-expanded': 'false', hidden: true,
     onclick: () => (panel && !panel.hidden ? closeAssistant() : openAssistant()) }, icon('chat'), h('span', null, 'Ask'));
   assistantEnabled().then((on) => { btn.hidden = !on; });
   return btn;
 }
+
+// Moves the button into the top bar on a phone, and back into the shell above that. Called once the shell is on the page.
+export function placeAssistantButton() {
+  const btn = document.querySelector('.assist-fab');
+  if (!btn) return;
+  const slot = document.querySelector('.topbar__assist');
+  const inBar = Boolean(slot && globalThis.matchMedia?.(PHONE).matches);
+  btn.classList.toggle('assist-fab--bar', inBar);
+  (inBar ? slot : document.querySelector('.shell'))?.append(btn);
+}
+// Keep the button in the right place when the window crosses the phone width.
+globalThis.matchMedia?.(PHONE).addEventListener('change', placeAssistantButton);

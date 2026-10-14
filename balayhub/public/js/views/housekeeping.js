@@ -38,7 +38,7 @@ extendTranslations({
   'Photo (optional)': 'Litrato (hindi required)', 'Saved, but the photo did not upload. Add it from the Photos card.': 'Na-save, pero hindi na-upload ang litrato. Idagdag ito sa Photos.',
   'Item': 'Gamit', 'What did you find?': 'Ano ang nakita mo?', 'Where was it found?': 'Saan ito nakita?', 'Date found': 'Petsa ng pagkakita',
   'Save item': 'I-save ang gamit', 'Lost item recorded. Thank you.': 'Naitala na ang nakitang gamit. Salamat.',
-  'Qty': 'Dami', 'Used': 'Nagamit', 'Restocked': 'Nadagdag', 'Save': 'I-save', 'Cancel': 'Kanselahin',
+  'Qty': 'Dami', 'Used': 'Nagamit', 'Restocked': 'Nadagdag', 'Used or restocked': 'Nagamit o nadagdag', 'Save': 'I-save', 'Cancel': 'Kanselahin',
   'No supplies are set up for this property yet.': 'Wala pang supplies na naka-set up para sa property na ito.',
   'Enter a quantity for at least one item.': 'Maglagay ng dami sa kahit isang gamit.', 'Supplies saved.': 'Na-save ang supplies.',
   '{name} was out of stock, so it wasn\'t recorded.': 'Ubos na ang {name}, kaya hindi ito na-record.', 'Tell your manager.': 'Sabihan ang manager mo.',
@@ -496,7 +496,7 @@ async function suppliesModal(task, onSaved) {
   const { supplies } = await get(`/supplies${qs({ property_id: task.property_id })}`);
   const rows = (supplies || []).map((sp) => ({
     sp, qty: h('input', { type: 'number', inputmode: 'numeric', min: 0, max: 9999, class: 'input hk-qty', 'aria-label': `${T('Qty')}: ${sp.name}` }),
-    kind: h('select', { class: 'input', 'aria-label': sp.name }, h('option', { value: 'used' }, T('Used')), h('option', { value: 'restocked' }, T('Restocked'))),
+    kind: h('select', { class: 'input', 'aria-label': `${T('Used or restocked')}: ${sp.name}` }, h('option', { value: 'used' }, T('Used')), h('option', { value: 'restocked' }, T('Restocked'))),
   }));
   formModal({
     title: T('Supplies used'), submitText: T('Save'),

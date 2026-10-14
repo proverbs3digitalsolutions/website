@@ -74,10 +74,10 @@ test('calendar#1 and #7 rooms are added to a group in one call, all or nothing; 
 });
 
 test('money#2 a channel fee above the stay total is refused on create and edit', async () => {
-  const over = await owner.post('/api/reservations', { unit_id: u.R4.unit_id, check_in: d(60), check_out: d(61), guest_name: 'Fee', accommodation_total: '1000', cleaning_fee: '0', channel_fee: '1500' });
+  const over = await owner.post('/api/reservations', { unit_id: u.R4.unit_id, check_in: d(60), check_out: d(61), guest_name: 'Fee', channel: 'airbnb', accommodation_total: '1000', cleaning_fee: '0', channel_fee: '1500' });
   assert.equal(over.status, 400, JSON.stringify(over.data));
   assert.match(over.data.fields.channel_fee, /more than the stay total/);
-  const r = await stay(u.R4, 60, 61, { accommodation_total: '1000', cleaning_fee: '0', channel_fee: '1000' });
+  const r = await stay(u.R4, 60, 61, { channel: 'airbnb', accommodation_total: '1000', cleaning_fee: '0', channel_fee: '1000' });
   const patch = await owner.patch(`/api/reservations/${r.booking_id}`, { channel_fee: '1000.01' });
   assert.equal(patch.status, 400, JSON.stringify(patch.data));
   // Raising the total and the fee together is judged on the merged values.
@@ -135,7 +135,7 @@ test('money#11 the activity log records only the fields that changed', async () 
 });
 
 test('S3 changing the channel fee closes open payment checkouts', async () => {
-  const r = await stay(u.R5, 110, 111, { accommodation_total: '2000', cleaning_fee: '0' });
+  const r = await stay(u.R5, 110, 111, { channel: 'airbnb', accommodation_total: '2000', cleaning_fee: '0' });
   const saved = balancepay.closeOpenCheckouts;
   const closed = [];
   balancepay.closeOpenCheckouts = async (id) => { closed.push(id); };

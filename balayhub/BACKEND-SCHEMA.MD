@@ -181,8 +181,8 @@ Last updated: 2026-10-13
 | status | text | `confirmed` or `cancelled` |
 | check_in, check_out | date | `check_out > check_in`; at most 366 nights |
 | num_guests | smallint | 1–50 |
-| accommodation_total, cleaning_fee, other_fees, channel_fee | numeric | All ≥ 0 |
-| total_amount | numeric | **Generated**: accommodation + cleaning + other fees. Guest balance = total − channel_fee − non-voided payments |
+| accommodation_total, cleaning_fee, other_fees, channel_fee | numeric | All ≥ 0. `channel_fee` must be 0 when `channel` is `direct`: the app refuses a fee on create and on any edit that leaves the booking direct with a fee (legacy rows may still hold one; it is ignored for what is owed and still counted as a cost in reports) |
+| total_amount | numeric | **Generated**: accommodation + cleaning + other fees. Guest balance = total − channel fee − non-voided payments, where the channel fee counts as 0 on a `direct` booking (D-78) |
 | confirmation_code | text | Unique per workspace |
 | block_reason, notes, cancel_reason | text | |
 | checked_in_at, checked_out_at, cancelled_at, created_at, updated_at | timestamptz | |
@@ -820,7 +820,7 @@ The cleaner role is denied by default in code (`cleanerGuard`, D-48). Any row no
 
 **Job detail (`GET /api/cleaning-tasks/:id`) per role.**
 - **Owner and manager (assigned):** the whole record: checklist files, inspections, every damage report with `estimated_cost`, `status`, `charge_id`, `resolution_note`, `resolved_at` and `resolved_by_name`, every lost item with `status_note`, and the work orders (`request_id`, `title`, `status`).
-- **Staff (assigned properties):** checklist files, and only the damage reports and lost items they filed. Damage reports carry `report_id`, `description`, `created_at`, `reported_by_name` and photos; lost items carry `item_id`, `description`, `found_where`, `found_on`, `status`, `created_at`, `found_by_name` and photos. No amounts, charge, resolution, status note or inspections. Work orders as in section 6.
+- **Staff (assigned properties):** checklist files, and only the damage reports and lost items they filed. Damage reports carry `report_id`, `description`, `created_at`, `reported_by_name` and their photos under `files`; lost items carry `item_id`, `description`, `found_where`, `found_on`, `status`, `created_at`, `found_by_name` and photos. No amounts, charge, resolution, status note or inspections. Work orders as in section 6.
 - **Cleaner (own and unassigned jobs):** the same filed-by-them damage and lost-item fields as staff. Inspections appear only when the job is assigned to that cleaner. `work_orders` is always empty. No estimate, no damage status, no charge, no resolution, no status note.
 
 **Staff pages.** Staff may open Group bookings (rooms and stays, without money, only when every room is in their properties; section 6.3) and the Supplies page (read-only). The screen route block (`public/js/routeaccess.js`) and the menu no longer hide them. Housekeeping is a stay-only page; cleaners keep it.
@@ -844,6 +844,8 @@ The cleaner role is denied by default in code (`cleanerGuard`, D-48). Any row no
 - Listing edit: the postal code must be 4 digits; blank required fields return field messages; blank fees and discounts are saved as 0; a blank deposit percentage is left unchanged.
 - Manager invitations and later manager edits require at least one property.
 - Uploads: the shared check in `src/lib/storage.js` (structure plus a 64-byte minimum for images) covers every upload route.
+
+**Damage report create (QA round 3, 2026-10-14).** `POST /api/cleaning-tasks/:id/damage` answers staff and cleaners with the same trimmed shape as the job detail: `report_id`, `description`, `created_at`, `reported_by_name` and `files` (photos; empty on create because photos are added in a second request). Owners and managers get the full row (estimate, status, charge, resolution).
 
 ### 6.2 Phase 4 access matrix (guests, quotes, add-ons, settings)
 
@@ -941,3 +943,13 @@ Cleaners are denied by `cleanerGuard` on every Phase 5 route. "Assigned" means t
 - `POST /api/bulk/prices`: a 0% change is refused and a nightly price above ₱1,000,000 is refused (preview and apply). `POST /api/bulk/blocks` needs a `reason`.
 - Auth limits (`src/routes/auth.js`): sign-in and sign-up count failed attempts only (20 per IP and email, 60 per IP, per 15 minutes). Forgot-password and resend-verification: 5 per email address (or signed-in user), plus 30 per IP, per 15 minutes.
 - **Shared rule `src/lib/leases.js`** (`leasedListings`): a unit with an active monthly lease over any of the requested nights can't be booked for a short stay. Used by manual reservations (create and move), room-type and group bookings, the public booking page (availability and checkout) and iCal import. A long-term-only workspace gets 409 `LONG_TERM_ONLY` on short stays.
+
+## 9. API notes from QA round 3 (2026-10-14)
+
+- **Channel fee rule.** `POST /api/reservations` and `PATCH /api/reservations/:id` answer 400 on `channel_fee` ("Direct bookings have no channel fee. If a platform or agent took a cut, set Booked through to that channel or Other.") when the booking's channel is `direct` and the fee is above 0, including a PATCH that moves a booking with a fee to `direct`. The reservation detail carries `channel_fee_ignored` (true when the channel is direct and the stored fee is above 0). Wherever the app works out what is owed, it uses `CASE WHEN b.channel = 'direct' THEN 0 ELSE b.channel_fee END`; P&L, owner statements, stay reports and the owner portal still use the stored fee.
+- `DELETE /public/pay/:token/proofs/:proofId` (guest, same rate limit as the screenshot upload): withdraws a pending proof that has no file. Answers 200 `{ ok: true }`; 409 `NOT_PENDING` once reviewed; 409 `HAS_FILE` once a screenshot is saved; 404 for another booking's proof. Audited as `payment_proof.withdrawn` ("Withdrew a payment proof", by Guest). The host is told about a proof only after its screenshot is saved.
+- `GET /public/guidebook/:token` before the window opens answers 409 `GUIDE_NOT_YET` with `opens_on` (check-in minus 14 days). Wrong, cancelled and ended links keep the 404.
+- `GET /api/stay-reports` carries `month_invalid` (true when a `month` was given that isn't a real `YYYY-MM`; the current month is used).
+- Group rooms: `rooms.N.accommodation_total` of 0 or less is refused; blank means the listing's price. A short count reads "Only N <type> rooms are free on these dates (you asked for M). Nothing was saved." (409 `NO_FREE_ROOM`).
+- `POST /api/account/password`: the new password, the sign-out of other devices and the retirement of open reset links happen in one transaction under the per-user lock `reset:<user_id>`; `POST /auth/reset-password` takes the same lock.
+- `POST /api/bulk/prices`: errors use the on-screen field name ("Change (%) must be at least -90.").

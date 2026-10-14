@@ -244,7 +244,10 @@ test('guest page: opens from 14 days before check-in until 2 days after check-ou
   const first = await guest.get(`/api/public/guide/${opens.token}`);
   assert.equal(first.status, 200, JSON.stringify(first.data));
   assert.equal(first.data.secrets_from, d(13));
-  assert.equal(await guest.get(`/api/public/guide/${tooEarly.token}`).then((r) => r.status), 404);
+  const early = await guest.get(`/api/public/guide/${tooEarly.token}`);
+  assert.equal(early.status, 409, JSON.stringify(early.data));
+  assert.equal(early.data.code, 'GUIDE_NOT_YET');
+  assert.equal(early.data.opens_on, d(1), 'opens 14 days before check-in');
   const last = await guest.get(`/api/public/guide/${closing.token}`);
   assert.equal(last.status, 200);
   assert.equal(last.data.stay_over, true, 'after check-out the page says the stay is over');

@@ -173,7 +173,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   background: var(--amber-soft); color: var(--amber); border-bottom: 1px solid var(--line-2);
   padding: 10px 16px; font-size: .9rem; font-weight: 600; text-align: center;
 }
-.alert { padding: 12px 14px; border-radius: var(--radius-sm); font-size: .92rem; font-weight: 600; }
+.alert { padding: 12px 14px; border-radius: var(--radius-sm); font-size: .92rem; font-weight: 600; overflow-wrap: anywhere; }
 .alert--error { background: var(--red-soft); color: var(--red); }
 .alert--info { background: var(--blue-soft); color: var(--blue); }
 .alert--warn { background: var(--amber-soft); color: var(--amber); }
@@ -237,6 +237,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .topbar .brand { font-size: 1.1rem; }
 .topbar .brand svg { width: 30px; height: 30px; }
 .topbar__org { font-size: .8rem; color: var(--muted); max-width: 45vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The Ask button's slot in the top bar (below 960px). Pushed to the right, next to the account link. */
+.topbar__assist { margin-left: auto; display: flex; flex: none; }
+.topbar__assist:empty { display: none; }
 .content { padding: 16px 16px calc(var(--bottomnav-h) + 32px + env(safe-area-inset-bottom)); max-width: 1180px; width: 100%; min-width: 0; margin: 0 auto; }
 
 .bottomnav {
@@ -250,6 +253,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .bottomnav svg { width: 24px; height: 24px; }
 .bottomnav [aria-current="page"] { color: var(--accent); }
+/* Phone: keyboard focus scrolls to clear of the fixed bottom tab bar (WCAG 2.4.11). */
+@media (max-width: 959px) { html { scroll-padding-bottom: calc(var(--bottomnav-h) + 16px + env(safe-area-inset-bottom)); } }
 
 .morenav { position: fixed; inset: 0; z-index: 50; background: rgba(10, 20, 35, .4); display: flex; align-items: flex-end; }
 .morenav__sheet { background: var(--surface); width: 100%; border-radius: 18px 18px 0 0; padding: 12px 12px calc(16px + env(safe-area-inset-bottom)); }
@@ -300,7 +305,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 @media (min-width: 760px) { .stats { grid-template-columns: repeat(4, 1fr); } }
 .stat {
   background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 16px;
-  text-decoration: none; color: inherit; display: block; border: 1px solid transparent;
+  text-decoration: none; color: inherit; display: block; border: 1px solid transparent; min-width: 0;
 }
 a.stat:hover { border-color: var(--line-2); }
 .stat__label { font-size: .8rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
@@ -349,24 +354,28 @@ a.row:hover .row__title { color: var(--accent); }
 .badge--vacant { background: var(--teal-soft); color: var(--teal-ink); }
 
 .table-wrap { position: relative; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-/* Scroll cue: an edge fade shows only while more content is hidden on that side (background-attachment: local). */
-.table-wrap, .tabs {
-  --cue: color-mix(in srgb, var(--text) 22%, transparent);
+/* Scroll cue: an edge fade shows only while more content is hidden on that side (background-attachment: local).
+   Tab strips do not use it: they wrap onto more lines, so they never scroll sideways. */
+.table-wrap {
+  --cue: color-mix(in srgb, var(--text) 32%, transparent);
   background:
     linear-gradient(to right, var(--bg), var(--bg)) left center / 24px 100% no-repeat local,
     linear-gradient(to left, var(--bg), var(--bg)) right center / 24px 100% no-repeat local,
-    linear-gradient(to right, var(--cue), transparent) left center / 14px 100% no-repeat scroll,
-    linear-gradient(to left, var(--cue), transparent) right center / 14px 100% no-repeat scroll;
+    linear-gradient(to right, var(--cue), transparent) left center / 24px 100% no-repeat scroll,
+    linear-gradient(to left, var(--cue), transparent) right center / 24px 100% no-repeat scroll;
 }
 table.table { width: 100%; border-collapse: collapse; font-size: .92rem; }
 .table th, .table td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .table th { font-size: .76rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 750; white-space: nowrap; }
 .table td.num, .table th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Phone: low-priority columns drop out so the rest of the table fits. */
+@media (max-width: 480px) { .col-sm-hide { display: none; } }
 .table tfoot td { font-weight: 800; border-bottom: 0; }
 
 .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; align-items: center; }
 .toolbar .search { flex: 1 1 220px; }
-.tabs { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 14px; padding-bottom: 2px; }
+.toolbar > * { min-width: 0; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; padding-bottom: 2px; }
 .tabs a, .tabs button {
   padding: 8px 14px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line-2);
   font-weight: 700; font-size: .88rem; color: var(--muted); text-decoration: none; white-space: nowrap; cursor: pointer;
@@ -462,7 +471,7 @@ dialog.modal::backdrop { background: rgba(10, 20, 35, .45); }
 .input--sm { min-height: 38px; padding: 6px 10px; font-size: .9rem; width: auto; }
 .card--flush { padding: 0; overflow: hidden; }
 .stat--flat { box-shadow: none; border: 1px solid var(--line); }
-.stat--flat .stat__value { font-size: 1.6rem; }
+.stat--flat .stat__value { font-size: clamp(.9rem, 4.2vw, 1.6rem); }
 .stat--flat .stat__label { text-transform: none; letter-spacing: 0; font-size: .9rem; color: var(--text); font-weight: 650; margin-top: 2px; }
 .hero-num { font-size: 2rem; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; margin: 2px 0 4px; }
 .delta { display: inline-block; font-size: .8rem; font-weight: 750; padding: 2px 8px; border-radius: 99px; margin-bottom: 6px; }
@@ -568,6 +577,7 @@ dialog.modal::backdrop { background: rgba(10, 20, 35, .45); }
   .res-view-select { display: none; }
 }
 .toolbar select.input { width: auto; flex: 0 1 200px; }
+@media (max-width: 480px) { .toolbar select.input, .flt__bar select.input { flex: 1 1 100%; width: 100%; } }
 
 /* listings */
 .listing-grid { display: grid; gap: 16px; }
@@ -987,6 +997,8 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .lp-lang__menu button { background: none; border: 0; text-align: left; padding: 10px 12px; border-radius: 8px; cursor: pointer; font-weight: 600; color: var(--text); }
 .lp-lang__menu button:hover, .lp-lang__menu button.is-on { background: var(--sand-soft); }
 .gs-modal { width: min(760px, calc(100vw - 24px)); }
+/* The Get started sheet sets an inline width (ui.js openModal, wide), so the phone sheet needs !important to win. */
+@media (max-width: 559px) { dialog.modal.gs-modal { width: 100vw !important; max-width: 100vw; margin: auto 0 0; } }
 .gs { display: grid; gap: 14px; padding: 4px 4px 8px; }
 .gs-steps { list-style: none; display: flex; justify-content: center; gap: 0; margin: 0 0 6px; padding: 0; }
 .gs-steps li { display: grid; justify-items: center; gap: 4px; width: 110px; position: relative; color: var(--muted); }
@@ -1081,12 +1093,9 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .assist-fab svg { width: 20px; height: 20px; }
 .assist-fab:focus-visible { outline: 3px solid var(--sand); outline-offset: 2px; }
 .assist-fab[aria-expanded="true"] { display: none; }
-@media (max-width: 959px) { .assist-fab { bottom: calc(76px + env(safe-area-inset-bottom)); right: 14px; padding: 11px 15px; } }
-/* Phone: icon-only circle (the button keeps its aria-label), and room under the page so it never covers the last line. */
-@media (max-width: 559px) {
-  .assist-fab { width: 48px; height: 48px; padding: 0; justify-content: center; font-size: 0; gap: 0; }
-  body:has(.assist-fab:not([hidden])) .content { padding-bottom: calc(var(--bottomnav-h) + 88px + env(safe-area-inset-bottom)); }
-}
+/* Below 960px the Ask button sits in the top bar (assistant.js mounts it in .topbar__assist) as a 40px round icon button.
+   It never floats over the page, so the page needs no extra bottom room. */
+.assist-fab--bar { position: static; bottom: auto; right: auto; width: 40px; height: 40px; padding: 0; border-radius: 50%; flex: none; justify-content: center; gap: 0; font-size: 0; box-shadow: none; }
 @media print { .assist-fab, .assist { display: none !important; } }
 .assist { position: fixed; right: 20px; bottom: 20px; z-index: 60; width: min(400px, calc(100vw - 24px)); height: min(620px, calc(100vh - 40px));
   display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 18px 48px rgba(0, 0, 0, .28); overflow: hidden; }
@@ -1199,8 +1208,7 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .op__ws { font-size: .8rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .op__name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .op__tabs { background: var(--surface); border-bottom: 1px solid var(--line); }
-.op__tabs-in { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; scroll-snap-type: x proximity; }
-.op__tabs-in::-webkit-scrollbar { display: none; }
+.op__tabs-in { display: flex; flex-wrap: wrap; gap: 4px; }
 .op__tabs a { flex: none; scroll-snap-align: center; white-space: nowrap; padding: 12px 14px; min-height: 44px; display: inline-flex; align-items: center; color: var(--muted); font-weight: 700; text-decoration: none; border-bottom: 3px solid transparent; }
 .op__tabs a:hover { color: var(--text); }
 .op__tabs a[aria-current="page"] { color: var(--forest); border-bottom-color: var(--forest); }

@@ -229,6 +229,7 @@ export const ACTIONS = {
   'lost_found.reported': 'Logged a lost item', 'lost_found.updated': 'Edited a lost item',
   'supply.created': 'Added a supply', 'supply.updated': 'Edited a supply', 'supply.movement': 'Recorded a supply movement', 'supply.archived': 'Archived a supply',
   'payment_proof.submitted': 'Received a payment screenshot', 'payment_proof.image_added': 'Added a payment screenshot', 'payment_proof.rejected': 'Rejected a payment screenshot',
+  'payment_proof.withdrawn': 'Withdrew a payment proof',
   'quote.created': 'Created a quote', 'quote.sent': 'Sent a quote', 'quote.cancelled': 'Cancelled a quote',
   'addon.created': 'Added an add-on', 'addon.updated': 'Edited an add-on', 'addon.archived': 'Archived an add-on',
   'member.invited': 'Invited a team member', 'member.joined': 'Joined the workspace', 'member.updated': 'Changed a team member’s access',
@@ -251,12 +252,15 @@ const DETAIL_LABELS = {
   estimated_cost: 'Estimated cost', payout: 'Payout', refund: 'Refund', deduction: 'Deduction', reserve_topup: 'Reserve top-up',
   check_in: 'Check-in', check_out: 'Check-out', start: 'Start', end: 'End', end_date: 'End date', paid_on: 'Paid on', paid_until: 'Paid until',
   month: 'Month', months: 'Months', enabled: 'Turned on', sent: 'Sent', count: 'Count', quantity: 'Quantity',
+  abandoned_followup: 'Follow-up email', returning_guest_pct: 'Returning-guest discount',
 };
 const MONEY_KEYS = new Set(['amount', 'amount_paid', 'total_amount', 'price', 'unit_price', 'monthly_rent', 'estimated_cost', 'payout', 'refund', 'deduction', 'reserve_topup']);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // One detail value as text: pesos for money, dates as dates, yes or no for switches, known words as labels.
 function detailValue(k, v) {
+  if (k === 'abandoned_followup') return v ? 'On' : 'Off';
+  if (k === 'returning_guest_pct') return `${v}%`;
   if (typeof v === 'boolean') return v ? 'Yes' : 'No';
   if (MONEY_KEYS.has(k)) return v !== '' && Number.isFinite(Number(v)) ? peso(v) : '';
   const s = String(v);
@@ -266,12 +270,23 @@ function detailValue(k, v) {
   return label(s);
 }
 
+// "every 1 month", "every 3 months": the stored unit is plural ('days' or 'months'), so it is singular for 1.
+const repeatText = (n, unit) => `every ${n} ${Number(n) === 1 ? String(unit).replace(/s$/, '') : unit}`;
+
 // Audit details on one line. Ids (any *_id field, or any UUID value), empty values and nested data are left out.
 export function summarize(details) {
   if (!details) return '';
   const parts = [];
   for (const [k, v] of Object.entries(details)) {
+    // Turning the discount off saves null. That is shown as Off, so the row still says what changed.
+    if (k === 'returning_guest_pct' && v === null) { parts.push(`${DETAIL_LABELS[k]}: Off`); continue; }
     if (v === null || v === undefined || typeof v === 'object' || k.endsWith('_id') || UUID.test(String(v))) continue;
+    // A repeat schedule is two fields, the count and the unit. They read as one phrase where the count is.
+    if (k === 'every_unit') continue;
+    if (k === 'every_n' && details.every_unit) {
+      parts.push(`Repeats: ${repeatText(v, details.every_unit)}`);
+      continue;
+    }
     const text = detailValue(k, v);
     if (text) parts.push(`${DETAIL_LABELS[k] || k.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())}: ${text}`);
   }

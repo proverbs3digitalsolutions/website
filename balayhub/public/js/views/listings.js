@@ -2,7 +2,7 @@
 
 import { get, post, patch, qs, api, ApiError } from '../api.js';
 import {
-  h, icon, peso, fmtDate, fmtDateTime, badge, field, formModal, makeForm, openModal, confirmDialog, emptyState, toast, options, todayManila, manilaDay,
+  h, icon, peso, pesoShort, fmtDate, fmtDateTime, badge, field, formModal, makeForm, openModal, confirmDialog, emptyState, toast, options, todayManila, manilaDay,
 } from '../ui.js';
 import { state } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
@@ -51,6 +51,18 @@ async function roomTypeNames() {
 // The server wants real lists and numbers, not form strings.
 function prepUnit(d) {
   return { ...d, tags: d.tags ? d.tags.split(',').filter(Boolean) : [], min_price: d.min_price === '' ? null : d.min_price, room_type: d.room_type?.trim() || null };
+}
+
+// A typed amount as a number ("₱5,000" becomes 5000), read the same way the server reads money.
+const moneyNumber = (v) => Number(String(v ?? '').replace(/[₱,\s]/g, ''));
+
+// A lowest price above the usual nightly rate means every night costs at least that much, so ask first.
+// Resolves true when the save may go ahead; a cancelled question resolves false and nothing is saved.
+async function lowPriceOk(d) {
+  const floor = moneyNumber(d.min_price); const rate = moneyNumber(d.nightly_rate);
+  if (!d.min_price || !(floor > rate)) return true;
+  return Boolean(await confirmDialog({ title: 'Check the lowest price?', confirmText: 'Save anyway',
+    text: `Your lowest price (${pesoShort(floor)}) is above your usual nightly price (${pesoShort(rate)}), so every night will cost at least ${pesoShort(floor)}. Save anyway?` }));
 }
 
 const BUILDING_SAVED = 'The building was saved; fix the listing details and save again.';
@@ -141,11 +153,13 @@ async function addListingModal(onSaved) {
   }) : null;
   propSelect?.querySelector('select').addEventListener('change', (e) => { newProp.hidden = e.target.value !== '__new'; });
   if (!properties.length && !isOwner) { toast('Ask the workspace owner to add a property first.', 'error'); return; }
-  formModal({
-    title: 'Add listing', submitText: 'Save listing', draftKey: 'listing-new',
+  // Not formModal: a cancelled question must leave the form open with what was typed.
+  const modal = openModal({ title: 'Add listing', body: makeForm({
+    submitText: 'Save listing', draftKey: 'listing-new', cancel: () => modal.close(),
     fields: [propSelect, newProp, h('hr', { class: 'divider' }), ...listingFields({}, roomTypes)],
     onSubmit: async (raw) => {
       const d = prepUnit(raw);
+      if (!await lowPriceOk(d)) return;
       let propertyId = d.property_id;
       if (!propertyId || propertyId === '__new') {
         // A building saved by an earlier try in this form is reused, never posted twice.
@@ -175,8 +189,9 @@ async function addListingModal(onSaved) {
       }
       toast('Listing added. Next: connect your Airbnb or Booking.com calendar.');
       onSaved();
+      modal.close();
     },
-  });
+  }) });
 }
 
 // Listing photos for the booking page: upload (shrunk first), choose the cover, delete.
@@ -501,8 +516,13 @@ export async function listingsView(el, { query }) {
           const { units } = await get(`/properties/${l.property_id}`).then((r) => ({ units: r.units }));
           const unit = units.find((u) => u.unit_id === l.unit_id);
           const roomTypes = await roomTypeNames();
-          formModal({ title: `Edit ${l.unit_name}`, submitText: 'Save changes', fields: listingFields({ ...unit, tags: unit.tags }, roomTypes),
-            onSubmit: async (d) => { await patch(`/units/${l.unit_id}`, prepUnit(d)); toast('Listing updated.'); load(); } });
+          // Not formModal: a cancelled question must leave the form open with what was typed.
+          const modal = openModal({ title: `Edit ${l.unit_name}`, body: makeForm({ submitText: 'Save changes', fields: listingFields({ ...unit, tags: unit.tags }, roomTypes),
+            cancel: () => modal.close(),
+            onSubmit: async (d) => {
+              if (!await lowPriceOk(d)) return;
+              await patch(`/units/${l.unit_id}`, prepUnit(d)); toast('Listing updated.'); load(); modal.close();
+            } }) });
         } }, 'Edit'),
         isOwner && h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Archive ${l.unit_name}`, onclick: () => changeArchive(l, 'archive', load) }, 'Archive'),
         h('a', { class: 'btn btn--ghost btn--sm', href: `#/reservations?q=${encodeURIComponent(l.unit_name)}&view=all` }, 'Bookings')))))

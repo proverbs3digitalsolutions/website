@@ -13,6 +13,7 @@ const { requireRole, rateLimit } = require('../lib/auth');
 const { propertyScope, loadUnit } = require('../lib/access');
 const { audit } = require('../lib/audit');
 const guidebook = require('../lib/guidebook');
+const ical = require('../lib/ical');
 
 const router = express.Router();
 const publicRouter = express.Router();
@@ -68,8 +69,10 @@ const guideLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 60, key: (req) =
 publicRouter.use('/public/guide', guideLimiter);
 
 const NOT_AVAILABLE = 'This guidebook is not available for this stay. Please ask your host for a new link.';
+const NOT_YET = 'This guidebook is not open yet. Come back on the day shown.';
 
-// Found only for a confirmed stay inside the link window. Anything else is the same 404.
+// Found only for a confirmed stay inside the link window. Bad tokens, cancelled stays and closed windows get
+// the same 404. Before the window the link is valid, so the guest gets the date it opens and nothing else.
 async function loadByToken(token, today) {
   if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{20,64}$/.test(token)) throw notFound(NOT_AVAILABLE);
   const cols = [...guidebook.GUIDE_COLUMNS, 'door_code_enc'].map((c) => `ug.${c}`).join(', ');
@@ -85,7 +88,11 @@ async function loadByToken(token, today) {
        LEFT JOIN guests g ON g.guest_id = b.guest_id
        LEFT JOIN unit_guides ug ON ug.unit_id = u.unit_id
       WHERE b.guide_token = $1 AND b.kind = 'reservation'`, [token]);
-  if (!row || row.status !== 'confirmed' || !guidebook.linkOpen(row, today)) throw notFound(NOT_AVAILABLE);
+  if (!row || row.status !== 'confirmed') throw notFound(NOT_AVAILABLE);
+  // The window opens 14 days before check-in (the same rule as guidebook.linkOpen).
+  const opensOn = ical.addDays(row.check_in, -14);
+  if (today < opensOn) throw new HttpError(409, NOT_YET, { code: 'GUIDE_NOT_YET', opens_on: opensOn });
+  if (!guidebook.linkOpen(row, today)) throw notFound(NOT_AVAILABLE);
   return row;
 }
 

@@ -75,6 +75,12 @@ export async function reportsView(el, { query }) {
 
   async function load() {
     history.replaceState(null, '', `#/reports${qs(changed(filters, defaults))}`);
+    // A custom range with no dates (filters.js clears both when the pair runs backwards) has nothing to report on yet.
+    if (filters.period === 'custom' && !filters.from && !filters.to) {
+      exportLink.removeAttribute('href');
+      body.replaceChildren(h('div', { class: 'card' }, h('p', { class: 'muted' }, 'Pick both dates to see this range.')));
+      return;
+    }
     exportLink.href = `/api/reports/export${qs(apiParams())}`;
     body.replaceChildren(h('div', { class: 'skeleton' }));
     let r;
@@ -123,7 +129,7 @@ export async function reportsView(el, { query }) {
         h('div', { class: 'card' },
           h('div', { class: 'card__head' }, h('h2', null, 'By month')),
           h('div', { class: 'table-wrap' }, h('table', { class: 'table' },
-            h('thead', null, h('tr', null, h('th', null, 'Month'), h('th', null, ''), h('th', { class: 'num' }, 'Collected'), h('th', { class: 'num' }, 'Expenses'), h('th', { class: 'num' }, 'Net'))),
+            h('thead', null, h('tr', null, h('th', null, 'Month'), h('th', null, h('span', { class: 'sr-only' }, 'Collected and expenses')), h('th', { class: 'num' }, 'Collected'), h('th', { class: 'num' }, 'Expenses'), h('th', { class: 'num' }, 'Net'))),
             h('tbody', null, r.monthly.map((m) => h('tr', null,
               h('td', null, fmtMonth(m.month)),
               h('td', { style: { minWidth: '90px' } },
