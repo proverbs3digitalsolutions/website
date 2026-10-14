@@ -63,6 +63,9 @@ function unitFields(u = {}) {
     h('div', { class: stayOnly ? 'form-row' : 'form-row form-row--2' },
       !stayOnly && field({ name: 'monthly_rent', label: 'Monthly rent', type: 'money', required: true, value: u.monthly_rent, placeholder: '8,000' }),
       field({ name: 'security_deposit_amount', label: 'Security deposit', type: 'money', value: u.security_deposit_amount, placeholder: '16,000' })),
+    // A new unit with no nightly rate is an unpriced listing the edit form then refuses to save.
+    !u.unit_id && state.user.business_type !== 'long_term' && h('div', { class: 'form-row' },
+      field({ name: 'nightly_rate', label: 'Base nightly rate (₱)', type: 'money', required: true, placeholder: '2,500' })),
     h('div', { class: 'form-row form-row--2' },
       field({ name: 'availability', label: 'Availability', type: 'select', value: u.availability || 'available', placeholderOption: false, options: [['available', 'Available to rent'], ['unavailable', 'Not available (renovation, owner use)']] }),
       field({ name: 'availability_date', label: 'Available from', type: 'date', value: u.availability_date })),

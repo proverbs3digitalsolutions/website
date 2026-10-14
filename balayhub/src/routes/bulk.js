@@ -112,7 +112,10 @@ async function priceChanges(db, units, body) {
       // A night already at its new price isn't a change: leave it out, so Apply doesn't write it
       // (which would freeze a night on its usual rate at that price).
       if (body.action === 'set') {
-        if (n.price !== body.price) changes.push({ ...row, date: n.night, from_price: n.price, to_price: body.price });
+        if (n.price !== body.price) {
+          changes.push({ ...row, date: n.night, from_price: n.price, to_price: body.price });
+          if (u.min_price !== null && Number(body.price) < Number(u.min_price)) belowLowest += 1;
+        }
       } else if (n.price === null) unpriced += 1;
       else {
         const toPrice = changeBy(n.price, body.percent);

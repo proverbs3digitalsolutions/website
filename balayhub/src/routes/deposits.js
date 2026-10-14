@@ -138,7 +138,14 @@ async function emailGuest(b, d, kind, user) {
     ? `Hi ${first},\n\nWe received your refundable security deposit of ${peso(d.amount)} by ${METHOD_LABEL[d.method]} on ${d.received_date} for ${stay}.\n\nWe'll return it after check-out once the unit has been checked.\n\nSalamat!\n${b.workspace_name}`
     : `Hi ${first},\n\nHere is the summary of your security deposit for ${stay}:\n\nDeposit:   ${peso(d.amount)}\n${Number(d.deduction_amount) > 0 ? `Deduction: ${peso(d.deduction_amount)}\nReason:    ${d.deduction_reason}\n` : ''}Returned:  ${peso(d.refund_amount)}${Number(d.refund_amount) > 0 ? ` by ${METHOD_LABEL[d.refund_method]}${d.refund_reference ? ` (ref. ${d.refund_reference})` : ''}` : ''}\n\nThank you for staying with us${Number(d.deduction_amount) > 0 ? '. If you have questions about the deduction, just reply to this email' : ''}.\n\nSalamat!\n${b.workspace_name}`;
   const r = await sendMail({ to: b.guest_email, subject: kind === 'received' ? `Security deposit received · ${b.confirmation_code}` : `Your security deposit · ${b.confirmation_code}`, text });
-  return r.notConfigured || r.error ? { sent: false, error: r.reason || 'Email is not set up yet.' } : { sent: true, to: user?.role === 'staff' ? 'the guest' : b.guest_email };
+  if (r.notConfigured || r.error) {
+    // The provider's text is for owners and managers; everyone else gets a fixed sentence and the raw text goes to the log.
+    const raw = r.reason || 'Email is not set up yet.';
+    if (['owner', 'manager'].includes(user?.role)) return { sent: false, error: raw };
+    console.warn(`Deposit email failed for booking ${b.booking_id}: ${raw}`);
+    return { sent: false, error: 'The email could not be sent. Ask an owner or manager to send it again.' };
+  }
+  return { sent: true, to: user?.role === 'staff' ? 'the guest' : b.guest_email };
 }
 
 // Deposits still held after check-out (for Home).

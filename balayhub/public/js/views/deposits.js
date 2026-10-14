@@ -9,6 +9,17 @@ const METHODS = [['cash', 'Cash'], ['gcash', 'GCash'], ['maya', 'Maya'], ['bank_
 const label = (m) => METHODS.find(([k]) => k === m)?.[1] || m;
 const STATUS = { held: ['partial', 'Held'], refunded: ['paid', 'Returned'], partly_refunded: ['paid', 'Partly returned'], kept: ['overdue', 'Kept'] };
 
+// The return line under the deduction box. A deduction above the deposit is one the server refuses (settle), so the line
+// says the limit and shows no return figure: a preview never shows a figure the server refuses. An amount that can't be
+// read, or a negative one, shows nothing rather than a figure built from a guess.
+export function returnLine(typedText, deposit) {
+  const raw = String(typedText ?? '');
+  const typed = raw.trim() === '' ? 0 : parseAmount(raw);
+  if (Number.isNaN(typed) || typed < 0) return '';
+  if (typed > Number(deposit.amount)) return `The deduction can't be more than the deposit (${peso(deposit.amount)}).`;
+  return `Return to guest: ${peso(Number(deposit.amount) - typed)}`;
+}
+
 export async function depositCard(r, rerender) {
   let d;
   try { d = await get(`/reservations/${r.booking_id}/deposit`); } catch { return null; }
@@ -25,7 +36,7 @@ export async function depositCard(r, rerender) {
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'method', label: 'Method', type: 'select', required: true, value: 'cash', placeholderOption: false, options: METHODS }),
         field({ name: 'reference_number', label: 'Reference (optional)', maxlength: 100 })),
-      r.guest_email && field({ name: 'send_receipt', label: `Email an acknowledgement to ${r.guest_email}`, type: 'checkbox', value: true }),
+      (r.guest_email || r.guest_has_email) && field({ name: 'send_receipt', label: r.guest_email ? `Email an acknowledgement to ${r.guest_email}` : 'Email an acknowledgement to the guest', type: 'checkbox', value: true }),
     ],
     onSubmit: async (v) => { sent(await post(`/reservations/${r.booking_id}/deposit`, v), 'Deposit recorded.'); rerender(); },
   });
@@ -34,14 +45,7 @@ export async function depositCard(r, rerender) {
     const suggested = Math.min(Number(d.suggested_deduction) || 0, Number(dep.amount));
     const dedInput = field({ name: 'deduction_amount', label: 'Deduction for damage / missing items', type: 'money', value: suggested > 0 ? String(suggested) : '0', hint: `Deposit: ${peso(dep.amount)}. Leave 0 to return it all.${suggested > 0 ? ' From damage reports: you can change it.' : ''}` });
     const refundLine = h('p', { class: 'small' });
-    const update = () => {
-      const raw = dedInput.querySelector('input').value;
-      const typed = raw.trim() === '' ? 0 : parseAmount(raw);
-      // An amount that can't be read shows no return figure, rather than one built from a guess.
-      if (Number.isNaN(typed)) { refundLine.textContent = ''; return; }
-      const ded = Math.min(typed, Number(dep.amount));
-      refundLine.textContent = `Return to guest: ${peso(Number(dep.amount) - ded)}`;
-    };
+    const update = () => { refundLine.textContent = returnLine(dedInput.querySelector('input').value, dep); };
     dedInput.querySelector('input').addEventListener('input', update);
     update();
     formModal({
@@ -54,7 +58,7 @@ export async function depositCard(r, rerender) {
           field({ name: 'refund_method', label: 'Returned by', type: 'select', value: dep.method === 'card' ? 'bank_transfer' : dep.method, placeholderOption: false, options: METHODS }),
           field({ name: 'refund_reference', label: 'Reference (optional)', maxlength: 100 })),
         h('p', { class: 'muted small' }, 'Damage photos: use "Add photo" on the deposit card (before or after saving).'),
-        r.guest_email && field({ name: 'send_receipt', label: `Email the summary to ${r.guest_email}`, type: 'checkbox', value: true }),
+        (r.guest_email || r.guest_has_email) && field({ name: 'send_receipt', label: r.guest_email ? `Email the summary to ${r.guest_email}` : 'Email the summary to the guest', type: 'checkbox', value: true }),
       ],
       onSubmit: async (v) => { sent(await post(`/reservations/${r.booking_id}/deposit/settle`, v), 'Deposit settled.'); rerender(); },
     });

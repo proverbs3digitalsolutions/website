@@ -3,7 +3,7 @@
 import { get, post, patch, qs, uploadFile } from '../api.js';
 import {
   h, icon, peso, fmtDate, fmtDateTime, manilaDay, badge, label, options, field, formModal, emptyState, pageHead, toast,
-  todayManila, filesList, openModal, unitLabel, confirmDialog } from '../ui.js';
+  todayManila, filesList, openModal, unitLabel, confirmDialog, showErrors } from '../ui.js';
 import { state, navigate } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 
@@ -11,6 +11,24 @@ const PRIORITIES = ['low', 'medium', 'high', 'urgent'];
 const STATUSES = ['open', 'in_progress', 'resolved', 'cancelled'];
 // The status buttons a request offers. A resolved request can be reopened or cancelled, a cancelled one only reopened.
 export const nextStatuses = (status) => ({ resolved: ['open', 'cancelled'], cancelled: ['open'] })[status] || STATUSES.filter((s) => s !== status);
+
+// Filter values a link may carry. Any other value is dropped before the list shows, so no chip shows for it (D-77).
+const FILTER_CHOICES = {
+  priority: ['high_up', ...PRIORITIES],
+  sort: ['newest', 'oldest', 'priority', 'cost', 'property'],
+  cost: ['recorded', 'none', 'estimate_only'],
+};
+
+// The next-due window the server accepts: a year back to five years ahead, counted from today in Manila.
+// Like Postgres, a day that does not exist in the target year is kept to the month's last day.
+export function nextDueWindow(today = todayManila()) {
+  const [y, m, d] = today.split('-').map(Number);
+  const on = (year) => {
+    const last = new Date(Date.UTC(year, m, 0)).getUTCDate();
+    return `${year}-${String(m).padStart(2, '0')}-${String(Math.min(d, last)).padStart(2, '0')}`;
+  };
+  return { earliest: on(y - 1), latest: on(y + 5) };
+}
 
 // "From cleaning task" badge, linking to the job. Inside a list row (already a link) it navigates by click.
 const taskBadge = (m, inRow) => h('a', {
@@ -59,6 +77,7 @@ export async function maintenanceView(el, { query }) {
   const defaults = { status: 'active', q: '', priority: '', property_id: '', unit_id: '', assigned: '', from: '', to: '', cost: '', sort: '' };
   const filters = initFilters('maintenance', query, defaults);
   if (!['active', 'open', 'in_progress', 'resolved', 'cancelled', 'all'].includes(filters.status)) filters.status = 'active';
+  for (const [key, choices] of Object.entries(FILTER_CHOICES)) if (!choices.includes(filters[key])) filters[key] = defaults[key];
   const listCard = h('div', { class: 'card' });
   const schedulesBox = h('div');
   const canSchedule = state.user.role !== 'staff';
@@ -75,6 +94,10 @@ export async function maintenanceView(el, { query }) {
     tabs.replaceChildren(...[['active', 'Open & in progress'], ['open', 'Open'], ['in_progress', 'In progress'], ['resolved', 'Resolved'], ['cancelled', 'Cancelled'], ['all', 'All']].map(([s, t]) =>
       h('button', { role: 'tab', 'aria-selected': String(filters.status === s), onclick: () => { filters.status = s; rememberFilters('maintenance', filters); load(); } }, t)));
     const res = await get(`/maintenance${qs(changed(filters, defaults))}`);
+    // A name no request is assigned to (typed into a link) is dropped, and the list loads again without it.
+    if (filters.assigned && filters.assigned !== 'none' && !res.assignees.includes(filters.assigned)) {
+      filters.assigned = defaults.assigned; rememberFilters('maintenance', filters); renderBar(); return load();
+    }
     const { requests } = res;
     // Rebuild the bar the first time new "Assigned to" names appear.
     if (res.assignees.join('|') !== assignees.join('|')) { assignees = res.assignees; renderBar(); }
@@ -124,28 +147,42 @@ export async function maintenanceView(el, { query }) {
     if (!canSchedule) return;
     let schedules;
     try { ({ schedules } = await get('/maintenance-schedules')); } catch { schedulesBox.replaceChildren(); return; }
-    const form = (x) => formModal({
-      title: x ? 'Edit recurring job' : 'New recurring job', submitText: x ? 'Save changes' : 'Save schedule',
-      fields: [
-        !x && field({ name: 'property_id', label: 'Property', type: 'select', required: true, value: properties.length === 1 ? properties[0].property_id : '', options: properties.map((p) => [p.property_id, p.property_name]) }),
-        !x && field({ name: 'unit_id', label: 'Unit (optional)', type: 'select', placeholderOption: 'Whole property', options: units.map((u) => [u.unit_id, `${unitLabel(u.unit_name)}${properties.length > 1 ? ` · ${u.property_name}` : ''}`]) }),
-        field({ name: 'title', label: 'Job', required: true, value: x?.title, placeholder: 'e.g. Clean the aircon', maxlength: 150 }),
-        field({ name: 'description', label: 'Details', type: 'textarea', value: x?.description, maxlength: 2000 }),
-        h('div', { class: 'form-row form-row--2' },
-          field({ name: 'every_n', label: 'Repeat every', type: 'number', min: 1, max: 365, step: 1, required: true, value: x?.every_n ?? 3 }),
-          field({ name: 'every_unit', label: 'Unit of time', type: 'select', required: true, value: x?.every_unit || 'months', placeholderOption: false, options: [['days', 'Days'], ['months', 'Months']] })),
-        h('div', { class: 'form-row form-row--2' },
-          field({ name: 'next_due', label: 'Next due', type: 'date', required: true, value: x?.next_due ? String(x.next_due).slice(0, 10) : todayManila() }),
-          field({ name: 'priority', label: 'Priority', type: 'select', required: true, value: x?.priority || 'medium', placeholderOption: false, options: options(PRIORITIES) })),
-      ],
-      onSubmit: async (d) => {
-        // The hourly check opens a request as soon as a job is due, so a date already past opens one at once. Ask first (Q9).
-        if (d.next_due < todayManila() && !await confirmDialog({ title: 'Next due date is in the past', text: 'A request opens at the next hourly check. Save anyway?', confirmText: 'Save anyway' })) return false;
-        const body = { title: d.title, description: d.description, every_n: Number(d.every_n), every_unit: d.every_unit, next_due: d.next_due, priority: d.priority };
-        if (x) await patch(`/maintenance-schedules/${x.schedule_id}`, body); else await post('/maintenance-schedules', { ...body, property_id: d.property_id, unit_id: d.unit_id || undefined });
-        toast(x ? 'Schedule updated.' : 'Schedule saved.'); loadSchedules();
-      },
-    });
+    const form = (x) => {
+      const propField = !x && field({ name: 'property_id', label: 'Property', type: 'select', required: true, value: properties.length === 1 ? properties[0].property_id : '', options: properties.map((p) => [p.property_id, p.property_name]) });
+      const unitField = !x && field({ name: 'unit_id', label: 'Unit (optional)', type: 'select', placeholderOption: 'Whole property', options: [] });
+      // The Unit list follows the Property choice, as New request does, so a unit from another property drops out.
+      if (!x) {
+        const fillUnits = (pid) => unitField.querySelector('select').replaceChildren(h('option', { value: '' }, 'Whole property'),
+          units.filter((u) => u.property_id === pid).map((u) => h('option', { value: u.unit_id }, unitLabel(u.unit_name))));
+        propField.querySelector('select').addEventListener('change', (e) => fillUnits(e.target.value));
+        fillUnits(propField.querySelector('select').value);
+      }
+      return formModal({
+        title: x ? 'Edit recurring job' : 'New recurring job', submitText: x ? 'Save changes' : 'Save schedule',
+        fields: [
+          propField,
+          unitField,
+          field({ name: 'title', label: 'Job', required: true, value: x?.title, placeholder: 'e.g. Clean the aircon', maxlength: 150 }),
+          field({ name: 'description', label: 'Details', type: 'textarea', value: x?.description, maxlength: 2000 }),
+          h('div', { class: 'form-row form-row--2' },
+            field({ name: 'every_n', label: 'Repeat every', type: 'number', min: 1, max: 365, step: 1, required: true, value: x?.every_n ?? 3 }),
+            field({ name: 'every_unit', label: 'Unit of time', type: 'select', required: true, value: x?.every_unit || 'months', placeholderOption: false, options: [['days', 'Days'], ['months', 'Months']] })),
+          h('div', { class: 'form-row form-row--2' },
+            field({ name: 'next_due', label: 'Next due', type: 'date', required: true, value: x?.next_due ? String(x.next_due).slice(0, 10) : todayManila() }),
+            field({ name: 'priority', label: 'Priority', type: 'select', required: true, value: x?.priority || 'medium', placeholderOption: false, options: options(PRIORITIES) })),
+        ],
+        onSubmit: async (d, ctx) => {
+          // The server refuses a next-due date outside its window, so say so at the field before any question (#30).
+          const { earliest, latest } = nextDueWindow();
+          if (d.next_due < earliest || d.next_due > latest) { showErrors(ctx.form, { next_due: `Next due must be between ${earliest} and ${latest}.` }); return false; }
+          // The hourly check opens a request as soon as a job is due, so a date already past opens one at once. Ask first (Q9).
+          if (d.next_due < todayManila() && !await confirmDialog({ title: 'Next due date is in the past', text: 'A request opens at the next hourly check. Save anyway?', confirmText: 'Save anyway' })) return false;
+          const body = { title: d.title, description: d.description, every_n: Number(d.every_n), every_unit: d.every_unit, next_due: d.next_due, priority: d.priority };
+          if (x) await patch(`/maintenance-schedules/${x.schedule_id}`, body); else await post('/maintenance-schedules', { ...body, property_id: d.property_id, unit_id: d.unit_id || undefined });
+          toast(x ? 'Schedule updated.' : 'Schedule saved.'); loadSchedules();
+        },
+      });
+    };
     const pause = async (x) => {
       try {
         if (x.active) { if (!await confirmDialog({ title: 'Pause this job?', text: 'No new repair requests are created until you resume it.', confirmText: 'Pause' })) return; await post(`/maintenance-schedules/${x.schedule_id}/pause`); toast('Paused.'); } else { await patch(`/maintenance-schedules/${x.schedule_id}`, { active: true }); toast('Resumed.'); }

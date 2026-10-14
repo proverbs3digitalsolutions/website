@@ -310,22 +310,26 @@ export async function logout() {
 
 function openMore(current) {
   const moreBtn = document.activeElement;
+  let panel;
   const sheet = h('dialog', { class: 'morenav', 'aria-label': 'More', onclick: (e) => { if (e.target === sheet) sheet.close(); }, onkeydown: (e) => {
       if (e.key !== 'Tab') return;
       const items = [...sheet.querySelectorAll('a[href], button:not([disabled])')];
       const first = items[0]; const last = items[items.length - 1];
       if (!first) return;
-      if (e.shiftKey && (document.activeElement === first || !sheet.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
+      // Shift+Tab from the first item, the scrollable panel or the dialog itself wraps to the last item.
+      if (e.shiftKey && (document.activeElement === first || document.activeElement === sheet || document.activeElement === panel || !sheet.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     },
     onclose: () => { sheet.remove(); if (moreBtn?.isConnected) moreBtn.focus(); } },
-    h('div', { class: 'morenav__sheet' },
+    panel = h('div', { class: 'morenav__sheet' },
+      h('button', { class: 'morenav__close', type: 'button', 'aria-label': 'Close menu', onclick: () => sheet.close() }, 'Close'),
       h('a', { href: '#/account', onclick: () => sheet.close(), 'aria-current': isCurrent('/account', current) ? 'page' : null }, icon('users'), 'My account'),
       moreNav().map(([p, t, ic]) => h('a', { href: `#${p}`, onclick: () => sheet.close(), 'aria-current': isCurrent(p, current) ? 'page' : null }, icon(ic), t)),
       h('div', { class: 'morenav__theme' }, themeSwitch()),
       h('button', { onclick: () => { sheet.close(); logout(); } }, icon('logout'), 'Log out')));
   document.body.append(sheet);
   sheet.showModal();
+  sheet.querySelector('a[href], button:not([disabled])')?.focus();
 }
 
 const initials = (name) => String(name || '').split(/\s+/).filter(Boolean).slice(0, 2).map((x) => x[0].toUpperCase()).join('') || '?';

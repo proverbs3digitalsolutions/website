@@ -19,7 +19,7 @@ The app is a single page with hash routes (`#/…`). Each route has an access le
 
 - **Home page by type:** Long-term workspaces land on `#/dashboard`. Short-term and Both land on `#/home`.
 - **Unknown route:** sends to the home page (signed in) or `#/` (signed out).
-- **Route guard (2026-10-13, D-76):** a signed-in user who types a page their role or workspace type can't use (for example staff on `#/inbox`, a manager on `#/owners`, a long-term workspace on `#/calendar`, a short-term one on `#/dashboard`, `#/admin` for anyone but a platform admin) goes to their home page with the toast "That page isn't available for your role or workspace." The rules are in `public/js/routeaccess.js`, built from the same lists as the menu.
+- **Route guard (2026-10-13, D-76):** a signed-in user who types a page their role or workspace type can't use (for example staff on `#/inbox`, a manager on `#/owners`, a long-term workspace on `#/calendar`, a short-term one on `#/dashboard`, `#/admin` for anyone but a platform admin) goes to their home page with the toast "That page isn't available for your role or workspace." The rules are in `public/js/routeaccess.js`, built from the same lists as the menu. *Exception (2026-10-14, round 7): a cleaner is sent to Housekeeping without the toast (`public/js/app.js`), on purpose.*
 - **After login (`afterLogin`):** setup redirect first; else the remembered page; else, for an owner of a short-term or Both workspace (not the demo) whose Launchpad is unfinished and not hidden, `#/launchpad`; else the home page.
 
 ## 2. Global states (every app page)
@@ -111,7 +111,7 @@ Managers and staff only see records in properties assigned to them (`propertySco
 | Owner portal (unit owners, separate sign-in) | Invites and turns off access | No access | No access |
 | Stay reports and tax summary | Yes | Yes | No (403) |
 | Long-term Dashboard and Reports | All properties | Assigned | Assigned (not hidden for staff) |
-| Properties | Create, archive, restore | Edit, add/archive units | View |
+| Properties | Create, archive, restore | Edit, add/archive units *(D-83: managers archive and restore units and listings in assigned properties from the property page.)* | View |
 | Tenants and leases | Full, export tenant data | Full except export | Names only; no lease documents; can record payments |
 | Expenses | Record, correct, void | Same | Record only |
 | Maintenance | Full | Full | Create, add costs; can't change status |
@@ -700,7 +700,7 @@ Spec: `docs/specs/PHASE-5-PRICING-TEAM.md`. Decisions D-66 to D-74. Staff and cl
 
 - **Inbox, mark unread:** after "Mark unread" the screen goes back to the conversation list.
 - **Inbox, send later:** if the chosen time has already passed, a dialog asks "That time has passed. Send it now?" with Send now or Cancel.
-- **Listings:** owners (short-term workspaces) get Archive and Restore on the Listings page. Managers and staff don't.
+- **Listings:** owners (short-term workspaces) get Archive and Restore on the Listings page. Managers and staff don't. *Clarified 2026-10-14 (D-83): this is the Listings page's own button. Managers archive and restore listings from the property page.*
 - **Staff menu:** Group bookings and Supplies appear. Supplies has no add, edit, count or restock buttons for staff.
 - **Supplies, record use above what is on hand:** for an owner or manager, a dialog titled "Not enough on hand" asks first, with the button "Record what is on hand". If confirmed, the log shows the on-hand amount and "Asked for N" in its note. With none on hand, the save is refused with a message. For a cleaner saving from a job, the short item is skipped, the rest are saved, and a note names the skipped item. The note disappears after 4 seconds.
 - **Rent payments:** a payment above the tenant's balance asks first and shows how much becomes advance credit.
@@ -807,7 +807,7 @@ Spec: `docs/specs/PHASE-5-PRICING-TEAM.md`. Decisions D-66 to D-74. Staff and cl
 - **Cleaning board and job page, per role:** owners and managers see inspection results in full. Staff see no inspection line. A cleaner sees "Passed" or "Failed" with the date on a unit where she has the job (no score, notes or inspector), and sees the guest only on units where she has a job.
 - **Housekeeping buttons:** Copy for cleaner is hidden on a cancelled job. Inspect is hidden on a paid clean (as Reopen is).
 - **Cleaner photo card:** the file box is named "Choose a photo". The empty card and the message for a file that isn't JPG, PNG or WEBP are in Taglish for cleaners using Taglish.
-- **New reservation:** "Use ₱X from your rates" fills the total and then disappears. If the stay's rates are missing it offers the cleaning fee only. A rate typed as "1,5" is read as 1.5. A check-out before check-in shows one message.
+- **New reservation:** "Use ₱X from your rates" fills the total and then disappears. If the stay's rates are missing it offers the cleaning fee only. ~~A rate typed as "1,5" is read as 1.5.~~ *Corrected 2026-10-14 (D-83): "1,5" is refused, as D-79 says.* A check-out before check-in shows one message.
 - **Group lead guest:** the search says "Showing 8 of N" when there are more matches.
 - **Daily close:** balances show dates written out ("Check-in Oct 15, 2026"). A sync problem opens the listing. Update close says "Close updated." On phones each "All clear" badge stays on its heading line.
 - **Listing form, discounts:** a weekly discount above the 14+ night discount, or a 14+ night discount above the monthly one, is refused at the longer stay's field with the reason.
@@ -826,3 +826,28 @@ Spec: `docs/specs/PHASE-5-PRICING-TEAM.md`. Decisions D-66 to D-74. Staff and cl
 - **Reviews and support:** a review filter that isn't a real id is ignored. A support rating can be given once; a second try is refused.
 - **Notifications:** a notification setting can't be saved with an empty property list.
 - **Long-term assistant:** the footer wording matches a monthly-rental workspace.
+
+## 20. QA round 7 flow changes (2026-10-14)
+
+- **Record payment above the balance:** asks "This is ₱X more than the balance of ₱Y. Record it?" Cancel keeps the form, says "Payment not saved." and records and sends nothing. The receipt email goes only after "Record it". A payment at the exact balance asks nothing. The question is on the screen only; the server still accepts an overpayment (D-32).
+- **Groups list and group page:** a cancelled group shows "Cancelled" and "₱X held" when its rooms had payments; the group page adds "Held from cancelled rooms". Owners and managers only; staff never see the held figure.
+- **New reservation:** "Use ₱X" appears after a typed amount too, and again when the money changes. Backwards dates (check-out before check-in) leave the price line empty and Save shows the one check-out message.
+- **Reservations filters:** Nights (at least) and Guests (at least) refuse anything that is not a whole number, with a message at the field and no filter chip.
+- **Deposit return:** a deduction above the deposit shows the server's sentence about the limit and no "Return to guest" button; no ₱0.00.
+- **Quote with a listing that has no nightly rate for some nights:** "This listing has no nightly rate for some nights. Enter the total yourself.", an empty total box and no "Use ₱0" button.
+- **Add unit (short-term and Both workspaces):** asks for a base nightly rate. A listing saved without one shows the note "No nightly rate yet." (staff see it too).
+- **Photos dialog:** every image has alt text with its number; buttons are named "Make cover, photo N" and "Delete, photo N"; per-card buttons are named with the listing ("Archive, <listing>").
+- **Pricing forms:** a base rate below zero, a rule's days out of range (gap nights 1 to 7, last-minute 0 to 30, far-out 31 to 540) and a percentage out of range are refused at the field before "Change the existing rule?" or the lowest-price question.
+- **Bulk "Set a price":** warns when it would put nights below the lowest price, as the percentage change does. The price preview labels a changed night "Adjusted" (a booked night still reads "Booked").
+- **Outside cleaner names:** typing a team member's name for a rate or a job is refused with "Pick <name> from the team list instead." The remove-rate dialog names the amount and the person.
+- **My pay (cleaners):** cleans paid to someone else show as "Paid to another cleaner" with no amount (Taglish too). "N cleans" stays on one line on phones.
+- **Recurring maintenance job:** the unit list follows the chosen property; a next-due date more than a year back is refused at the field with no question; a recent past date asks first. Resuming a paused job writes "Resumed a maintenance schedule".
+- **Calendar:** staff see their own subtitle; link filters that aren't real options (tag, availability, cleaning, maintenance priority) are dropped; a range that crosses a month reads "October – November 2026" with "Nov 1" on the first of the month.
+- **Inbox:** From and To show the full year; the Listing dropdown names the unit (the property only when two units share a name); an unknown listing or property id in the link is ignored and shows the full list.
+- **Stay reports:** the average stay line says how many whole stays it counts; a link with the end before the start shows both dates and the end-before-start line; the By listing header reads "Of which cleaning & extras".
+- **Reviews (empty):** owners get a hint to Inbox settings; managers and staff read "Reviews from your guests show here."
+- **Booking page:** "At least 1 guest." stays at the field and no quote is asked for fewer than 1; switching language works on an invalid-link card without a reload.
+- **Guest pages in Taglish:** the "link not valid" and "not available" sentences (check-in, review, guidebook, quote, booking page).
+- **Get started:** an error moves focus to the first field with a message.
+- **More menu (phones):** a visible Close button, first in the list so it takes focus; Shift+Tab wraps inside the menu.
+- **Team invite with an existing email:** one message at the field, "This email already has a BalayHub account. Use a different email for each workspace.", plus a generic banner.

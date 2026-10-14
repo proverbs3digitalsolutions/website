@@ -12,6 +12,7 @@ const { validate, uuidParam } = require('../lib/validate');
 const { requireRole, rateLimit } = require('../lib/auth');
 const { propertyScope, loadUnit } = require('../lib/access');
 const { audit } = require('../lib/audit');
+const { changedKeys } = require('../lib/auditdiff');
 const guidebook = require('../lib/guidebook');
 const ical = require('../lib/ical');
 
@@ -44,9 +45,15 @@ router.get('/units/:id/guide', managers, ah(async (req, res) => {
 router.put('/units/:id/guide', managers, ah(async (req, res) => {
   const unit = await loadUnit(req.user, uuidParam(req.params.id));
   const input = validate(req.body, guideSpec, { partial: true });
-  const row = await tx((db) => guidebook.saveGuide(db, req.user, unit.unit_id, input));
-  // The audit records which fields changed, never their values (the door code is secret).
-  await audit(null, req.user, 'guide.updated', 'unit', unit.unit_id, { fields: Object.keys(input) });
+  let fields = [];
+  const row = await tx(async (db) => {
+    // The stored door code is compared in plain form, so saving the same code is no change.
+    const { rows: [cur] } = await db.query('SELECT * FROM unit_guides WHERE unit_id = $1 FOR UPDATE', [unit.unit_id]);
+    fields = changedKeys({ ...cur, door_code: guidebook.doorCodeOf(cur?.door_code_enc) }, input);
+    return guidebook.saveGuide(db, req.user, unit.unit_id, input);
+  });
+  // The audit records which fields changed, never their values (the door code is secret). No change, no row.
+  if (fields.length) await audit(null, req.user, 'guide.updated', 'unit', unit.unit_id, { fields });
   res.json({ guide: guidebook.guideForHost(row) });
 }));
 

@@ -15,6 +15,7 @@ const { requireRole, rateLimit } = require('../lib/auth');
 const { loadUnit, propertyScope } = require('../lib/access');
 const { addDays } = require('../lib/holidays');
 const { sendMail } = require('../lib/mailer');
+const { quote } = require('../lib/pricing');
 const direct = require('./directbooking');
 
 const { cents, money, validationError, manilaToday, nightsBetween, priceStay, isFree, withHostState, parseSelections,
@@ -136,14 +137,17 @@ function offerEmail(q) {
 
 // ---------------------------------------------------------------- host (owners and managers)
 
-// The price the pricing engine gives for a listing and dates, to start a quote from.
+// The price the pricing engine gives for a listing and dates, to start a quote from. missing_rates is true when a
+// night has no nightly rate (the same flag /reservations/quote gives), so the screen never fills in a PHP 0 price.
 router.get('/units/:id/price-preview', managers, ah(async (req, res) => {
   const unit = await loadUnit(req.user, uuidParam(req.params.id));
   const { check_in, check_out } = validate(req.query, {
     check_in: { type: 'date', required: true, label: 'Check-in' },
     check_out: { type: 'date', required: true, label: 'Check-out' },
   });
-  res.json({ ...await priceStay(unit, check_in, check_out), available: await isFree(unit.unit_id, check_in, check_out) });
+  const price = await priceStay(unit, check_in, check_out);
+  const { missing_rates } = await quote(unit.unit_id, check_in, check_out);
+  res.json({ ...price, missing_rates, available: await isFree(unit.unit_id, check_in, check_out) });
 }));
 
 router.get('/quotes', managers, ah(async (req, res) => {

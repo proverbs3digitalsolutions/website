@@ -74,6 +74,11 @@ export async function inboxView(el, { params, query, rerender }) {
   // Links keep the current filters, so opening a conversation doesn't reset the list.
   const href = (id) => `#/inbox${id ? `/${id}` : ''}${qs(changed(filters, { ...defaults, view: '' }))}`;
   const stUnits = units.filter((u) => u.nightly_rate !== null && u.nightly_rate !== undefined);
+  // A listing or property the workspace doesn't have (an old or edited link) is dropped here, so no chip shows a raw id.
+  if (!stUnits.some((u) => u.unit_id === filters.unit_id)) filters.unit_id = '';
+  if (!properties.some((p) => p.property_id === filters.property_id)) filters.property_id = '';
+  // Two listings can share a name; only those get the property added, so the dropdown and its chip stay short.
+  const repeated = new Set(stUnits.map((u) => u.unit_name).filter((n, i, all) => all.indexOf(n) !== i));
   const items = h('div');
   const viewSelect = h('select', { class: 'input input--sm', 'aria-label': 'Show' },
     VIEWS.map(([k, t]) => h('option', { value: k, selected: k === filters.view }, viewLabel([k, t], counts.counts))));
@@ -136,7 +141,7 @@ export async function inboxView(el, { params, query, rerender }) {
       { name: 'stay', label: 'Stay', all: 'Any stay', options: [['upcoming', 'Upcoming'], ['in_house', 'Staying now'], ['past', 'Checked out'], ['cancelled', 'Cancelled']] },
       { name: 'channel', label: 'Channel', all: 'All channels', options: Object.entries(CHANNEL_LABEL) },
       properties.length > 1 && { name: 'property_id', label: 'Property', all: 'All properties', options: properties.map((p) => [p.property_id, p.property_name]) },
-      { name: 'unit_id', label: 'Listing', all: 'All listings', options: stUnits.map((u) => [u.unit_id, `${u.unit_name}${properties.length > 1 ? ` · ${u.property_name || ''}` : ''}`]) },
+      { name: 'unit_id', label: 'Listing', all: 'All listings', options: stUnits.map((u) => [u.unit_id, repeated.has(u.unit_name) ? `${u.unit_name} · ${u.property_name || ''}` : u.unit_name]) },
       assignees.length > 1 && { name: 'assigned', label: 'Assigned to', all: 'Anyone', options: [['unassigned', 'Not assigned'], ...assignees.map((a) => [a.user_id, a.full_name])] },
       { name: 'attention', label: 'Needs attention', all: 'Any', options: [['awaiting_reply', 'Guest wrote last'], ['failed', 'Message not sent'], ['scheduled', 'Has scheduled messages']] },
       { name: 'msg', keys: ['msg_from', 'msg_to'], label: 'Last message between', type: 'daterange' },

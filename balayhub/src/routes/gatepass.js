@@ -14,6 +14,7 @@ const { query, one } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
 const { validate, uuidParam, EMAIL_RE } = require('../lib/validate');
 const { audit } = require('../lib/audit');
+const { changedKeys } = require('../lib/auditdiff');
 const { requireRole, rateLimit } = require('../lib/auth');
 const { propertyScope, loadProperty } = require('../lib/access');
 const { planStatus } = require('../lib/plans');
@@ -69,7 +70,8 @@ router.patch('/properties/:id/gatepass', managers, ah(async (req, res) => {
   const keys = Object.keys(body).filter((k) => body[k] !== undefined && (body[k] !== null || ['admin_email', 'gatepass_authorized_by', 'gatepass_notes'].includes(k)));
   if (keys.length) {
     await query(`UPDATE properties SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')} WHERE property_id = $1`, [p.property_id, ...keys.map((k) => body[k])]);
-    await audit(null, req.user, 'property.gatepass_updated', 'property', p.property_id, { fields: keys });
+    const fields = changedKeys(p, Object.fromEntries(keys.map((k) => [k, body[k]])));
+    if (fields.length) await audit(null, req.user, 'property.gatepass_updated', 'property', p.property_id, { fields });
   }
   res.json({ ok: true });
 }));

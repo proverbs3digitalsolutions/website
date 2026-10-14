@@ -288,7 +288,8 @@ export async function groupsView(el, { query }) {
           h('td', null, g.check_in ? `${fmtDate(g.check_in)} – ${fmtDate(g.check_out)}` : '—'),
           h('td', null, isCancelled(g) ? '—' : String(g.rooms)),
           h('td', null, isCancelled(g) ? h('span', { class: 'badge badge--voided' }, 'Cancelled') : h('span', { class: 'badge badge--active' }, 'Active')),
-          canManage && h('td', { class: 'num' }, peso(g.total)),
+          // A cancelled group has no total owed (its rooms are cancelled); the money they still hold is named under it.
+          canManage && h('td', { class: 'num' }, isCancelled(g) ? [h('span', { class: 'muted' }, 'Cancelled'), h('div', { class: 'muted small' }, Number(g.held) > 0 ? `${peso(g.held)} held` : '—')] : peso(g.total)),
           canManage && h('td', { class: `num${bal > 0 ? ' amount--neg' : ''}` }, isCancelled(g) ? '—' : peso(bal)));
       })))));
   }
@@ -364,7 +365,9 @@ export async function groupDetailView(el, { params, rerender }) {
         })),
         canManage && h('tfoot', null, h('tr', null, h('td', { colspan: 3 }, 'Group total'),
           h('td', { class: 'num' }, peso(totals.total)), h('td', { class: 'num' }, peso(totals.amount_paid)),
-          h('td', { class: `num${Number(totals.balance) > 0 ? ' amount--neg' : ''}` }, peso(totals.balance)), !cancelled && h('td')))))
+          h('td', { class: `num${Number(totals.balance) > 0 ? ' amount--neg' : ''}` }, peso(totals.balance)), !cancelled && h('td')),
+          // Money still held on rooms that were removed or cancelled. It is on record but not part of the total above.
+          Number(totals.held) > 0 && h('tr', null, h('td', { colspan: cancelled ? 6 : 7, class: 'muted' }, `Held from cancelled rooms ${peso(totals.held)}`)))))
         : h('p', { class: 'muted' }, 'No rooms in this group.')),
     canManage && h('p', { class: 'muted small' }, 'Payments are recorded on each room\'s reservation. Open a room to record one.'));
 }

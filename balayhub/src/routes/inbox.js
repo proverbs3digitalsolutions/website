@@ -10,6 +10,7 @@ const { query, one } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
 const { validate, uuidParam, isValidDate, UUID_RE } = require('../lib/validate');
 const { audit } = require('../lib/audit');
+const { changedKeys } = require('../lib/auditdiff');
 const { requireRole, rateLimit } = require('../lib/auth');
 const { propertyScope } = require('../lib/access');
 const { mailEnabled } = require('../lib/mailer');
@@ -37,6 +38,12 @@ const validationError = (fields) => new HttpError(400, 'Please check the highlig
 const dayText = (d) => new Date(`${String(d).slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 // A filter id that isn't a UUID is ignored, like a bad channel or view, so an old or edited link still loads the list.
 const uuidOrNull = (v) => (typeof v === 'string' && UUID_RE.test(v) ? v : null);
+// A listing or property filter counts only when this workspace has that row; any other id is ignored like a bad one.
+// The caller's own property scope still applies to the rows themselves.
+async function inWorkspace(user, sql, id) {
+  if (!id) return null;
+  return (await one(sql, [id, user.organization_id])) ? id : null;
+}
 
 // A mention in a note is stored as @[Full Name](user id).
 const MENTION_RE = /@\[([^\]\n]{1,120})\]\(([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\)/gi;
@@ -160,9 +167,10 @@ router.get('/inbox', ah(async (req, res) => {
   const qp = req.query;
   if (qp.unread === '1') where.push('c.unread');
   if (CHANNELS.includes(qp.channel)) { params.push(qp.channel); where.push(`b.channel = $${params.length}`); }
-  const propertyId = uuidOrNull(qp.property_id);
+  const propertyId = await inWorkspace(req.user, 'SELECT 1 FROM properties WHERE property_id = $1 AND organization_id = $2', uuidOrNull(qp.property_id));
   if (propertyId) { params.push(propertyId); where.push(`p.property_id = $${params.length}`); }
-  const unitId = uuidOrNull(qp.unit_id);
+  const unitId = await inWorkspace(req.user, `SELECT 1 FROM units u JOIN properties p ON p.property_id = u.property_id
+                                               WHERE u.unit_id = $1 AND p.organization_id = $2`, uuidOrNull(qp.unit_id));
   if (unitId) { params.push(unitId); where.push(`u.unit_id = $${params.length}`); }
   if (STAYS[qp.stay]) where.push(STAYS[qp.stay]);
   const assignee = uuidOrNull(qp.assigned);
@@ -553,7 +561,9 @@ router.patch('/automations/:id', owners, ah(async (req, res) => {
     const restart = body.enabled === true && !a.enabled ? ', created_at = now()' : '';
     await query(`UPDATE automations SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')}${restart} WHERE automation_id = $1`,
       [a.automation_id, ...keys.map((k) => body[k])]);
-    await audit(null, req.user, 'automation.updated', 'automation', a.automation_id, { after: body });
+    // Only the fields whose stored value really changed are logged, by name; a save with no change logs nothing.
+    const fields = changedKeys(a, Object.fromEntries(keys.map((k) => [k, body[k]])));
+    if (fields.length) await audit(null, req.user, 'automation.updated', 'automation', a.automation_id, { fields, name: a.name });
   }
   res.json({ automation: await loadAutomation(req.user, a.automation_id) });
 }));

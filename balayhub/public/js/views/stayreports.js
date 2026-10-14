@@ -13,6 +13,11 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 const CATEGORY = { repairs: 'Repairs', utilities: 'Utilities', taxes: 'Taxes', insurance: 'Insurance', association_dues: 'Association dues', supplies: 'Supplies', salaries: 'Salaries', cleaning: 'Cleaning', other: 'Other' };
 const pct = (n) => (n === null || n === undefined ? '—' : `${n}%`);
 const monthName = (ym) => new Date(`${ym}-01T00:00:00Z`).toLocaleDateString('en-PH', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+// A real calendar day as YYYY-MM-DD (2026-02-30 is not).
+function isDay(v) {
+  const d = new Date(`${v}T00:00:00Z`);
+  return /^\d{4}-\d{2}-\d{2}$/.test(v || '') && !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+}
 
 function stat(label, value, sub) {
   return h('div', { class: 'stat stat--flat' }, h('div', { class: 'stat__value' }, value), h('div', { class: 'stat__label' }, label), sub && h('div', { class: 'muted small' }, sub));
@@ -103,6 +108,8 @@ export async function stayReportsView(el, { query = {} }) {
   const defaults = { period: '', month: '', year: '', from: '', to: '', property_id: '', unit_id: '', channel: '' };
   const filters = initFilters('stay-reports', query, defaults);
   if (!filters.period && filters.year && !query.month) filters.period = 'year'; // old links: ?year=2026
+  // initFilters() holds back a range that runs backwards. A shared link keeps its real dates on screen; load() says why.
+  if (filters.period === 'range' && isDay(query.from) && isDay(query.to) && query.to < query.from) { filters.from = query.from; filters.to = query.to; }
   const periodBox = h('div', { class: 'chips' });
   const status = h('span', { class: 'muted small' });
   const notice = h('div');
@@ -129,11 +136,14 @@ export async function stayReportsView(el, { query = {} }) {
   async function load() {
     drawPeriod();
     setUrl(changed(filters, defaults));
+    // A range that ends before it starts is never sent: this month is shown, and the dates stay in the boxes until fixed.
+    const backwards = filters.period === 'range' && Boolean(filters.from && filters.to) && filters.to < filters.from;
     let periodQ;
     if (filters.period === 'year') periodQ = { year: filters.year || thisYear };
-    else if (filters.period === 'range' && filters.from && filters.to) periodQ = { from: filters.from, to: filters.to };
+    else if (filters.period === 'range' && filters.from && filters.to && !backwards) periodQ = { from: filters.from, to: filters.to };
     else periodQ = { month: filters.month || todayManila().slice(0, 7) };
-    status.textContent = filters.period === 'range' && !(filters.from && filters.to) ? 'Choose both dates. Showing this month for now.' : '';
+    status.textContent = backwards ? 'The end date must be after the start date. Showing this month for now.'
+      : filters.period === 'range' && !(filters.from && filters.to) ? 'Choose both dates. Showing this month for now.' : '';
     const apiQ = qs({ ...periodQ, ...scopeOf(filters) });
     exportLink.href = `/api/stay-reports/export${apiQ}`;
     let r;
@@ -156,7 +166,7 @@ export async function stayReportsView(el, { query = {} }) {
           stat('Occupancy', pct(t.occupancy), 'booked nights ÷ open nights'),
           stat('Avg nightly rate', peso(t.adr), `RevPAR ${peso(t.revpar)}`),
           stat('Net (before refunds)', peso(t.net), r.expenses_excluded ? `${peso(t.channel_fees)} channel fees · expenses not split by channel` : `${peso(t.channel_fees)} channel fees · ${peso(t.expenses)} expenses`)),
-        h('p', { class: 'muted small' }, `Average stay ${t.avg_stay} nights${t.cancelled ? ` · ${t.cancelled} cancelled` : ''}.`),
+        h('p', { class: 'muted small' }, `Average stay ${t.avg_stay} nights (whole stays, check-ins in this period)${t.cancelled ? ` · ${t.cancelled} cancelled` : ''}.`),
         h('p', { class: 'muted small' }, 'Refunds aren\'t deducted here. Profit and loss shows the net after refunds.')),
       h('div', { class: 'grid grid--2' },
         h('div', { class: 'card' }, h('h2', null, 'Revenue by channel'),
@@ -179,7 +189,7 @@ export async function stayReportsView(el, { query = {} }) {
       h('div', { class: 'card card--flush' },
         h('div', { class: 'card__head', style: { padding: '16px 16px 0' } }, h('h2', null, 'By listing')),
         h('div', { class: 'table-wrap' }, h('table', { class: 'table table--compact' },
-          h('thead', null, h('tr', null, ['Listing', 'Nights', 'Occupancy', 'Avg rate', 'Revenue', 'Cleaning & extras', 'Channel fees', 'Expenses', 'Net'].map((x, i) => h('th', { class: i ? 'num' : null }, x)))),
+          h('thead', null, h('tr', null, ['Listing', 'Nights', 'Occupancy', 'Avg rate', 'Revenue', 'Of which cleaning & extras', 'Channel fees', 'Expenses', 'Net'].map((x, i) => h('th', { class: i ? 'num' : null }, x)))),
           h('tbody', null, r.units.map((u) => h('tr', null,
             h('td', null, u.unit_name, h('div', { class: 'muted small' }, u.property_name)),
             h('td', { class: 'num' }, String(u.nights)), h('td', { class: 'num' }, pct(u.occupancy)), h('td', { class: 'num' }, peso(u.adr)),

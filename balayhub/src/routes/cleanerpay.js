@@ -11,6 +11,7 @@ const { validate, uuidParam } = require('../lib/validate');
 const { audit } = require('../lib/audit');
 const { requireRole } = require('../lib/auth');
 const { propertyScope } = require('../lib/access');
+const { teamMemberByName } = require('../lib/cleanerpay');
 
 const router = express.Router();
 const managers = requireRole('owner', 'manager');
@@ -123,6 +124,9 @@ router.put('/cleaner-rates', owners, ah(async (req, res) => {
   if (body.user_id) {
     const member = await one(`SELECT user_id FROM users WHERE user_id = $1 AND organization_id = $2 AND account_status = 'active'`, [body.user_id, org]);
     if (!member) throw validationError({ user_id: 'Choose a member of this workspace.' });
+  } else {
+    const same = await teamMemberByName({ query }, org, body.assignee_name);
+    if (same) throw validationError({ assignee_name: `Pick ${same.full_name} from the team list instead.` });
   }
   const rate = body.user_id
     ? await one(`INSERT INTO cleaner_rates (organization_id, user_id, rate_type, amount) VALUES ($1, $2, $3, $4)

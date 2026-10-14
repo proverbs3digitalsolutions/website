@@ -5,6 +5,7 @@ const { query, one, tx } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
 const { validate, uuidParam, isValidDate } = require('../lib/validate');
 const { audit } = require('../lib/audit');
+const { changedKeys } = require('../lib/auditdiff');
 const { requireRole } = require('../lib/auth');
 const { propertyScope, loadProperty, loadUnit } = require('../lib/access');
 const { taskScope } = require('../lib/housekeeping');
@@ -295,7 +296,13 @@ router.patch('/maintenance-schedules/:id', managers, ah(async (req, res) => {
     await tx(async (db) => {
       await db.query(`UPDATE maintenance_schedules SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')} WHERE schedule_id = $1`,
         [schedule.schedule_id, ...keys.map((k) => body[k])]);
-      await audit(db, req.user, 'maintenance.schedule_updated', 'maintenance_schedule', schedule.schedule_id, { after: body });
+      // Resuming a paused job has its own row (#31). Any other save names only the fields that changed, and none if nothing did.
+      if (keys.length === 1 && body.active === true && !schedule.active) {
+        await audit(db, req.user, 'maintenance.schedule_resumed', 'maintenance_schedule', schedule.schedule_id, { title: schedule.title });
+      } else {
+        const fields = changedKeys(schedule, body);
+        if (fields.length) await audit(db, req.user, 'maintenance.schedule_updated', 'maintenance_schedule', schedule.schedule_id, { fields });
+      }
     });
   }
   res.json({ schedule: await loadSchedule(req.user, schedule.schedule_id) });

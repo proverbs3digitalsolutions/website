@@ -15,6 +15,8 @@ const { audit } = require('../lib/audit');
 const { requireRole } = require('../lib/auth');
 const { propertyScope, loadUnit } = require('../lib/access');
 const { isCleaner } = require('../lib/cleaner');
+const { teamMemberByName } = require('../lib/cleanerpay');
+const { changedKeys } = require('../lib/auditdiff');
 const { TODAY, taskScope, cleanerTaskSql, presentTask, firstName, cleanerKey } = require('../lib/housekeeping');
 
 const router = express.Router();
@@ -190,6 +192,12 @@ async function checkAssignee(user, body, propertyId, propertyName) {
   }
 }
 
+// A typed outside name must not be a team member's name: it would pay their clean at the outside rate (#29).
+async function checkOutsideName(user, name) {
+  const same = name && await teamMemberByName({ query }, user.organization_id, name);
+  if (same) throw validationError({ assignee_name: `Pick ${same.full_name} from the team list instead.` });
+}
+
 // Add a cleaning task by hand (e.g. a mid-stay clean or deep clean).
 router.post('/cleaning-tasks', managers, ah(async (req, res) => {
   const body = validate(req.body, {
@@ -201,6 +209,7 @@ router.post('/cleaning-tasks', managers, ah(async (req, res) => {
   });
   const unit = await loadUnit(req.user, body.unit_id);
   await checkAssignee(req.user, body, unit.property_id, unit.property_name);
+  if (!body.assigned_to) await checkOutsideName(req.user, body.assignee_name);
   const t = await one(
     `INSERT INTO cleaning_tasks (organization_id, unit_id, due_date, assigned_to, assignee_name, notes, checklist, created_by,
                                  next_check_in)
@@ -231,10 +240,11 @@ router.patch('/cleaning-tasks/:id', managers, ah(async (req, res) => {
   else if (body.assignee_name) body.assigned_to = null;
   if ('due_date' in body && !body.due_date) delete body.due_date;
   await checkAssignee(req.user, body, task.property_id, task.property_name);
+  if (body.assignee_name !== task.assignee_name) await checkOutsideName(req.user, body.assignee_name);
   const keys = Object.keys(body);
   await tx(async (db) => {
     // Locked and read here, so a clean paid a moment ago can't be re-assigned or re-priced in between.
-    const { rows: [cur] } = await db.query('SELECT pay_status, assigned_to, assignee_name FROM cleaning_tasks WHERE task_id = $1 FOR UPDATE', [task.task_id]);
+    const { rows: [cur] } = await db.query('SELECT pay_status, assigned_to, assignee_name, due_date, notes, pay_amount FROM cleaning_tasks WHERE task_id = $1 FOR UPDATE', [task.task_id]);
     if (cur.pay_status === 'paid') {
       const moves = 'pay_amount' in body
         || ('assigned_to' in body && body.assigned_to !== cur.assigned_to)
@@ -244,7 +254,8 @@ router.patch('/cleaning-tasks/:id', managers, ah(async (req, res) => {
     if (keys.length) {
       await db.query(`UPDATE cleaning_tasks SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')} WHERE task_id = $1`,
         [task.task_id, ...keys.map((k) => body[k])]);
-      await audit(db, req.user, 'cleaning.task_updated', 'cleaning_task', task.task_id, { after: body });
+      const fields = changedKeys(cur, body);
+      if (fields.length) await audit(db, req.user, 'cleaning.task_updated', 'cleaning_task', task.task_id, { fields });
     }
   });
   if (body.assigned_to && body.assigned_to !== task.assigned_to) {

@@ -207,6 +207,12 @@ const SERVER_TL = [
   [/^You already sent proofs for (₱[\d,]+\.\d{2}) that the host hasn't checked yet, so you can send up to (₱[\d,]+\.\d{2}) more\.$/, (m) => `Nakapadala ka na ng patunay na ${m[1]} na hindi pa na-check ng host, kaya hanggang ${m[2]} pa lang ang puwede mong ipadala.`],
   [/^Your proofs already cover what you owe\. The host will check them soon\.$/, () => 'Sapat na ang mga patunay mo para sa utang mo. I-check na ito ng host maya-maya.'],
   [/^This is more than the (₱[\d,]+\.\d{2}) still owed\.$/, (m) => `Mas malaki ito sa balanseng ${m[1]}.`],
+  [/^This check-in link is not valid\. Please ask your host for a new one\.$/, () => 'Hindi valid ang check-in link na ito. Humingi ng bagong link sa host mo.'],
+  [/^This review link is not valid\.$/, () => 'Hindi valid ang review link na ito.'],
+  [/^This guidebook is not available for this stay\. Please ask your host for a new link\.$/, () => 'Hindi available ang guidebook para sa stay na ito. Humingi ng bagong link sa host mo.'],
+  [/^This quote is not available\.$/, () => 'Hindi available ang quote na ito.'],
+  [/^This booking page is not available\.$/, () => 'Hindi available ang booking page na ito.'],
+  [/^This listing is not available\.$/, () => 'Hindi available ang listing na ito.'],
 ];
 export function tServer(msg) {
   if (current !== 'tl' || !msg) return msg;

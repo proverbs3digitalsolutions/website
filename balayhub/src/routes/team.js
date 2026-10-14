@@ -52,7 +52,7 @@ router.post('/team/invitations', ownerOnly, ah(async (req, res) => {
   if (needsProperty(body.role) && !propertyIds.length) throw noProperty(body.role);
   const existing = await query('SELECT organization_id FROM users WHERE lower(email) = $1', [body.email]);
   if (existing.rowCount) {
-    throw new HttpError(409, 'This email already has a BalayHub account. Team members must use a separate email for each workspace in this version.', { code: 'EMAIL_TAKEN', fields: { email: 'Already registered.' } });
+    throw new HttpError(409, 'Please check the highlighted fields.', { code: 'EMAIL_TAKEN', fields: { email: 'This email already has a BalayHub account. Use a different email for each workspace.' } });
   }
   const token = newToken();
   const invite = await tx(async (db) => {

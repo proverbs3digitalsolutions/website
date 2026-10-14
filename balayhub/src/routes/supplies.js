@@ -9,6 +9,7 @@ const { query, one, tx } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
 const { validate, uuidParam } = require('../lib/validate');
 const { audit } = require('../lib/audit');
+const { changedKeys } = require('../lib/auditdiff');
 const { requireRole } = require('../lib/auth');
 const { propertyScope, loadProperty } = require('../lib/access');
 const { taskScope } = require('../lib/housekeeping');
@@ -166,7 +167,8 @@ router.patch('/supplies/:id', managers, ah(async (req, res) => {
     await withNameCheck(() => tx(async (db) => {
       await db.query(`UPDATE supplies SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')}, updated_at = now() WHERE supply_id = $1`,
         [supply.supply_id, ...keys.map((k) => body[k])]);
-      await audit(db, req.user, 'supply.updated', 'supply', supply.supply_id, { after: body });
+      const fields = changedKeys(supply, body);
+      if (fields.length) await audit(db, req.user, 'supply.updated', 'supply', supply.supply_id, { fields });
     }));
   }
   res.json({ supply: await loadSupply(req.user, supply.supply_id) });

@@ -264,6 +264,7 @@ dialog.morenav::backdrop { background: var(--scrim); }
 .morenav__sheet { background: var(--surface); width: 100%; max-height: calc(100dvh - 16px); overflow-y: auto; overscroll-behavior: contain; border-radius: 18px 18px 0 0; padding: 12px 12px calc(16px + env(safe-area-inset-bottom)); }
 .morenav__sheet a, .morenav__sheet button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 12px; border-radius: 12px; color: var(--text); text-decoration: none; font-weight: 700; background: none; border: 0; cursor: pointer; text-align: left; }
 .morenav__sheet a:hover, .morenav__sheet button:hover { background: var(--gray-soft); }
+.morenav__sheet .morenav__close { min-height: 44px; justify-content: center; background: var(--gray-soft); margin-bottom: 4px; }
 .morenav__sheet svg { width: 22px; height: 22px; color: var(--navy); }
 
 @media (min-width: 960px) {
@@ -932,6 +933,7 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 
 /* ================================================================ owner statements */
 .statement { max-width: 900px; }
+.statement .receipt__head > div { min-width: 0; overflow-wrap: anywhere; }
 .statement__sum { max-width: 460px; }
 .statement__payout strong { font-size: 1.2rem; }
 .table--compact td, .table--compact th { padding: 8px 10px; }
@@ -1155,6 +1157,7 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 @media (max-width: 559px) { .flt__field--range { grid-column: auto; } }
 .flt__range { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .flt__range .input { min-width: 0; flex: 1 1 120px; }
+.flt__range input[type=date] { min-width: 9.5rem; }
 .flt__check { align-self: center; }
 .flt__actions { display: flex; justify-content: flex-end; gap: 8px; }
 .flt__chips { display: flex; flex-wrap: wrap; gap: 6px; }

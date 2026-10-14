@@ -18,6 +18,10 @@ const money = (v) => {
   return n < 0 ? NaN : n;
 };
 const nightsBetween = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
+// The rate-card price for a quote: null when a night has no nightly rate, or the price is not above 0. Never filled in or offered as PHP 0.
+export const rateStay = (p) => (p.missing_rates || !(Number(p.accommodation_total) > 0) ? null : p.accommodation_total);
+// Offer the rate-card price when the Accommodation box holds something else. A box that is not an amount ("1,5") counts as different.
+export const rateOffer = (typed, stay) => Number(stay) > 0 && parseAmount(typed) !== Number(stay);
 
 // Shared by the host pages (quotes, reservations, listings, charges, check-in). If the browser blocks the clipboard,
 // the text opens selected in a read-only box, so the host can copy it by hand.
@@ -101,7 +105,9 @@ async function newQuoteModal(listings, onSaved) {
     const n = Math.max(nights(), 0);
     let add = 0;
     for (const a of addons) add += addonCost(a, n, guests(), Number(picks.get(a.addon_id)?.value) || 0);
-    const total = money(el('accommodation_total').value) + money(el('cleaning_fee').value) + add - money(el('discount_amount').value);
+    // An empty Accommodation box has no total yet (a listing with no nightly rate leaves it empty for the host to type).
+    const stayBox = el('accommodation_total').value.trim();
+    const total = (stayBox === '' ? NaN : money(stayBox)) + money(el('cleaning_fee').value) + add - money(el('discount_amount').value);
     totalLine.textContent = Number.isNaN(total) ? 'Total for the guest: -' : `Total for the guest: ${peso(Math.max(total, 0))}${add ? ` (add-ons ${peso(add)})` : ''}`;
   }
   function drawAddons() {
@@ -134,11 +140,19 @@ async function newQuoteModal(listings, onSaved) {
     try {
       const p = await get(`/units/${unit}/price-preview${qs({ check_in: el('check_in').value, check_out: el('check_out').value, guests: guests() })}`);
       rate = p;
-      if (edited) { useRate.textContent = `Use rate-card price ${peso(p.accommodation_total)}`; useRate.hidden = false; } else {
-        el('accommodation_total').value = p.accommodation_total ?? '';
+      const stay = rateStay(p);
+      if (edited) {
+        useRate.hidden = !rateOffer(el('accommodation_total').value, stay);
+        if (!useRate.hidden) useRate.textContent = `Use rate-card price ${peso(stay)}`;
+      } else {
+        // With no rate for some nights the box stays empty for the host to type an amount.
+        el('accommodation_total').value = stay ?? '';
         el('cleaning_fee').value = p.cleaning_fee ?? '';
       }
-      preview.textContent = `Price from your rates: ${nights()} night${nights() === 1 ? '' : 's'}, ${peso(p.accommodation_total)} plus ${peso(p.cleaning_fee)} cleaning. You can change the amounts.${p.available ? '' : ' Warning: these dates are already booked, so this quote cannot be created.'}`;
+      const warn = p.available ? '' : ' Warning: these dates are already booked, so this quote cannot be created.';
+      preview.textContent = p.missing_rates
+        ? `This listing has no nightly rate for some nights. Enter the total yourself.${warn}`
+        : `Price from your rates: ${nights()} night${nights() === 1 ? '' : 's'}, ${peso(p.accommodation_total)} plus ${peso(p.cleaning_fee)} cleaning. You can change the amounts.${warn}`;
       preview.setAttribute('role', 'status');
     } catch (e) { preview.textContent = `Couldn't price these dates: ${e.message} Enter the amounts yourself.`; }
     drawTotal();

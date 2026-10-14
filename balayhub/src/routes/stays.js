@@ -34,13 +34,23 @@ const addDays = ical.addDays;
 const nightsBetween = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000);
 const validationError = (fields) => new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields });
 
-function redactGuest(user, g) {
+// Staff see reservations and receipts through allow-lists (matrix 6 and 6.2), so a column added to bookings later never reaches them.
+// STAFF_RESERVATION_KEYS is the BOOKING_SELECT row without guest contact, VIP / do-not-rebook flags, rating, stay count, tokens,
+// house rules and the booking source, plus guest_has_email (computed: whether there is an address to email a receipt to, never the address). STAFF_RECEIPT_KEYS is the receipt row without the guest's email and the payment's idempotency key.
+const STAFF_RESERVATION_KEYS = ['accommodation_total', 'amount_paid', 'balance', 'block_reason', 'booking_id', 'cancel_reason', 'cancelled_at', 'channel',
+  'channel_fee', 'channel_fee_ignored', 'check_in', 'check_out', 'checked_in_at', 'checked_out_at', 'cleaning_fee', 'confirmation_code', 'created_at',
+  'created_by', 'external_uid', 'extras_total', 'group_id', 'guest_has_email', 'guest_id', 'guest_label', 'guest_name', 'ical_feed_id', 'kind', 'max_guests',
+  'nights', 'num_guests', 'organization_id', 'other_fees', 'owner_block_by', 'property_id', 'property_name', 'status', 'total_amount', 'unit_id', 'unit_name',
+  'updated_at'];
+const STAFF_RECEIPT_KEYS = ['adjustments', 'amount', 'balance_after', 'booking_id', 'charges', 'check_in', 'check_out', 'confirmation_code', 'created_at',
+  'extras_total', 'guest_id', 'guest_name', 'organization_id', 'payment_date', 'payment_id', 'payment_method', 'property_name', 'receipt_number',
+  'receipt_sent_at', 'recorded_by', 'recorded_by_name', 'reference_number', 'total_amount', 'unit_name', 'void_reason', 'voided_at', 'voided_by', 'workspace_name'];
+
+function redactGuest(user, g, allowed = STAFF_RESERVATION_KEYS) {
   if (!g || ['owner', 'manager'].includes(user.role)) return g;
-  // Staff see guest names only (matrix 6): also drop the VIP / do-not-rebook flags, rating and stay count that reservation rows carry,
-  // and the house rules the guest accepted (matrix 6.2: staff No, cleaner No).
-  const { email, phone, notes, guest_email: ge, guest_phone: gp, review_token: rt, pay_token: pt, checkin_token: ct, guide_token: gt,
-    guest_vip: gv, guest_do_not_rebook: gd, review: rv, previous_stays: ps, rules_text: rx, rules_accepted_at: ra, ...rest } = g;
-  return { ...rest, limited: true };
+  const row = Object.fromEntries(allowed.filter((k) => k in g).map((k) => [k, g[k]]));
+  if (allowed.includes('guest_has_email')) row.guest_has_email = Boolean(g.guest_email);
+  return { ...row, limited: true };
 }
 
 // A guest as staff and cleaners see them: the name and nothing else.
@@ -698,6 +708,11 @@ router.post('/reservations/:id/payments', ah(async (req, res) => {
   }
   await closeOpenCheckouts(booking.booking_id);
   const receipt = body.send_receipt ? await receipts.sendReceipt(paymentId, req.user) : null;
+  // The provider's error text is for owners and managers; everyone else gets a fixed sentence and the raw text goes to the log.
+  if (receipt && !receipt.sent && !['owner', 'manager'].includes(req.user.role)) {
+    console.warn(`Receipt email failed for payment ${paymentId}: ${receipt.error}`);
+    receipt.error = 'The receipt could not be emailed. Ask an owner or manager to send it again.';
+  }
   res.status(201).json({ reservation: redactGuest(req.user, await loadBooking(req.user, booking.booking_id)), payment_id: paymentId, receipt });
 }));
 
@@ -735,7 +750,7 @@ async function loadBookingPayment(user, id) {
 router.get('/booking-payments/:id/receipt', ah(async (req, res) => {
   const p = await loadBookingPayment(req.user, uuidParam(req.params.id));
   const r = await receipts.receiptData(p.payment_id);
-  res.json({ receipt: redactGuest(req.user, withoutIdemKey(r)) });
+  res.json({ receipt: redactGuest(req.user, withoutIdemKey(r), STAFF_RECEIPT_KEYS) });
 }));
 
 router.post('/booking-payments/:id/send-receipt', managers, ah(async (req, res) => {
@@ -761,7 +776,7 @@ router.post('/reservations/:id/send-confirmation', managers, ah(async (req, res)
 
 // Staff see groups and rooms without money, as they see reservations without guest contact details.
 const seesMoney = (user) => !['staff', 'cleaner'].includes(user.role);
-const MONEY_FIELDS = ['total', 'total_amount', 'amount_paid', 'balance'];
+const MONEY_FIELDS = ['total', 'total_amount', 'amount_paid', 'balance', 'held'];
 function hideMoney(user, row) {
   if (seesMoney(user)) return row;
   return Object.fromEntries(Object.entries(row).filter(([k]) => !MONEY_FIELDS.includes(k)));
@@ -782,12 +797,14 @@ async function loadGroup(user, id) {
 }
 
 // One summary row per group: room count, dates, and money over the rooms still booked.
+// `held` is what was paid on rooms no longer booked (a cancelled group's rooms), so cancelling never hides money taken.
 const GROUP_ROWS = `
   SELECT g.group_id, g.name, g.cancelled_at, CASE WHEN g.cancelled_at IS NULL THEN 'active' ELSE 'cancelled' END AS status,
          gu.full_name AS guest_name, COUNT(b.booking_id) FILTER (WHERE b.status = 'confirmed')::int AS rooms, MIN(b.check_in) AS check_in, MAX(b.check_out) AS check_out,
          COALESCE(SUM(b.total_amount) FILTER (WHERE b.status = 'confirmed'), 0)::numeric(12,2) AS total,
          COALESCE(SUM(paid.amount) FILTER (WHERE b.status = 'confirmed'), 0)::numeric(12,2) AS amount_paid,
-         COALESCE(SUM(b.total_amount - CASE WHEN b.channel = 'direct' THEN 0 ELSE b.channel_fee END - paid.amount) FILTER (WHERE b.status = 'confirmed'), 0)::numeric(12,2) AS balance
+         COALESCE(SUM(b.total_amount - CASE WHEN b.channel = 'direct' THEN 0 ELSE b.channel_fee END - paid.amount) FILTER (WHERE b.status = 'confirmed'), 0)::numeric(12,2) AS balance,
+         COALESCE(SUM(paid.amount) FILTER (WHERE b.status <> 'confirmed'), 0)::numeric(12,2) AS held
     FROM booking_groups g
     LEFT JOIN guests gu ON gu.guest_id = g.guest_id
     LEFT JOIN bookings b ON b.group_id = g.group_id
@@ -955,7 +972,7 @@ router.get('/booking-groups/:id', ah(async (req, res) => {
     group: { group_id: group.group_id, name: group.name, notes: group.notes, status: summary.status, cancelled_at: group.cancelled_at, created_at: group.created_at },
     guest: ['staff', 'cleaner'].includes(req.user.role) ? staffGuest(guest) : guest,
     rooms: rooms.map((b) => roomView(req.user, b)),
-    totals: hideMoney(req.user, { rooms: summary.rooms, total: summary.total, amount_paid: summary.amount_paid, balance: summary.balance }),
+    totals: hideMoney(req.user, { rooms: summary.rooms, total: summary.total, amount_paid: summary.amount_paid, balance: summary.balance, held: summary.held }),
   });
 }));
 

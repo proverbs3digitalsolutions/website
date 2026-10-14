@@ -2,7 +2,7 @@
 
 Every decision made on BalayHub, with the date and the reason. Newest decisions go at the bottom. When a decision changes, add a new entry and mark the old one **Superseded by D-xx**. Never delete history.
 
-Last updated: 2026-10-14 (D-82, QA round 6 calls)
+Last updated: 2026-10-14 (D-83, QA round 7 calls)
 
 ---
 
@@ -668,3 +668,42 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 > - **Internal payment idempotency keys are never returned**, to any role.
 > - **Hidden guest details now apply to every role except owner and manager.** The check is an allow-list, so a role added later sees nothing extra by default.
 > - **Empty-state rule:** a status tab with nothing in it keeps its own text (for example "No archived tenants"). "No results found" with Clear filters shows only when a search or another filter is set. In Maintenance, a non-default status chip counts as a filter. This is the rule, not a bug (it was reported as one in round 6 and closed).
+
+> **D-83 · 2026-10-14 · QA round 7 calls (2026-10-14 sweep, fixed the same day).** The seventh QA sweep (12 lanes, 88 entries including items carried from round 6) found problems that needed a product decision. These are the calls made, with the default we are using until the founder says otherwise. Open questions are in BLOCKERS.MD under "Questions from QA round 7". Each call was checked against the code after the fixes landed.
+>
+> *Money*
+> - **Recording a payment above the balance asks first.** "This is ₱X more than the balance of ₱Y. Record it?" Cancel keeps the form and records nothing ("Payment not saved."). The guest's receipt is emailed only after the host says yes. This is a question on the screen only: the server still accepts an overpayment, because a guest can overpay (D-32) and the refund flow handles it. *Why:* rent payments and owner payouts already ask (D-76); a receipt for a wrong amount went to a guest.
+> - **A cancelled group shows the money it holds.** The Groups list shows a cancelled group as "Cancelled" with "₱X held" when its rooms had payments, and the group page adds "Held from cancelled rooms". Only owners and managers get this figure; staff never see "held" (staff see groups without money). *Why:* the list showed ₱0.00 while the page showed ₱1,000 paid.
+> - **A quote never offers ₱0 from your rates.** When a listing has no nightly rate for some nights, the quote says "This listing has no nightly rate for some nights. Enter the total yourself.", leaves the amount empty and shows no "Use ₱0" button.
+> - **Previews follow the server's rules first:** a deposit deduction above the deposit, a booking-window rule out of range, a negative base rate and a next-due date more than a year back are refused at the field before any question or preview figure. Bulk "Set a price" warns about nights below the lowest price, as the percentage change does.
+> - **Gap-night rules run from 1 to 7 days** (`RULE_DAYS` in `src/routes/pricing.js`: last-minute 0 to 30, far-out 31 to 540, gap night 1 to 7). The rule form checks the days before it asks "Change the existing rule?".
+> - **The price preview labels a night "Adjusted"** when a booking-window rule or discount changed it from the base rate. A night that is already booked still reads "Booked".
+> - **"1,5" is refused everywhere,** as D-79 says. APP-FLOW said New reservation read it as 1.5; that line was wrong and is corrected.
+> - **Both workspaces need a nightly rate on every new unit.** Add unit asks for a base nightly rate in short-term workspaces and in Both workspaces, even when the unit is only rented monthly (founder question 5). Units already saved without a rate show "No nightly rate yet".
+>
+> *Cleaning*
+> - **An outside cleaner can't have an active team member's name.** Typing a name that matches someone on the team (spaces and capitals ignored), for a rate or a job, is refused with "Pick <name> from the team list instead." The check covers adding or changing a rate and adding or editing a cleaning task. *Why:* the clean was paid at a second rate and wasn't linked to her login. Rates already saved that way are left alone (read-only check for the founder in BLOCKERS). The remove-rate dialog now names the amount and the person.
+> - **My pay shows cleans paid to someone else as "Paid to another cleaner",** with no amount, as BACKEND-SCHEMA 6.1 says (answers BLOCKERS round 6 "My pay: cleans paid to someone else" with its default).
+>
+> *Access*
+> - **Staff reservation data is an allow-list.** Staff and cleaners get a fixed set of reservation fields (`STAFF_RESERVATION_KEYS` in `src/routes/stays.js`); a new booking column stays hidden from them until someone adds it. The booking `source` is not in the set (matrix 6.2 denies booking sources to staff; founder question 7).
+> - **A failed receipt email gives staff a fixed plain sentence,** not the email provider's text; owners and managers still see the details.
+> - **Non-owners see the plan's status, not its price or listing limit.** Managers, staff and cleaners still receive `plan`, `name`, `ai`, `read_only`, `reason`, `is_demo` and the dates they need to read the status: `trial_ends_at`, `trial_days_left`, `paid_until` and `deletion_scheduled_at`. Only `price` and `listing_limit` are removed.
+> - **Staff and cleaners don't get a lease's document id** (the document itself was already refused).
+> - **Managers may archive and restore units and listings in the properties assigned to them,** from the property page, as BACKEND-SCHEMA 6 ("Same, assigned") and APP-FLOW section 2 ("add/archive units") say and the server does. The Listings page's own Archive button stays owner-only. *Why:* the Listings page note in APP-FLOW read as a rule; the access table is the rule. Founder question 6.
+> - **Template language stays owner-only (D-28).** The access table row that said managers could switch it is corrected.
+> - **Every team member sees the workspace owner's name and email** on their account page, so they know whom to ask. Recorded in the matrix (founder question 4).
+> - **Team invites say the same as sign-up** when an email already has an account ("This email already has a BalayHub account. Use a different email for each workspace."), once at the field plus a generic banner. This follows the round 1 sign-up default (keep the friendly message).
+>
+> *Activity log*
+> - **The activity log records only what really changed,** by field name, never values, for every edit: listings and properties, the guide, the gate pass, guest experience, automatic messages, cleaning tasks, recurring jobs and supplies. A save that changes nothing writes no row. "14:00" and "14:00:00", or "4200.00" and "4200", count as the same. Numbers and yes/no values are compared as numbers or yes/no only when one side really is a number or a yes/no; two pieces of text are always compared as text, so a door code or Wi-Fi password change ("0123" to "123", "1234" to "1234.0") is never hidden. Resuming a recurring job reads "Resumed a maintenance schedule", and a cleaning task edit reads "Edited a cleaning task". *Why:* round 6 fixed how rows are shown; the rows themselves still listed every field sent, and this class had come back three rounds running. One shared check (`src/lib/auditdiff.js`, `changedKeys`) now decides for all of them. The security check found one gap in the first version (digits-only text compared as numbers, which hid door code changes); it was fixed in the same round.
+>
+> *Screens*
+> - **Filter values in a link that aren't real options are dropped** (calendar tag, availability and cleaning; inbox listing and unknown listing or property ids; maintenance priority), so the list and the dropdowns always agree (D-77). The inbox Listing dropdown names the unit, with the property only when two units share a name.
+> - **Guest pages show the "link not valid" and "not available" sentences in Taglish** (check-in, review, guidebook, quote, and two booking page sentences).
+> - **The booking page keeps "At least 1 guest."** at the field (only the server's guest-limit text is cleared when a new quote is requested), and no quote is asked for fewer than 1 guest.
+> - **The More menu on phones has a Close button, listed first so it takes focus, and keeps focus inside** while open.
+>
+> *Not changed (recorded so later sweeps don't file them):* a long-term owner reaching stay APIs (D-82 modules rule); add-on descriptions in one language (D-81); a manager's all-listings season answering 400 with the message (round 6); past nights' prices and blocks can be edited (founder question 1); staff can still read the Reviews page and booking group notes (open round 6 questions). D-82's "no review card" wording for staff applies to guest profiles and reservations, not to the Reviews page. The cleaner redirect with no toast is on purpose (APP-FLOW route guard).
+>
+> *Why:* each call follows the access table and the existing money rules, asks before money moves, and stops the screens offering what the server refuses.

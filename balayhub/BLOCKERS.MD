@@ -2,7 +2,7 @@
 
 Things only the founder can do or decide before related work can go ahead. Automated runs add items here. The founder clears them by doing the item and ticking it, or by writing the decision in DECISIONS.MD.
 
-Last updated: 2026-10-14 (QA round 6 questions added; round 5 question 13 (my pay) decided by D-82)
+Last updated: 2026-10-14 (QA round 7 questions added; round 6 "My pay" done with its default by D-83)
 
 ## Security — do first
 
@@ -74,7 +74,7 @@ Each one has the default we will use if you don't answer. None of them stops the
 - [ ] **Contact email on the live server.** Is a contact email set on the live server, so "Message us" on the home page has somewhere to go? Without one, the public "Help & support" links need a login, so a visitor who can't log in has no way to reach you. *Default (updated in round 2): with no contact email, logged-out help links go to sign-up with "Create your account and ask us in Help & support", so a visitor is never sent to a login wall.*
 - [ ] **Weak passwords.** Passwords only need 8 characters, so "password" works. Should we also refuse the most common passwords? *Default: add a short block list of common passwords (small and easy to undo).*
 - [ ] **Starter plan card.** The landing page card says "1 to 3 units" but the Starter plan allows 2 listings. Should it say "1 to 2 units"? *Default: change the copy to "1 to 2 units". Applied in round 2.*
-- [ ] **Sign-up and taken emails.** Sign-up says an email is already registered, which tells anyone that address has an account. Keep the friendly message, or use a neutral one? *Default: keep it, as most apps do.*
+- [ ] **Sign-up and taken emails.** Sign-up says an email is already registered, which tells anyone that address has an account. Keep the friendly message, or use a neutral one? *Default: keep it, as most apps do.* *Round 7: team invites say the same ("This email already has a BalayHub account"), so the same answer covers both (D-83).*
 
   Asked again in round 4.
 - [ ] **Building-wide expenses on statements.** Expenses for the whole building (such as association dues) never reach an owner statement; they only show on your profit and loss as "Not linked to a unit". Is that what you want? *Default: keep it (D-44).*
@@ -117,7 +117,7 @@ Each one has the default already applied. None of them stops the work.
 - [ ] **Profit and loss and cancelled stays.** Money you kept from a cancelled stay, and any refund on it, is left out of profit and loss. The tax summary counts both because it follows the money. Should profit and loss count them too, in the month they happened? *Default: leave them out, and the page now says so. Counting them would also change owner statements.*
 - [ ] **Guidebook wording before the window opens.** A guest who opens the link more than 14 days before check-in now sees "Your guidebook opens on <date>". Is that the wording you want, or should the guidebook open earlier? *Default: show the opening date; the window stays 14 days before check-in to 2 days after check-out.*
 - [ ] **Lowest price above the usual price.** If the lowest price is higher than the usual nightly price, every night costs at least the lowest price. Should Add listing and Edit listing ask first? *Default: yes, they ask "Save anyway?" and Cancel keeps the form open.*
-- [ ] **Duplicate-email sign-up message.** Still open from round 1 ("Sign-up and taken emails" above, asked again). Keep the friendly "already registered" message, or use a neutral one? *Default: keep it.*
+- [ ] **Duplicate-email sign-up message.** Still open from round 1 ("Sign-up and taken emails" above, asked again). Keep the friendly "already registered" message, or use a neutral one? *Default: keep it.* *Round 7: team invites show the same friendly message, so one answer covers both.*
 - [ ] **Maintenance estimate of 0.** Is 0 a useful answer ("no cost expected"), or should it be refused like a 0 price? *Default: allowed; blank means no estimate yet.*
 - [ ] **Typed markup in names.** If someone types something like `<b>` into a tenant or vendor name, we store it as typed and show it as plain text. Fine, or should we remove such characters when saving? *Default: stored as typed and shown as text.*
 - [ ] **Free stays on manual reservations.** A group room can no longer be saved at 0, but a single manual reservation still can (for example a free stay for family). Keep that? *Default: keep it for single reservations.*
@@ -172,7 +172,7 @@ Each one has the default already applied. None of them stops the work.
 
 - [ ] **What staff may see about guests.** Staff now see only a guest's name: on the Guests page, on a guest's page, on a reservation and as a group's lead guest. They no longer see VIP or Do not rebook, how many times someone stayed, their stay dates, their ratings or the review card. Before this, staff saw all of that except contact details and total spent. Is name-only right, or should staff see some of it again (for example Do not rebook, so they are warned at check-in)? *Default: name only.*
 - [ ] **Staff and guest reviews.** Staff can still open the Reviews page and read guests' full reviews (names and comments), as the access table and D-62 allow. Now that staff see only names everywhere else, should we keep that, or make reviews owners and managers only so the rules line up? *Default: keep (staff can read reviews in their properties).*
-- [ ] **Removing a listing's page address.** Once a listing has its own page address, the form won't save it blank, so you can't remove it, only change it. Should blank be allowed? (The listing page link would stop working.) *Default: unchanged (an address can be changed, not removed).*
+- [ ] **Removing a listing's page address.** Once a listing has its own page address, the form won't save it blank, so you can't remove it, only change it. Should blank be allowed? (The listing page link would stop working.) *Default: unchanged (an address can be changed, not removed).* *Raised again in round 7; still open.*
 - [ ] **Discount ladder.** A listing can no longer save a weekly discount above its 14+ night discount, or a 14+ night discount above its monthly one, because only one discount applies and a longer stay would end up dearer per night. OK? *Default: refused. An old listing that already has an inverted ladder is left as it is until someone edits a discount.*
 - [ ] **Payouts need a month.** Every payout now has to say which statement month it pays (2000 to 2100). The screens already did this; only a direct call could leave it out. OK? *Default: month required.*
 - [ ] **Taglish check.** These new lines need a Taglish speaker to read them: for cleaners, "Pumili ng litrato" (choose a photo), "Wala pang litrato.", "Mag-upload ng JPG, PNG o WEBP na litrato, hanggang 10 MB.", "Mga inspection", "Pasado", "Hindi pasado"; on Get started, "Panandaliang stays (Airbnb, staycation)", the language switch name "Wika: TL", and the taken-email message; on the quote page, "ang host" and the loading line; on the booking page, the new not-found sentence and the guest-limit message. *Default: keep the drafts.*
@@ -193,5 +193,27 @@ Each one has the default already applied. None of them stops the work.
     ```
 
   *If either lists rows, tell us and we plan a data fix. Default: no data change from us. The names above come from the code (`users.notify_prefs`, and `units.weekly_discount`, `fortnight_discount`, `monthly_discount`); if psql still complains, send us the message.*
-- [ ] **Staff and booking group notes.** Staff can read the notes on a booking group. The access table says nothing about group notes. Keep it, or hide the notes from staff? Same-name guests also show staff nothing to tell them apart, which is what names-only means. *Default: staff can read group notes (unchanged).*
-- [ ] **My pay: cleans paid to someone else.** Today the My pay page hides those rows, then says "No cleans finished this month" even when the cleaner finished some. The access table (6.1) says to show them without a name or money. *Default for round 7: show them as "Paid to another cleaner" rows with no amount, following the table.*
+- [ ] **Staff and booking group notes.** Staff can read the notes on a booking group. The access table says nothing about group notes. Keep it, or hide the notes from staff? Same-name guests also show staff nothing to tell them apart, which is what names-only means. *Default: staff can read group notes (unchanged).* *Raised again in round 7 (access lane); default unchanged, still open. Round 7 asked the same thing about group notes for staff.*
+- [ ] **My pay: cleans paid to someone else.** Today the My pay page hides those rows, then says "No cleans finished this month" even when the cleaner finished some. The access table (6.1) says to show them without a name or money. *Default for round 7: show them as "Paid to another cleaner" rows with no amount, following the table.* *Done in round 7 with the default (D-83).*
+
+## Questions from QA round 7 (2026-10-14)
+
+Each one has the default already applied. None of them stops the work. Earlier open questions are not repeated here.
+
+- [ ] **Editing past nights.** On the calendar you can still set a price or a block on a night that has passed. That's useful for fixing records, but it changes history that reports read from. Keep it, or lock nights before today? *Default: keep (allowed).*
+- [ ] **Payments above the balance.** Recording a payment bigger than what's owed now asks first, and the receipt goes out only after you say yes. The guest's overpayment is still allowed, so you can refund it. OK? *Default: ask first.*
+- [ ] **Outside cleaner with a team member's name.** You can no longer type a team member's name as an outside cleaner, for a rate or a job. Pick them from the team list instead. OK? *Default: refused.* We also ask for a read-only check on the live database (we change nothing): it lists rates typed with a team member's name before this fix. If it lists rows, tell us and we plan a data fix. *Default: no data change from us.*
+
+    ```
+    cd /opt/balayhub-src/balayhub
+    C="docker compose -f docker-compose.prod.yml --env-file deploy/.env"
+    $C exec -T db psql -U balayhub balayhub -c "select r.organization_id, r.assignee_name from cleaner_rates r join users u on u.organization_id = r.organization_id and lower(trim(u.full_name)) = lower(trim(r.assignee_name)) where r.assignee_name is not null;"
+    ```
+
+    The names above come from the code (`cleaner_rates.assignee_name`, `users.full_name`, `users.organization_id`; checked against `db/migrations/001`, `004` and `030`). Cleaning tasks have the same kind of column (`cleaning_tasks.assignee_name`), so jobs typed with a team member's name before the fix can also exist; if you want those listed too, say so and we send the matching line.
+- [ ] **The owner's email shown to the team.** Every team member sees the workspace owner's name and email on their account page, so they know whom to ask. Keep it, or show the name only? *Default: keep.*
+- [ ] **Both workspaces need a nightly rate on every new unit.** In a Both workspace (short-term and monthly), Add unit now asks for a nightly rate even when the unit will only be rented monthly, because the same screen serves both. Keep that, or let monthly-only units skip it? *Default: required.*
+- [ ] **Managers archiving listings.** Managers can archive and restore listings in the properties assigned to them, from the property page, as the access table says. The Listings page's Archive button stays yours only. OK, or should archiving be owner-only everywhere? *Default: managers may, from the property page.*
+- [ ] **Booking source and staff.** Staff no longer receive where a booking came from (the source), because the access table hides booking sources from staff. Should staff see it on a reservation? *Default: hidden.*
+- [ ] **"1,5" in amounts.** Not a question unless you disagree: "1,5" is refused everywhere, as decided in round 4 (D-79). One line in the app guide said otherwise; it's corrected. *Default: refused.*
+- [ ] **Taglish check.** New lines for a Taglish speaker to read: "Hindi valid ang check-in link na ito. Humingi ng bagong link sa host mo.", "Hindi valid ang review link na ito.", "Hindi available ang guidebook para sa stay na ito. Humingi ng bagong link sa host mo.", "Hindi available ang quote na ito.", two booking page sentences (the not-found cards), and on My pay "Bayad sa ibang tagalinis" (paid to another cleaner). *Default: keep the drafts.*

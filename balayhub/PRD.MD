@@ -1011,3 +1011,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - QA round 6: staff see a guest's name only (no VIP or Do not rebook flag, stay counts, ratings or review card on guest pages and reservations). Staff can still read full reviews on the Reviews page. Founder questions 1 and 2 in BLOCKERS (D-82).
 - QA round 6: `GET /api/my-pay` is now cleaners only, which closes the round 5 question (D-82).
 - QA round 6: add-on descriptions are still English only (unchanged, round 4 question).
+- QA round 7: past nights' prices and blocks can still be edited on the calendar (founder question 1 in BLOCKERS, default allowed).
+- QA round 7: add-on descriptions are still English only (unchanged).
+- QA round 7: the booking source is hidden from staff, following the access table (founder question 7 in BLOCKERS, default hidden).
+- QA round 7: in a Both workspace every new unit needs a nightly rate even if it is rented monthly only (founder question 5, default required).

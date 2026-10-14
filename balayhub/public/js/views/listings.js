@@ -68,6 +68,16 @@ function checkDiscountOrder(d) {
   }
 }
 
+// A base rate must be an amount above zero. The server refuses the same values, so the field says so before any question.
+function baseRateError(text) {
+  const n = parseAmount(text);
+  return Number.isFinite(n) && n > 0 ? null : 'Nightly rate must be greater than zero.';
+}
+function checkBaseRate(d) {
+  const error = baseRateError(d.nightly_rate);
+  if (error) throw new ApiError('Please check the highlighted fields.', { status: 400, fields: { nightly_rate: error } });
+}
+
 // A lowest price above the usual nightly rate means every night costs at least that much, so ask first.
 // Resolves true when the save may go ahead; a cancelled question resolves false and nothing is saved.
 // makeForm has set the save button to "Saving…"; it shows the save label again while the question waits.
@@ -177,6 +187,7 @@ async function addListingModal(onSaved) {
     fields: [propSelect, newProp, h('hr', { class: 'divider' }), ...listingFields({}, roomTypes)],
     onSubmit: async (raw, { form }) => {
       const d = prepUnit(raw);
+      checkBaseRate(d);
       checkDiscountOrder(d);
       if (!await lowPriceOk(d, form, 'Save listing')) return false; // false keeps the saved draft
       let propertyId = d.property_id;
@@ -237,10 +248,10 @@ async function photosModal(listing) {
     box.replaceChildren(
       h('p', { class: 'muted small' }, 'Shown on your booking page. The first photo is the cover. Up to 12 photos; large photos are resized automatically.'),
       photos.length ? h('div', { class: 'ph-grid' }, photos.map((p, i) => h('figure', { class: 'ph-item' },
-        h('img', { src: `/api/files/${p.file_id}`, alt: '', loading: 'lazy' }),
+        h('img', { src: `/api/files/${p.file_id}`, alt: `${listing.unit_name}, photo ${i + 1} of ${photos.length}`, loading: 'lazy' }),
         h('figcaption', null,
-          i === 0 ? h('span', { class: 'badge badge--paid' }, 'Cover') : h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: async () => { await post(`/listing-photos/${p.file_id}/cover`); draw(); } }, 'Make cover'),
-          h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: async () => { if (!await confirmDialog({ title: 'Delete this photo?', text: 'It is removed from your booking page.', confirmText: 'Delete photo', danger: true })) return; await post(`/listing-photos/${p.file_id}/remove`); draw(); } }, 'Delete')))))
+          i === 0 ? h('span', { class: 'badge badge--paid' }, 'Cover') : h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Make cover, photo ${i + 1}`, onclick: async () => { await post(`/listing-photos/${p.file_id}/cover`); draw(); } }, 'Make cover'),
+          h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Delete, photo ${i + 1}`, onclick: async () => { if (!await confirmDialog({ title: 'Delete this photo?', text: 'It is removed from your booking page.', confirmText: 'Delete photo', danger: true })) return; await post(`/listing-photos/${p.file_id}/remove`); draw(); } }, 'Delete')))))
         : h('p', { class: 'muted' }, 'No photos yet.'),
       h('div', { class: 'form' }, input,
         h('div', { class: 'chips' }, h('button', { class: 'btn btn--primary btn--sm', type: 'button', onclick: async (e) => {
@@ -451,6 +462,9 @@ async function changeArchive(listing, action, onDone) {
 export async function listingsView(el, { query }) {
   const canManage = state.user.role !== 'staff';
   const isOwner = state.user.role === 'owner';
+  // Short-term and both workspaces price each listing by the night, so an unpriced one needs a rate.
+  // Only people who can edit a listing are told how to add the rate.
+  const unpricedNote = state.user.business_type === 'long_term' ? null : (canManage ? 'No nightly rate yet. Edit to add one.' : 'No nightly rate yet.');
   const defaults = { q: '', cleaning: '', property_id: '', tag: '', unit_type: '', occupancy: '', channels: '', direct: '', min_guests: '', sort: '', status: '' };
   const filters = initFilters('listings', query, defaults);
   if (!['', 'dirty', 'clean'].includes(filters.cleaning)) filters.cleaning = '';
@@ -516,7 +530,7 @@ export async function listingsView(el, { query }) {
           `${CHANNEL_LABEL[p.channel]}${p.host ? ` (${p.host})` : ''}: ${p.message}${p.kind === 'overlap' ? ` (${fmtDate(p.check_in)} to ${fmtDate(p.check_out)})` : ''}`))),
         canManage && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => channelsModal(l, load) }, 'Open channels')),
       h('dl', { class: 'dl' },
-        h('dt', null, 'Nightly rate'), h('dd', null, l.nightly_rate ? peso(l.nightly_rate) : '—'),
+        h('dt', null, 'Nightly rate'), h('dd', null, l.nightly_rate ? peso(l.nightly_rate) : (unpricedNote || '—')),
         h('dt', null, 'Cleaning fee'), h('dd', null, peso(l.cleaning_fee)),
         h('dt', null, 'Guests'), h('dd', null, l.max_guests ? `Up to ${l.max_guests}` : '—'),
         h('dt', null, 'Check-in / out'), h('dd', null, `${l.checkin_time} / ${l.checkout_time}`),
@@ -524,14 +538,14 @@ export async function listingsView(el, { query }) {
         h('dt', null, 'Next arrival'), h('dd', null, l.next_check_in ? `${fmtDate(l.next_check_in)} · ${l.next_guest}` : '—'),
         h('dt', null, 'Channels'), h('dd', null, Number(l.channel_count) ? `${l.channel_count} connected` : 'None')),
       h('div', { class: 'chips', style: { marginTop: '12px' } },
-        h('button', { class: `btn btn--sm ${l.cleaning_status === 'dirty' ? 'btn--primary' : 'btn--secondary'}`, onclick: async () => {
+        h('button', { class: `btn btn--sm ${l.cleaning_status === 'dirty' ? 'btn--primary' : 'btn--secondary'}`, 'aria-label': `${l.cleaning_status === 'dirty' ? 'Mark clean' : 'Mark dirty'}, ${l.unit_name}`, onclick: async () => {
           await post(`/units/${l.unit_id}/cleaning`, { status: l.cleaning_status === 'dirty' ? 'clean' : 'dirty' });
           toast(l.cleaning_status === 'dirty' ? 'Marked clean.' : 'Marked as needing cleaning.'); load();
         } }, l.cleaning_status === 'dirty' ? 'Mark clean' : 'Mark dirty'),
-        canManage && h('button', { class: 'btn btn--secondary btn--sm', onclick: () => channelsModal(l, load) }, 'Channels'),
-        canManage && h('button', { class: 'btn btn--secondary btn--sm', onclick: () => photosModal(l) }, 'Photos'),
-        canManage && h('button', { class: 'btn btn--secondary btn--sm', onclick: () => guestPagesModal(l) }, 'Guest pages'),
-        canManage && h('button', { class: 'btn btn--ghost btn--sm', onclick: async () => {
+        canManage && h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `Channels, ${l.unit_name}`, onclick: () => channelsModal(l, load) }, 'Channels'),
+        canManage && h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `Photos, ${l.unit_name}`, onclick: () => photosModal(l) }, 'Photos'),
+        canManage && h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `Guest pages, ${l.unit_name}`, onclick: () => guestPagesModal(l) }, 'Guest pages'),
+        canManage && h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Edit, ${l.unit_name}`, onclick: async () => {
           const { units } = await get(`/properties/${l.property_id}`).then((r) => ({ units: r.units }));
           const unit = units.find((u) => u.unit_id === l.unit_id);
           const roomTypes = await roomTypeNames();
@@ -539,6 +553,7 @@ export async function listingsView(el, { query }) {
           const modal = openModal({ title: `Edit ${l.unit_name}`, body: makeForm({ submitText: 'Save changes', fields: listingFields({ ...unit, tags: unit.tags }, roomTypes),
             cancel: () => modal.close(),
             onSubmit: async (d, { form }) => {
+              checkBaseRate(d);
               checkDiscountOrder(d);
               if (!await lowPriceOk(d, form, 'Save changes')) return false;
               await patch(`/units/${l.unit_id}`, prepUnit(d)); toast('Listing updated.'); load(); modal.close();

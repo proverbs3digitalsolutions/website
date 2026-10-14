@@ -9,6 +9,8 @@ import { addDays, newReservationModal, CHANNEL_LABEL } from './reservations.js';
 
 const dayName = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { weekday: 'short', timeZone: 'UTC' });
 const dayNum = (d) => Number(d.slice(8, 10));
+// The 1st of a month reads "Nov 1", so a month change shows in the day header.
+const dayLabel = (d) => (dayNum(d) === 1 ? new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', timeZone: 'UTC' }) : dayNum(d));
 const monthName = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 const shortPeso = (v) => (v === null || v === undefined ? '' : `₱${Math.round(Number(v)).toLocaleString('en-PH')}`);
 // Cells are narrow: from ₱100,000 up a price reads as ₱100K or ₱1.2M. The full amount stays in the cell's title and aria-label.
@@ -16,6 +18,22 @@ const compactPeso = new Intl.NumberFormat('en-PH', { style: 'currency', currency
 const cellPeso = (v) => (Number(v) >= 100000 ? compactPeso.format(Number(v)) : shortPeso(v));
 // One sync problem as a line: its channel and link host, so two links on one listing read differently.
 const problemLine = (p) => `${CHANNEL_LABEL[p.channel] || 'Calendar'}${p.host ? ` (${p.host})` : ''}: ${p.message}`;
+
+// The grid title: one month, or both months when the shown days run into the next one ("October – November 2026").
+export function rangeTitle(start, days) {
+  const last = addDays(start, days - 1);
+  if (last.slice(0, 7) === start.slice(0, 7)) return monthName(start);
+  const first = start.slice(0, 4) === last.slice(0, 4) ? new Date(`${start}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'long', timeZone: 'UTC' }) : monthName(start);
+  return `${first} – ${monthName(last)}`;
+}
+
+// A filter value from the link that is not one of the options this person is shown is reset: no chip, and no listing
+// hidden for a reason nobody can see. A filter with no options list is left alone.
+export function knownFilters(values, options) {
+  const out = { ...values };
+  for (const [name, list] of Object.entries(options)) if (out[name] && !list.includes(out[name])) out[name] = '';
+  return out;
+}
 
 export async function calendarView(el, { query }) {
   const canManage = state.user.role !== 'staff';
@@ -44,6 +62,10 @@ export async function calendarView(el, { query }) {
     if (!canManage) return;
     try { for (const p of (await get('/sync-health')).problems) problems.set(p.unit_id, [...(problems.get(p.unit_id) || []), p]); } catch { /* the grid works without it */ }
   }
+  // A filter value from the link that this person is not shown as an option is reset before the first load.
+  Object.assign(filters, knownFilters(filters, {
+    property_id: properties.map(([id]) => id), tag: tags.map((t) => t.tag), unit_type: types, avail: ['open', 'empty', 'booked'], cleaning: ['dirty', 'clean'],
+  }));
   await loadTagUnits();
   const grid = h('div', { class: 'cal-scroll' });
   const title = h('strong', { class: 'cal-title' });
@@ -56,7 +78,7 @@ export async function calendarView(el, { query }) {
     if (asked && asked !== data.start) toast("That date wasn't valid, so we're showing today.");
     view.start = data.start;
     lastData = data;
-    title.textContent = monthName(data.start);
+    title.textContent = rangeTitle(data.start, data.days);
     dateInput.value = data.start;
     render(data);
   }
@@ -102,7 +124,7 @@ export async function calendarView(el, { query }) {
       h('div', { class: 'cal-side' }, `${listings.length} listing${listings.length === 1 ? '' : 's'}`),
       h('div', { class: 'cal-days' }, dates.map((d) => h('div', {
         class: `cal-day-head${d === data.today ? ' is-today' : ''}${['Sat', 'Sun'].includes(dayName(d)) ? ' is-weekend' : ''}`,
-      }, h('span', null, dayName(d)), h('b', null, dayNum(d)))))));
+      }, h('span', null, dayName(d)), h('b', null, dayLabel(d)))))));
 
     for (const l of listings) {
       const cells = dates.map((d) => {
@@ -238,7 +260,7 @@ export async function calendarView(el, { query }) {
 
   el.replaceChildren(
     h('div', { class: 'page-head' },
-      h('div', { class: 'page-head__title' }, h('h1', null, 'Multi-calendar'), h('p', null, 'Tap an open night to book, block or change its price')),
+      h('div', { class: 'page-head__title' }, h('h1', null, 'Multi-calendar'), h('p', null, canManage ? 'Tap an open night to book, block or change its price' : 'See who is staying and which nights are open. Booking and price changes are for owners and managers.')),
       canManage && h('div', { class: 'page-head__actions' },
         h('a', { class: 'btn btn--secondary', href: '#/pricing' }, '₱ Pricing rules'),
         h('button', { class: 'btn btn--primary', onclick: () => newReservationModal({ onSaved: load }) }, icon('plus'), 'New reservation'))),

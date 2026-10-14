@@ -307,6 +307,9 @@ export function openGetStarted(preset = {}) {
       const f = box.querySelector(`[data-field="${k}"] .error`);
       if (f) f.textContent = msg;
     }
+    // Focus the first field (in form order) that now has a message, so keyboard and screen-reader users land on it.
+    const first = [...box.querySelectorAll('[data-field]')].find((field) => field.querySelector('.error')?.textContent);
+    first?.querySelector('input, select, textarea')?.focus();
   };
   const read = () => { for (const el of box.querySelectorAll('input[name], select[name]')) data[el.name] = el.type === 'checkbox' ? el.checked : el.value.trim(); };
 

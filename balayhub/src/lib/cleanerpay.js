@@ -23,6 +23,17 @@ async function rateFor(db, orgId, task) {
   return rows[0] || null;
 }
 
+// The active team member (any role) whose name equals a typed outside-cleaner name, ignoring case and extra
+// spaces, or undefined. An outside name that matches a member would fork their rate and pay (#29).
+async function teamMemberByName(db, orgId, name) {
+  const { rows } = await db.query(
+    `SELECT user_id, full_name FROM users
+      WHERE organization_id = $1 AND account_status = 'active'
+        AND lower(regexp_replace(btrim(full_name), '\\s+', ' ', 'g')) = lower(regexp_replace(btrim($2), '\\s+', ' ', 'g'))
+      LIMIT 1`, [orgId, name]);
+  return rows[0];
+}
+
 // Set pay_amount on a finished, unpaid clean from its payee's rate. Per clean: the rate.
 // Per hour: finished minus started, rounded up to the next 15 minutes, at most 12 hours.
 // Per hour with no real start (Start never pressed) leaves the pay NULL, "not set", for the owner
@@ -46,4 +57,4 @@ async function computePay(db, taskId) {
   return out.pay_amount;
 }
 
-module.exports = { computePay, rateFor };
+module.exports = { computePay, rateFor, teamMemberByName };

@@ -3,7 +3,7 @@
 
 import { get } from '../api.js';
 import { h, brand, icon, toast } from '../ui.js';
-import { t, guestLang, initGuestLang, langToggle, fmtDateL as fmtDate, extendTranslations } from '../i18n.js';
+import { t, tServer, guestLang, initGuestLang, langToggle, fmtDateL as fmtDate, extendTranslations } from '../i18n.js';
 
 extendTranslations({
   'Your guidebook': 'Ang guidebook mo',
@@ -92,7 +92,7 @@ export async function guideView(el, { params }) {
     const early = err.code === 'GUIDE_NOT_YET';
     el.replaceChildren(page(h('div', { class: 'card' },
       h('h1', null, early ? t('Your guidebook') : t('Guidebook not available')),
-      h('p', { class: 'muted' }, early ? t('Your guidebook opens on {date}. Come back then; this same link will work.', { date: fmtDate(err.data?.opens_on) }) : err.message),
+      h('p', { class: 'muted' }, early ? t('Your guidebook opens on {date}. Come back then; this same link will work.', { date: fmtDate(err.data?.opens_on) }) : tServer(err.message)),
       err.offline && h('button', { class: 'btn btn--secondary', type: 'button', onclick: () => guideView(el, { params }) }, t('Try again')))));
     return;
   }

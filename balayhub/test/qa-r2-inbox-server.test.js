@@ -56,7 +56,9 @@ test('#7 a filter id that is not a UUID is ignored: the list loads and nothing i
   }
 });
 
-test('#7 a valid id still filters, and an unknown valid id gives an empty list', async () => {
+// QA round 7 (#17): an id this workspace does not have is ignored like a bad one (D-77), so it no longer empties the list.
+test('#7 a valid id still filters, and an unknown valid id is ignored', async () => {
   assert.deepEqual(ids((await owner.get(`/api/inbox?property_id=${propId}`)).data.conversations), [conv]);
-  assert.deepEqual(ids((await owner.get('/api/inbox?property_id=00000000-0000-0000-0000-000000000000')).data.conversations), []);
+  const all = ids((await owner.get('/api/inbox')).data.conversations);
+  assert.deepEqual(ids((await owner.get('/api/inbox?property_id=00000000-0000-0000-0000-000000000000')).data.conversations), all);
 });

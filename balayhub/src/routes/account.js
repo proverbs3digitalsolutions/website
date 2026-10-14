@@ -74,7 +74,10 @@ router.get('/account/profile', requireAuth, ah(async (req, res) => {
   if (u.organization_id) {
     const { planStatus } = require('../lib/plans');
     const org = await one('SELECT created_at FROM organizations WHERE organization_id = $1', [u.organization_id]);
-    workspace = { name: u.organization_name, business_type: u.business_type, role: u.role, created_at: org.created_at, plan: planStatus(u),
+    const plan = planStatus(u);
+    // Only owners see what the plan costs and its listing limit; everyone sees the status (BACKEND-SCHEMA 6, D-83).
+    if (u.role !== 'owner') { delete plan.price; delete plan.listing_limit; }
+    workspace = { name: u.organization_name, business_type: u.business_type, role: u.role, created_at: org.created_at, plan,
       members: (await one(`SELECT COUNT(*)::int AS n FROM users WHERE organization_id = $1 AND account_status = 'active'`, [u.organization_id])).n };
     // Which properties this person works on (owners see everything).
     ({ rows: properties } = await query(

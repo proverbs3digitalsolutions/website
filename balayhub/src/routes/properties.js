@@ -5,6 +5,7 @@ const { query, one, tx } = require('../db');
 const { HttpError, ah, forbidden } = require('../lib/http');
 const { validate, uuidParam } = require('../lib/validate');
 const { audit } = require('../lib/audit');
+const { changedKeys } = require('../lib/auditdiff');
 const { requireRole } = require('../lib/auth');
 const { propertyScope, loadProperty, loadUnit } = require('../lib/access');
 const { POLICY_KEYS } = require('../lib/policies');
@@ -242,8 +243,8 @@ router.patch('/properties/:id', managers, ah(async (req, res) => {
     const { rows: [p] } = await db.query(
       `UPDATE properties SET ${sets.join(', ')} WHERE property_id = $1 RETURNING *`,
       [property.property_id, ...keys.map((k) => body[k])]);
-    await audit(db, req.user, 'property.updated', 'property', p.property_id, {
-      before: Object.fromEntries(keys.map((k) => [k, property[k]])), after: body });
+    const fields = changedKeys(property, body);
+    if (fields.length) await audit(db, req.user, 'property.updated', 'property', p.property_id, { fields });
     return p;
   });
   res.json({ property: updated });
@@ -392,8 +393,8 @@ router.patch('/units/:id', managers, ah(async (req, res) => {
       }
       const { rows: [u] } = await db.query(`UPDATE units SET ${sets.join(', ')} WHERE unit_id = $1 RETURNING *`,
         [unit.unit_id, ...keys.map((k) => body[k])]);
-      await audit(db, req.user, 'unit.updated', 'unit', u.unit_id, {
-        before: Object.fromEntries(keys.map((k) => [k, unit[k]])), after: body });
+      const fields = changedKeys(unit, body);
+      if (fields.length) await audit(db, req.user, 'unit.updated', 'unit', u.unit_id, { fields });
       return u;
     });
     res.json({ unit: updated });

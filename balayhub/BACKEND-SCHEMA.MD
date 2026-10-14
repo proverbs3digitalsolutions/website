@@ -739,9 +739,9 @@ The workspace export (`exportOrganization`) is not complete. It leaves out `supp
 
 | Data area | Owner | Manager | Staff | Platform admin | Guest via token link |
 |---|---|---|---|---|---|
-| Workspace settings (name, type, guest language, cleaning checklist, onboarding) | View, edit | View basic info; can switch the built-in message templates' language | View basic info | View every workspace (owner name and email, counts, plan); edit plan, paid-until, trial end, note (not the demo) | Sees the host's name and language on guest pages |
+| Workspace settings (name, type, guest language, cleaning checklist, onboarding) | View, edit | View basic info. Cannot switch the built-in message templates' language (owner only, D-28; *2026-10-14: the earlier manager wording was wrong*) | View basic info | View every workspace (owner name and email, counts, plan); edit plan, paid-until, trial end, note (not the demo) | Sees the host's name and language on guest pages |
 | Team, invitations, property assignments | View, invite, change role and properties, revoke invite, remove member (revokes the account and signs it out) | None | None | Member count only | Invitee: view workspace name and role from the invite link |
-| Own account (profile, password, devices, notification settings) | Own only | Own only | Own only | Own only | None |
+| Own account (profile, password, devices, notification settings) | Own only | Own only. Also sees the workspace owner's name and email (founder question 4) | Same as manager | Own only | None |
 | Properties | View, create, edit, archive and restore (all) | View, edit (assigned); no create or archive | View (assigned) | None | Property name and city on guest pages |
 | Units and listings (including Wi-Fi password, instructions, photos) | View, create, edit, archive and restore | Same, assigned; upload, reorder and remove photos | View (assigned, includes Wi-Fi details); mark clean or dirty | None | Booking page: view bookable listings, photos and prices |
 | Pricing (nightly rates, seasons) | View, edit; seasons for all listings | View, edit rates and per-listing seasons (assigned); no all-listings seasons | View (pricing page and calendar prices, assigned) | None | Price quotes on the booking page |
@@ -777,18 +777,22 @@ The workspace export (`exportOrganization`) is not complete. It leaves out `supp
 | Profit and loss (`/reports/pnl`, CSV) | View all units | View assigned properties | None (403) | None | None |
 | Owner portal (unit owner, `bh_owner` cookie, not a workspace role) | None (invites and turns access off only) | None | None | None | Unit owner, own units only: published statements (never drafts), payouts, own reserve balance, bookings and activity for own units (guests by first name), own blocks (create, cancel before start), P&L for own units, receipts on published statements. Sees history of units now assigned to them (D-46). Never guest contact details, payment proofs, other owners or other workspace data. Blocks: not while the workspace is view-only; 20 per hour (D-46) |
 | Support tickets | All of the workspace's tickets: view, create, reply, resolve, rate, attach files | Own tickets only | Own tickets only | All tickets: view, reply, internal notes, change status, assign, view attachments | None |
-| Plan and billing payments | View; start and confirm checkout | Plan status only (via session) | Plan status only | Set plan and dates by hand | None |
+| Plan and billing payments | View; start and confirm checkout | Plan status only (via session; no price or listing limit, D-83) | Plan status only (same) | Set plan and dates by hand | None |
 | Audit log | View all entries (latest 200) | View own actions only | None | No viewer (plan changes are written into the workspace's log) | None |
 | Workspace export and deletion | Export JSON; request and cancel deletion | None | None | None | None |
 | Files (generic) | Follows the parent record's rule | Same, assigned | Same, assigned, except lease and guest ID files | Support attachments only | Guest IDs: upload only. Building admin: view guest IDs. Public listing photos |
 
 *2026-10-14 (D-82): staff get `{ guest_id, full_name, limited }` only, on `/guests`, `/guests/:id` (with empty stays and reviews) and a group's lead guest. Reservation rows for staff carry no `guest_vip` or `guest_do_not_rebook`, no review card and no Returning badge. Staff can still read full reviews on `GET /reviews` (the Reviews page; the matrix allows it; BLOCKERS round 6, question 2). Correction 2026-10-14: cleaners are not names only. Cleaners get 403 on guests, guest profiles, reservations, booking groups and reviews (matches 6.2); only staff get names only.*
 
+*2026-10-14 (D-83): managers, staff and cleaners receive plan status (`plan`, `name`, `ai`, `read_only`, `reason`, `is_demo`) and the dates `trial_ends_at`, `trial_days_left`, `paid_until` and `deletion_scheduled_at`, never `price` or `listing_limit`. Staff and cleaners get `document_file_id: null` on a lease. Every team member also receives the workspace owner's name and email (the "Workspace owner" line on the account page).*
+
 ---
 
 ### 6.1 Phase 3 access matrix (with the Cleaner column)
 
 The cleaner role is denied by default in code (`cleanerGuard`, D-48). Any row not listed here is **No** for a cleaner. "Assigned" means the properties in `property_assignments`. Owners see the whole workspace.
+
+*2026-10-14 (D-83): for cleaners, the lost-and-found and damage lists (the pages) answer 403; a cleaner sees only the items and reports they filed, on the job page, with no amounts or status notes. The cleaning board shows one open job per unit: the first by due date that the viewer may see.*
 
 | Data area | Owner | Manager | Staff | Cleaner |
 |---|---|---|---|---|
@@ -855,6 +859,8 @@ The cleaner role is denied by default in code (`cleanerGuard`, D-48). Any row no
 
 The cleaner role is denied by `cleanerGuard` (D-48) unless a route is on its allow-list. None of the Phase 4 routes are on that list, so cleaners get 403 on every one. "Assigned" means the properties the manager is assigned to, as in section 6.1.
 
+*2026-10-14 (D-83): staff and cleaner reservation rows are an allow-list (`STAFF_RESERVATION_KEYS` in `src/routes/stays.js`); `source` is not in it, and a new booking column stays hidden from them until it is added to the list.*
+
 | Data area | Owner | Manager | Staff | Cleaner | Public (with the private link or no login) |
 |---|---|---|---|---|---|
 | Guidebook: read and edit text | Full | Assigned | No | No | No |
@@ -882,6 +888,8 @@ The cleaner role is denied by `cleanerGuard` (D-48) unless a route is on its all
 ### 6.3 Phase 5 access matrix (pricing, team, groups, daily close, sync)
 
 Cleaners are denied by `cleanerGuard` on every Phase 5 route. "Assigned" means the properties the manager is assigned to, as in section 6.1. Workspace-wide pricing rules and seasons are owner-only to change.
+
+*2026-10-14 (D-83): a manager's season create for every listing answers 400 on `unit_id` with a clear message (nothing is written); removing or changing an all-listings rule answers 403. Staff group rows and totals carry no `held` figure.*
 
 | Data area | Owner | Manager | Staff | Cleaner | Public |
 |---|---|---|---|---|---|
@@ -1017,3 +1025,17 @@ Cleaners are denied by `cleanerGuard` on every Phase 5 route. "Assigned" means t
 - **House rules on reservations (C22):** `GET /api/reservations` and `GET /api/reservations/:id` give `rules_text` and `rules_accepted_at` to owners and managers only. Staff do not get them (matrix 6.2). Guest detail redaction is an allow-list: every role except owner and manager is redacted.
 - **`POST /api/reservations/:id/payments`:** staff can record a payment, but the response is redacted the same way: no guest email, phone or flags, no other stays, review or house rules. Owners and managers get the full guest.
 - **Payment idempotency keys:** `idempotency_key` is internal. It is removed from payment and receipt responses for every role.
+
+## 13. API notes from QA round 7 (2026-10-14)
+
+- **Activity log (`src/lib/auditdiff.js`):** `changedKeys(before, after)` returns the names of the fields that really differ. Every edit action writes `{ fields: [...names], ...identity }` (names only, never values) and writes **no row** when nothing changed. Covered: unit and property edits, guide, gate pass, guest experience, automatic message edit, cleaning task edit, maintenance schedule edit, supply edit. Equality rules: empty and null are the same; text is trimmed; "14:00:00" equals "14:00"; object keys are compared in sorted order and an empty array is a value; text and a real number or yes/no are the same only when the text is that value's plain form ("4200.00" equals 4200), and two pieces of text are never coerced (door codes and Wi-Fi passwords compare as text).
+- **`maintenance.schedule_resumed`** is a new action (`{ title }`); the screen reads "Resumed a maintenance schedule". `PATCH /api/maintenance/:id` still writes before and after values and a row on a no-change save (carried to round 8).
+- **`GET /api/reservations`, `GET /api/reservations/:id`, `GET /api/stays/overview`:** staff and cleaners get only `STAFF_RESERVATION_KEYS`; owners and managers are unchanged.
+- **`POST /api/reservations/:id/payments` and `/booking-payments/:id/receipt`:** a failed receipt email gives staff `receipt.error` as one fixed sentence; owners and managers keep the provider detail. The over-balance question is on the screen only; the server still accepts an overpayment (D-32).
+- **`GET /api/booking-groups` and `/:id`:** a group carries `held` (money paid on rooms that are not confirmed, for example in a cancelled group) for owners and managers only.
+- **Quotes price preview:** carries `missing_rates` (the nights with no nightly rate). **Bulk price preview:** `below_lowest` is also returned for a set-price change.
+- **`PUT /api/cleaner-rates` (typed outside name), `POST /api/cleaning-tasks`, `PATCH /api/cleaning-tasks/:id`:** a typed name equal to an active team member in the same workspace (any role, spaces and capitals ignored) answers 400 on `assignee_name`: "Pick <name> from the team list instead." (`teamMemberByName` in `src/lib/cleanerpay.js`). Rates saved that way earlier are left alone. Security note carried: the message echoes the member's full name to managers.
+- **`GET /api/inbox`:** an unknown `unit_id` or `property_id` is ignored (the list is not filtered); an id the manager cannot reach still gives an empty list.
+- **`GET /api/auth/me` and `GET /api/account/profile`:** the plan object for managers, staff and cleaners has no `price` or `listing_limit`.
+- **`GET /api/leases/:id`:** `document_file_id` is null for staff and cleaners.
+- **`POST /api/team/invitations`:** an existing email answers 409 `EMAIL_TAKEN` with `fields.email` = "This email already has a BalayHub account. Use a different email for each workspace."

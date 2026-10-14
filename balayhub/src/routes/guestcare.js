@@ -7,6 +7,7 @@ const { query, one } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
 const { validate, uuidParam, isValidDate, UUID_RE } = require('../lib/validate');
 const { audit } = require('../lib/audit');
+const { changedKeys } = require('../lib/auditdiff');
 const { requireRole, rateLimit } = require('../lib/auth');
 const { propertyScope } = require('../lib/access');
 const { normalize, USES } = require('../lib/discounts');
@@ -240,12 +241,13 @@ router.patch('/workspace/guest-settings', owners, ah(async (req, res) => {
   }, { partial: true });
   const sets = [];
   const params = [req.user.organization_id];
-  const changed = {};
+  const sent = {};
   const set = (column, value, cast = '') => {
     params.push(cast ? JSON.stringify(value) : value);
     sets.push(`${column} = $${params.length}${cast}`);
-    changed[column] = value;
+    sent[column] = value;
   };
+  const current = await guestSettings(req.user.organization_id);
   if ('returning_guest_pct' in body) set('returning_guest_pct', body.returning_guest_pct);
   if ('abandoned_followup' in body) set('abandoned_followup', body.abandoned_followup);
   if (b.review_links !== undefined) {
@@ -257,7 +259,9 @@ router.patch('/workspace/guest-settings', owners, ah(async (req, res) => {
   }
   if (sets.length) {
     await query(`UPDATE organizations SET ${sets.join(', ')} WHERE organization_id = $1`, params);
-    await audit(null, req.user, 'workspace.guest_settings_updated', 'organization', req.user.organization_id, changed);
+    // Which settings changed, never their values. Saving what is already stored writes no row.
+    const fields = changedKeys(current, sent);
+    if (fields.length) await audit(null, req.user, 'workspace.guest_settings_updated', 'organization', req.user.organization_id, { fields });
   }
   res.json(await guestSettings(req.user.organization_id));
 }));

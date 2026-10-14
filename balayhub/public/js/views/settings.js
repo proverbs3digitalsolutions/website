@@ -206,7 +206,7 @@ export const ACTIONS = {
   'bulk.blocks': 'Blocked or unblocked dates in bulk', 'bulk.prices': 'Changed prices in bulk',
   'pricing_rule.created': 'Added a pricing rule', 'pricing_rule.updated': 'Edited a pricing rule', 'pricing_rule.removed': 'Removed a pricing rule',
   'season.created': 'Added a season price', 'season.removed': 'Removed a season price',
-  'cleaning.task_created': 'Added a cleaning task', 'cleaning.task_updated': 'Updated a cleaning task', 'cleaning.checklist_updated': 'Edited the cleaning checklist', 'cleaning.inspected': 'Inspected a cleaning',
+  'cleaning.task_created': 'Added a cleaning task', 'cleaning.task_updated': 'Edited a cleaning task', 'cleaning.checklist_updated': 'Edited the cleaning checklist', 'cleaning.inspected': 'Inspected a cleaning',
   'cleaning.task_todo': 'Set a cleaning task back to to-do', 'cleaning.task_in_progress': 'Started a cleaning task', 'cleaning.task_done': 'Finished a cleaning task', 'cleaning.task_cancelled': 'Cancelled a cleaning task',
   'cleaning.clean': 'Marked a listing clean', 'cleaning.dirty': 'Marked a listing dirty',
   'cleaner_rate.saved': 'Saved a cleaner rate', 'cleaner_rate.deleted': 'Removed a cleaner rate', 'cleaner_pay.paid': 'Marked a cleaner’s pay as paid', 'cleaner_pay.unpaid': 'Marked a cleaner’s pay as unpaid',
@@ -239,6 +239,7 @@ export const ACTIONS = {
   'maintenance.created': 'Logged a repair request', 'maintenance.updated': 'Edited a repair request', 'maintenance.scheduled': 'Scheduled a repair',
   'maintenance.status_changed': 'Changed a repair’s status', 'maintenance.schedule_created': 'Added a maintenance schedule',
   'maintenance.schedule_updated': 'Edited a maintenance schedule', 'maintenance.schedule_paused': 'Paused a maintenance schedule',
+  'maintenance.schedule_resumed': 'Resumed a maintenance schedule',
   'lost_found.reported': 'Logged a lost item', 'lost_found.updated': 'Edited a lost item',
   'supply.created': 'Added a supply', 'supply.updated': 'Edited a supply', 'supply.movement': 'Recorded a supply movement', 'supply.archived': 'Archived a supply',
   'payment_proof.submitted': 'Received a payment screenshot', 'payment_proof.image_added': 'Added a payment screenshot', 'payment_proof.rejected': 'Rejected a payment screenshot',
@@ -269,6 +270,9 @@ const DETAIL_LABELS = {
   pricing: 'Pricing', adjust_pct: 'Price change',
   vip: 'VIP', gatepass_enabled: 'Send automatically', gatepass_days_before: 'Days before check-in', gatepass_attach_ids: 'Attach IDs',
   gatepass_authorized_by: 'Authorized by', gatepass_notes: 'Notes for the admin',
+  admin_email: 'Admin email', review_links: 'Public review links', door_code: 'Door code', unit_label: 'Unit', par_level: 'Par level',
+  checkin_time: 'Check-in time', checkout_time: 'Check-out time', min_nights: 'Minimum nights', wifi_name: 'Wi-Fi name', wifi_password: 'Wi-Fi password',
+  security_deposit_amount: 'Security deposit', deposit_pct: 'Deposit percent', bookable_online: 'Bookable online', checkin_instructions: 'Check-in instructions',
 };
 const MONEY_KEYS = new Set(['amount', 'amount_paid', 'total_amount', 'price', 'unit_price', 'monthly_rent', 'estimated_cost', 'payout', 'refund', 'deduction', 'reserve_topup']);
 // Stored codes for add-on pricing and pricing rules, in plain words.

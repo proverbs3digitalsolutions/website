@@ -1,7 +1,7 @@
 // Pricing rules: how nightly prices are worked out, seasons, and the PH holiday calendar.
 
 import { get, post, patch, qs } from '../api.js';
-import { h, peso, fmtDate, field, formModal, openModal, confirmDialog, emptyState, pageHead, toast, todayManila } from '../ui.js';
+import { h, peso, fmtDate, field, formModal, openModal, confirmDialog, emptyState, pageHead, toast, todayManila, showErrors } from '../ui.js';
 import { state } from '../app.js';
 import { addDays } from './reservations.js';
 
@@ -20,6 +20,19 @@ export function ruleSummary(r) {
 // What changes when a rule takes the place of the rule of its kind already on the same listing (or on every listing).
 export function replaceRuleText(old, next) {
   return `${old.unit_name || 'All listings'} already has a ${RULE_KINDS[next.kind].label} rule: “${ruleSummary(old)}”. It will change to “${ruleSummary(next)}”.${old.active ? '' : ' It is off now, so this turns it on.'}`;
+}
+// The checks the server makes on a rule (src/routes/pricing.js and its validate spec), with the same messages, so a
+// value it would refuse is refused at its field before the browser asks about changing an existing rule.
+export function ruleProblems(kind, days, pct) {
+  const k = RULE_KINDS[kind];
+  const fields = {};
+  if (!Number.isInteger(days)) fields.days = 'Days must be a whole number.';
+  else if (days < 0 || days > 540) fields.days = days < 0 ? 'Days must be at least 0.' : 'Days must be at most 540.';
+  else if (days < k.min || days > k.max) fields.days = `For this kind of rule, use ${k.min} to ${k.max} days.`;
+  if (!Number.isInteger(pct)) fields.adjust_pct = 'Percentage change must be a whole number.';
+  else if (pct < -90 || pct > 300) fields.adjust_pct = pct < -90 ? 'Percentage change must be at least -90.' : 'Percentage change must be at most 300.';
+  else if (pct === 0) fields.adjust_pct = 'Enter a percentage other than 0.';
+  return fields;
 }
 const KIND_LABEL = { custom: 'Custom price', holiday: 'Holiday', season: 'Season', weekend: 'Weekend', base: 'Base rate' };
 
@@ -123,8 +136,10 @@ export async function pricingView(el, { rerender }) {
           hint: 'Use a minus for a discount, e.g. -15 for 15% off. From -90 to 300.' }),
         scopeField,
         h('p', { class: 'muted small' }, 'A rule for one listing replaces the all-listings rule of the same kind. Prices you set by hand on the calendar are never changed.')],
-      onSubmit: async (d) => {
+      onSubmit: async (d, { form }) => {
         const body = { kind: d.kind, days: Number(d.days), adjust_pct: Number(d.adjust_pct), unit_id: d.unit_id || null };
+        const problems = ruleProblems(body.kind, body.days, body.adjust_pct);
+        if (Object.keys(problems).length) { showErrors(form, problems); return false; }
         if (r) await patch(`/pricing/rules/${r.rule_id}`, { days: body.days, adjust_pct: body.adjust_pct });
         else {
           const dup = rules.find((x) => x.kind === body.kind && (x.unit_id || null) === body.unit_id);
@@ -259,11 +274,13 @@ function previewCard(listings, seasons) {
       const kind = KIND_LABEL[n.kind] ? n.kind : 'base';
       const day = new Date(`${n.date}T00:00:00Z`).getUTCDate();
       const mon = new Date(`${n.date}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'short', timeZone: 'UTC' });
+      // A night a booking-window rule changed reads "Adjusted", not its source kind.
+      const adjusted = (n.applied || []).length > 0;
       const b = h('button', { type: 'button', class: `pr-night pr-night--${n.booked ? 'booked' : kind}`, 'aria-pressed': 'false',
-        'aria-label': `${fmtDate(n.date)}, ${peso(n.price)}, ${n.booked ? 'booked, ' : ''}${KIND_LABEL[kind]}${(n.applied || []).length ? ', rules applied' : ''}` },
-        h('span', { class: 'pr-night__d' }, day === 1 || n === nights[0] ? `${mon} ${day}` : String(day), (n.applied || []).length ? h('span', { class: 'pr-i', 'aria-hidden': 'true' }, 'i') : null),
+        'aria-label': `${fmtDate(n.date)}, ${peso(n.price)}, ${n.booked ? 'booked, ' : ''}${adjusted ? `${KIND_LABEL[kind]}, adjusted by rules` : KIND_LABEL[kind]}` },
+        h('span', { class: 'pr-night__d' }, day === 1 || n === nights[0] ? `${mon} ${day}` : String(day), adjusted ? h('span', { class: 'pr-i', 'aria-hidden': 'true' }, 'i') : null),
         h('span', { class: 'pr-night__p' }, peso(n.price)),
-        h('span', { class: 'pr-night__k' }, n.booked ? 'Booked' : KIND_LABEL[kind]));
+        h('span', { class: 'pr-night__k' }, n.booked ? 'Booked' : adjusted ? 'Adjusted' : KIND_LABEL[kind]));
       b.addEventListener('click', () => show(n, b));
       cells.push(b);
     }

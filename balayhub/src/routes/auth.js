@@ -35,6 +35,9 @@ const { planStatus } = require('../lib/plans');
 const isPlatformAdmin = (u) => Boolean(u.email_verified_at) && config.platformAdmins.includes(String(u.email).toLowerCase());
 
 function publicUser(u) {
+  // Only owners see what the plan costs and its listing limit; everyone sees the status (BACKEND-SCHEMA 6, D-83).
+  const plan = u.organization_id ? planStatus(u) : null;
+  if (plan && u.role !== 'owner') { delete plan.price; delete plan.listing_limit; }
   return {
     user_id: u.user_id,
     full_name: u.full_name,
@@ -45,7 +48,7 @@ function publicUser(u) {
     business_type: u.business_type || null,
     guest_language: u.guest_language || 'en',
     email_verified: Boolean(u.email_verified_at),
-    plan: u.organization_id ? planStatus(u) : null,
+    plan,
     is_platform_admin: isPlatformAdmin(u),
   };
 }

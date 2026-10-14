@@ -100,7 +100,9 @@ test('charges and deposits show no figure for an amount that cannot be read', ()
   assert.match(chg, /Number\.isNaN\(unit\) \? '' : `Charge total:/);
   const dep = read('views/deposits.js');
   assert.match(dep, /const typed = raw\.trim\(\) === '' \? 0 : parseAmount\(raw\);/);
-  assert.match(dep, /if \(Number\.isNaN\(typed\)\) \{ refundLine\.textContent = ''; return; \}/);
+  // QA round 7 (C16): the read moved into returnLine(), which gives no figure for an unreadable or negative amount.
+  assert.match(dep, /if \(Number\.isNaN\(typed\) \|\| typed < 0\) return '';/);
+  assert.match(dep, /refundLine\.textContent = returnLine\(dedInput\.querySelector\('input'\)\.value, dep\);/);
 });
 
 test('quotes: a typed amount that cannot be read gives no total; a blank box is 0; a negative stays unreadable', () => {

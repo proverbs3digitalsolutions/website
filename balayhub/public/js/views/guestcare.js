@@ -23,7 +23,7 @@ export async function reviewsView(el, { query = {} } = {}) {
     if (!reviews.length) {
       listBox.replaceChildren(filtered
         ? emptyState({ iconName: 'users', title: 'No results found', text: 'No review matches these filters. Try removing a filter.' })
-        : emptyState({ iconName: 'users', title: 'No reviews yet', text: 'Your thank-you message after check-out includes a private link where guests rate their stay. Turn on the "thank-you the day after check-out" automation in Inbox settings.' }));
+        : emptyState({ iconName: 'users', title: 'No reviews yet', text: state.user.role === 'owner' ? 'Your thank-you message after check-out includes a private link where guests rate their stay. Turn on the "thank-you the day after check-out" automation in Inbox settings.' : 'Reviews from your guests show here.' }));
       return;
     }
     listBox.replaceChildren(

@@ -12,6 +12,9 @@ const { syncCharges, LEASE_BALANCE_CTE, CHARGE_STATUS_CTE, TODAY } = require('..
 const router = express.Router();
 const managers = requireRole('owner', 'manager');
 
+// Staff and cleaners never get a lease's document id, and the files list is blank for them too.
+const withoutDocument = (user, lease) => (['staff', 'cleaner'].includes(user.role) ? { ...lease, document_file_id: null } : lease);
+
 const tenantSpec = {
   full_name: { type: 'string', required: true, max: 120, label: 'Full name' },
   email: { type: 'email', label: 'Email' },
@@ -148,7 +151,7 @@ router.get('/tenants/:id', ah(async (req, res) => {
   const { rows: charges } = await query(
     `WITH ${CHARGE_STATUS_CTE}
      SELECT * FROM charges WHERE lease_id = ANY($2) ORDER BY due_date DESC`, [org, leaseIds]);
-  res.json({ tenant: redactTenant(req.user, tenant), leases, payments, charges });
+  res.json({ tenant: redactTenant(req.user, tenant), leases: leases.map((l) => withoutDocument(req.user, l)), payments, charges });
 }));
 
 router.patch('/tenants/:id', managers, ah(async (req, res) => {
@@ -247,7 +250,7 @@ router.get('/leases/:id', ah(async (req, res) => {
     `SELECT file_id, file_name, mime_type, size_bytes, uploaded_at FROM files
       WHERE related_record_type = 'lease' AND related_record_id = $1 AND organization_id = $2 ORDER BY uploaded_at DESC`,
     [lease.lease_id, req.user.organization_id]);
-  res.json({ lease, balance, charges, files: ['staff', 'cleaner'].includes(req.user.role) ? [] : files });
+  res.json({ lease: withoutDocument(req.user, lease), balance, charges, files: ['staff', 'cleaner'].includes(req.user.role) ? [] : files });
 }));
 
 // Adjust the remaining terms. Changing rent affects charges not yet generated.

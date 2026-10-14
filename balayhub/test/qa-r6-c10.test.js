@@ -39,11 +39,11 @@ test('Stay reports: the Revenue tile splits rooms from cleaning and extras', () 
   assert.match(src, /Rooms \$\{peso\(t\.accommodation\)\} · cleaning and extras \$\{peso\(t\.fees\)\}/);
 });
 
-test('Stay reports: the By listing table has a Cleaning & extras column and its building row still lines up', () => {
+test('Stay reports: the By listing table has an Of which cleaning & extras column and its building row still lines up', () => {
   const src = read('stayreports.js');
   const headers = src.match(/\['Listing', ([^\]]*)\]/);
   assert.ok(headers, 'By listing headers found');
-  assert.match(headers[1], /'Cleaning & extras'/);
+  assert.match(headers[1], /'Of which cleaning & extras'/); // QA r7 C17 (K9): the header says the cleaning part is inside Revenue.
   assert.match(headers[1], /'Channel fees'/);
   const columns = headers[1].split(',').length + 1;
   const building = src.match(/colspan: (\d+) \}, 'Building-level expenses/);

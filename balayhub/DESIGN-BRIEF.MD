@@ -508,3 +508,12 @@ Printable views are built from `.receipt` (with a 2px `--navy` rule under the he
 - **Narrow filter panels put range fields on their own row.** A from and to pair gets a full row so the two boxes and their messages fit.
 - **A control's name includes its visible label.** The language switch is named "Language: EN" or "Wika: TL", matching what is on screen.
 - **Each problem is said once, at its field.** A banner or summary doesn't repeat a field message.
+
+## 16. Patterns added in QA round 7 (2026-10-14)
+
+- **A dialog sheet takes focus on its first item and has a visible Close button.** On phones the More menu lists Close first, keeps Tab and Shift+Tab inside the menu, and returns focus to More when it closes.
+- **Repeated per-photo and per-card buttons name what they act on:** "Make cover, photo 2", "Delete, photo 2", "Archive, <listing>". Photos carry alt text with their number.
+- **Date boxes in filter ranges are wide enough for a full date with the year** (From and To in the inbox, reports and statements).
+- **Long names in statement and page headers wrap** instead of pushing the page sideways at 390 px.
+- **A money question uses the same confirm dialog pattern as payouts.** Plain sentence, the amount and the balance in the text ("This is ₱500.00 more than the balance of ₱5,500.00. Record it?"), a clear yes button, and cancel leaves the form as it was with "Payment not saved."
+- **A field error moves focus to the first field with a message** (Get started). Known gap: sheet inputs do not yet set `aria-invalid` or `aria-describedby` (round 8).

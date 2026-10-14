@@ -39,6 +39,12 @@ function nightsNote(q) {
 export function overpaidAfterRefunds(balance, refunded) {
   return Math.max(0, Math.round((-Number(balance) - Number(refunded || 0)) * 100) / 100);
 }
+// What a payment adds over the balance, in pesos (0 when not over). Already overpaid (a balance below 0) owes nothing; an amount that cannot be read ("1,5") counts as 0.
+export function overBalance(amount, balance) {
+  const typed = parseAmount(amount);
+  if (!Number.isFinite(typed)) return 0;
+  return Math.max(0, Math.round((typed - (Math.max(0, Number(balance)) || 0)) * 100) / 100);
+}
 // Only the fields the host actually changed, so the activity log isn't noisy.
 export function changedFields(orig, d) {
   const same = (a, b) => (a === '' || a == null || b === '' || b == null) ? (a ?? '') === (b ?? '')
@@ -203,12 +209,16 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
   const applyQuote = (q) => {
     const mode = typeMode() ? 'type' : 'unit';
     sugg = { accommodation_total: q && !q.missing_rates ? q.accommodation_total : null, cleaning_fee: q ? q.cleaning_fee : null };
-    let offer = false;
     for (const n of MONEY) {
       const box = form.elements[n];
-      offer = offer || offerRate({ typed: typed[n], mode, suggestion: sugg[n], current: box.value });
       box.value = boxValue({ typed: typed[n], mode, suggestion: sugg[n], current: box.value });
     }
+    offerNow();
+  };
+  // The rate offer for the boxes the host typed in, checked against the last quote. It only shows or hides the offer: no box is written and no request is sent.
+  const offerNow = () => {
+    const mode = typeMode() ? 'type' : 'unit';
+    const offer = MONEY.some((n) => offerRate({ typed: typed[n], mode, suggestion: sugg[n], current: form.elements[n].value }));
     useRate.hidden = !offer;
     if (offer) useRate.textContent = rateOfferText(sugg);
   };
@@ -220,18 +230,24 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
     }
   });
   quoteBox.after(useRate);
+  // A money box the host finishes typing (Tab or blur) re-checks the offer; the quote itself is not asked again.
+  form.addEventListener('change', (e) => { if (MONEY.includes(e.target.name)) offerNow(); });
   form.addEventListener('change', (e) => { if (e.target.name === 'channel') syncChannelFee(form, true); });
   syncChannelFee(form, false);
   let seq = 0;
   async function refreshQuote(e) {
     if (e?.target.name === 'pick_mode') syncMode();
     if (e && !['unit_id', 'check_in', 'check_out', 'pick_mode', 'room_pick'].includes(e.target.name)) return;
+    quoteBox.hidden = false;
     const { check_in: ci, check_out: co } = Object.fromEntries(['check_in', 'check_out'].map((k) => [k, form.elements[k].value]));
     const u = quoteUnit();
     if (e?.target.name === 'check_in' && ci && (!co || co <= ci)) form.elements.check_out.value = addDays(ci, 1);
     const coNow = form.elements.check_out.value;
-    if (!u) { applyQuote(null); quoteBox.textContent = typeMode() ? 'The price is not suggested for this room type. Enter the total yourself, or leave it empty to use each listing\'s price.' : 'Choose a listing to see the price.'; return; }
-    if (!ci || !coNow || coNow <= ci) { applyQuote(null); quoteBox.textContent = 'The price shows once the dates are set.'; return; }
+    if (!u) { ++seq; applyQuote(null); quoteBox.textContent = typeMode() ? 'The price is not suggested for this room type. Enter the total yourself, or leave it empty to use each listing\'s price.' : 'Choose a listing to see the price.'; return; }
+    // A quote still on its way for an old listing or old dates must not fill the boxes now, so the request counter moves on in the branches below.
+    if (!ci || !coNow) { ++seq; applyQuote(null); quoteBox.textContent = 'The price shows once the dates are set.'; return; }
+    // Dates set but backwards: the check-out message on save says it, so the price line is left out rather than asking for dates again.
+    if (coNow <= ci) { ++seq; applyQuote(null); quoteBox.hidden = true; quoteBox.textContent = ''; return; }
     const mySeq = ++seq;
     try {
       const q = await get(`/reservations/quote${qs({ unit_id: u, check_in: ci, check_out: coNow })}`);
@@ -318,8 +334,9 @@ export async function reservationsView(el, { query }) {
       canManage && { name: 'payment', label: 'Payment', all: 'Any', options: [['unpaid', 'Not paid yet'], ['partial', 'Partly paid'], ['paid', 'Fully paid']] },
       { name: 'guest', label: 'Guest', all: 'Any guest', options: [['first', 'First-time guests'], ['repeat', 'Repeat guests'], ['vip', 'VIP guests']] },
       canManage && { name: 'checkin_form', label: 'Check-in form', all: 'Any', options: [['missing', 'Not filled in yet'], ['done', 'Filled in']] },
-      { name: 'min_nights', label: 'Nights (at least)', type: 'number', min: 1 },
-      { name: 'min_guests', label: 'Guests (at least)', type: 'number', min: 1 },
+      // The server reads one or two digits only, so a longer number is refused here rather than shown as a chip the list ignores.
+      { name: 'min_nights', label: 'Nights (at least)', type: 'number', min: 1, pattern: /^[1-9]\d?$/, patternText: 'Enter a whole number, 1 or more.' },
+      { name: 'min_guests', label: 'Guests (at least)', type: 'number', min: 1, pattern: /^[1-9]\d?$/, patternText: 'Enter a whole number, 1 or more.' },
       { name: 'sort', label: 'Sort by', all: 'Default for this view', options: [['checkin', 'Check-in (soonest first)'], ['checkin_desc', 'Check-in (latest first)'], ['checkout', 'Check-out'], ['created', 'Newest bookings'], ['total', 'Highest total'], ['balance', 'Biggest balance']] },
     ].filter(Boolean),
   });
@@ -469,9 +486,13 @@ export async function reservationDetailView(el, { params, rerender }) {
         field({ name: 'payment_method', label: 'Method', type: 'select', required: true, value: r.channel === 'direct' ? 'gcash' : 'channel_payout', placeholderOption: false, options: paymentMethodOptions(r.channel) })),
       field({ name: 'reference_number', label: 'Reference no.', maxlength: 100 }),
       // Channel payouts come from Airbnb/Booking.com, not the guest: no guest receipt by default.
-      r.guest_email && field({ name: 'send_receipt', label: `Email a receipt to ${r.guest_email}`, type: 'checkbox', value: r.channel === 'direct' }),
+      (r.guest_email || r.guest_has_email) && field({ name: 'send_receipt', label: r.guest_email ? `Email a receipt to ${r.guest_email}` : 'Email a receipt to the guest', type: 'checkbox', value: r.channel === 'direct' }),
     ],
     onSubmit: async (d, { idempotencyKey }) => {
+      // More than is owed is allowed (a refund is recorded later), but the host says so first. Cancel posts nothing and keeps the form open, as the rent payment does.
+      const over = overBalance(d.amount, r.balance);
+      const owed = Math.max(0, Number(r.balance));
+      if (over > 0 && !await confirmDialog({ title: 'Record more than the balance?', text: `This is ${peso(over)} more than the balance of ${peso(owed)}. Record it?`, confirmText: 'Record it' })) throw new ApiError('Payment not saved.', { status: 400 });
       if (d.payment_method === 'channel_payout') d.send_receipt = false;
       const res = await post(`/reservations/${r.booking_id}/payments`, d, { idempotencyKey });
       if (res.receipt && !res.receipt.sent) toast(`Payment saved, but the receipt was not emailed: ${res.receipt.error}`, 'error');

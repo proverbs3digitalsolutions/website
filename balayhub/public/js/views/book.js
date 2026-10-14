@@ -71,14 +71,15 @@ function cover(l, cls = 'bk-card__img') {
 export async function bookHostView(el, { params, query }) {
   rememberSource(query);
   initGuestLang();
+  // Set before the first request, so a language switch on the "Page not found" card redraws this page too.
+  redraw = () => bookHostView(el, { params, query: {} });
   let data;
   try { data = await get(`/public/book/${encodeURIComponent(params.slug)}`); } catch (err) {
-    el.replaceChildren(shell(null, params.slug, h('div', { class: 'card' }, h('h1', null, t('Page not found')), h('p', { class: 'muted' }, err.message))));
+    el.replaceChildren(shell(null, params.slug, h('div', { class: 'card' }, h('h1', null, t('Page not found')), h('p', { class: 'muted' }, tServer(err.message)))));
     return;
   }
   const { host, listings } = data;
   initGuestLang(host.guest_language);
-  redraw = () => bookHostView(el, { params, query: {} });
   document.title = `${host.name} — Book direct`;
   el.replaceChildren(shell(host.name, params.slug,
     h('section', { class: 'bk-hero' }, h('h1', null, host.name), host.intro && h('p', null, host.intro),
@@ -101,14 +102,15 @@ export async function bookListingView(el, { params, query }) {
   rememberSource(query);
   initGuestLang();
   const slug = params.slug;
+  // Set before the first request, so a language switch on the "Page not found" card redraws this page too.
+  redraw = () => bookListingView(el, { params, query: {} });
   let data;
   try { data = await get(`/public/book/${encodeURIComponent(slug)}`); } catch (err) {
-    el.replaceChildren(shell(null, slug, h('div', { class: 'card' }, h('h1', null, t('Page not found')), h('p', { class: 'muted' }, err.message))));
+    el.replaceChildren(shell(null, slug, h('div', { class: 'card' }, h('h1', null, t('Page not found')), h('p', { class: 'muted' }, tServer(err.message)))));
     return;
   }
   const { host } = data;
   initGuestLang(host.guest_language);
-  redraw = () => bookListingView(el, { params, query: {} });
   const l = data.listings.find((x) => x.unit_id === params.unitId);
   if (!l) {
     el.replaceChildren(shell(host.name, slug, h('div', { class: 'card' }, h('h1', null, t('Not available')), h('p', null, h('a', { href: `#/book/${slug}` }, t('See all places'))))));
@@ -260,16 +262,21 @@ export async function bookListingView(el, { params, query }) {
     if (msg) input.setAttribute('aria-invalid', 'true'); else input.removeAttribute('aria-invalid');
     wrap.querySelector('.error').textContent = msg;
   };
+  // True only while the Guests message is the server's guest-limit text (set in the quote's catch below).
+  let guestsFromServer = false;
+  const guestCountOk = () => { const n = Number(form.elements.num_guests.value); return Number.isInteger(n) && n >= 1; };
   async function updateQuote() {
     current = null;
     submit.disabled = true;
     payChoice.querySelector('.error').textContent = '';
     codeBox.querySelector('.error').textContent = '';
-    setGuestsError('');
+    if (guestsFromServer) { guestsFromServer = false; setGuestsError(''); }
     if (!checkIn || !checkOut) {
       summary.replaceChildren(h('p', { class: 'muted' }, checkIn ? t('Check-in {date}. Now choose check-out.', { date: fmtDate(checkIn) }) : t('Choose your dates on the calendar to see the price.')));
       return;
     }
+    // A count below 1 is not quoted; its "At least 1 guest." is already in the Guests box.
+    if (!guestCountOk()) return;
     try {
       const promo = promoCode ? `&code=${encodeURIComponent(promoCode)}` : '';
       const ad = picked.size ? `&addons=${encodeURIComponent(JSON.stringify(selections()))}` : '';
@@ -303,7 +310,7 @@ export async function bookListingView(el, { params, query }) {
       submit.disabled = !q.available || !host.accepting;
     } catch (err) {
       // Over the guest limit the Guests box carries the sentence, so the summary stays quiet about it.
-      if (err.fields?.guests) { setGuestsError(tServer(err.fields.guests)); summary.replaceChildren(); return; }
+      if (err.fields?.guests) { guestsFromServer = true; setGuestsError(tServer(err.fields.guests)); summary.replaceChildren(); return; }
       // Show the actual reason (e.g. minimum stay), not just "check the highlighted fields".
       const reason = err.fields ? Object.values(err.fields)[0] : err.message;
       summary.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, tServer(reason)));
@@ -336,6 +343,11 @@ export async function bookListingView(el, { params, query }) {
     !host.accepting && h('p', { class: 'muted small' }, host.demo ? t('This is a demo, so booking is turned off.') : t('Online booking is paused. Please contact the host.')));
 
   let busy = false;
+  // The count message: a count below 1 (or not a whole number) is said at once and stays until the count is fixed. It makes no quote request.
+  form.elements.num_guests?.addEventListener('change', () => {
+    guestsFromServer = false;
+    setGuestsError(guestCountOk() ? '' : t('At least 1 guest.'));
+  });
   // A new guest count is quoted again, so an over-limit count shows the refusal and no Total. Wait for it to settle, so one change makes one request.
   let guestTimer;
   form.elements.num_guests?.addEventListener('change', () => {
@@ -437,6 +449,8 @@ export async function bookDoneView(el, { params }) {
   initGuestLang();
   const show = (s, extra) => el.replaceChildren(shell(s?.stay?.host, params.slug, extra));
   let tries = 0;
+  // Set before the first request, so a language switch on the "Booking not found" card redraws it too.
+  redraw = () => check();
   async function check() {
     let s;
     try { s = await get(`/public/book/status/${encodeURIComponent(params.token)}`); } catch {
@@ -447,7 +461,6 @@ export async function bookDoneView(el, { params }) {
     }
     const st = s.stay;
     initGuestLang(st?.guest_language);
-    redraw = () => check();
     if (s.status === 'confirmed') {
       show(s, h('div', { class: 'card bk-done' },
         h('div', { class: 'gc__tick', 'aria-hidden': 'true' }, '✓'),
