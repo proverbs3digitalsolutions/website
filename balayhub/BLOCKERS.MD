@@ -2,7 +2,7 @@
 
 Things only the founder can do or decide before related work can go ahead. Automated runs add items here. The founder clears them by doing the item and ticking it, or by writing the decision in DECISIONS.MD.
 
-Last updated: 2026-10-14 (QA round 2 questions added)
+Last updated: 2026-10-14 (QA round 4 questions added)
 
 ## Security — do first
 
@@ -75,6 +75,8 @@ Each one has the default we will use if you don't answer. None of them stops the
 - [ ] **Weak passwords.** Passwords only need 8 characters, so "password" works. Should we also refuse the most common passwords? *Default: add a short block list of common passwords (small and easy to undo).*
 - [ ] **Starter plan card.** The landing page card says "1 to 3 units" but the Starter plan allows 2 listings. Should it say "1 to 2 units"? *Default: change the copy to "1 to 2 units". Applied in round 2.*
 - [ ] **Sign-up and taken emails.** Sign-up says an email is already registered, which tells anyone that address has an account. Keep the friendly message, or use a neutral one? *Default: keep it, as most apps do.*
+
+  Asked again in round 4.
 - [ ] **Building-wide expenses on statements.** Expenses for the whole building (such as association dues) never reach an owner statement; they only show on your profit and loss as "Not linked to a unit". Is that what you want? *Default: keep it (D-44).*
 - [ ] **Cleaner pay in the owner portal.** The owner portal's recent activity lists cleaner pay as an expense, but statements never deduct it. Hide it from owners, or deduct it on statements? *Default: hide it from the owner portal activity.*
 - [ ] **Bottom tab bar on tablets.** The phone bottom tab bar also shows at tablet width (768px). Is that intended? *Default: keep it.*
@@ -120,4 +122,20 @@ Each one has the default already applied. None of them stops the work.
 - [ ] **Typed markup in names.** If someone types something like `<b>` into a tenant or vendor name, we store it as typed and show it as plain text. Fine, or should we remove such characters when saving? *Default: stored as typed and shown as text.*
 - [ ] **Free stays on manual reservations.** A group room can no longer be saved at 0, but a single manual reservation still can (for example a free stay for family). Keep that? *Default: keep it for single reservations.*
 - [ ] **Taglish check.** These drafts need a Taglish speaker to read them: "Nagamit o nadagdag", the guidebook line, and the 8-character password message. *Default: keep the drafts.*
-- [ ] **Blanking a channel fee on Edit.** On a channel booking, clearing the fee box does nothing; the host must type 0. Logged for round 4. *Default: leave as is.*
+- [x] **Blanking a channel fee on Edit.** On a channel booking, clearing the fee box does nothing; the host must type 0. Logged for round 4. *Default: leave as is.* Resolved by D-79 (2026-10-14): a blank fee now means 0 on every booking, and a save that changes nothing says so.
+
+## Questions from QA round 4 (2026-10-14)
+
+Each one has the default already applied. None of them stops the work.
+
+- [ ] **Staff and property money details.** Staff can't see rent, deposits, the admin email or gate-pass notes on screen, but the app still sends those numbers to a staff member's browser when they open a property. Should we stop sending them to staff? *Default: no change for now. It matches the written access rules, and nothing on the staff screen shows them.*
+- [ ] **Staff invited with no property.** You can invite a staff member without giving them a property. They then see an empty workspace until you assign one. Should staff need a property too, as managers and cleaners do? *Default: allowed, as today.*
+- [ ] **Taglish descriptions for add-ons.** Add-on names can have a Taglish version, but their descriptions can't, so guests reading in Taglish see the description in English. Do you want a Taglish description box? *Default: no. Descriptions show as you typed them.*
+- [ ] **Inserting a template under a typed message.** When you pick a template after typing a reply, the template now goes below your text, and a typed subject is kept. Would you rather we ask first? *Default: add below.*
+- [ ] **Blank number of days on automatic messages.** A "days before check-in" message with the days box left empty used to save as 0 days. Now the app asks for a number. A blank send time still means 10:00. OK? *Default: a number is required for the before and after messages; a blank time is 10:00.*
+- [ ] **Two cleaning tasks for the same unit on the same day.** That can be right (two short stays on one day, or a redo), but it could also mean paying a cleaner twice. Should the app warn you? *Default: allowed with no warning, as today. Each task's pay shows separately before it is marked paid.*
+- [ ] **Alerts for monthly rentals.** All of today's alerts are about short stays: bookings, guest messages, check-in forms and cleaning. A monthly-rental workspace now sees a note that alerts aren't available yet, instead of a list it can't use. Which alerts would help most for monthly rentals: rent due, rent overdue, lease ending, or maintenance requests? *Default: none until you choose.*
+- [ ] **Prices and groups on past dates.** You can set a nightly price on a night that has already passed, and create a group booking for past dates. That helps record what already happened. Keep it, or warn first? *Default: allowed, as today.*
+- [ ] **Reopening a finished clean.** Reopening clears the clean's pay, and finishing it again works the pay out from the cleaner's rate, so a special amount you typed would need typing again. The app now asks before reopening. Would you rather keep a typed amount? *Default: ask first, then clear the pay (the same as a failed inspection).*
+- [ ] **Wide tables on phones.** On a phone, a wide table or the calendar now fades its cut-off edge to show that more columns are there. The fade is subtle, and it can read as text running off the edge. Keep the fade, add a small "Swipe for more" hint above wide tables on phones, or show those tables as stacked cards on phones? The stacked cards are the biggest change, because each table needs its own layout. The hint is the smallest change that makes the cue clearer. *Default: keep the fade, as it is now.*
+- [ ] **Taglish check.** These new lines need a Taglish speaker to read them: the guest-limit message on the booking page, the "Quantity must be a whole number" message for cleaners, and the Terms message on the Get started sign-up. *Default: keep the drafts.*

@@ -456,7 +456,7 @@ Printable views are built from `.receipt` (with a 2px `--navy` rule under the he
 ## 11. Patterns added in QA round 2 (2026-10-14)
 
 - **Phone row stacking.** At 480px and narrower, a `.row` whose end holds buttons, chips or a label wraps so the actions sit on their own line. Add `.row--stack-sm` to force this on any other row.
-- **Scroll cues.** `.table-wrap` and `.tabs` show a faint edge fade only on the side where more content is hidden (`background-attachment: local` over `scroll`). Use it on any new wide table or tab strip.
+- **Scroll cues.** `.table-wrap` and `.tabs` show a faint edge fade only on the side where more content is hidden (`background-attachment: local` over `scroll`). Use it on any new wide table or tab strip. *(For wide tables and the calendar this is superseded in round 4, see section 13.)*
 - **Focus ring token.** `--focus-ring` replaces the old translucent ring (see section 6).
 - **Muted text instead of opacity.** Cancelled messages use `var(--muted)` with a dashed border rather than `opacity`, so contrast holds. Mentions use `--teal-ink`; today's calendar day and the Airbnb bar colour were darkened for contrast.
 - **Compact Ask button on phones (superseded in round 3: the Ask button is now in the top bar below 960px, see section 12).** Below 560px the assistant button is a 48px icon-only circle (its `aria-label` stays), and the page gets extra bottom padding so it never covers the last line.
@@ -466,9 +466,19 @@ Printable views are built from `.receipt` (with a 2px `--navy` rule under the he
 ## 12. Patterns added in QA round 3 (2026-10-14)
 
 - **Ask button in the top bar on phones.** Below 960px the assistant button is a 40px round icon button in the top bar (`.topbar__assist` slot, `.assist-fab--bar`), placed before the account avatar, with the same `aria-label`. It never floats over content. On desktop (960px and up) it stays a floating button. This supersedes the section 11 compact floating button.
-- **Table edge cue.** `.table-wrap` shows a real shade on the clipped edge while the box can still scroll, and it shows over solid cell backgrounds (the section 11 fade did not). Use it on any new wide table.
+- **Table edge cue.** `.table-wrap` shows a real shade on the clipped edge while the box can still scroll, and it shows over solid cell backgrounds (the section 11 fade did not). Use it on any new wide table. *(Superseded in round 4, see section 13: the shade did not show on phones, so the edge fade now follows the scroll position.)*
 - **Wrapping tabs.** At 560px and narrower, `.tabs` wrap onto as many lines as they need instead of scrolling, so every tab and chip shows.
 - **`.col-sm-hide`.** Put it on the header and cells of a low-priority column; it is hidden at 480px and narrower. The reservations list uses it for Channel and Code and shows Total and Balance right after the dates.
 - **Alerts wrap long words** (`overflow-wrap: anywhere`), so a long unbroken note can't push the page sideways.
 - **Focus clear of the bottom bar (WCAG 2.4.11).** Below 960px the page has bottom scroll padding the height of the bottom bar, and a small focus guard in the app shell scrolls a focused control up if the bar still covers it.
 - **Toolbars.** Children can shrink (`min-width: 0`), and selects go full width at 480px and narrower. The Get started sheet follows the phone sheet width at 560px and narrower.
+
+## 13. Patterns added in QA round 4 (2026-10-14)
+
+- **Clipped-edge fade for wide tables and the calendar.** `app.js` sets `is-more-right` or `is-more-left` on a `.table-wrap` or `.cal-scroll` while columns are hidden on that side. CSS then fades the clipped 32px of the content itself with `mask-image`, so the fade shows over any cell colour in either theme. The calendar (`.cal-scroll`) fades the right edge only, because its first column is sticky. The fade is removed when printing. Use the same class pair on any new wide scroll box. Do not use a background gradient for this: it does not show over content.
+- **Wide dialogs use a class, not an inline width.** `openModal` with `wide` adds `modal--wide` (760px on a desktop, full width minus 24px). Below 560px every dialog is a full-width sheet, wide or not. Do not set a dialog's width in the style attribute.
+- **Theme switch.** The selected icon takes the text colour of the selected button (`color: inherit`), so it reads on the green selected state in both themes.
+- **Star rating uses the amber token** (`--amber`), not a fixed colour. It is about 5:1 on white in light mode.
+- **Long words in user text wrap.** Lists that show user text, such as the cleaning task history (`.hk-history`) and the work-order and found-item titles, use `overflow-wrap: anywhere` and `min-width: 0`.
+- **Names for controls.** Every visible label is tied to its control (`for` and `id`), and a control's spoken name starts with the words on screen. A table header that has no title uses a screen-reader-only word (`.sr-only`, for example "Actions"), never an empty cell. Any text box a person copies from has a name.
+- **Round 4 supersedes sections 11 and 12 for the wide-table edge cue** (section 11 and 12 bullets are kept, marked as superseded).

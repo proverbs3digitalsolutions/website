@@ -993,3 +993,11 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - Phase 5: notification settings let any team member choose among the properties they can see. The spec limited this to owners.
 - QA round 3: a channel fee exists only on channel bookings (D-78). Older direct bookings may still hold a stored fee; it is ignored for what the guest owes and still counted as a cost in reports until the founder decides.
 - QA round 3: the guidebook link shows "Your guidebook opens on <date>" before its 14-day window (D-57, D-78).
+- QA round 4: there are no notification types for monthly rentals yet. The Notifications card says so, and the founder question is in BLOCKERS.
+- QA round 4: a monthly-rental owner can still see a "Turn on notifications" button with no alert types to turn on. Carried to round 5.
+- QA round 4: staff browsers still receive rent, deposit, admin email and gate-pass notes with a property, although the staff screen hides them (founder question in BLOCKERS).
+- QA round 4: add-on descriptions are single-language. Guests reading in Taglish see the description as typed (founder question in BLOCKERS).
+- QA round 4: on phones, wide tables and the calendar show a subtle edge fade rather than a clear cue. The founder is asked whether to add a swipe hint or show stacked cards instead (BLOCKERS).
+- QA round 4: the Taglish template-language switch can create a second template with the same name as a custom one. This is rare and accepted for now (D-79).
+- QA round 4: a proof screenshot can be left on disk after a rare database failure. Nothing can reach the file without its record, so the fix is left for a tidy-up sprint (D-79).
+- QA round 4: some choices are allowed with no warning until the founder answers in BLOCKERS: prices and groups on past dates, two cleaning tasks on one day, and staff invited with no property.

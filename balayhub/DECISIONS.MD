@@ -481,7 +481,7 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 *Money*
 - **A channel fee exists only on a booking that came through a channel.** A direct booking can't take one: creating it is refused, and moving a booking to Direct while it carries a fee is refused unless the same edit clears the fee. This amends D-34 and the guest balance rule in BACKEND-SCHEMA, and D-38's Adjustments line now shows only for channel bookings.
 - **Old fees on direct bookings count as 0 for what is owed.** The stored number is not rewritten (it is live money data). Everywhere the app works out what is owed it is ignored: the guest pay page, payment links, checkout, payment proofs, receipts, the `{{balance}}` placeholder in guest messages, the inbox guest panel, AI drafts, daily close, and the host Payment card including "You keep".
-- **The host is warned, and any Edit save clears it.** The reservation page shows a warning on such a booking. Any Edit save on it sets the fee to 0, and the Edit dialog says so. On a channel booking, blanking the fee on Edit still changes nothing; the host must type 0 (logged for round 4).
+- **The host is warned, and any Edit save clears it.** The reservation page shows a warning on such a booking. Any Edit save on it sets the fee to 0, and the Edit dialog says so. On a channel booking, blanking the fee on Edit still changes nothing; the host must type 0 (logged for round 4). *Superseded by D-79 (2026-10-14): a blank fee now means 0 on every booking.*
 - **Reports still count a stored fee as a cost** (P&L, owner statements, stay reports) until the founder decides whether to clear them (BLOCKERS).
 - **Receipts for a channel booking show an "Adjustments (settled through the booking channel)" line,** so the total, the adjustment, the payments and the remaining balance add up.
 - **No policy, no suggestion (follows D-33).** A cancelled booking with no cancellation policy or a Custom policy says how much is held and that no refund is suggested.
@@ -514,9 +514,53 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 
 *Phones, filters and wording*
 - **The Ask button sits in the top bar below 960px** and floats on desktop. This replaces the round 2 compact floating button.
-- **Focus scrolls clear of the bottom bar** (scroll padding plus a focus guard). Tabs wrap onto more lines, wide tables show an edge shade, and Channel and Code are hidden in the reservations list on phones, which shows Total and Balance next to the dates.
+- **Focus scrolls clear of the bottom bar** (scroll padding plus a focus guard). Tabs wrap onto more lines, wide tables show an edge shade (*superseded by D-79: the edge fade now follows the scroll position, because the shade did not show*), and Channel and Code are hidden in the reservations list on phones, which shows Total and Balance next to the dates.
 - **A backwards date range turns that date filter off entirely,** including a side that was valid a moment ago, with the message "The end date is before the start date. This date filter is off until you fix it." (completes D-77). Reports with a custom range and no dates asks for both dates.
 - **An invalid month on Stay reports warns** and shows the month used (same as P&L, D-77).
 - **Audit labels:** "Follow-up email" On/Off, "Returning-guest discount" N% or Off, and "Repeats: every N month(s)".
 
 *Why:* each call picks the safest reading of the existing decisions and keeps the founder's money rules exact: nothing stored is rewritten, and the guest is never asked for less than they owe. The open questions are in BLOCKERS.MD under "Questions from QA round 3".
+
+**D-79 · 2026-10-14 · QA round 4 calls (2026-10-14 sweep, fixed the same day).** The fourth QA sweep (12 lanes, 48 entries) found problems that needed a product decision. These are the calls made, with the default we are using until the founder says otherwise. Open questions are in BLOCKERS.MD under "Questions from QA round 4".
+
+*Money*
+- **Commas in amounts are accepted only as thousands separators** ("1,000", "12,500.50"). "1,5" or "1,50" is refused as not a valid amount, everywhere money is typed. The bulk price form no longer strips commas in the browser, so the server judges what was typed. *Why:* the old parser removed every comma, so a slip saved ₱15 for "1,5".
+- **A blank fee on Edit reservation means 0** (cleaning fee, other fees, channel fee), the same as unit edits. A blank accommodation total is refused ("Accommodation total is required. Type 0 for a free stay."). A save that changes nothing says "No changes to save." instead of "Reservation updated." *Supersedes the D-78 bullet "On a channel booking, blanking the fee on Edit still changes nothing; the host must type 0".*
+- **The refund suggestion counts refunds already recorded.** The policy amount is still shown; the screen says how much is already refunded and how much more is suggested, and Record refund starts at that remaining amount.
+- **"Channel payout" is a payment method only on channel bookings.** Refused on direct bookings; existing rows are left alone. Follows D-78.
+- **The Record payment dialog says "Guest overpaid by ₱X."** when the guest has paid more than the balance, instead of showing a negative balance.
+- **One night's price has the same ₱1,000,000 cap as bulk changes** (extends D-76). The cap applies to the calendar's price box and to the rates save.
+- **The Set nightly price box starts empty** and shows the current price as a hint. A blank save clears set prices for those nights and says how many. *Why:* a pre-filled save froze the night at today's price without the host choosing it.
+- **Reopening a finished clean asks first when it has pay,** and still clears the pay (priced again when it is finished, as D-76 does for a failed inspection).
+- **Adding a rate for a cleaner who already has one asks** "Change it to ...?" before replacing it. Cancel keeps the form open and saves nothing. While the question waits, the button keeps the words "Save rate".
+
+*Messages*
+- **Insert template adds the template below what you typed,** after a blank line, and a typed subject is kept. A template that would take a message past 10,000 characters is refused with a message, and nothing is inserted.
+- **Automatic messages:** "Number of days" is required for the before check-in, before check-out and after check-out messages. A blank "Send at" time means 10:00, and the form says so. 0 days reads "On check-in day" or "On check-out day". Check-in day and booking-created messages store 0 days.
+- **Message template names are unique among active templates** (case and end spaces ignored), checked in the app only, like add-on names (D-76). *Accepted edge, not fixed:* the Taglish template-language switch can create a "(Taglish)" template with the same name as a custom template next to it. It is rare.
+- **The inbox clears a conversation's unread look, the header count and the menu badge as soon as it is opened,** and the subject is kept in the draft with the message.
+
+*Workspaces and access*
+- **Long-term workspaces get no stay-only notification types.** Every current type is about stays, so the Notifications card (in My account, and in Settings under App & notifications) says "Alerts for monthly rentals aren't available yet." Both-type workspaces keep them all. Question in BLOCKERS.
+- **The Properties list in a short-term workspace** shows no occupied or vacant badge, no occupancy filter and no "Most vacant units" sort (completes D-78). A link with those values ignores them.
+- **A missing booking receipt in a long-term workspace redirects home** as D-76 says; receipts are a short-term page.
+- **Staff invites with no property stay allowed** (D-77). Staff property API fields are unchanged. Questions in BLOCKERS.
+
+*Forms, links and screens*
+- **A bad date in a link is dropped, whatever it looks like,** and a custom range with only one date asks for both dates and loads nothing (completes D-77 and D-78).
+- **Supplies quantities must be whole numbers** on every screen; nothing is rounded silently.
+- **Sign-up checks the "I agree" box in the browser** on the Get started steps and on the standalone sign-up page, so a missed tick never uses up the hourly sign-up limit. The standalone page is English only, as it has no Taglish text. Each problem is named once. The server limit is unchanged.
+- **The public booking quote refuses more guests than the listing allows,** the same as checkout. The booking page prices again when the guest count changes after dates are picked, so the limit message shows at once, in Taglish too.
+- **Invite errors show together,** email first.
+- **Wide tables and the calendar fade the edge where more columns are hidden,** driven by scroll position, in both themes. *Replaces the D-78 "wide tables show an edge shade" bullet, which did not show.*
+- **Every dialog is a full-width sheet on a phone** below 560px, including wide ones (they sat off-centre before).
+- **Audit details read in words** ("Pricing: Per night", "Price change: -10%") with no underscores.
+
+*Accessibility and phones*
+- The selected theme-switch icon is white on green; the guest star rating uses the amber colour token; labels are tied to their controls; no table header is empty; the cleaner's copy box has a name.
+- Long words wrap in cleaning-task history and work-order lists.
+
+*Defaults with no change*
+- Past nights may take a price and past dates may hold a group (back-entry); two cleaning tasks for the same unit and day are allowed; a proof file left on disk after a rare database failure is left for a tidy-up sprint; add-on descriptions stay in the language they were typed in.
+
+*Why:* each call picks the safest reading of the existing decisions: nothing a person typed is replaced, rounded or wiped without asking, a save never claims to have done what it didn't, and the guest and host money rules stay exact.
