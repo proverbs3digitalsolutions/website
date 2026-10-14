@@ -110,25 +110,28 @@ export async function stayReportsView(el, { query = {} }) {
   if (!filters.period && filters.year && !query.month) filters.period = 'year'; // old links: ?year=2026
   // initFilters() holds back a range that runs backwards. A shared link keeps its real dates on screen; load() says why.
   if (filters.period === 'range' && isDay(query.from) && isDay(query.to) && query.to < query.from) { filters.from = query.from; filters.to = query.to; }
-  const periodBox = h('div', { class: 'chips' });
+  // The period controls sit flat in the filter bar's row (.flt__period in app.css), not in a wrapping chip box.
+  const periodBox = h('div', { class: 'flt__period' });
   const status = h('span', { class: 'muted small' });
   const notice = h('div');
   const setPeriod = (patch) => { Object.assign(filters, patch); rememberFilters('stay-reports', filters); load(); };
 
   function drawPeriod() {
-    const sel = h('select', { class: 'input input--sm', 'aria-label': 'Period', onchange: (e) => setPeriod({ period: e.target.value }) },
+    // Same control size as the Property, Listing and Channel selects, so the whole filter row lines up.
+    const sel = h('select', { class: 'input', 'aria-label': 'Period', onchange: (e) => setPeriod({ period: e.target.value }) },
       [['', 'Month'], ['year', 'Whole year'], ['range', 'Custom dates']].map(([v, t]) => h('option', { value: v, selected: filters.period === v }, t)));
     let inputs;
     if (filters.period === 'year') {
-      inputs = h('select', { class: 'input input--sm', 'aria-label': 'Year', onchange: (e) => setPeriod({ year: e.target.value }) },
+      inputs = h('select', { class: 'input', 'aria-label': 'Year', onchange: (e) => setPeriod({ year: e.target.value }) },
         [thisYear, thisYear - 1, thisYear - 2].map((y) => h('option', { value: y, selected: String(y) === (filters.year || String(thisYear)) }, String(y))));
     } else if (filters.period === 'range') {
-      inputs = [
-        h('input', { class: 'input input--sm', type: 'date', value: filters.from, 'aria-label': 'From', onchange: (e) => setPeriod({ from: e.target.value }) }),
+      // The two dates stay together as one unit (the same .flt__range markup as the daterange fields in filters.js).
+      inputs = h('div', { class: 'flt__range' },
+        h('input', { class: 'input', type: 'date', value: filters.from, 'aria-label': 'From', onchange: (e) => setPeriod({ from: e.target.value }) }),
         h('span', { 'aria-hidden': 'true' }, '–'),
-        h('input', { class: 'input input--sm', type: 'date', value: filters.to, 'aria-label': 'To', onchange: (e) => setPeriod({ to: e.target.value }) })];
+        h('input', { class: 'input', type: 'date', value: filters.to, 'aria-label': 'To', onchange: (e) => setPeriod({ to: e.target.value }) }));
     } else {
-      inputs = h('input', { class: 'input input--sm', type: 'month', value: filters.month || todayManila().slice(0, 7), 'aria-label': 'Month', onchange: (e) => e.target.value && setPeriod({ month: e.target.value }) });
+      inputs = h('input', { class: 'input', type: 'month', value: filters.month || todayManila().slice(0, 7), 'aria-label': 'Month', onchange: (e) => e.target.value && setPeriod({ month: e.target.value }) });
     }
     periodBox.replaceChildren(sel, inputs);
   }

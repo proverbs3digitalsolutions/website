@@ -1162,6 +1162,11 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .flt__range { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .flt__range .input { min-width: 0; flex: 1 1 120px; }
 .flt__range input[type=date] { min-width: 9.5rem; }
+/* Reports period row (stayreports.js): the period select and its month, year or date boxes are direct items of the
+   filter bar's row (display: contents), so they size and wrap with the Property, Listing and Channel selects. */
+.flt__period { display: contents; }
+.flt__period > input.input { width: auto; flex: 0 1 200px; }
+@media (max-width: 480px) { .flt__period > input.input, .flt__period > .flt__range { flex: 1 1 100%; width: 100%; } }
 .flt__check { align-self: center; }
 .flt__actions { display: flex; justify-content: flex-end; gap: 8px; }
 .flt__chips { display: flex; flex-wrap: wrap; gap: 6px; }
