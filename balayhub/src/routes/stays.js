@@ -26,6 +26,8 @@ const managers = requireRole('owner', 'manager');
 const TODAY = `(now() AT TIME ZONE 'Asia/Manila')::date`;
 const CHANNELS = ['direct', 'airbnb', 'booking', 'agoda', 'vrbo', 'expedia', 'tripcom', 'other'];
 const METHODS = ['cash', 'bank_transfer', 'gcash', 'maya', 'card', 'channel_payout', 'other'];
+// Same ceiling as bulk price changes (bulk.js), so a typed extra zero is caught on one night too.
+const MAX_PRICE = 1000000;
 
 const today = async () => (await one(`SELECT ${TODAY} AS d`)).d;
 const addDays = ical.addDays;
@@ -557,7 +559,14 @@ router.patch('/reservations/:id', managers, ah(async (req, res) => {
     num_guests: reservationSpec.num_guests, channel: reservationSpec.channel, accommodation_total: reservationSpec.accommodation_total,
     cleaning_fee: reservationSpec.cleaning_fee, other_fees: reservationSpec.other_fees, channel_fee: reservationSpec.channel_fee, notes: reservationSpec.notes,
   }, { partial: true });
-  for (const k of ['unit_id', 'check_in', 'check_out', 'channel', 'accommodation_total', 'cleaning_fee', 'other_fees', 'channel_fee']) {
+  // A blank fee means 0, the same as unit edits. A blank accommodation total is refused: a blank there is more likely a slip than a free stay.
+  if ('accommodation_total' in body && body.accommodation_total === null) {
+    throw validationError({ accommodation_total: 'Accommodation total is required. Type 0 for a free stay.' });
+  }
+  for (const k of ['cleaning_fee', 'other_fees', 'channel_fee']) {
+    if (k in body && body[k] === null) body[k] = '0.00';
+  }
+  for (const k of ['unit_id', 'check_in', 'check_out', 'channel']) {
     if (k in body && body[k] === null) delete body[k];
   }
   if (booking.ical_feed_id && (body.check_in || body.check_out || body.unit_id)) {
@@ -573,7 +582,7 @@ router.patch('/reservations/:id', managers, ah(async (req, res) => {
   // Only values that really change are written and audited (money compares by amount: '2000' is '2000.00').
   const MONEY = ['accommodation_total', 'cleaning_fee', 'other_fees', 'channel_fee'];
   const keys = Object.keys(body).filter((k) => (MONEY.includes(k) ? Number(body[k]) !== Number(booking[k]) : String(body[k]) !== String(booking[k])));
-  if (!keys.length) return res.json({ reservation: booking });
+  if (!keys.length) return res.json({ reservation: booking, changed: false });
   if (keys.some((k) => MONEY.includes(k))) checkChannelFee(merged, booking.extras_total);
   // A fee set, or a stay moved to direct while it carries one, is refused. An old fee on a direct stay is left alone until the host clears it.
   if (keys.includes('channel') || keys.includes('channel_fee')) checkDirectFee(merged.channel, merged.channel_fee);
@@ -593,7 +602,7 @@ router.patch('/reservations/:id', managers, ah(async (req, res) => {
   if (keys.some((k) => ['unit_id', 'check_in', 'check_out', ...MONEY].includes(k))) {
     await closeOpenCheckouts(booking.booking_id);
   }
-  res.json({ reservation: redactGuest(req.user, await loadBooking(req.user, booking.booking_id)) });
+  res.json({ reservation: redactGuest(req.user, await loadBooking(req.user, booking.booking_id)), changed: true });
 }));
 
 router.post('/reservations/:id/cancel', managers, ah(async (req, res) => {
@@ -644,6 +653,10 @@ router.post('/reservations/:id/payments', ah(async (req, res) => {
     notes: { type: 'text', max: 500, label: 'Notes' },
     send_receipt: { type: 'bool', label: 'Email receipt' },
   });
+  // A channel's payout is money a platform paid out, so it only exists on a booking that came through a channel.
+  if (body.payment_method === 'channel_payout' && booking.channel === 'direct') {
+    throw validationError({ payment_method: 'Channel payout is only for bookings made through a channel.' });
+  }
   if (body.payment_date > await today()) throw validationError({ payment_date: 'Payment date cannot be in the future.' });
   const key = req.get('Idempotency-Key');
   if (key && !/^[A-Za-z0-9_-]{8,100}$/.test(key)) throw new HttpError(400, 'Invalid Idempotency-Key header.', { code: 'BAD_REQUEST' });
@@ -1102,9 +1115,15 @@ router.put('/rates', managers, ah(async (req, res) => {
   const unit = await loadUnit(req.user, body.unit_id);
   if (body.end_date < body.start_date) throw validationError({ end_date: 'Must be on or after the start date.' });
   if (nightsBetween(body.start_date, body.end_date) > 366) throw validationError({ end_date: 'Up to one year at a time.' });
+  if (body.price !== null && Number(body.price) > MAX_PRICE) {
+    throw validationError({ price: `A nightly price can't be more than ₱${MAX_PRICE.toLocaleString('en-PH')}.` });
+  }
+  // A blank price clears the set prices in the range; the count says how many were there.
+  let cleared = 0;
   await tx(async (db) => {
     if (body.price === null) {
-      await db.query('DELETE FROM nightly_rates WHERE unit_id = $1 AND rate_date BETWEEN $2 AND $3', [unit.unit_id, body.start_date, body.end_date]);
+      const r = await db.query('DELETE FROM nightly_rates WHERE unit_id = $1 AND rate_date BETWEEN $2 AND $3', [unit.unit_id, body.start_date, body.end_date]);
+      cleared = r.rowCount;
     } else {
       await db.query(
         `INSERT INTO nightly_rates (unit_id, rate_date, price)
@@ -1114,7 +1133,7 @@ router.put('/rates', managers, ah(async (req, res) => {
     }
     await audit(db, req.user, 'rates.updated', 'unit', unit.unit_id, body);
   });
-  res.json({ ok: true });
+  res.json({ ok: true, cleared });
 }));
 
 // ---------------------------------------------------------------- homepage

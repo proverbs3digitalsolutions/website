@@ -354,16 +354,14 @@ a.row:hover .row__title { color: var(--accent); }
 .badge--vacant { background: var(--teal-soft); color: var(--teal-ink); }
 
 .table-wrap { position: relative; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-/* Scroll cue: an edge fade shows only while more content is hidden on that side (background-attachment: local).
-   Tab strips do not use it: they wrap onto more lines, so they never scroll sideways. */
-.table-wrap {
-  --cue: color-mix(in srgb, var(--text) 32%, transparent);
-  background:
-    linear-gradient(to right, var(--bg), var(--bg)) left center / 24px 100% no-repeat local,
-    linear-gradient(to left, var(--bg), var(--bg)) right center / 24px 100% no-repeat local,
-    linear-gradient(to right, var(--cue), transparent) left center / 24px 100% no-repeat scroll,
-    linear-gradient(to left, var(--cue), transparent) right center / 24px 100% no-repeat scroll;
-}
+/* Scroll cue: app.js sets is-more-right / is-more-left while columns are hidden on that side, and the clipped edge
+   of the content itself fades out (a mask, so it shows over any cell colour in both themes). The calendar fades
+   on the right only: its left column is sticky. Tab strips wrap onto more lines, so they never use it. */
+.table-wrap.is-more-right { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); }
+.table-wrap.is-more-left { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 32px), transparent); }
+.table-wrap.is-more-left.is-more-right { -webkit-mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent); }
+.cal-scroll.is-more-right { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); }
+@media print { .table-wrap, .cal-scroll { -webkit-mask-image: none !important; mask-image: none !important; } }
 table.table { width: 100%; border-collapse: collapse; font-size: .92rem; }
 .table th, .table td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .table th { font-size: .76rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 750; white-space: nowrap; }
@@ -424,13 +422,14 @@ dialog.modal {
   border: 0; padding: 0; border-radius: 18px; width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 32px);
   box-shadow: 0 20px 60px rgba(10, 20, 35, .3); color: var(--text);
 }
+dialog.modal.modal--wide { width: min(760px, calc(100vw - 24px)); }
 dialog.modal::backdrop { background: rgba(10, 20, 35, .45); }
 .modal__head { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 6px; }
 .modal__body { padding: 10px 20px 20px; overflow: auto; max-height: calc(100vh - 120px); }
 .modal__close { background: none; border: 0; font-size: 1.6rem; line-height: 1; cursor: pointer; color: var(--muted); width: 40px; height: 40px; border-radius: 10px; }
 .modal__close:hover { background: var(--gray-soft); }
 @media (max-width: 559px) {
-  dialog.modal { width: 100vw; max-width: 100vw; margin: auto 0 0; border-radius: 18px 18px 0 0; max-height: 92vh; }
+  dialog.modal, dialog.modal.modal--wide { width: 100vw; max-width: 100vw; margin: auto 0 0; border-radius: 18px 18px 0 0; max-height: 92vh; }
 }
 
 /* ---------------------------------------------------------------- toasts */
@@ -937,7 +936,7 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .stars button.is-on { color: #e0a526; }
 .stars button:focus-visible { outline: 2px solid var(--forest, #0f5132); }
 .stars--sm button { font-size: 1.4rem; }
-.rating { color: #b7791f; letter-spacing: 1px; white-space: nowrap; }
+.rating { color: var(--amber); letter-spacing: 1px; white-space: nowrap; }
 
 /* ================================================================ gate pass */
 .gp .receipt { max-width: 720px; }
@@ -996,9 +995,6 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .lp-lang__menu { position: absolute; right: 0; top: calc(100% + 6px); background: var(--surface); border-radius: 12px; box-shadow: 0 10px 30px rgba(16,32,56,.15); padding: 6px; display: grid; min-width: 140px; z-index: 30; }
 .lp-lang__menu button { background: none; border: 0; text-align: left; padding: 10px 12px; border-radius: 8px; cursor: pointer; font-weight: 600; color: var(--text); }
 .lp-lang__menu button:hover, .lp-lang__menu button.is-on { background: var(--sand-soft); }
-.gs-modal { width: min(760px, calc(100vw - 24px)); }
-/* The Get started sheet sets an inline width (ui.js openModal, wide), so the phone sheet needs !important to win. */
-@media (max-width: 559px) { dialog.modal.gs-modal { width: 100vw !important; max-width: 100vw; margin: auto 0 0; } }
 .gs { display: grid; gap: 14px; padding: 4px 4px 8px; }
 .gs-steps { list-style: none; display: flex; justify-content: center; gap: 0; margin: 0 0 6px; padding: 0; }
 .gs-steps li { display: grid; justify-items: center; gap: 4px; width: 110px; position: relative; color: var(--muted); }
@@ -1027,6 +1023,9 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .themeswitch button[aria-checked="true"] { background: var(--forest); color: #fff; }
 .themeswitch button > [aria-hidden] { font-size: 1.1rem; line-height: 1; }
 .themeswitch button[aria-checked="false"] > [aria-hidden] { color: var(--text); }
+/* Beats `.sidebar__foot span { color: var(--muted) }`, which would otherwise grey the selected icon on green. */
+.themeswitch button[aria-checked="true"] > [aria-hidden] { color: inherit; }
+.sidebar__foot .themeswitch button[aria-checked="true"] > [aria-hidden] { color: inherit; }
 .themeswitch--compact button { padding: 4px 9px; }
 .morenav__theme { padding: 10px 12px; }
 .sidebar__foot .themeswitch { margin: 8px 0; }
@@ -1372,8 +1371,11 @@ a.op__row:hover { background: var(--surface-2); }
 .hk-pf--fail { background: var(--red-soft); color: var(--red); }
 .hk-pf__text { flex: 1; }
 .hk-history { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-.hk-history li { display: grid; gap: 2px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.hk-history li { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 .hk-history li:last-child { border-bottom: 0; padding-bottom: 0; }
+/* In the history lists the text column takes what is left and the status keeps its natural width (a long word must not squeeze it). */
+.hk-history .hk-card__top > :first-child { min-width: 0; overflow-wrap: anywhere; }
+.hk-history .hk-card__top > :not(:first-child) { flex-shrink: 0; white-space: nowrap; }
 .hk-thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
 .hk-thumbs a { display: inline-block; }
 .hk-thumbs img { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); display: block; }

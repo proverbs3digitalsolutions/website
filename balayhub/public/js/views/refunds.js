@@ -10,7 +10,11 @@ const METHOD_LABEL = { cash: 'Cash', bank_transfer: 'Bank transfer', gcash: 'GCa
 // The policy's suggested refund. On a live reservation it is only what the policy would refund if cancelled today.
 export function suggestionText(s, cancelled) {
   const lead = cancelled ? 'Suggested refund' : 'If cancelled today, suggested refund';
-  return `${lead}: ${peso(s.amount)} (${s.percent}%). ${s.rule}.`;
+  // After a partial refund, say what is already back and what is still owed.
+  const done = Number(s.already_refunded) > 0
+    ? ` ${peso(s.already_refunded)} is already refunded, so ${Number(s.remaining) > 0 ? `${peso(s.remaining)} more` : 'nothing more is suggested'}.`
+    : '';
+  return `${lead}: ${peso(s.amount)} (${s.percent}%). ${s.rule}.${done}`;
 }
 
 export async function refundsCard(reservation, rerender) {
@@ -21,7 +25,7 @@ export async function refundsCard(reservation, rerender) {
   const recordRefund = () => formModal({
     title: 'Record refund', submitText: 'Save refund', idempotent: true,
     fields: [
-      field({ name: 'amount', label: 'Amount refunded', type: 'money', required: true, value: cancelled ? data.suggestion?.amount : undefined,
+      field({ name: 'amount', label: 'Amount refunded', type: 'money', required: true, value: cancelled && Number(data.suggestion?.remaining) > 0 ? data.suggestion.remaining : undefined,
         hint: `Up to ${peso(data.refundable)} is left to refund.` }),
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'refund_date', label: 'Date refunded', type: 'date', required: true, value: todayManila(), max: todayManila() }),

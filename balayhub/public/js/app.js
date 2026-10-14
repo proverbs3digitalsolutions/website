@@ -409,7 +409,34 @@ function labelTableWraps(root) {
     w.setAttribute('aria-label', `${heading?.textContent.trim() || 'Table'} (scrollable)`);
   });
 }
-new MutationObserver(() => labelTableWraps(document.getElementById('app'))).observe(document.getElementById('app'), { childList: true, subtree: true });
+// Scroll cue: mark a scroll box while columns are hidden on a side; the CSS fades that edge (is-more-left / is-more-right).
+const cueSeen = new WeakSet();
+const cueResize = typeof ResizeObserver === 'function' ? new ResizeObserver((entries) => entries.forEach((e) => updateScrollCue(e.target.__cueBox || e.target))) : null;
+function updateScrollCue(box) {
+  box.classList.toggle('is-more-left', box.scrollLeft > 1);
+  box.classList.toggle('is-more-right', box.scrollLeft + box.clientWidth < box.scrollWidth - 1);
+}
+function watchScrollCues(root) {
+  root.querySelectorAll('.table-wrap, .cal-scroll').forEach((box) => {
+    if (cueSeen.has(box)) return;
+    cueSeen.add(box);
+    box.addEventListener('scroll', () => updateScrollCue(box), { passive: true });
+    if (cueResize) {
+      cueResize.observe(box);
+      [...box.children].forEach((c) => { c.__cueBox = box; cueResize.observe(c); });
+    }
+  });
+  // Content inside a box can be swapped without the box resizing, so re-check every box on each change.
+  root.querySelectorAll('.table-wrap, .cal-scroll').forEach((box) => {
+    [...box.children].forEach((c) => { if (cueResize && !c.__cueBox) { c.__cueBox = box; cueResize.observe(c); } });
+    updateScrollCue(box);
+  });
+}
+new MutationObserver(() => {
+  const app = document.getElementById('app');
+  labelTableWraps(app);
+  watchScrollCues(app);
+}).observe(document.getElementById('app'), { childList: true, subtree: true });
 
 // ---------------------------------------------------------------- session events
 onAuthLost(async (err) => {

@@ -28,7 +28,7 @@ export async function reportsView(el, { query }) {
   const defaults = { period: 'this_month', from: '', to: '', property_id: '', property_type: '' };
   const filters = initFilters('reports', query, defaults);
   // Old links carry only from/to: match them to a preset, or treat them as a custom range.
-  if (query.from && query.to && !query.period) {
+  if ((query.from || query.to) && !query.period) {
     const match = Object.entries(P).find(([, [, f, t]]) => f === query.from && t === query.to);
     Object.assign(filters, match ? { period: match[0], from: '', to: '' } : { period: 'custom' });
   }
@@ -39,9 +39,9 @@ export async function reportsView(el, { query }) {
   const barBox = h('div', { class: 'no-print' });
   const exportLink = h('a', { class: 'btn btn--primary', download: '' }, 'Export (Excel / CSV)');
 
-  // The dates the report runs for.
+  // The dates the report runs for. A custom range runs only once both dates are set (see load()).
   const range = () => (filters.period === 'custom'
-    ? { from: filters.from || P.this_month[1], to: filters.to || today }
+    ? { from: filters.from, to: filters.to }
     : { from: P[filters.period][1], to: P[filters.period][2] });
   const apiParams = () => ({ ...range(), property_id: filters.property_id, property_type: filters.property_type });
 
@@ -75,8 +75,11 @@ export async function reportsView(el, { query }) {
 
   async function load() {
     history.replaceState(null, '', `#/reports${qs(changed(filters, defaults))}`);
-    // A custom range with no dates (filters.js clears both when the pair runs backwards) has nothing to report on yet.
-    if (filters.period === 'custom' && !filters.from && !filters.to) {
+    // A custom range needs both dates. With neither (filters.js clears both when the pair runs backwards) or only one
+    // (a bad date in the link, or one side cleared), there is nothing to report on yet.
+    const neither = filters.period === 'custom' && !filters.from && !filters.to;
+    const one = filters.period === 'custom' && Boolean(filters.from) !== Boolean(filters.to);
+    if (neither || one) {
       exportLink.removeAttribute('href');
       body.replaceChildren(h('div', { class: 'card' }, h('p', { class: 'muted' }, 'Pick both dates to see this range.')));
       return;

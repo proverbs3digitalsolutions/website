@@ -65,3 +65,8 @@
 - 2026-10-14: Round 4 started (local sweep, DB restored from snapshot).
 - 2026-10-14: Round 4 sweep done (12 lanes). Dev server stopped. Strategist dispatched (r4/STRATEGY.md).
 - 2026-10-14: Round 4 strategy done (HARD: scroll cue 3rd round, money parser class). 31 real bugs (10 SEV2, 21 SEV3), 0 SEV1. 17 fix lanes C01-C17 dispatched (C01, C04 on sonnet). D01 docs after merge gate.
+- 2026-10-14: Round 4 fixes landed (17 planned + C18 signup page + C19 settings notifications card). Full suite 1217/1218, the 1 stale r2 css test updated by C04 (css tests 36/36). Security review running. Dev DB restored, server on :3000, 8 re-verify lanes R1-R8 dispatched.
+- 2026-10-14: Round 4 security review PASS (2 Info: template name race, subject draft in sessionStorage; neither needs action).
+- R5 candidates (from r4 re-verify R6): Settings Modules select option text cut at 390 (SEV3, settings business_type field); long-term owner still offered 'Turn on notifications' with no types (deferred under rent-alerts founder question).
+- Carry to next round: both-type workspace Properties list not verifiable locally (none exists); owner portal nav (O-e) still unchecked.
+- 2026-10-14: Round 4 final full suite 1232/1232 after follow-ups (C20 book guest re-quote, C21 Taglish guest-limit, C03 overpaid wording, C06 no-day triggers 0, C09 busy label, C04 hk-card status). Re-verify R1-R8 held (scroll cue visible but subtle; founder question added). R9 follow-up browser check + D01 docs running.

@@ -57,13 +57,20 @@ router.get('/reservations/:id/refunds', ah(async (req, res) => {
   // ponytail: uses the listing's current policy, not the one at booking time (no snapshot column in migration 027).
   // A cancelled booking is judged on the day it was cancelled; anything else on today.
   const cancelDate = b.status === 'cancelled' && b.cancelled_on ? b.cancelled_on : manilaToday();
+  // Never negative: if a payment was voided after a refund, nothing more can be refunded.
+  const refundableCentavos = Math.max(0, centavos(b.paid) - centavos(b.refunded));
+  const suggestion = suggestRefund(b.cancellation_policy, b.paid, b.check_in, cancelDate);
+  // What is still owed back: the policy share less refunds already recorded. Never below 0, never more than is left to refund.
+  if (suggestion) {
+    suggestion.already_refunded = b.refunded;
+    suggestion.remaining = money(Math.max(0, Math.min(centavos(suggestion.amount) - centavos(b.refunded), refundableCentavos)));
+  }
   res.json({
     policy: describePolicy(b.cancellation_policy, b.cancellation_policy_text),
-    suggestion: suggestRefund(b.cancellation_policy, b.paid, b.check_in, cancelDate),
+    suggestion,
     paid: b.paid,
     refunded: b.refunded,
-    // Never negative: if a payment was voided after a refund, nothing more can be refunded.
-    refundable: money(Math.max(0, centavos(b.paid) - centavos(b.refunded))),
+    refundable: money(refundableCentavos),
     refunds: rows,
   });
 }));

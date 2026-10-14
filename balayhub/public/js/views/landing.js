@@ -166,6 +166,8 @@ extendTranslations({
   'Already have an account? ': 'May account ka na? ',
   'Sign up with Google': 'Mag-sign up gamit ang Google',
   'Please fill in the highlighted fields.': 'Pakisagutan ang mga naka-highlight.',
+  'Please check the highlighted fields.': 'Pakitingnan ang mga naka-highlight.',
+  'Please accept the Terms of Service and read the Privacy Notice to continue.': 'Pakisang-ayunan ang Terms of Service at basahin ang Privacy Notice para magpatuloy.',
   'Enter your first name.': 'Ilagay ang first name mo.', 'Enter your last name.': 'Ilagay ang last name mo.', 'Enter your business name.': 'Ilagay ang business name mo.',
   'Password must be at least 8 characters.': 'Dapat hindi bababa sa 8 characters ang password.',
   'More than 10': 'Higit 10',
@@ -342,15 +344,17 @@ export function openGetStarted(preset = {}) {
       const form = h('form', { class: 'form', novalidate: true, onsubmit: async (e) => {
         e.preventDefault(); read();
         showErrors({}); formError.replaceChildren();
-        // Email and password are checked here, so the banner only names fields that are on this sheet.
+        // Email, password and the consent box are checked here, so an unticked box never uses up the sign-up limit.
+        // Each message sits at its own field; the banner only points at them, so no problem is named twice.
         const errs = {};
         if (!data.email) errs.email = tServer('Email is required.');
         else if (!EMAIL_RE.test(data.email)) errs.email = tServer('Enter a valid email address.');
         if (!data.password) errs.password = tServer('Password is required.');
         else if (data.password.length < 8) errs.password = t('Password must be at least 8 characters.');
+        if (!data.accept_privacy) errs.accept_privacy = t('Please accept the Terms of Service and read the Privacy Notice to continue.');
         if (Object.keys(errs).length) {
           showErrors(errs);
-          formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, Object.values(errs).join(' ')));
+          formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, t('Please check the highlighted fields.')));
           return;
         }
         submit.disabled = true; submit.textContent = t('Creating your account…');
@@ -370,11 +374,12 @@ export function openGetStarted(preset = {}) {
           m.close();
           afterLogin();
         } catch (err) {
-          // This sheet has no confirm-password box, so the server's confirm message is left out of the banner too.
+          // This sheet has no confirm-password box, so the server's confirm message is left out here too.
           const fields = { ...(err.fields || {}) };
           delete fields.confirm_password;
           let message = t('Please fill in the highlighted fields.');
-          if (err instanceof ApiError) message = err.code === 'VALIDATION' ? Object.values(fields).join(' ') || message : err.message;
+          if (err instanceof ApiError && err.code !== 'VALIDATION') message = err.message;
+          else if (Object.keys(fields).length) message = t('Please check the highlighted fields.');
           formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, message));
           showErrors(fields);
           submit.disabled = false; submit.textContent = t('Start my free trial');

@@ -182,7 +182,7 @@ export const skeleton = (n = 2) => h('div', { class: 'stack' }, Array.from({ len
 // ---------------------------------------------------------------- modal
 export function openModal({ title, body, onClose, wide }) {
   const dlg = h('dialog', { class: 'modal', 'aria-label': title });
-  if (wide) dlg.style.width = 'min(760px, calc(100vw - 24px))';
+  if (wide) dlg.classList.add('modal--wide');
   const close = () => dlg.close();
   dlg.append(
     h('div', { class: 'modal__head' }, h('h2', null, title), h('button', { class: 'modal__close', type: 'button', 'aria-label': 'Close', onclick: close }, '×')),

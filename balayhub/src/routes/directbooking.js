@@ -325,6 +325,8 @@ publicRouter.get('/public/book/:slug/units/:unitId/quote', ah(async (req, res) =
   const { promo_code_id: _id, ...p } = await priceStay(u, req.query.check_in, req.query.check_out,
     { orgId: host.organization_id, code: req.query.code ? String(req.query.code).slice(0, 40) : null });
   const guests = validate(req.query, { guests: { type: 'int', min: 1, max: 50, label: 'Guests' } }).guests ?? 1;
+  // Same limit as checkout, so a quote never says a place is available for more guests than it takes.
+  if (u.max_guests && guests > u.max_guests) throw validationError({ guests: `This place allows up to ${u.max_guests} guests.` });
   const addons = await priceAddonSelections({ orgId: host.organization_id, unitId: u.unit_id, nights: p.nights, guests,
     selections: parseSelections(req.query.addons), context: 'booking' });
   // The total includes add-ons; the deposit is on the stay only (add-ons are paid in full when booked).

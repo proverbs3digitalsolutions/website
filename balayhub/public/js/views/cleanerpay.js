@@ -2,7 +2,7 @@
 // mark them paid; owners also set rates. `myPayView` is the cleaner's own phone-first list.
 
 import { get, post, patch, api, qs } from '../api.js';
-import { h, peso, manilaDay, fmtDate, field, formModal, confirmDialog, emptyState, pageHead, toast, todayManila, options, label, errorState, skeleton } from '../ui.js';
+import { h, peso, manilaDay, fmtDate, field, formModal, makeForm, openModal, confirmDialog, emptyState, pageHead, toast, todayManila, options, label, errorState, skeleton } from '../ui.js';
 import { state } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 import { t, initGuestLang, extendTranslations, fmtDateL } from '../i18n.js';
@@ -14,6 +14,12 @@ const monthOk = (m) => /^\d{4}-(0[1-9]|1[0-2])$/.test(m || '');
 const whoOf = (x) => x.cleaner_name || 'Not assigned';
 const unitOf = (x) => `${x.unit_name || 'Unit'}${x.property_name ? ` · ${x.property_name}` : ''}`;
 const doneDay = (x) => manilaDay(x.completed_at || x.cleaning_date || x.due_date);
+// The rate a new one would replace: the same team member, or the same outside name (trimmed, any case).
+// Mirrors the server's keys in PUT /cleaner-rates.
+const norm = (s) => String(s || '').trim().toLowerCase();
+export const existingRate = (rates, body) => rates.find((r) => (body.user_id
+  ? r.user_id === body.user_id
+  : !r.user_id && norm(body.assignee_name) && norm(r.assignee_name) === norm(body.assignee_name)));
 
 // One cleaner's status in the By cleaner card. A clean with no pay set is never "All paid".
 export const cleanerStatus = (c) => {
@@ -180,21 +186,38 @@ export async function cleanerPayView(el, { query = {} } = {}) {
       const nameF = field({ name: 'assignee_name', label: 'Name', value: r?.assignee_name || '', maxlength: 120, hint: 'Match the name you type when assigning a clean.' });
       const sync = () => { nameF.hidden = !!who.querySelector('select').value; };
       who.querySelector('select').addEventListener('change', sync);
-      formModal({
-        title: r ? `Rate for ${nameOf(r)}` : 'Add a cleaner rate', submitText: 'Save rate',
+      // makeForm, not formModal: a Cancel on the question below must leave this dialog open.
+      let modal;
+      const form = makeForm({
         fields: [
           !r && who, (!r || outside) && nameF,
           h('div', { class: 'form-row form-row--2' },
             field({ name: 'rate_type', label: 'Paid', type: 'select', required: true, value: r?.rate_type || 'per_clean', placeholderOption: false, options: [['per_clean', 'Per clean'], ['per_hour', 'Per hour']] }),
             field({ name: 'amount', label: 'Amount', type: 'money', required: true, value: r?.amount })),
         ],
-        onSubmit: async (d) => {
+        submitText: 'Save rate',
+        cancel: () => modal.close(),
+        onSubmit: async (d, { form: dialogForm }) => {
           const body = { rate_type: d.rate_type, amount: d.amount };
           if (r) { if (r.user_id) body.user_id = r.user_id; else body.assignee_name = r.assignee_name; } else if (d.user_id) body.user_id = d.user_id; else body.assignee_name = d.assignee_name;
+          // Adding a rate for a cleaner who already has one replaces it, so ask first.
+          const prior = !r && existingRate(rates, body);
+          if (prior) {
+            // The amount as the server reads it ("1,000", "₱1,250.50"); what was typed when it can't be read.
+            const plain = String(d.amount).replace(/[₱\s]/g, '').replace(/^PHP/i, '');
+            const shown = /^(\d{1,3}(,\d{3})+|\d+)(\.\d{1,2})?$/.test(plain) ? rateText({ amount: Number(plain.replace(/,/g, '')), rate_type: d.rate_type }) : String(d.amount).trim();
+            // makeForm has set the button to "Saving…" already; put "Save rate" back while the question waits.
+            const submit = dialogForm.querySelector('[type=submit]');
+            submit.textContent = 'Save rate';
+            if (!await confirmDialog({ title: 'Change this rate?', text: `${nameOf(prior)} already has ${rateText(prior)}. Change it to ${shown}?`, confirmText: 'Change rate' })) return;
+            submit.textContent = 'Saving…';
+          }
           await api('PUT', '/cleaner-rates', body);
           toast('Rate saved.'); loadRates(); load();
+          modal.close();
         },
       });
+      modal = openModal({ title: r ? `Rate for ${nameOf(r)}` : 'Add a cleaner rate', body: form });
       if (!r) sync();
     };
     const remove = async (r) => {

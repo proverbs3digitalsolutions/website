@@ -141,6 +141,8 @@ export async function signupView(el, { query }) {
       privacy,
     ],
     onSubmit: async (data) => {
+      // Checked before the request goes out, so an unticked box never uses up the sign-up limit.
+      if (!data.accept_privacy) throw new ApiError('Please check the highlighted fields.', { status: 400, fields: { accept_privacy: 'Please accept the Terms of Service and read the Privacy Notice to continue.' } });
       const res = await post('/auth/signup', { ...data, invite_token: query.invite || undefined });
       state.user = res.user;
       await refreshUser();

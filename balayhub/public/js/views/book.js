@@ -321,7 +321,12 @@ export async function bookListingView(el, { params, query }) {
     !host.accepting && h('p', { class: 'muted small' }, host.demo ? t('This is a demo, so booking is turned off.') : t('Online booking is paused. Please contact the host.')));
 
   let busy = false;
-  form.elements.num_guests?.addEventListener('change', () => { if (picked.size) updateQuote(); else addonRows.forEach((r) => r.sync()); });
+  // A new guest count is quoted again, so an over-limit count shows the refusal and no Total. Wait for it to settle, so one change makes one request.
+  let guestTimer;
+  form.elements.num_guests?.addEventListener('change', () => {
+    clearTimeout(guestTimer);
+    guestTimer = setTimeout(() => { if (checkIn && checkOut) updateQuote(); }, 300);
+  });
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (busy || !current) return;

@@ -32,7 +32,19 @@ const CLEANER_HINT = 'Cleaner: sees cleaning jobs only, no money or guest detail
 const roleOptions = (u) => [['manager', 'Property manager'], ['staff', 'Staff (cleaner, front desk, accountant)'], ...(u.business_type === 'long_term' ? [] : [['cleaner', 'Cleaner — sees cleaning jobs only, no money or guest details']])];
 const roleName = (r) => (r === 'cleaner' ? 'Cleaner' : label(r));
 // Managers and cleaners need at least one property, the same rule the server applies.
-export const needProperty = (data) => { if (['manager', 'cleaner'].includes(data.role) && !(data.property_ids || []).length) throw new ApiError(`Pick at least one property for a ${data.role}.`, { status: 400 }); };
+const propertyProblem = (data) => (['manager', 'cleaner'].includes(data.role) && !(data.property_ids || []).length ? `Pick at least one property for a ${data.role}.` : '');
+export const needProperty = (data) => { const msg = propertyProblem(data); if (msg) throw new ApiError(msg, { status: 400 }); };
+// Same email test as the server (src/lib/validate.js). The invite checks the email first, then the property, the
+// server's order, and returns every problem at once so each field can say what is wrong.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+export const inviteProblems = (data) => {
+  const fields = {};
+  const email = String(data.email ?? '');
+  if (email.length > 254 || !EMAIL_RE.test(email)) fields.email = 'Enter a valid email address.';
+  const property = propertyProblem(data);
+  if (property) fields.property_ids = property;
+  return fields;
+};
 
 export async function settingsView(el, { rerender, query = {} }) {
   // Back from PayMongo checkout: confirm the payment with the server.
@@ -97,7 +109,8 @@ export async function settingsView(el, { rerender, query = {} }) {
         propertyChecks(properties),
       ],
       onSubmit: async (data) => {
-        needProperty(data);
+        const problems = inviteProblems(data);
+        if (Object.keys(problems).length) throw new ApiError('Please check the highlighted fields.', { status: 400, fields: problems });
         const res = await post('/team/invitations', { ...data, property_ids: data.property_ids || [] });
         // Re-render first (it clears open dialogs), then show the link so it stays open.
         await rerender();
@@ -253,21 +266,30 @@ const DETAIL_LABELS = {
   check_in: 'Check-in', check_out: 'Check-out', start: 'Start', end: 'End', end_date: 'End date', paid_on: 'Paid on', paid_until: 'Paid until',
   month: 'Month', months: 'Months', enabled: 'Turned on', sent: 'Sent', count: 'Count', quantity: 'Quantity',
   abandoned_followup: 'Follow-up email', returning_guest_pct: 'Returning-guest discount',
+  pricing: 'Pricing', adjust_pct: 'Price change',
 };
 const MONEY_KEYS = new Set(['amount', 'amount_paid', 'total_amount', 'price', 'unit_price', 'monthly_rent', 'estimated_cost', 'payout', 'refund', 'deduction', 'reserve_topup']);
+// Stored codes for add-on pricing and pricing rules, in plain words.
+const DETAIL_VALUES = {
+  per_stay: 'Per stay', per_night: 'Per night', per_guest: 'Per guest', per_guest_night: 'Per guest, per night',
+  last_minute: 'Last minute', far_out: 'Far out', gap_night: 'Gap night',
+};
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // One detail value as text: pesos for money, dates as dates, yes or no for switches, known words as labels.
 function detailValue(k, v) {
   if (k === 'abandoned_followup') return v ? 'On' : 'Off';
   if (k === 'returning_guest_pct') return `${v}%`;
+  if (k === 'adjust_pct') return `${Number(v) > 0 ? '+' : ''}${v}%`;
   if (typeof v === 'boolean') return v ? 'Yes' : 'No';
   if (MONEY_KEYS.has(k)) return v !== '' && Number.isFinite(Number(v)) ? peso(v) : '';
   const s = String(v);
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return fmtDate(s);
   if (/^\d{4}-\d{2}$/.test(s)) return fmtMonth(s);
   if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return fmtDateTime(s);
-  return label(s);
+  // A code nothing above names still reads as words ("some_code" is "Some code"), never with an underscore.
+  const word = DETAIL_VALUES[s] || label(s);
+  return /^[a-z]+(_[a-z]+)+$/.test(word) ? word.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()) : word;
 }
 
 // "every 1 month", "every 3 months": the stored unit is plural ('days' or 'months'), so it is singular for 1.
@@ -379,7 +401,7 @@ function payOnline(p, bill) {
 // ---------------------------------------------------------------- password
 // ---------------------------------------------------------------- guest language
 function guestLanguageCard(u, rerender) {
-  const lang = h('select', { class: 'input', 'aria-label': 'Language for guests' },
+  const lang = h('select', { class: 'input', id: 'guest-lang' },
     h('option', { value: 'en', selected: u.guest_language !== 'tl' }, 'English'),
     h('option', { value: 'tl', selected: u.guest_language === 'tl' }, 'Taglish (Tagalog + English)'));
   const alsoMessages = h('input', { type: 'checkbox', checked: true });
@@ -400,7 +422,7 @@ function guestLanguageCard(u, rerender) {
     h('div', { class: 'card__head' }, h('h2', null, 'Language for guests')),
     h('p', { class: 'muted small' }, 'Used on your booking page, payment page, guest check-in form and review page. Guests can switch between English and Tagalog themselves.'),
     h('div', { class: 'form' },
-      h('div', { class: 'field' }, h('label', null, 'Default language'), lang),
+      h('div', { class: 'field' }, h('label', { for: 'guest-lang' }, 'Default language'), lang),
       h('label', { class: 'check' }, alsoMessages, h('span', null, 'Also switch my booking confirmation, check-in, thank-you and payment reminder messages')),
       h('div', null, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: save }, 'Save'))));
 }

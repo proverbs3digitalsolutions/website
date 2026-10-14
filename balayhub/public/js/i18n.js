@@ -197,6 +197,7 @@ const SERVER_TL = [
   [/^(.+) off$/, (m) => `${m[1]} bawas`],
   [/^During (.+), this place has a minimum stay of (\d+) nights\.$/, (m) => `Sa ${m[1]}, minimum ${m[2]} gabi ang stay dito.`],
   [/^This place has a minimum stay of (\d+) nights\.$/, (m) => `Minimum ${m[1]} gabi ang stay dito.`],
+  [/^This place allows up to (\d+) guests\.$/, (m) => `Hanggang ${m[1]} guests lang ang puwede sa lugar na ito.`],
   [/^Choose a date from today onwards\.$/, () => 'Pumili ng petsa mula ngayon.'],
   [/^Choose a check-out date after check-in\.$/, () => 'Pumili ng check-out pagkatapos ng check-in.'],
   [/^For stays longer than 60 nights, please contact the host\.$/, () => 'Para sa stay na higit 60 gabi, paki-contact ang host.'],

@@ -325,7 +325,7 @@ async function bulkModal({ listings, rerender }) {
   const body = (dry) => {
     const b = { from: from.value, to: to.value, action: actSel.value, dry_run: dry };
     if (form.elements.by.value === 'tag') b.tag = tagSel.value; else b.unit_ids = [...form.querySelectorAll('input[name=unit]:checked')].map((c) => c.value);
-    if (b.action === 'set') b.price = price.value.replace(/,/g, '').trim();
+    if (b.action === 'set') b.price = price.value.trim();
     if (b.action === 'percent') b.percent = Number(pct.value);
     if (b.action === 'block') b.reason = reason.value.trim();
     return b;
@@ -335,7 +335,7 @@ async function bulkModal({ listings, rerender }) {
     if (b.tag === '' || (b.unit_ids && !b.unit_ids.length)) return 'Choose at least one listing or a tag.';
     if (!b.from || !b.to) return 'Choose the first and last night.';
     if (b.to < b.from) return 'The last night must be on or after the first night.';
-    if (b.action === 'set' && !/^\d+(\.\d{1,2})?$/.test(b.price)) return 'Enter the new price per night.';
+    if (b.action === 'set' && !b.price) return 'Enter the new price per night.';
     if (b.action === 'percent' && (pct.value === '' || !Number.isFinite(b.percent))) return 'Enter a percentage between -90 and 300.';
     if (b.action === 'block' && !b.reason) return 'Add a reason for the block.';
     return '';

@@ -185,7 +185,7 @@ export async function ownerStatementsView(el, { query = {} }) {
       ? [ready > 0 && h('div', { class: 'alert alert--info' }, `${ready} statement${ready === 1 ? ' is' : 's are'} ready to publish. Open each one, check the numbers, then publish.`),
         !ready && drafts > 0 && h('div', { class: 'alert alert--info' }, `${drafts} ${drafts === 1 ? 'draft' : 'drafts'} can be published once the month ends.`),
         h('div', { class: 'card card--flush' }, h('div', { class: 'table-wrap' }, h('table', { class: 'table own-list' },
-          h('thead', null, h('tr', null, ['Owner', 'Units', 'Status', 'Payout', 'Sent', ''].map((x, i) => h('th', { class: i === 3 ? 'num' : null }, x)))),
+          h('thead', null, h('tr', null, ['Owner', 'Units', 'Status', 'Payout', 'Sent', h('span', { class: 'sr-only' }, 'Actions')].map((x, i) => h('th', { class: i === 3 ? 'num' : null }, x)))),
           h('tbody', null, list.map((r) => h('tr', null,
             h('td', null, h('strong', null, r.full_name)),
             h('td', null, String(r.unit_count)),

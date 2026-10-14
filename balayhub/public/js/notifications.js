@@ -73,16 +73,19 @@ export async function notificationsCard(rerender) {
     try { await patch('/push/settings', { [key]: value }); toast('Saved.'); } catch (err) { toast(err.message, 'error'); }
   };
 
+  // A long-term workspace has no alert types. Its card says so, and it gets no stay-only sentence.
+  const noTypes = s.types.length === 0;
   let status;
   if (!supported()) {
     status = isIos() && !standalone()
       ? h('p', { class: 'muted' }, 'On iPhone and iPad, first add BalayHub to your Home Screen: tap Share, then "Add to Home Screen". Open BalayHub from the new icon and come back here to turn on notifications.')
       : h('p', { class: 'muted' }, 'This browser does not support notifications. Try Chrome, Edge, Firefox or Safari.');
   } else {
+    const intro = on ? 'Notifications are on for this device.'
+      : noTypes ? null
+        : 'Get a notification on this device for new bookings, guest messages and payments, even when BalayHub is closed.';
     status = h('div', null,
-      h('p', { class: 'muted' }, on
-        ? 'Notifications are on for this device.'
-        : 'Get a notification on this device for new bookings, guest messages and payments, even when BalayHub is closed.'),
+      intro && h('p', { class: 'muted' }, intro),
       h('div', { class: 'chips' },
         on ? h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: test }, 'Send a test')
           : h('button', { class: 'btn btn--primary btn--sm', type: 'button', onclick: enable }, 'Turn on notifications'),
@@ -101,9 +104,11 @@ export async function notificationsCard(rerender) {
     !standalone() && !installEvent && !isIos() && h('p', { class: 'muted small' }, 'Tip: add BalayHub to your home screen from your browser menu (⋮ → Add to Home screen / Install app) so it opens like an app.'),
     status,
     s.devices.length > 0 && h('p', { class: 'muted small' }, `Turned on for: ${s.devices.map((d) => d.device || 'a device').join(', ')}`),
-    h('fieldset', { class: 'checks', style: { border: 0, padding: 0, margin: '12px 0 0' } },
-      h('legend', { class: 'small' }, 'Notify me about'),
-      s.types.map((t) => h('label', { class: 'check' },
-        h('input', { type: 'checkbox', checked: t.on, onchange: (e) => toggle(t.key, e.target.checked) }),
-        h('span', null, t.label)))));
+    noTypes
+      ? h('p', { class: 'muted' }, 'Alerts for monthly rentals aren’t available yet.')
+      : h('fieldset', { class: 'checks', style: { border: 0, padding: 0, margin: '12px 0 0' } },
+        h('legend', { class: 'small' }, 'Notify me about'),
+        s.types.map((t) => h('label', { class: 'check' },
+          h('input', { type: 'checkbox', checked: t.on, onchange: (e) => toggle(t.key, e.target.checked) }),
+          h('span', null, t.label)))));
 }

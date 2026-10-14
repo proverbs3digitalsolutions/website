@@ -50,10 +50,12 @@ test('global focus-visible uses the solid ring', () => {
   assert.match(css, /^:focus-visible \{ outline: 2px solid var\(--focus-ring\)/m);
 });
 
-test('scroll cue on .table-wrap uses local attachment; tab strips have none (they wrap)', () => {
-  const m = css.match(/^\.table-wrap \{\n  --cue[^}]*\}/m);
-  assert.ok(m && /no-repeat local/.test(m[0]) && /no-repeat scroll/.test(m[0]));
+test('scroll cue on .table-wrap is a mask fade driven by is-more-right; tab strips have none (they wrap)', () => {
+  assert.match(rule('.table-wrap.is-more-right'), /mask-image: linear-gradient/);
+  assert.doesNotMatch(rule('.table-wrap'), /background/);
   assert.doesNotMatch(css, /\.table-wrap, \.tabs/);
+  assert.doesNotMatch(css, /\.tabs[^{]*is-more/);
+  assert.doesNotMatch(rule('.tabs'), /mask-image|background-attachment|no-repeat local/);
 });
 
 test('money values do not break mid-number; long words wrap in rows', () => {

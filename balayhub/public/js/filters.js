@@ -8,7 +8,7 @@
 // Field: { name, label, type: 'select' | 'date' | 'daterange' | 'number' | 'check', options: [[value, text]], all: 'All …' }
 // A daterange field uses `${name}_from` / `${name}_to` (or from/to keys given as `keys`).
 // A range that ends before it starts is flagged inline and applies nothing: both of its dates are dropped until it is fixed.
-// initFilters() drops impossible dates and non-UUID ids before any page fetches.
+// initFilters() drops text and impossible dates in from/to, and non-UUID ids, before any page fetches.
 
 import { h, fmtDate } from './ui.js';
 import { state } from './app.js';
@@ -28,17 +28,21 @@ function realDate(v) {
   return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d;
 }
 
-// Runs before any page fetches, so a bad value never reaches the server. An impossible date and a non-UUID *_id are
-// dropped. A date range that runs backwards is not applied; its dates stay in typedBack for the bar to show.
+// A date shown in a chip: a value that is not a real day is shown as typed, never as "Invalid Date".
+const chipDate = (v) => (DATE_RE.test(v) && realDate(v) ? fmtDate(v) : v);
+
+// Runs before any page fetches, so a bad value never reaches the server. Text or an impossible date in a from/to key,
+// and a non-UUID *_id, are dropped. A date range that runs backwards is not applied; its dates stay in typedBack for
+// the bar to show.
 // ponytail: date keys are found by their from/to names, which every range in the app uses. A range with other key
 // names would need its pair passed in here to be checked.
 function sanitise(out, defaults) {
   const typed = {};
   for (const k of Object.keys(out)) {
     const v = out[k];
-    const impossible = /(^|_)(from|to)$/.test(k) && DATE_RE.test(v) && !realDate(v);
+    const badDate = /(^|_)(from|to)$/.test(k) && v !== '' && !(DATE_RE.test(v) && realDate(v));
     const badId = k.endsWith('_id') && v !== '' && !UUID_RE.test(v);
-    if (impossible || badId) out[k] = defaults[k] ?? '';
+    if (badDate || badId) out[k] = defaults[k] ?? '';
   }
   for (const k of Object.keys(out)) {
     if (!/(^|_)from$/.test(k)) continue;
@@ -136,13 +140,13 @@ function chipText(f, values) {
   if (f.type === 'daterange') {
     const [a, b] = rangeKeys(f);
     if (!values[a] && !values[b]) return null;
-    return `${f.label}: ${values[a] ? fmtDate(values[a]) : '…'} – ${values[b] ? fmtDate(values[b]) : '…'}`;
+    return `${f.label}: ${values[a] ? chipDate(values[a]) : '…'} – ${values[b] ? chipDate(values[b]) : '…'}`;
   }
   const v = values[f.name];
   if (!v) return null;
   if (f.type === 'check') return f.label;
   if (!f.type || f.type === 'select') return `${f.label}: ${(f.options || []).find(([k]) => String(k) === String(v))?.[1] || v}`;
-  return `${f.label}: ${f.type === 'date' ? fmtDate(v) : v}`;
+  return `${f.label}: ${f.type === 'date' ? chipDate(v) : v}`;
 }
 
 function clearField(f, values, defaults) {

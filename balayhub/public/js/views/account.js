@@ -32,6 +32,11 @@ function notifyCard(role) {
         h('button', { class: 'btn btn--secondary btn--sm', style: { marginTop: '10px' }, onclick: load }, 'Try again'));
       return;
     }
+    // A long-term workspace has no alert types yet, so there is nothing to choose.
+    if (!Object.keys(np.types).length) {
+      card.replaceChildren(h('div', { class: 'card__head' }, h('h2', null, 'Notifications')), h('p', { class: 'muted' }, 'Alerts for monthly rentals aren’t available yet.'));
+      return;
+    }
     const boxes = Object.entries(np.types).map(([k, on]) => {
       const input = h('input', { type: 'checkbox', name: k, checked: on });
       return h('label', { class: 'check', key: k }, input, h('span', null, np.labels[k]));

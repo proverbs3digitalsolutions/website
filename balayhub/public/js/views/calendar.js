@@ -2,7 +2,7 @@
 // nightly prices on open nights. Tap an open night to book, block or reprice.
 
 import { get, post, patch, api, qs, ApiError } from '../api.js';
-import { h, icon, peso, fmtDate, field, formModal, openModal, confirmDialog, toast, emptyState, label } from '../ui.js';
+import { h, icon, peso, pesoShort, fmtDate, field, formModal, openModal, confirmDialog, toast, emptyState, label } from '../ui.js';
 import { initFilters, filterBar, changed } from '../filters.js';
 import { state, navigate } from '../app.js';
 import { addDays, newReservationModal, CHANNEL_LABEL } from './reservations.js';
@@ -109,7 +109,7 @@ export async function calendarView(el, { query }) {
         return h('button', {
           class: `cal-cell${d < data.today ? ' is-past' : ''}${d === data.today ? ' is-today' : ''}${rates.has(`${l.unit_id}|${d}`) ? ' has-override' : ''}${p && ['holiday', 'season', 'weekend'].includes(p.kind) ? ` is-${p.kind}` : ''}`,
           type: 'button', 'aria-label': `${l.unit_name}, ${fmtDate(d)}, ${shortPeso(price) || 'no rate'}${why}`, title: p?.label || null,
-          onclick: () => cellMenu(l, d, price, p),
+          onclick: () => cellMenu(l, d, price, p, rates.has(`${l.unit_id}|${d}`)),
         }, shortPeso(price));
       });
       const bars = data.bookings.filter((b) => b.unit_id === l.unit_id).map((b) => {
@@ -165,7 +165,7 @@ export async function calendarView(el, { query }) {
     load();
   }
 
-  function cellMenu(listing, date, price, rule) {
+  function cellMenu(listing, date, price, rule, overridden) {
     if (!canManage) { toast('Only owners and managers can change the calendar.'); return; }
     const m = openModal({
       title: `${listing.unit_name} · ${fmtDate(date)}`,
@@ -173,7 +173,7 @@ export async function calendarView(el, { query }) {
         h('p', { class: 'muted' }, `Nightly price: ${price ? peso(price) : 'not set'}${rule?.label ? ` · ${rule.label}` : ''}`),
         h('button', { class: 'btn btn--primary btn--block', onclick: () => { m.close(); newReservationModal({ unitId: listing.unit_id, checkIn: date, onSaved: load }); } }, icon('plus'), 'New reservation'),
         h('button', { class: 'btn btn--secondary btn--block', onclick: () => { m.close(); blockModal(listing, date); } }, '🔒 Block dates'),
-        h('button', { class: 'btn btn--secondary btn--block', onclick: () => { m.close(); priceModal(listing, date, price); } }, '₱ Set nightly price')),
+        h('button', { class: 'btn btn--secondary btn--block', onclick: () => { m.close(); priceModal(listing, date, price, overridden); } }, '₱ Set nightly price')),
     });
   }
 
@@ -191,14 +191,18 @@ export async function calendarView(el, { query }) {
     });
   }
 
-  function priceModal(listing, date, price) {
+  function priceModal(listing, date, price, overridden) {
+    // The box starts empty: a pre-filled price would be saved for every night in the range and stop following the usual rates.
+    const now = !price ? 'No price is set for this night yet. Type a price to set it for these nights.'
+      : overridden ? `Now ${pesoShort(price)}, set on the calendar. Leave empty to go back to your usual rates.`
+        : `Now ${pesoShort(price)} from your usual rates. Type a price to set it for these nights; leave empty to use your usual rates.`;
     formModal({
       title: `Nightly price · ${listing.unit_name}`, submitText: 'Save price',
       fields: [
         h('div', { class: 'form-row form-row--2' },
           field({ name: 'start_date', label: 'From night', type: 'date', required: true, value: date }),
           field({ name: 'end_date', label: 'To night', type: 'date', required: true, value: date })),
-        field({ name: 'price', label: 'Price per night', type: 'money', value: price, hint: 'A price set here wins over weekend, holiday and season rates. Leave empty to go back to those.' }),
+        field({ name: 'price', label: 'Price per night', type: 'money', hint: now }),
       ],
       onSubmit: async (d) => {
         // 0 would make the night free; a blank still clears the price back to the usual rates.
@@ -206,7 +210,11 @@ export async function calendarView(el, { query }) {
           const m = 'Price must be greater than zero. Leave it blank to use your usual price.';
           throw new ApiError('Please check the highlighted fields.', { status: 400, code: 'VALIDATION', fields: { price: m } });
         }
-        await api('PUT', '/rates', { ...d, unit_id: listing.unit_id }); toast('Price saved.'); load();
+        const res = await api('PUT', '/rates', { ...d, unit_id: listing.unit_id });
+        // A blank price clears any set prices in the range; the server says how many it removed.
+        if (d.price.trim() === '') toast(res.cleared > 0 ? 'Set prices cleared. These nights use your usual rates again.' : 'No set prices to clear. These nights already use your usual rates.');
+        else toast('Price saved.');
+        load();
       },
     });
   }

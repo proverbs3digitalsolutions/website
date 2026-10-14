@@ -363,7 +363,7 @@ async function guestPagesModal(listing) {
     onSubmit: async (d) => { const r = await patch(`/units/${listing.unit_id}`, { public_slug: d.public_slug }); unit.public_slug = (r.unit || d).public_slug || d.public_slug; toast('Page address saved.'); drawLinks(); },
   });
   const linksBox = h('div', { class: 'stack' });
-  const src = h('select', { class: 'input', 'aria-label': 'Where will you share it?' }, Object.entries(SOURCE_LABEL).filter(([k]) => k !== 'quote').map(([k, t]) => h('option', { value: k }, t)));
+  const src = h('select', { class: 'input', id: 'share-src' }, Object.entries(SOURCE_LABEL).filter(([k]) => k !== 'quote').map(([k, t]) => h('option', { value: k }, t)));
   const shareUrl = () => `${booking.url.replace(/#.*$/, '')}#/book/${booking.slug}/${listing.unit_id}?src=${src.value}`;
   const out = h('input', { class: 'input', readonly: true, 'aria-label': 'Share link' });
   function drawLinks() {
@@ -374,7 +374,7 @@ async function guestPagesModal(listing) {
       pageUrl ? h('p', { class: 'small' }, h('a', { class: 'btn btn--secondary btn--sm', href: pageUrl, target: '_blank', rel: 'noopener' }, 'View page'), ' ', h('span', { class: 'muted hp-wrap' }, pageUrl))
         : h('p', { class: 'muted small' }, 'Set your booking page address in Settings and a page address here to get a public page.'),
       !live && h('div', { class: 'alert alert--warn' }, 'This listing is not live on your booking page yet. Turn on your booking page in Settings and tick "Show this listing on my booking page" in Edit.'),
-      booking?.url ? h('div', { class: 'field' }, h('label', null, 'Share link for'), src,
+      booking?.url ? h('div', { class: 'field' }, h('label', { for: 'share-src' }, 'Share link for'), src,
         h('div', { class: 'hp-copy' }, out, h('button', { class: 'btn btn--primary btn--sm', type: 'button', onclick: () => copyText(out.value) }, 'Copy')),
         h('div', { class: 'hint' }, 'Bookings made from this link are tagged with where it was shared, so Reports can show what works.'))
         : h('p', { class: 'muted small' }, 'Set up your booking page in Settings to get share links.'));

@@ -87,9 +87,13 @@ function unitModal(property, unit, onSaved) {
 // ---------------------------------------------------------------- list
 export async function propertiesView(el, { query }) {
   const isOwner = state.user.role === 'owner';
+  const stayOnly = state.user.business_type === 'short_term';
   const defaults = { status: 'active', q: '', type: '', city: '', occupancy: '', sort: '' };
   const filters = initFilters('properties', query, defaults);
   if (filters.status !== 'archived') filters.status = 'active';
+  // Occupancy is a long-term idea: a link to it in a short-term workspace is ignored, and so is the vacant-units sort.
+  if (stayOnly) filters.occupancy = '';
+  if (stayOnly && filters.sort === 'vacant') filters.sort = '';
   const listCard = h('div', { class: 'card' });
   const tabs = h('div', { class: 'tabs', role: 'tablist' });
   // City choices come from every property this person can see, active or archived.
@@ -112,7 +116,7 @@ export async function propertiesView(el, { query }) {
             h('span', { class: 'row__sub' }, `${label(p.property_type)} · ${p.address}, ${p.city}, ${p.province}`)),
           h('div', { class: 'row__end' },
             h('span', { class: 'small' }, `${p.unit_count} unit${p.unit_count === 1 ? '' : 's'}`),
-            p.unit_count ? badge(p.occupied_count === p.unit_count ? 'occupied' : 'vacant', `${p.occupied_count} occupied · ${p.unit_count - p.occupied_count} vacant`) : badge('unpaid', 'No units yet'))))))]
+            p.unit_count ? !stayOnly && badge(p.occupied_count === p.unit_count ? 'occupied' : 'vacant', `${p.occupied_count} occupied · ${p.unit_count - p.occupied_count} vacant`) : badge('unpaid', 'No units yet'))))))]
       : (filtered
         ? emptyState({ title: 'No results found', text: 'No property matches these filters. Try removing a filter.', action: h('button', { class: 'btn btn--secondary', onclick: () => { Object.assign(filters, defaults, { status: filters.status }); rememberFilters('properties', filters); renderBar(); load(); } }, 'Clear filters') })
         : emptyState({
@@ -131,11 +135,11 @@ export async function propertiesView(el, { query }) {
       search: { placeholder: 'Search name, address, city or province' },
       quick: [
         { name: 'type', label: 'Type', all: 'All types', options: PROPERTY_TYPES.map((t) => [t, label(t)]) },
-        { name: 'occupancy', label: 'Occupancy', all: 'Any occupancy', options: [['vacant', 'Has vacant units'], ['full', 'Fully occupied'], ['no_units', 'No units yet']] },
+        ...(stayOnly ? [] : [{ name: 'occupancy', label: 'Occupancy', all: 'Any occupancy', options: [['vacant', 'Has vacant units'], ['full', 'Fully occupied'], ['no_units', 'No units yet']] }]),
       ],
       more: [
         cities.length > 1 && { name: 'city', label: 'City / municipality', all: 'All cities', options: cities.map((c) => [c, c]) },
-        { name: 'sort', label: 'Sort by', all: 'Name (A–Z)', options: [['city', 'City'], ['units', 'Most units'], ['vacant', 'Most vacant units'], ['newest', 'Newest added']] },
+        { name: 'sort', label: 'Sort by', all: 'Name (A–Z)', options: [['city', 'City'], ['units', 'Most units'], ...(stayOnly ? [] : [['vacant', 'Most vacant units']]), ['newest', 'Newest added']] },
       ].filter(Boolean),
     }));
   }

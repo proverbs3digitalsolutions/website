@@ -25,6 +25,10 @@ export async function unreadCount() {
   try { return Number((await get('/inbox/counts')).counts.unread) || 0; } catch { return 0; }
 }
 
+// The header line and the view menu counts. Opening a thread redraws them from the server's counts.
+const unreadText = (n) => (Number(n) ? `${n} unread` : 'Guest messages by email');
+const viewLabel = ([k, t], counts) => `${t}${Number(counts[k]) ? ` (${counts[k]})` : ''}`;
+
 function shortWhen(ts) {
   if (!ts) return '';
   const d = new Date(ts);
@@ -72,8 +76,9 @@ export async function inboxView(el, { params, query, rerender }) {
   const stUnits = units.filter((u) => u.nightly_rate !== null && u.nightly_rate !== undefined);
   const items = h('div');
   const viewSelect = h('select', { class: 'input input--sm', 'aria-label': 'Show' },
-    VIEWS.map(([k, t]) => h('option', { value: k, selected: k === filters.view }, `${t}${counts.counts[k] !== undefined && Number(counts.counts[k]) ? ` (${counts.counts[k]})` : ''}`)));
+    VIEWS.map(([k, t]) => h('option', { value: k, selected: k === filters.view }, viewLabel([k, t], counts.counts))));
   viewSelect.addEventListener('change', () => { filters.view = viewSelect.value; rememberFilters('inbox', filters); load(); });
+  const unreadLine = h('p', null, unreadText(counts.counts.unread));
 
   async function load() {
     history.replaceState(null, '', href(selected));
@@ -106,6 +111,20 @@ export async function inboxView(el, { params, query, rerender }) {
       : emptyState(filtered ? { title: 'No results found', text: 'Try removing a filter.' }
         : filters.view === 'open' ? { title: 'No conversations yet', text: 'Open a reservation and choose "Message guest" to start one. Guest replies show up here.' }
           : { title: 'Nothing here', text: 'Try another view.' }));
+  }
+
+  // Opening a thread reads it on the server, so redraw what still shows it as unread: its row, the header
+  // line, the view counts and the menu badge. If the count request fails, the next page load catches up.
+  async function refreshCounts() {
+    items.querySelector('.inbox__item.is-active')?.classList.remove('is-unread');
+    const counts = await get('/inbox/counts').then((r) => r.counts, () => null);
+    if (!counts) return;
+    const n = Number(counts.unread) || 0;
+    unreadLine.textContent = unreadText(counts.unread);
+    VIEWS.forEach(([k, t], i) => { viewSelect.options[i].textContent = viewLabel([k, t], counts); });
+    document.querySelectorAll('a[href="#/inbox"] .navbadge').forEach((b) => {
+      if (n) { b.textContent = n > 99 ? '99+' : String(n); b.setAttribute('aria-label', `${n} unread`); } else b.remove();
+    });
   }
 
   const bar = filterBar({
@@ -141,8 +160,7 @@ export async function inboxView(el, { params, query, rerender }) {
 
   el.replaceChildren(
     h('div', { class: 'page-head' },
-      h('div', { class: 'page-head__title' }, h('h1', null, 'Inbox'),
-        h('p', null, Number(counts.counts.unread) ? `${counts.counts.unread} unread` : 'Guest messages by email')),
+      h('div', { class: 'page-head__title' }, h('h1', null, 'Inbox'), unreadLine),
       h('div', { class: 'page-head__actions' },
         h('a', { class: 'btn btn--secondary', href: '#/inbox-settings' }, 'Templates & automatic messages'))),
     h('div', { class: 'inbox-alerts' }, statusAlerts(status)),
@@ -151,6 +169,7 @@ export async function inboxView(el, { params, query, rerender }) {
   if (selected) {
     try {
       await renderThread(threadPane, selected, { status, back: href(null), rerender });
+      await refreshCounts();
     } catch (err) {
       threadPane.replaceChildren(h('div', { class: 'card' }, emptyState({ title: err.status === 404 ? 'Not found' : "Couldn't load", text: err.message })));
     }
@@ -346,6 +365,13 @@ function mentionPicker(body, people) {
   return { list, close };
 }
 
+// A template goes below the typed message. Null when the result would be over the message limit, so nothing is added part way.
+export function insertBelow(typed, templateBody) {
+  const head = String(typed ?? '').trimEnd();
+  const next = head ? `${head}\n\n${templateBody}` : templateBody;
+  return next.length > 10000 ? null : next;
+}
+
 function composer(c, templates, status, rerender, assignees = []) {
   let mode = composerModes.get(c.conversation_id) || 'message';
   const subject = h('input', { class: 'input input--sm', name: 'subject', maxlength: 200, placeholder: `Subject (default: ${c.subject})`, 'aria-label': 'Subject' });
@@ -369,6 +395,10 @@ function composer(c, templates, status, rerender, assignees = []) {
   try { body.value = sessionStorage.getItem(draftKey) || ''; } catch { /* ignore */ }
   updateCounter();
   body.addEventListener('input', () => { try { sessionStorage.setItem(draftKey, body.value); } catch { /* ignore */ } });
+  // The subject is kept the same way, so switching conversations doesn't lose it.
+  const subjKey = `bh-draft:subj:${c.conversation_id}`;
+  try { subject.value = sessionStorage.getItem(subjKey) || ''; } catch { /* ignore */ }
+  subject.addEventListener('input', () => { try { sessionStorage.setItem(subjKey, subject.value); } catch { /* ignore */ } });
 
   const tplSelect = h('select', {
     class: 'input input--sm', 'aria-label': 'Insert template',
@@ -378,9 +408,14 @@ function composer(c, templates, status, rerender, assignees = []) {
       if (!tid) return;
       try {
         const r = await get(`/message-templates/${tid}/render${qs({ booking_id: c.booking_id })}`);
-        subject.value = r.subject;
-        body.value = r.body;
+        // The template goes below what the host has typed, and a subject they typed is kept. Too long to fit: add nothing.
+        const next = insertBelow(body.value, r.body);
+        if (next === null) { toast('Adding this template would go over the 10,000-character limit.', 'error'); return; }
+        if (body.value.trim()) toast('Template added below your message.');
+        body.value = next;
+        if (!subject.value.trim()) subject.value = r.subject;
         body.dispatchEvent(new Event('input'));
+        subject.dispatchEvent(new Event('input'));
         body.focus();
       } catch (ex) { toast(ex.message, 'error'); }
     },
@@ -450,7 +485,7 @@ function composer(c, templates, status, rerender, assignees = []) {
           if (scheduleFor) payload.send_at = scheduleFor.toISOString();
         }
         const r = await post(`/inbox/${c.conversation_id}/messages`, payload);
-        try { sessionStorage.removeItem(draftKey); } catch { /* ignore */ }
+        try { sessionStorage.removeItem(draftKey); sessionStorage.removeItem(subjKey); } catch { /* ignore */ }
         if (r.message.status === 'failed') toast(`Saved, but the email was not sent: ${r.message.error}`, 'error');
         else if (r.mentions.length) toast(`Note saved. ${r.mentions.map((x) => x.full_name).join(', ')} mentioned.`);
         else toast({ note: 'Note saved.', scheduled: `Scheduled for ${fmtDateTime(r.message.scheduled_at)}.`, sent: 'Sent.' }[r.message.status] || 'Saved.');
@@ -508,14 +543,24 @@ const TRIGGER_LABEL = {
   after_check_out: 'Days after check-out',
 };
 
-function describeAutomation(a) {
+// The day count sent with an automatic message. The two triggers that don't use a count always store 0, whatever the
+// hidden box holds. On the before and after triggers a blank count goes as null, so the server refuses it.
+export function daysToSend(trigger, days) {
+  if (['booking_created', 'check_in_day'].includes(trigger)) return 0;
+  return days === '' ? null : days;
+}
+
+export function describeAutomation(a) {
   const t = a.send_time;
+  const n = a.offset_days;
+  const days = `${n} day${n === 1 ? '' : 's'}`;
   switch (a.trigger_event) {
     case 'booking_created': return 'Right after a reservation is added (manually or from a channel)';
     case 'check_in_day': return `On check-in day at ${t}`;
-    case 'before_check_in': return `${a.offset_days} day${a.offset_days === 1 ? '' : 's'} before check-in at ${t}`;
-    case 'before_check_out': return `${a.offset_days} day${a.offset_days === 1 ? '' : 's'} before check-out at ${t}`;
-    case 'after_check_out': return `${a.offset_days} day${a.offset_days === 1 ? '' : 's'} after check-out at ${t}`;
+    // Zero days is the day itself; "0 days before" reads oddly.
+    case 'before_check_in': return n ? `${days} before check-in at ${t}` : `On check-in day at ${t}`;
+    case 'before_check_out': return n ? `${days} before check-out at ${t}` : `On check-out day at ${t}`;
+    case 'after_check_out': return n ? `${days} after check-out at ${t}` : `On check-out day at ${t}`;
     default: return a.trigger_event;
   }
 }
@@ -558,12 +603,14 @@ export async function inboxSettingsView(el, { rerender }) {
         field({ name: 'trigger_event', label: 'When', type: 'select', required: true, value: a?.trigger_event || 'before_check_in', placeholderOption: false, options: Object.entries(TRIGGER_LABEL) }),
         h('div', { class: 'form-row form-row--2' },
           field({ name: 'offset_days', label: 'Number of days', type: 'number', min: 0, max: 30, value: a?.offset_days ?? 1, inputmode: 'numeric' }),
-          field({ name: 'send_time', label: 'Send at (Philippine time)', type: 'time', value: a?.send_time || '10:00' })),
+          field({ name: 'send_time', label: 'Send at (Philippine time)', type: 'time', value: a?.send_time || '10:00', hint: 'Leave blank for 10:00.' })),
         field({ name: 'enabled', label: 'Turned on', type: 'checkbox', value: a ? a.enabled : true }),
         h('p', { class: 'hint' }, 'Only guests with an email address get automatic messages. Turning one on never sends to stays whose time has already passed.'),
       ],
       onSubmit: async (d) => {
-        d.offset_days = d.offset_days === '' ? 0 : Number(d.offset_days);
+        d.offset_days = daysToSend(d.trigger_event, d.offset_days);
+        // A blank send time means 10:00, as the form says.
+        d.send_time = d.send_time || '10:00';
         if (a) await patch(`/automations/${a.automation_id}`, d); else await post('/automations', d);
         toast('Automatic message saved.');
         rerender();

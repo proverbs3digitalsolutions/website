@@ -49,5 +49,5 @@ test('the refund suggestion says "If cancelled today" until the reservation is c
 test('the refund card uses the label, and prefills the Record refund form only once cancelled', () => {
   assert.match(refundsSrc, /const cancelled = reservation\.status === 'cancelled';/);
   assert.match(refundsSrc, /suggestionText\(data\.suggestion, cancelled\)/);
-  assert.match(refundsSrc, /value: cancelled \? data\.suggestion\?\.amount : undefined/);
+  assert.match(refundsSrc, /value: cancelled && Number\(data\.suggestion\?\.remaining\) > 0 \? data\.suggestion\.remaining : undefined/);
 });

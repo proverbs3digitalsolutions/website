@@ -10,15 +10,17 @@ const webpush = require('web-push');
 const config = require('../config');
 const { query } = require('../db');
 
+// module: the part of the app the alert is about. All of them are about stays today, so a
+// long-term workspace is offered none (typesFor in src/routes/push.js).
 const TYPES = {
-  new_booking: { label: 'New bookings', roles: ['owner', 'manager'] },
-  guest_message: { label: 'Guest messages', roles: ['owner', 'manager'] },
-  checkin_form: { label: 'Guest check-in forms', roles: ['owner', 'manager'] },
-  payment: { label: 'Online payments', roles: ['owner', 'manager'] },
-  cleaning: { label: 'Cleaning tasks', roles: ['owner', 'manager', 'staff', 'cleaner'] },
-  mention: { label: 'Mentions in notes', roles: ['owner', 'manager'] },
-  assignment: { label: 'Conversations assigned to you', roles: ['owner', 'manager'] },
-  sync_problem: { label: 'Calendar sync problems', roles: ['owner', 'manager'] },
+  new_booking: { label: 'New bookings', roles: ['owner', 'manager'], module: 'stay' },
+  guest_message: { label: 'Guest messages', roles: ['owner', 'manager'], module: 'stay' },
+  checkin_form: { label: 'Guest check-in forms', roles: ['owner', 'manager'], module: 'stay' },
+  payment: { label: 'Online payments', roles: ['owner', 'manager'], module: 'stay' },
+  cleaning: { label: 'Cleaning tasks', roles: ['owner', 'manager', 'staff', 'cleaner'], module: 'stay' },
+  mention: { label: 'Mentions in notes', roles: ['owner', 'manager'], module: 'stay' },
+  assignment: { label: 'Conversations assigned to you', roles: ['owner', 'manager'], module: 'stay' },
+  sync_problem: { label: 'Calendar sync problems', roles: ['owner', 'manager'], module: 'stay' },
 };
 
 // May this person (a users row: role and notify_prefs) get a `type` notification about `propertyId`?

@@ -53,7 +53,7 @@ test('big stat figures scale down on the stay reports cards and keep the no-wrap
 });
 
 test('the Get started sheet takes the full phone width like the other phone sheets (public#25)', () => {
-  assert.match(mediaBody(559), /\.gs-modal\s*\{[^}]*width:\s*100vw[^}]*margin:\s*auto 0 0/);
+  assert.match(mediaBody(559), /dialog\.modal\.modal--wide\s*\{[^}]*width:\s*100vw[^}]*margin:\s*auto 0 0/);
 });
 
 test('tab strips wrap at every width and never scroll sideways, so they need no cue (ops#16)', () => {
@@ -71,11 +71,8 @@ test('low-priority table columns can hide on small phones (money#14)', () => {
   assert.doesNotMatch(mediaBody(480), /(?:td|th)\.col-sm-hide/);
 });
 
-test('wide tables show a clear edge cue (money#14, ops#17): a 24px edge shade on the clipped side', () => {
-  // The cue lives in the background of the rule that lists .table-wrap (the wrapper and the tab strip share it).
-  const cue = [...css.matchAll(/([^{}]*\.table-wrap[^{}]*)\{([^}]*)\}/g)].filter((m) => /background\s*:/.test(m[2])).map((m) => m[2]).join(' ');
-  assert.match(cue, /24px 100% no-repeat scroll/, 'the shade is 24px on each clipped edge');
-  assert.doesNotMatch(cue, /14px 100% no-repeat scroll/, 'the old 14px fade is gone');
+test('wide tables show a clear edge cue (money#14, ops#17): a mask fade on the clipped side, driven by is-more-* classes', () => {
+  assert.match(blocksFor('.table-wrap.is-more-right').join(' '), /mask-image:\s*linear-gradient/);
   assert.doesNotMatch(css, /\.table-wrap,\s*\.tabs/, 'tab strips do not get the cue');
 });
 
@@ -107,6 +104,7 @@ test('the phone block no longer adds extra bottom room for a floating Ask button
   assert.doesNotMatch(css, /body:has\(\.assist-fab:not\(\[hidden\]\)\) \.content/);
 });
 
-test('the Get started sheet gets the full phone width even though ui.js sets an inline width (public#25)', () => {
-  assert.match(mediaBody(559), /dialog\.modal\.gs-modal\s*\{[^}]*width:\s*100vw !important[^}]*margin:\s*auto 0 0/);
+test('the Get started sheet gets the full phone width through the modal--wide class, no !important (public#25, O-c)', () => {
+  assert.match(mediaBody(559), /dialog\.modal\.modal--wide\s*\{[^}]*width:\s*100vw[^}]*margin:\s*auto 0 0/);
+  assert.doesNotMatch(css, /gs-modal[^{]*\{[^}]*!important/);
 });

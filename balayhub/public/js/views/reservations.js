@@ -51,7 +51,12 @@ export function channelFeeToSave(channel, storedFee, typedFee) {
 }
 // Cancelled-booking alert wording. A suggestion comes from the cancellation policy. With no policy, or a Custom one, nothing is suggested, so the text says what is still held.
 export function refundAlertText({ suggestion, refundable, paid, policy }) {
-  if (suggestion) return `Cancelled: policy suggests refunding ${peso(suggestion.amount)} of ${peso(paid)} paid.`;
+  if (suggestion) {
+    const said = `Cancelled: policy suggests refunding ${peso(suggestion.amount)} of ${peso(paid)} paid.`;
+    if (!(Number(suggestion.already_refunded) > 0)) return said;
+    const more = Number(suggestion.remaining) > 0 ? `so ${peso(suggestion.remaining)} more.` : 'so nothing more is suggested.';
+    return `${said} ${peso(suggestion.already_refunded)} is already refunded, ${more}`;
+  }
   const note = policy?.key === 'custom' ? 'A Custom policy has no automatic suggestion.' : 'No cancellation policy is set, so no refund is suggested.';
   return `Cancelled: ${peso(refundable)} of ${peso(paid)} paid is still held. ${note}`;
 }
@@ -59,6 +64,10 @@ export function refundAlertText({ suggestion, refundable, paid, policy }) {
 export const CHANNEL_LABEL = { direct: 'Direct', airbnb: 'Airbnb', booking: 'Booking.com', agoda: 'Agoda', vrbo: 'Vrbo', expedia: 'Expedia', tripcom: 'Trip.com', other: 'Other' };
 export const SOURCE_LABEL = { facebook: 'Facebook', instagram: 'Instagram', messenger: 'Messenger', viber: 'Viber', tiktok: 'TikTok', google: 'Google', whatsapp: 'WhatsApp', email: 'Email', referral: 'Referral', quote: 'Quote', other: 'Other' };
 const METHOD_LABEL = { cash: 'Cash', bank_transfer: 'Bank transfer', gcash: 'GCash', maya: 'Maya', card: 'Card', channel_payout: 'Channel payout', other: 'Other' };
+// Channel payouts only come from a channel booking, so a direct booking's method list leaves them out.
+export function paymentMethodOptions(channel) {
+  return Object.entries(METHOD_LABEL).filter(([k]) => k !== 'channel_payout' || channel !== 'direct');
+}
 
 export function addDays(dateStr, n) {
   const d = new Date(`${dateStr}T00:00:00Z`);
@@ -403,11 +412,14 @@ export async function reservationDetailView(el, { params, rerender }) {
   const recordPayment = () => formModal({
     title: 'Record payment', submitText: 'Save payment', idempotent: true,
     fields: [
-      h('div', { class: 'alert alert--info' }, `Balance: ${peso(r.balance)} of ${peso(r.total_amount)}${Number(r.channel_fee) > 0 && !r.channel_fee_ignored ? ` (after the ${peso(r.channel_fee)} channel fee)` : ''}`),
+      // Below 0 the guest overpaid: the same figure, and wording, as the page (net of refunds already recorded).
+      h('div', { class: 'alert alert--info' }, Number(r.balance) < 0
+        ? `Guest overpaid by ${peso(overpaidAfterRefunds(r.balance, heldInfo?.refunded))}.`
+        : `Balance: ${peso(r.balance)} of ${peso(r.total_amount)}${Number(r.channel_fee) > 0 && !r.channel_fee_ignored ? ` (after the ${peso(r.channel_fee)} channel fee)` : ''}`),
       field({ name: 'amount', label: 'Amount received', type: 'money', required: true, value: Number(r.balance) > 0 ? r.balance : '' }),
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'payment_date', label: 'Date received', type: 'date', required: true, value: today, max: today }),
-        field({ name: 'payment_method', label: 'Method', type: 'select', required: true, value: r.channel === 'direct' ? 'gcash' : 'channel_payout', placeholderOption: false, options: Object.entries(METHOD_LABEL) })),
+        field({ name: 'payment_method', label: 'Method', type: 'select', required: true, value: r.channel === 'direct' ? 'gcash' : 'channel_payout', placeholderOption: false, options: paymentMethodOptions(r.channel) })),
       field({ name: 'reference_number', label: 'Reference no.', maxlength: 100 }),
       // Channel payouts come from Airbnb/Booking.com, not the guest: no guest receipt by default.
       r.guest_email && field({ name: 'send_receipt', label: `Email a receipt to ${r.guest_email}`, type: 'checkbox', value: r.channel === 'direct' }),
@@ -435,17 +447,18 @@ export async function reservationDetailView(el, { params, rerender }) {
           field({ name: 'channel', label: 'Booked through', type: 'select', value: r.channel, placeholderOption: false, options: Object.entries(CHANNEL_LABEL) })),
         h('div', { class: 'form-row form-row--2' },
           field({ name: 'accommodation_total', label: 'Accommodation total', type: 'money', value: r.accommodation_total }),
-          field({ name: 'cleaning_fee', label: 'Cleaning fee', type: 'money', value: r.cleaning_fee })),
+          field({ name: 'cleaning_fee', label: 'Cleaning fee', type: 'money', value: r.cleaning_fee, hint: 'Leave blank for 0.' })),
         h('div', { class: 'form-row form-row--2' },
-          field({ name: 'other_fees', label: 'Other fees', type: 'money', value: r.other_fees }),
-          field({ name: 'channel_fee', label: 'Channel fee / commission', type: 'money', value: r.channel_fee, hint: 'What the channel keeps. Used in owner statements.' })),
+          field({ name: 'other_fees', label: 'Other fees', type: 'money', value: r.other_fees, hint: 'Leave blank for 0.' }),
+          field({ name: 'channel_fee', label: 'Channel fee / commission', type: 'money', value: r.channel_fee, hint: 'What the channel keeps. Used in owner statements. Leave blank for 0.' })),
         field({ name: 'notes', label: 'Notes', type: 'textarea', value: r.notes, maxlength: 1000 }),
       ],
       onSubmit: async (d) => {
         d.channel_fee = channelFeeToSave(d.channel, r.channel_fee, d.channel_fee);
         const changes = changedFields(r, d);
-        if (Object.keys(changes).length) await patch(`/reservations/${r.booking_id}`, changes);
-        toast(Object.keys(changes).length ? 'Reservation updated.' : 'No changes to save.'); rerender();
+        // The server says whether it wrote anything (a blank fee is stored as 0, which can be no change at all).
+        const saved = Object.keys(changes).length ? await patch(`/reservations/${r.booking_id}`, changes) : { changed: false };
+        toast(saved.changed ? 'Reservation updated.' : 'No changes to save.'); rerender();
       },
     });
     const form = modal.el.querySelector('form');

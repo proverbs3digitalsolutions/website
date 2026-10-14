@@ -41,6 +41,7 @@ extendTranslations({
   'Qty': 'Dami', 'Used': 'Nagamit', 'Restocked': 'Nadagdag', 'Used or restocked': 'Nagamit o nadagdag', 'Save': 'I-save', 'Cancel': 'Kanselahin',
   'No supplies are set up for this property yet.': 'Wala pang supplies na naka-set up para sa property na ito.',
   'Enter a quantity for at least one item.': 'Maglagay ng dami sa kahit isang gamit.', 'Supplies saved.': 'Na-save ang supplies.',
+  'Quantity must be a whole number.': 'Dapat buong bilang ang dami.',
   '{name} was out of stock, so it wasn\'t recorded.': 'Ubos na ang {name}, kaya hindi ito na-record.', 'Tell your manager.': 'Sabihan ang manager mo.',
   'Title': 'Pamagat', 'What needs fixing?': 'Ano ang kailangang ayusin?', 'Priority': 'Prayoridad',
   'Low': 'Mababa', 'Medium': 'Katamtaman', 'High': 'Mataas', 'Urgent': 'Madalian',
@@ -94,7 +95,7 @@ function taskText(t) {
 
 async function copyText(text) {
   try { await navigator.clipboard.writeText(text); toast('Copied. Paste it in Messenger or Viber.'); } catch {
-    openModal({ title: 'Copy this text', body: h('textarea', { class: 'input', rows: 12, readonly: true, value: text }) });
+    openModal({ title: 'Copy this text', body: h('textarea', { class: 'input', rows: 12, readonly: true, value: text, 'aria-label': 'Task text to copy' }) });
   }
 }
 
@@ -495,18 +496,30 @@ function lostFoundModal(task, onSaved) {
 async function suppliesModal(task, onSaved) {
   const { supplies } = await get(`/supplies${qs({ property_id: task.property_id })}`);
   const rows = (supplies || []).map((sp) => ({
-    sp, qty: h('input', { type: 'number', inputmode: 'numeric', min: 0, max: 9999, class: 'input hk-qty', 'aria-label': `${T('Qty')}: ${sp.name}` }),
+    sp, key: `qty-${sp.supply_id}`, qty: h('input', { type: 'number', inputmode: 'numeric', min: 0, max: 9999, class: 'input hk-qty', 'aria-label': `${T('Qty')}: ${sp.name}` }),
     kind: h('select', { class: 'input', 'aria-label': `${T('Used or restocked')}: ${sp.name}` }, h('option', { value: 'used' }, T('Used')), h('option', { value: 'restocked' }, T('Restocked'))),
   }));
   formModal({
     title: T('Supplies used'), submitText: T('Save'),
+    // Each row has its own error line (the .error inside .field), so a refused quantity shows on its row.
     fields: rows.length
-      ? h('div', { class: 'hk-supply-list' }, rows.map((r) => h('div', { class: 'hk-supply' },
-        h('div', null, h('strong', null, r.sp.name), h('div', { class: 'small muted' }, r.sp.unit_label || '')),
-        r.qty, r.kind)))
+      ? h('div', { class: 'hk-supply-list' }, rows.map((r) => h('div', { class: 'field', style: { gap: '0' }, 'data-field': r.key },
+        h('div', { class: 'hk-supply' },
+          h('div', null, h('strong', null, r.sp.name), h('div', { class: 'small muted' }, r.sp.unit_label || '')),
+          r.qty, r.kind),
+        h('div', { class: 'error' }))))
       : h('p', { class: 'muted' }, T('No supplies are set up for this property yet.')),
     onSubmit: async () => {
-      const items = rows.filter((r) => Number(r.qty.value) > 0).map((r) => ({ supply_id: r.sp.supply_id, kind: r.kind.value, quantity: Math.floor(Number(r.qty.value)) }));
+      // A decimal is refused on its own row and never rounded: nothing is sent until every quantity is whole.
+      const filled = rows.filter((r) => Number(r.qty.value) > 0);
+      const decimal = filled.filter((r) => !Number.isInteger(Number(r.qty.value)));
+      if (decimal.length) {
+        const msg = T('Quantity must be a whole number.');
+        const err = new ApiError(msg, { status: 400, fields: Object.fromEntries(decimal.map((r) => [r.key, msg])) });
+        err.onRender = (box) => box.replaceChildren();
+        throw err;
+      }
+      const items = filled.map((r) => ({ supply_id: r.sp.supply_id, kind: r.kind.value, quantity: Number(r.qty.value) }));
       if (!items.length) throw new ApiError(T('Enter a quantity for at least one item.'), { status: 400 });
       const { skipped } = await post(`/cleaning-tasks/${task.task_id}/supplies`, { items });
       toast(skipped.length ? [...skipped.map((name) => T('{name} was out of stock, so it wasn\'t recorded.', { name })), T('Tell your manager.')].join(' ') : T('Supplies saved.'), skipped.length ? 'error' : 'info');
@@ -586,6 +599,11 @@ export async function housekeepingDetailView(el, { params, rerender }) {
     if (left > 0 && !await confirmDialog({ title: T('Mark as done?'), text: T('{n} checklist item(s) not ticked yet.', { n: left }), confirmText: T('Mark done anyway'), cancelText: T('Cancel') })) return;
     setStatus('done', T('Cleaning done. Listing marked clean.'));
   };
+  // Reopening clears a pay that was typed or worked out, so it asks first when there is one.
+  const reopen = async () => {
+    if (t.pay_amount != null && !await confirmDialog({ title: 'Reopen this clean?', text: `Its pay of ${peso(t.pay_amount)} is cleared. It's worked out again from the rate when the clean is finished, so check the amount then.`, confirmText: 'Reopen' })) return;
+    setStatus('in_progress', T('Reopened.'));
+  };
 
   const items = h('ul', { class: 'hk-checklist' }, t.checklist.map((c, i) => h('li', null,
     h('label', { class: 'check' },
@@ -624,7 +642,7 @@ export async function housekeepingDetailView(el, { params, rerender }) {
       h('div', { class: 'page-head__actions' },
         startBtn,
         open && h('button', { class: 'btn btn--primary', onclick: finish }, T('Mark done')),
-        t.status === 'done' && !isCleaner() && h('button', { class: 'btn btn--secondary', onclick: () => setStatus('in_progress', T('Reopened.')) }, T('Reopen')),
+        t.status === 'done' && !isCleaner() && h('button', { class: 'btn btn--secondary', onclick: reopen }, T('Reopen')),
         isManager && t.status === 'done' && t.checklist.length > 0 && h('button', { class: 'btn btn--primary', onclick: () => inspectModal(t, rerender) }, 'Inspect'),
         isManager && h('button', { class: 'btn btn--secondary', onclick: () => copyText(taskText(t)) }, 'Copy for cleaner'),
         isManager && open && h('button', { class: 'btn btn--ghost', onclick: async () => {

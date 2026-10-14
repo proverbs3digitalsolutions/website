@@ -7,6 +7,8 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 // No digit cap here: an amount that is too big must reach the "too large" check in validate().
 const MONEY_RE = /^-?\d+(\.\d{1,2})?$/;
+// A comma is accepted only as a thousands separator ("1,000", "12,500.50"); "1,5" is refused, not read as 15.
+const MONEY_COMMA_RE = /^-?\d{1,3}(,\d{3})+(\.\d{1,2})?$/;
 
 function isValidDate(s) {
   const m = DATE_RE.exec(s);
@@ -20,7 +22,11 @@ function isValidDate(s) {
 function parseMoney(raw) {
   if (typeof raw === 'number') raw = String(raw);
   if (typeof raw !== 'string') return null;
-  const s = raw.replace(/[₱,\s]/g, '').replace(/^PHP/i, '');
+  let s = raw.replace(/[₱\s]/g, '').replace(/^PHP/i, '');
+  if (s.includes(',')) {
+    if (!MONEY_COMMA_RE.test(s)) return null;
+    s = s.replace(/,/g, '');
+  }
   if (!MONEY_RE.test(s)) return null;
   const [whole, frac = ''] = s.split('.');
   return `${whole}.${frac.padEnd(2, '0')}`.replace(/^(-?)0+(\d)/, '$1$2');

@@ -412,13 +412,24 @@ const templateSpec = {
   body: { type: 'text', required: true, max: 5000, label: 'Message' },
 };
 
-// Refuse {{names}} that messaging doesn't know: they would reach the guest as literal braces.
-function checkVariables(body) {
+// Refuse {{names}} that messaging doesn't know (they would reach the guest as literal braces), and a name another
+// active template already uses (case and end spaces ignored, like add-on names; archived templates don't count).
+// Both problems are reported in one answer. ponytail: check then write, so two saves at the same instant could both pass.
+async function checkTemplate(orgId, body, current = null) {
   const fields = {};
   for (const k of ['subject', 'body']) {
     if (typeof body[k] !== 'string') continue;
     const bad = [...new Set([...body[k].matchAll(/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g)].map((m) => m[1]))].filter((n) => !messaging.VARIABLE_NAMES.includes(n));
     if (bad.length) fields[k] = `Unknown ${bad.length === 1 ? 'variable' : 'variables'}: ${bad.map((n) => `{{${n}}}`).join(', ')}. Use only the names listed under the message.`;
+  }
+  // Saving the same name again (or only changing its case) is not a rename, so an older duplicate can still be edited.
+  const renamed = typeof body.name === 'string' && (!current || body.name.toLowerCase() !== current.name.trim().toLowerCase());
+  if (renamed) {
+    const dup = await one(
+      `SELECT btrim(name) AS name FROM message_templates
+        WHERE organization_id = $1 AND NOT archived AND lower(btrim(name)) = lower(btrim($2)) AND template_id IS DISTINCT FROM $3 LIMIT 1`,
+      [orgId, body.name, current?.template_id ?? null]);
+    if (dup) fields.name = `You already have a template called "${dup.name}".`;
   }
   if (Object.keys(fields).length) throw validationError(fields);
 }
@@ -447,7 +458,7 @@ router.post('/message-templates/language', owners, ah(async (req, res) => {
 
 router.post('/message-templates', owners, ah(async (req, res) => {
   const body = validate(req.body, templateSpec);
-  checkVariables(body);
+  await checkTemplate(req.user.organization_id, body);
   const t = await one(
     `INSERT INTO message_templates (organization_id, name, subject, body, created_by) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
     [req.user.organization_id, body.name, body.subject, body.body, req.user.user_id]);
@@ -458,7 +469,7 @@ router.post('/message-templates', owners, ah(async (req, res) => {
 router.patch('/message-templates/:id', owners, ah(async (req, res) => {
   const t = await loadTemplate(req.user, uuidParam(req.params.id));
   const body = validate(req.body, templateSpec, { partial: true });
-  checkVariables(body);
+  await checkTemplate(req.user.organization_id, body, t);
   const keys = Object.keys(body).filter((k) => body[k] !== null);
   if (keys.length) {
     await query(`UPDATE message_templates SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')}, updated_at = now() WHERE template_id = $1`,
@@ -488,6 +499,8 @@ router.get('/message-templates/:id/render', ah(async (req, res) => {
 
 // ---------------------------------------------------------------- automatic messages
 const TRIGGERS = ['booking_created', 'before_check_in', 'check_in_day', 'before_check_out', 'after_check_out'];
+// These count a number of days, so the box can't be left blank for them.
+const DAY_TRIGGERS = ['before_check_in', 'before_check_out', 'after_check_out'];
 const automationSpec = {
   name: { type: 'string', required: true, max: 120, label: 'Name' },
   template_id: { type: 'uuid', required: true, label: 'Template' },
@@ -516,6 +529,7 @@ router.get('/automations', ah(async (req, res) => {
 
 router.post('/automations', owners, ah(async (req, res) => {
   const body = validate(req.body, automationSpec);
+  if (DAY_TRIGGERS.includes(body.trigger_event) && body.offset_days === null) throw validationError({ offset_days: 'Enter the number of days.' });
   await loadTemplate(req.user, body.template_id);
   const a = await one(
     `INSERT INTO automations (organization_id, template_id, name, trigger_event, offset_days, send_time, enabled)
@@ -528,6 +542,9 @@ router.post('/automations', owners, ah(async (req, res) => {
 router.patch('/automations/:id', owners, ah(async (req, res) => {
   const a = await loadAutomation(req.user, uuidParam(req.params.id));
   const body = validate(req.body, automationSpec, { partial: true });
+  // Checked against the trigger and number of days the automation will have once saved.
+  const days = body.offset_days === undefined ? a.offset_days : body.offset_days;
+  if (DAY_TRIGGERS.includes(body.trigger_event || a.trigger_event) && days === null) throw validationError({ offset_days: 'Enter the number of days.' });
   const keys = Object.keys(body).filter((k) => body[k] !== null);
   if (body.template_id) await loadTemplate(req.user, body.template_id);
   if (keys.length) {

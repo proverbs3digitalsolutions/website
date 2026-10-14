@@ -23,10 +23,16 @@ function isPushService(url) {
   } catch { return false; }
 }
 
+// The types a person can receive, given their role and the workspace type. Stay-only types
+// are left out of a long-term workspace, which has no stays to tell anyone about.
+const typesFor = (role, businessType) => Object.keys(push.TYPES).filter((key) => push.TYPES[key].roles.includes(role)
+  && (businessType !== 'long_term' || push.TYPES[key].module !== 'stay'));
+
 router.get('/push/settings', ah(async (req, res) => {
   const u = await one('SELECT notify_prefs FROM users WHERE user_id = $1', [req.user.user_id]);
   const { rows } = await query('SELECT device, created_at FROM push_subscriptions WHERE user_id = $1 ORDER BY created_at', [req.user.user_id]);
-  const types = Object.entries(push.TYPES).filter(([key, t]) => DEVICE_TYPES.includes(key) && t.roles.includes(req.user.role))
+  const shown = typesFor(req.user.role, req.user.business_type);
+  const types = Object.entries(push.TYPES).filter(([key]) => DEVICE_TYPES.includes(key) && shown.includes(key))
     .map(([key, t]) => ({ key, label: t.label, on: u.notify_prefs[key] !== false }));
   res.json({ public_key: push.vapid().publicKey, devices: rows, types });
 }));
@@ -78,8 +84,6 @@ router.post('/push/test', ah(async (req, res) => {
 // Each person picks which notification types they get (only those their role can receive) and,
 // for owners and managers, which properties (null = all). Stored in users.notify_prefs: a
 // { type: boolean } map plus an optional property_ids list; no list means all properties.
-const typesFor = (role) => Object.keys(push.TYPES).filter((key) => push.TYPES[key].roles.includes(role));
-
 async function visibleProperties(user) {
   const params = [];
   const { rows } = await query(
@@ -92,7 +96,7 @@ async function prefsView(user) {
   const { notify_prefs: prefs } = await one('SELECT notify_prefs FROM users WHERE user_id = $1', [user.user_id]);
   const properties = await visibleProperties(user);
   const visible = new Set(properties.map((p) => p.property_id));
-  const keys = typesFor(user.role);
+  const keys = typesFor(user.role, user.business_type);
   return {
     types: Object.fromEntries(keys.map((key) => [key, prefs[key] !== false])),
     labels: Object.fromEntries(keys.map((key) => [key, push.TYPES[key].label])),
@@ -109,7 +113,7 @@ router.patch('/account/notify-prefs', ah(async (req, res) => {
   const user = req.user;
   const body = req.body && typeof req.body === 'object' ? req.body : {};
   const { types, property_ids: propertyIds } = body;
-  const keys = typesFor(user.role);
+  const keys = typesFor(user.role, user.business_type);
   const fields = {};
   if (types !== undefined && (!types || typeof types !== 'object' || Array.isArray(types)
       || Object.entries(types).some(([key, on]) => !keys.includes(key) || typeof on !== 'boolean'))) {
