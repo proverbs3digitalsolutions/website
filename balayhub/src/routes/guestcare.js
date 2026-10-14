@@ -122,7 +122,7 @@ router.get('/reviews', ah(async (req, res) => {
   if (isValidDate(q.to)) { params.push(q.to); where.push(`(r.created_at AT TIME ZONE 'Asia/Manila')::date <= $${params.length}`); }
   if (q.has_comment === '1') where.push(`COALESCE(btrim(r.comment), '') <> ''`);
   if (q.q) {
-    params.push(`%${String(q.q).slice(0, 100)}%`);
+    params.push(`%${String(q.q).slice(0, 100).replace(/[%_\\]/g, '\\$&')}%`);
     where.push(`(g.full_name ILIKE $${params.length} OR b.guest_label ILIKE $${params.length} OR r.comment ILIKE $${params.length} OR u.unit_name ILIKE $${params.length})`);
   }
   const from = `FROM guest_reviews r JOIN bookings b USING (booking_id) JOIN units u ON u.unit_id = b.unit_id JOIN properties p ON p.property_id = u.property_id
@@ -172,7 +172,7 @@ router.get('/discount-codes', managers, ah(async (req, res) => {
   // Issued = a personal returning-guest code (issued_to_booking_id is set); the rest were made by the host.
   if (q.issued === 'yes') where.push('d.issued_to_booking_id IS NOT NULL');
   if (q.issued === 'no') where.push('d.issued_to_booking_id IS NULL');
-  if (q.q) { params.push(`%${String(q.q).slice(0, 60)}%`); where.push(`(d.code ILIKE $${params.length} OR d.description ILIKE $${params.length})`); }
+  if (q.q) { params.push(`%${String(q.q).slice(0, 60).replace(/[%_\\]/g, '\\$&')}%`); where.push(`(d.code ILIKE $${params.length} OR d.description ILIKE $${params.length})`); }
   const SORTS = { newest: 'd.created_at DESC', code: 'd.code', most_used: 'uses DESC, d.code', ending: 'd.valid_until NULLS LAST, d.code' };
   const { rows } = await query(
     `SELECT d.*, (d.issued_to_booking_id IS NOT NULL) AS issued, ${USES} AS uses,

@@ -5,11 +5,16 @@ import { h, brand, toast } from '../ui.js';
 import { t, tServer, initGuestLang, langToggle, fmtDateL as fmtDate, extendTranslations } from '../i18n.js';
 
 extendTranslations({
+  'Too many attempts': 'Napakaraming subok',
+  'Something went wrong': 'May nagkaproblema',
   'Thank you!': 'Salamat po!',
   'Would you share your experience?': 'Gusto mo bang ibahagi ang karanasan mo?',
   'A public review helps other travellers find {host}. It only takes a minute.': 'Nakakatulong ang public review para mahanap ng ibang biyahero si {host}. Isang minuto lang ito.',
   'Opens in a new tab': 'Bubukas sa bagong tab',
 });
+
+// The heading follows the cause: only a 404 is a bad link.
+const failTitle = (err) => (err.status === 404 ? t('Link not found') : err.status === 429 ? t('Too many attempts') : t('Something went wrong'));
 
 const LABELS = ['', 'Poor', 'Fair', 'Good', 'Very good', 'Excellent'];
 
@@ -39,7 +44,7 @@ export async function guestReviewView(el, { params }) {
     h('p', { class: 'gc__foot muted small' }, t('Your feedback goes only to your host. '), h('a', { href: '#/privacy' }, t('Privacy notice'))));
   let d;
   try { d = await get(`/public/review/${encodeURIComponent(token)}`); } catch (err) {
-    el.replaceChildren(page(h('div', { class: 'card' }, h('h1', null, t('Link not found')), h('p', { class: 'muted' }, err.message))));
+    el.replaceChildren(page(h('div', { class: 'card' }, h('h1', null, failTitle(err)), h('p', { class: 'muted' }, tServer(err.message)))));
     return;
   }
   initGuestLang(d.guest_language);

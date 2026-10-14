@@ -6,7 +6,7 @@ const { one, query, tx } = require('../db');
 const { HttpError, ah } = require('../lib/http');
 const { validate } = require('../lib/validate');
 const { audit } = require('../lib/audit');
-const { sendMail } = require('../lib/mailer');
+const mailer = require('../lib/mailer');
 const {
   hashPassword, verifyPassword, burnPasswordCheck, newToken, hashToken,
   createSession, destroySession, requireAuth, rateLimit,
@@ -23,12 +23,11 @@ const authLimiter = rateLimit({
 // Per-IP cap regardless of email, against password spraying.
 const ipLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 60, failedOnly: true, key: (req) => `ip|${req.ip}` });
 // Email-sending routes. Resend-verification is capped per signed-in user. Forgot-password is
-// capped visibly per IP+email (and per IP), while the per-email cap is silent (same 200, no mail),
-// so a stranger can't use it to show the real owner an error or block their reset emails.
+// capped visibly per IP+email (and per IP). There is no per-email cap: a stranger could use it to
+// block the real owner's reset emails, so repeat requests are de-duplicated in the route instead.
 const emailLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, key: (req) => `mail|${req.user?.user_id || req.ip}` });
 const emailIpLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, key: (req) => `mailip|${req.ip}` });
 const forgotPairLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, key: (req) => `forgot|${req.ip}|${normEmail(req)}` });
-const forgotEmailLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, silent: true, key: (req) => `forgotmail|${normEmail(req) || req.ip}` });
 // Signup sends a verification email to any address, so EVERY attempt counts toward a per-IP cap.
 const signupLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 10, key: (req) => `signup|${req.ip}` });
 
@@ -51,9 +50,9 @@ function publicUser(u) {
   };
 }
 
-async function issueToken(userId, purpose, hours) {
+async function issueToken(userId, purpose, hours, db = { query }) {
   const token = newToken();
-  await query(
+  await db.query(
     `INSERT INTO auth_tokens (token_hash, user_id, purpose, expires_at)
      VALUES ($1, $2, $3, now() + make_interval(hours => $4))`,
     [hashToken(token), userId, purpose, hours],
@@ -64,7 +63,7 @@ async function issueToken(userId, purpose, hours) {
 async function sendVerification(user) {
   const token = await issueToken(user.user_id, 'verify_email', 48);
   const link = `${config.appUrl}/#/verify?token=${encodeURIComponent(token)}`;
-  const mail = await sendMail({
+  const mail = await mailer.sendMail({
     to: user.email,
     subject: 'Verify your BalayHub email',
     text: `Hi ${user.full_name},\n\nConfirm your email to start using BalayHub:\n${link}\n\nThis link expires in 48 hours. If you didn't sign up, you can ignore this email.`,
@@ -211,20 +210,39 @@ router.post('/auth/resend-verification', requireAuth, emailIpLimiter, emailLimit
 }));
 
 // ---------------------------------------------------------------- password reset
-router.post('/auth/forgot-password', emailIpLimiter, forgotPairLimiter, forgotEmailLimiter, ah(async (req, res) => {
-  const { email } = validate(req.body, { email: { type: 'email', required: true, label: 'Email' } });
+// Issue the token and send the email. Skipped when an unused reset token for this user is under
+// 5 minutes old: that email is still valid for an hour, and repeat requests can't flood the inbox.
+async function sendReset(email) {
   const user = await one(`SELECT * FROM users WHERE lower(email) = $1 AND account_status = 'active'`, [email]);
-  let devLink;
-  if (user && !req.rateLimited) {
-    const token = await issueToken(user.user_id, 'reset_password', 1);
-    const link = `${config.appUrl}/#/reset-password?token=${encodeURIComponent(token)}`;
-    await sendMail({
-      to: user.email,
-      subject: 'Reset your BalayHub password',
-      text: `Hi ${user.full_name},\n\nUse this link to choose a new password:\n${link}\n\nThe link expires in 1 hour. If you didn't ask for this, you can ignore this email.`,
-    });
-    if (config.exposeDevLinks) devLink = link;
-  }
+  if (!user) return undefined;
+  // The check and the insert share one transaction under a per-user lock, so parallel requests queue
+  // up and only the first one issues a token. Only that request sends the email.
+  const token = await tx(async (db) => {
+    await db.query(`SELECT pg_advisory_xact_lock(hashtext('reset:' || $1))`, [user.user_id]);
+    const { rows: [recent] } = await db.query(
+      `SELECT 1 FROM auth_tokens WHERE user_id = $1 AND purpose = 'reset_password' AND used_at IS NULL
+          AND expires_at > now() AND created_at > now() - interval '5 minutes'`,
+      [user.user_id],
+    );
+    if (recent) return null;
+    return issueToken(user.user_id, 'reset_password', 1, db);
+  });
+  if (!token) return undefined;
+  const link = `${config.appUrl}/#/reset-password?token=${encodeURIComponent(token)}`;
+  await mailer.sendMail({
+    to: user.email,
+    subject: 'Reset your BalayHub password',
+    text: `Hi ${user.full_name},\n\nUse this link to choose a new password:\n${link}\n\nThe link expires in 1 hour. If you didn't ask for this, you can ignore this email.`,
+  });
+  return link;
+}
+
+router.post('/auth/forgot-password', emailIpLimiter, forgotPairLimiter, ah(async (req, res) => {
+  const { email } = validate(req.body, { email: { type: 'email', required: true, label: 'Email' } });
+  // Answer before the lookup and send finish, so timing doesn't show whether the account exists.
+  // Development (dev links on) waits, because the page shows the link; production never does.
+  const work = sendReset(email).catch((err) => { console.error(`[auth] forgot-password failed: ${err.message}`); });
+  const devLink = config.exposeDevLinks ? await work : undefined;
   // Same response either way so the form doesn't reveal which emails exist.
   res.json({ ok: true, message: 'If an account exists for that email, we sent a reset link.', devResetLink: devLink });
 }));
@@ -245,6 +263,8 @@ router.post('/auth/reset-password', authLimiter, ah(async (req, res) => {
     if (!row) throw new HttpError(400, 'This reset link is invalid or has expired. Request a new one.', { code: 'TOKEN_INVALID' });
     // Resetting via email also proves the address.
     await db.query('UPDATE users SET password_hash = $1, email_verified_at = COALESCE(email_verified_at, now()) WHERE user_id = $2', [passwordHash, row.user_id]);
+    // Any other reset link already emailed to this user is retired too, so an older email can't reset the password later.
+    await db.query(`UPDATE auth_tokens SET used_at = now() WHERE user_id = $1 AND purpose = 'reset_password' AND used_at IS NULL`, [row.user_id]);
     await db.query('DELETE FROM sessions WHERE user_id = $1', [row.user_id]);
     const { rows: [u] } = await db.query('SELECT * FROM users WHERE user_id = $1', [row.user_id]);
     await audit(db, u, 'auth.password_reset', 'user', u.user_id);

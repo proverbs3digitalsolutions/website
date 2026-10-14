@@ -5,6 +5,11 @@ import { h, brand, field, readForm, clearErrors, showErrors } from '../ui.js';
 import { t, tServer, tFields, guestLang, initGuestLang, langToggle, extendTranslations, fmtDateL as fmtDate } from '../i18n.js';
 
 extendTranslations({
+  'Too many attempts': 'Napakaraming subok',
+  'Something went wrong': 'May nagkaproblema',
+  'Please enter your full name.': 'Ilagay ang buong pangalan mo.',
+  'Please enter your mobile number.': 'Ilagay ang mobile number mo.',
+  'Please enter a valid email address.': 'Maglagay ng tamang email address.',
   'Your quote': 'Quote mo',
   'Quote from {host}': 'Quote mula kay {host}',
   'Accommodation': 'Tirahan',
@@ -43,6 +48,9 @@ extendTranslations({
   '1 night': '1 gabi',
 });
 
+// Only a 404 is a bad link; a rate limit or a server error says so instead.
+const failTitle = (err) => (err.status === 404 ? t('Quote not found') : err.status === 429 ? t('Too many attempts') : t('Something went wrong'));
+
 const peso = (v) => { const n = Number(v || 0); return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`; };
 const fmtDateTime = (iso) => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Manila' });
 
@@ -65,7 +73,7 @@ export async function quoteView(el, { params }) {
     if (err.code === 'QUOTE_EXPIRED' || err.status === 410) {
       const hostName = err.data?.host?.name || t('the host');
       stateCard(null, t('This offer has expired'), t('Please ask {host} for a new quote.', { host: hostName }));
-    } else stateCard(null, t('Quote not found'), err.message);
+    } else stateCard(null, failTitle(err), tServer(err.message));
     return;
   }
   const host = q.host.name;
@@ -104,20 +112,20 @@ export async function quoteView(el, { params }) {
     if (busy) return;
     clearErrors(form);
     formError.replaceChildren();
-    if (rules && !form.elements.accept_rules.checked) {
-      showErrors(form, { accept_rules: t('Please read and agree to the house rules.') });
-      return;
-    }
-    if (!form.elements.consent.checked) {
-      showErrors(form, { consent: t('Please tick this box to continue.') });
-      return;
-    }
+    // Everything is checked in one pass so the guest sees every problem at once; the server stays the judge.
+    const v = readForm(form);
+    const problems = {};
+    if (!String(v.name || '').trim()) problems.name = t('Please enter your full name.');
+    if (!String(v.email || '').trim() || !/^\S+@\S+\.\S+$/.test(String(v.email).trim())) problems.email = t('Please enter a valid email address.');
+    if (!String(v.phone || '').trim()) problems.phone = t('Please enter your mobile number.');
+    if (rules && !form.elements.accept_rules.checked) problems.accept_rules = t('Please read and agree to the house rules.');
+    if (!form.elements.consent.checked) problems.consent = t('Please tick this box to continue.');
+    if (Object.keys(problems).length) { showErrors(form, problems); return; }
     busy = true;
     submit.disabled = true;
     submit.textContent = t('Opening secure payment…');
-    const d = readForm(form);
     try {
-      const r = await post(`/public/quote/${token}/checkout`, { name: d.name, email: d.email, phone: d.phone, accept_rules: rules ? true : undefined, consent: true });
+      const r = await post(`/public/quote/${token}/checkout`, { name: v.name, email: v.email, phone: v.phone, accept_rules: rules ? true : undefined, consent: true });
       location.href = r.checkout_url;
     } catch (err) {
       if (err.code === 'QUOTE_EXPIRED' || err.status === 410) { redraw(); return; }

@@ -75,6 +75,13 @@ function checkSlugFormat(slug) {
   }
 }
 
+// Postal codes are 4 digits. A blank one is allowed.
+function checkPostalCode(code) {
+  if (code && !/^\d{4}$/.test(code)) {
+    throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { postal_code: 'Postal code should be 4 digits.' } });
+  }
+}
+
 // Listing tags: lowercase, trimmed, 1 to 30 characters, at most 10 per listing, no repeats.
 const TAG_LIMIT = 10;
 const tagError = (msg) => new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { tags: msg } });
@@ -141,7 +148,7 @@ router.get('/properties', ah(async (req, res) => {
   const status = req.query.status === 'archived' ? 'archived' : 'active';
   params.push(status); where.push(`p.status = $${params.length}`);
   if (req.query.q) {
-    params.push(`%${String(req.query.q).slice(0, 100)}%`);
+    params.push(`%${String(req.query.q).slice(0, 100).replace(/[%_\\]/g, '\\$&')}%`);
     const n = params.length;
     where.push(`(p.property_name ILIKE $${n} OR p.address ILIKE $${n} OR p.city ILIKE $${n} OR p.province ILIKE $${n})`);
   }
@@ -178,6 +185,7 @@ router.get('/properties', ah(async (req, res) => {
 
 router.post('/properties', requireRole('owner'), ah(async (req, res) => {
   const body = validate(req.body, propertySpec);
+  checkPostalCode(body.postal_code);
   const org = req.user.organization_id;
   if (!req.body.confirm_duplicate) {
     const { rows: dupes } = await query(
@@ -211,6 +219,7 @@ router.get('/properties/:id', ah(async (req, res) => {
 router.patch('/properties/:id', managers, ah(async (req, res) => {
   const property = await loadProperty(req.user, uuidParam(req.params.id));
   const body = validate(req.body, propertySpec, { partial: true });
+  checkPostalCode(body.postal_code);
   const keys = Object.keys(body);
   if (!keys.length) return res.json({ property });
   const sets = keys.map((k, i) => `${k} = $${i + 2}`);
@@ -325,6 +334,23 @@ router.post('/properties/:id/units', managers, ah(async (req, res) => {
   }
 }));
 
+// A blank field on a unit edit either clears, or is refused with a field message. A cleared money or
+// discount field goes to 0, the same as a new unit stores it. Never a save that reports success
+// while the old value stays. A blank deposit percentage still leaves the deposit alone.
+const BLANK_TO_ZERO = { monthly_rent: '0.00', cleaning_fee: '0.00', security_deposit_amount: '0.00', weekly_discount: 0, monthly_discount: 0, fortnight_discount: 0 };
+const BLANK_CLEARS = ['availability_date', 'nightly_rate', 'max_guests', 'wifi_name', 'wifi_password', 'checkin_instructions', 'house_rules', 'description',
+  'weekend_rate', 'holiday_rate', 'cancellation_policy', 'cancellation_policy_text', 'room_type', 'min_price'];
+function settleBlanks(body) {
+  const fields = {};
+  for (const k of Object.keys(body)) {
+    if (body[k] !== null) continue;
+    if (k in BLANK_TO_ZERO) body[k] = BLANK_TO_ZERO[k];
+    else if (k === 'deposit_pct') delete body[k];
+    else if (!BLANK_CLEARS.includes(k)) fields[k] = `${unitSpec[k].label} is required.`;
+  }
+  if (Object.keys(fields).length) throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields });
+}
+
 router.patch('/units/:id', managers, ah(async (req, res) => {
   const unit = await loadUnit(req.user, uuidParam(req.params.id));
   const body = validate(req.body, unitSpec, { partial: true });
@@ -333,12 +359,10 @@ router.patch('/units/:id', managers, ah(async (req, res) => {
     'cancellation_policy' in body ? body.cancellation_policy : unit.cancellation_policy,
     'cancellation_policy_text' in body ? body.cancellation_policy_text : unit.cancellation_policy_text);
   if ('public_slug' in body) checkSlugFormat(body.public_slug);
+  settleBlanks(body);
   // Giving a long-term unit a nightly rate turns it into a listing.
   if (body.nightly_rate && !unit.nightly_rate && unit.status === 'active') await checkListingLimit(req.user);
-  // deposit_pct is NOT NULL, so a blank deposit leaves it unchanged rather than clearing it.
-  const keys = Object.keys(body).filter((k) => body[k] !== null
-    || ['availability_date', 'nightly_rate', 'max_guests', 'wifi_name', 'wifi_password', 'checkin_instructions', 'house_rules', 'description',
-      'weekend_rate', 'holiday_rate', 'cancellation_policy', 'cancellation_policy_text', 'room_type', 'min_price'].includes(k));
+  const keys = Object.keys(body);
   if (!keys.length) return res.json({ unit });
   const sets = keys.map((k, i) => `${k} = $${i + 2}`);
   try {

@@ -162,6 +162,10 @@ router.get('/quotes/:id', managers, ah(async (req, res) => {
 
 // Makes a quote. Checks that the dates are free now, but holds nothing until the guest pays.
 router.post('/quotes', managers, ah(async (req, res) => {
+  const hrs = req.body?.expires_in_hours;
+  if (hrs !== undefined && hrs !== null && hrs !== '' && !(Number.isInteger(Number(hrs)) && Number(hrs) >= 1 && Number(hrs) <= 336)) {
+    throw validationError({ expires_in_hours: 'Hours must be between 1 and 336 (14 days).' });
+  }
   const body = validate(req.body, {
     unit_id: { type: 'uuid', required: true, label: 'Listing' },
     check_in: { type: 'date', required: true, label: 'Check-in' },
@@ -170,11 +174,11 @@ router.post('/quotes', managers, ah(async (req, res) => {
     guest_name: { type: 'string', required: true, max: 120, label: 'Guest name' },
     guest_email: { type: 'email', label: 'Guest email' },
     guest_phone: { type: 'phone', label: 'Guest mobile' },
-    accommodation_total: { type: 'money', required: true, label: 'Accommodation' },
+    accommodation_total: { type: 'money', required: true, positive: true, label: 'Accommodation' },
     cleaning_fee: { type: 'money', label: 'Cleaning fee' },
     discount_amount: { type: 'money', label: 'Discount' },
     pay_type: { type: 'enum', values: ['full', 'deposit'], required: true, label: 'Payment' },
-    expires_in_hours: { type: 'int', min: 1, max: 336, label: 'Valid for' },
+    expires_in_hours: { type: 'int', min: 1, max: 336, label: 'Hours' },
     note: { type: 'text', max: 1000, label: 'Note' },
   });
   if (body.check_out <= body.check_in) throw validationError({ check_out: 'Choose a check-out date after check-in.' });

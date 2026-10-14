@@ -12,6 +12,7 @@ const { requireRole } = require('../lib/auth');
 const { propertyScope, loadUnit } = require('../lib/access');
 const ical = require('../lib/ical');
 const { feedProblem, problemText, STALE_MS } = require('../lib/synchealth');
+const { hostOf } = require('./synchealth');
 const { leasedListings } = require('../lib/leases');
 const { ensureTaskForBooking, syncOpenTasks } = require('../lib/housekeeping');
 const { computePay } = require('../lib/cleanerpay');
@@ -170,7 +171,7 @@ router.get('/guests', ah(async (req, res) => {
   // Bookings counted for each guest: only in properties this person can see.
   const seen = req.user.role === 'owner' ? 'true' : `ux.property_id IN (SELECT property_id FROM property_assignments WHERE user_id = $${params.push(req.user.user_id)})`;
   if (qp.q) {
-    params.push(`%${String(qp.q).slice(0, 100)}%`);
+    params.push(`%${String(qp.q).slice(0, 100).replace(/[%_\\]/g, '\\$&')}%`);
     const n = params.length;
     where.push(staff ? `g.full_name ILIKE $${n}` : `(g.full_name ILIKE $${n} OR g.email ILIKE $${n} OR g.phone ILIKE $${n})`);
   }
@@ -273,7 +274,7 @@ function reservationQuery(req) {
   const params = [];
   const where = [propertyScope(req.user, params), `b.kind = 'reservation'`, VIEWS[view].where];
   if (req.query.q) {
-    params.push(`%${String(req.query.q).slice(0, 100)}%`);
+    params.push(`%${String(req.query.q).slice(0, 100).replace(/[%_\\]/g, '\\$&')}%`);
     const n = params.length;
     where.push(`(g.full_name ILIKE $${n} OR b.guest_label ILIKE $${n} OR b.confirmation_code ILIKE $${n} OR u.unit_name ILIKE $${n} OR p.property_name ILIKE $${n})`);
   }
@@ -317,7 +318,7 @@ router.get('/reservations/export', ah(async (req, res) => {
   const { rows } = await query(sql, params);
   const head = ['Confirmation code', 'Check-in', 'Check-out', 'Nights', 'Listing', 'Property', 'Guest', 'Guests', 'Channel', 'Status', 'Total', 'Paid', 'Balance'];
   const lines = [head, ...rows.map((r) => [r.confirmation_code, r.check_in, r.check_out, r.nights, r.unit_name, r.property_name,
-    r.guest_name || r.guest_label, r.num_guests, r.channel, r.status, r.total_amount, r.amount_paid, r.balance])];
+    r.guest_name || r.guest_label, r.num_guests, r.channel, r.status, r.total_amount, r.amount_paid, r.status === 'cancelled' ? '' : r.balance])];
   res.set('Content-Type', 'text/csv; charset=utf-8');
   res.set('Content-Disposition', `attachment; filename="balayhub-reservations-${view}.csv"`);
   res.send(`﻿${lines.map((l) => l.map(csvCell).join(',')).join('\r\n')}\r\n`);
@@ -381,6 +382,14 @@ function checkStay(body, unit) {
   }
 }
 
+// The channel keeps a cut of the stay, so its fee can't be more than the stay total.
+function checkChannelFee(b, extras = 0) {
+  const c = (v) => Math.round(Number(v || 0) * 100);
+  if (c(b.channel_fee) > c(b.accommodation_total) + c(b.cleaning_fee) + c(b.other_fees) + c(extras)) {
+    throw validationError({ channel_fee: 'Channel fee can\'t be more than the stay total.' });
+  }
+}
+
 // A stay names a listing or a room type at a property, not both and not neither.
 function checkListingChoice(body) {
   if (body.unit_id) {
@@ -431,6 +440,14 @@ async function roomTypeListings(user, room, db = { query }) {
 }
 
 const noFreeRoom = (room) => new HttpError(409, `No free ${room.room_type} at this property on these dates.`, { code: 'NO_FREE_ROOM' });
+
+// A group asked for more rooms of a type than are free: say how many are, out of the rooms asked for in this call.
+const notEnoughRooms = (room, rooms, ids, byId, busy) => {
+  const free = ids.filter((x) => { const u = byId.get(x); return u && u.status === 'active' && u.property_status === 'active' && !busy.has(x); }).length;
+  if (!free) return noFreeRoom(room);
+  const asked = rooms.filter((x) => !x.unit_id && x.property_id === room.property_id && x.room_type.toLowerCase() === room.room_type.toLowerCase() && sameNights(x, room)).length;
+  return new HttpError(409, `Only ${free} ${room.room_type} ${free === 1 ? 'room is' : 'rooms are'} free on these dates (you asked for ${asked}). Nothing was saved.`, { code: 'NO_FREE_ROOM' });
+};
 
 // A single reservation for a room type: the first free listing of that type.
 async function pickListing(user, room) {
@@ -504,6 +521,7 @@ router.post('/reservations', managers, ah(async (req, res) => {
     if (q.missing_rates) throw validationError({ accommodation_total: NO_RATE });
     accommodation = q.accommodation_total;
   }
+  checkChannelFee({ ...body, accommodation_total: accommodation, cleaning_fee: body.cleaning_fee ?? unit.cleaning_fee });
   try {
     const id = await tx(async (db) => {
       const guestId = await resolveGuest(db, req.user, body);
@@ -542,14 +560,17 @@ router.patch('/reservations/:id', managers, ah(async (req, res) => {
   if (['unit_id', 'check_in', 'check_out'].some((k) => k in body && String(body[k]) !== String(booking[k]))) {
     await assertStayAllowed(req.user, merged.unit_id, merged.check_in, merged.check_out);
   }
-  const keys = Object.keys(body);
+  // Only values that really change are written and audited (money compares by amount: '2000' is '2000.00').
+  const MONEY = ['accommodation_total', 'cleaning_fee', 'other_fees', 'channel_fee'];
+  const keys = Object.keys(body).filter((k) => (MONEY.includes(k) ? Number(body[k]) !== Number(booking[k]) : String(body[k]) !== String(booking[k])));
   if (!keys.length) return res.json({ reservation: booking });
+  if (keys.some((k) => MONEY.includes(k))) checkChannelFee(merged, booking.extras_total);
   try {
     await tx(async (db) => {
       await db.query(`UPDATE bookings SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')}, updated_at = now() WHERE booking_id = $1`,
         [booking.booking_id, ...keys.map((k) => body[k])]);
       await audit(db, req.user, 'reservation.updated', 'booking', booking.booking_id, {
-        before: Object.fromEntries(keys.map((k) => [k, booking[k]])), after: body });
+        before: Object.fromEntries(keys.map((k) => [k, booking[k]])), after: Object.fromEntries(keys.map((k) => [k, body[k]])) });
       await syncOpenTasks(booking.booking_id, db);
     });
   } catch (err) {
@@ -557,7 +578,7 @@ router.patch('/reservations/:id', managers, ah(async (req, res) => {
     throw err;
   }
   // Only changes to what's owed close the guest's open payment page (not notes etc.).
-  if (['unit_id', 'check_in', 'check_out', 'accommodation_total', 'cleaning_fee', 'other_fees'].some((k) => k in body && String(body[k]) !== String(booking[k]))) {
+  if (keys.some((k) => ['unit_id', 'check_in', 'check_out', ...MONEY].includes(k))) {
     await closeOpenCheckouts(booking.booking_id);
   }
   res.json({ reservation: redactGuest(req.user, await loadBooking(req.user, booking.booking_id)) });
@@ -644,8 +665,18 @@ router.post('/booking-payments/:id/void', managers, ah(async (req, res) => {
   await loadBooking(req.user, p.booking_id);
   if (p.voided_at) throw new HttpError(409, 'This payment is already voided.', { code: 'ALREADY_VOIDED' });
   const { reason } = validate(req.body, { reason: { type: 'string', required: true, max: 300, label: 'Reason' } });
-  await query('UPDATE booking_payments SET voided_at = now(), voided_by = $2, void_reason = $3 WHERE payment_id = $1', [id, req.user.user_id, reason]);
-  await audit(null, req.user, 'reservation.payment_voided', 'booking_payment', id, { amount: p.amount, reason });
+  await tx(async (db) => {
+    // Refunds can't exceed what was paid (section 2.5): after this void, the live payments must still cover the live refunds.
+    await db.query('SELECT 1 FROM bookings WHERE booking_id = $1 FOR UPDATE', [p.booking_id]);
+    const { rows: [t] } = await db.query(
+      `SELECT (SELECT COALESCE(SUM(amount), 0) FROM booking_payments WHERE booking_id = $1 AND voided_at IS NULL AND payment_id <> $2) AS paid,
+              (SELECT COALESCE(SUM(amount), 0) FROM booking_refunds WHERE booking_id = $1 AND voided_at IS NULL) AS refunded`, [p.booking_id, id]);
+    if (Math.round(t.refunded * 100) > Math.round(t.paid * 100)) {
+      throw new HttpError(409, 'Void the refund first, then this payment.', { code: 'REFUNDS_EXCEED_PAYMENTS' });
+    }
+    await db.query('UPDATE booking_payments SET voided_at = now(), voided_by = $2, void_reason = $3 WHERE payment_id = $1 AND voided_at IS NULL', [id, req.user.user_id, reason]);
+    await audit(db, req.user, 'reservation.payment_voided', 'booking_payment', id, { amount: p.amount, reason });
+  });
   await closeOpenCheckouts(p.booking_id);
   res.json({ ok: true });
 }));
@@ -710,7 +741,7 @@ async function loadGroup(user, id) {
 // One summary row per group: room count, dates, and money over the rooms still booked.
 const GROUP_ROWS = `
   SELECT g.group_id, g.name, g.cancelled_at, CASE WHEN g.cancelled_at IS NULL THEN 'active' ELSE 'cancelled' END AS status,
-         gu.full_name AS guest_name, COUNT(b.booking_id)::int AS rooms, MIN(b.check_in) AS check_in, MAX(b.check_out) AS check_out,
+         gu.full_name AS guest_name, COUNT(b.booking_id) FILTER (WHERE b.status = 'confirmed')::int AS rooms, MIN(b.check_in) AS check_in, MAX(b.check_out) AS check_out,
          COALESCE(SUM(b.total_amount) FILTER (WHERE b.status = 'confirmed'), 0)::numeric(12,2) AS total,
          COALESCE(SUM(paid.amount) FILTER (WHERE b.status = 'confirmed'), 0)::numeric(12,2) AS amount_paid,
          COALESCE(SUM(b.total_amount - b.channel_fee - paid.amount) FILTER (WHERE b.status = 'confirmed'), 0)::numeric(12,2) AS balance
@@ -745,9 +776,11 @@ function cleanRoom(body) {
   return r;
 }
 
-// Two to twenty rooms. Field errors name the room, for example rooms.2.check_out.
-function cleanRooms(list) {
-  if (!Array.isArray(list) || list.length < 2 || list.length > 20) throw validationError({ rooms: 'A group needs between 2 and 20 rooms.' });
+// Two to twenty rooms for a new group (one to twenty when adding to one). Field errors name the room, for example rooms.2.check_out.
+function cleanRooms(list, min = 2) {
+  if (!Array.isArray(list) || list.length < min || list.length > 20) {
+    throw validationError({ rooms: min > 1 ? 'A group needs between 2 and 20 rooms.' : 'Add between 1 and 20 rooms at a time.' });
+  }
   const fields = {};
   const rooms = list.map((r, i) => {
     try {
@@ -820,7 +853,7 @@ async function bookRooms(db, user, rooms, { guestId, groupId, picks, action }) {
         const u = byId.get(x);
         return u && u.status === 'active' && u.property_status === 'active' && !busy.has(x) && !takenInGroup(x);
       });
-      if (!id) throw noFreeRoom(r);
+      if (!id) throw notEnoughRooms(r, rooms, listingsFor[i], byId, busy);
       unit = byId.get(id);
     }
     checkStay(r, unit);
@@ -920,15 +953,23 @@ router.patch('/booking-groups/:id', managers, ah(async (req, res) => {
 
 router.post('/booking-groups/:id/rooms', managers, ah(async (req, res) => {
   const group = await loadGroup(req.user, uuidParam(req.params.id));
-  const room = cleanRoom(req.body);
+  // One room as a plain body (older clients), or `rooms: [...]` to add several at once, all or nothing.
+  const many = Array.isArray(req.body?.rooms);
+  const rooms = many ? cleanRooms(req.body.rooms, 1) : [cleanRoom(req.body)];
   const picks = [];
-  const [bookingId] = await bookInTx(picks, async (db) => {
-    // The group row is locked first, as the cancel path does, so no room is added while the group is being cancelled.
-    const { rows: [locked] } = await db.query('SELECT cancelled_at FROM booking_groups WHERE group_id = $1 FOR UPDATE', [group.group_id]);
-    if (locked.cancelled_at) throw new HttpError(409, 'This group is cancelled. Rooms cannot be added.', { code: 'CANCELLED' });
-    return bookRooms(db, req.user, [room], { guestId: group.guest_id, groupId: group.group_id, picks, action: 'booking_group.room_added' });
-  });
-  res.status(201).json({ booking_id: bookingId, group: (await groupRows(['g.group_id = $1'], [group.group_id]))[0] });
+  let bookingIds;
+  try {
+    bookingIds = await bookInTx(picks, async (db) => {
+      // The group row is locked first, as the cancel path does, so no room is added while the group is being cancelled.
+      const { rows: [locked] } = await db.query('SELECT cancelled_at FROM booking_groups WHERE group_id = $1 FOR UPDATE', [group.group_id]);
+      if (locked.cancelled_at) throw new HttpError(409, 'This group is cancelled. Rooms cannot be added.', { code: 'CANCELLED' });
+      return bookRooms(db, req.user, rooms, { guestId: group.guest_id, groupId: group.group_id, picks, action: 'booking_group.room_added' });
+    });
+  } catch (err) {
+    if (many && err.status === 409 && !/Nothing was saved/.test(err.message)) err.message += ' Nothing was saved.';
+    throw err;
+  }
+  res.status(201).json({ booking_id: bookingIds[0], booking_ids: bookingIds, group: (await groupRows(['g.group_id = $1'], [group.group_id]))[0] });
 }));
 
 // Removing a room is the normal cancel path for that booking. If no confirmed room is left, the group is cancelled too.
@@ -1040,7 +1081,7 @@ router.put('/rates', managers, ah(async (req, res) => {
     unit_id: { type: 'uuid', required: true, label: 'Listing' },
     start_date: { type: 'date', required: true, label: 'From' },
     end_date: { type: 'date', required: true, label: 'To' },
-    price: { type: 'money', label: 'Nightly price' },
+    price: { type: 'money', positive: true, label: 'Nightly price' },
   });
   const unit = await loadUnit(req.user, body.unit_id);
   if (body.end_date < body.start_date) throw validationError({ end_date: 'Must be on or after the start date.' });
@@ -1188,7 +1229,7 @@ router.get('/units/:id/channels', managers, ah(async (req, res) => {
   const cutoff = new Date(Date.now() - STALE_MS);
   const withProblems = feeds.map((f) => {
     const problem = feedProblem(f, cutoff);
-    return { ...f, problem_message: problem ? problemText(f, problem).message : null };
+    return { ...f, host: hostOf(f.url), problem_message: problem ? problemText(f, problem).message : null };
   });
   res.json({ export_url: `${require('../config').appUrl}/ical/${token}.ics`, feeds: withProblems });
 }));

@@ -4,6 +4,9 @@ import { get, qs } from '../api.js';
 import { h, icon, peso, fmtDate, fmtMonth, label, emptyState, pageHead, todayManila } from '../ui.js';
 import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 
+// An archived tenant reads "(archived)"; one who has moved out reads "(former)".
+const tenantTag = (x) => (x.tenant_status === 'archived' ? ' (archived)' : x.lease_status !== 'active' ? ' (former)' : '');
+
 const PROPERTY_TYPES = ['apartment', 'boarding_house', 'condominium', 'house', 'commercial', 'dormitory', 'other'];
 
 function presets(today) {
@@ -141,7 +144,7 @@ export async function reportsView(el, { query }) {
         r.outstanding.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'table' },
           h('thead', null, h('tr', null, h('th', null, 'Tenant'), h('th', null, 'Unit'), h('th', { class: 'num' }, 'Outstanding'), h('th', { class: 'num' }, 'Overdue'), h('th', null, 'Overdue since'))),
           h('tbody', null, r.outstanding.map((o) => h('tr', null,
-            h('td', null, h('a', { href: `#/tenants/${o.tenant_id}` }, o.tenant_name), o.lease_status !== 'active' ? h('span', { class: 'muted small' }, ' (former)') : ''),
+            h('td', null, h('a', { href: `#/tenants/${o.tenant_id}` }, o.tenant_name), tenantTag(o) && h('span', { class: 'muted small' }, tenantTag(o))),
             h('td', null, `${o.property_name}, ${o.unit_name}`),
             h('td', { class: 'num' }, peso(o.outstanding)),
             h('td', { class: `num${Number(o.overdue) > 0 ? ' amount--neg' : ''}` }, peso(o.overdue)),

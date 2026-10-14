@@ -211,14 +211,18 @@ test('inbox: unread, channel, property, listing, stay, assigned, last message da
   assert.equal(byCheckIn[0].conversation_id, conv.dan);
   assert.equal(byCheckIn.at(-1).conversation_id, conv.ben);
 
-  // Bad values are ignored, or 404 for ids.
+  // Bad values are ignored, and so are bad ids: the list loads as if the filter were not there.
   const all = (await owner.get('/api/inbox')).data.conversations.length;
   for (const q of ['unread=yes', 'channel=x', 'stay=forever', 'msg_from=2026-02-30', 'msg_to=x', 'attention=all', 'sort=c.unread;DROP']) {
     const r = await owner.get(`/api/inbox?${q}`);
     assert.equal(r.status, 200, q);
     assert.equal(r.data.conversations.length, all, q);
   }
-  for (const q of ['property_id=x', 'unit_id=x', 'assigned=nobody']) assert.equal((await owner.get(`/api/inbox?${q}`)).status, 404, q);
+  for (const q of ['property_id=x', 'unit_id=x', 'assigned=nobody']) {
+    const r = await owner.get(`/api/inbox?${q}`);
+    assert.equal(r.status, 200, q);
+    assert.equal(r.data.conversations.length, all, q);
+  }
 
   // Managers stay scoped; staff have no inbox at all.
   const m = await mgr.get(`/api/inbox?property_id=${prop.property_id}`);

@@ -1,7 +1,7 @@
 // Settings: account, team access (owner), audit history and privacy.
 
 import { get, post, patch, ApiError } from '../api.js';
-import { h, icon, label, field, formModal, confirmDialog, emptyState, pageHead, toast, fmtDateTime, openModal, clearErrors, showErrors } from '../ui.js';
+import { h, icon, label, field, formModal, confirmDialog, emptyState, pageHead, toast, peso, fmtDate, fmtMonth, fmtDateTime, openModal, clearErrors, showErrors } from '../ui.js';
 import { state, refreshUser } from '../app.js';
 import { notificationsCard } from '../notifications.js';
 import { themeSwitch } from '../themeswitch.js';
@@ -31,7 +31,8 @@ let ROLE_HELP = ROLE_TEXT.short_term;
 const CLEANER_HINT = 'Cleaner: sees cleaning jobs only, no money or guest details. Needs at least one property.';
 const roleOptions = (u) => [['manager', 'Property manager'], ['staff', 'Staff (cleaner, front desk, accountant)'], ...(u.business_type === 'long_term' ? [] : [['cleaner', 'Cleaner — sees cleaning jobs only, no money or guest details']])];
 const roleName = (r) => (r === 'cleaner' ? 'Cleaner' : label(r));
-const needProperty = (data) => { if (data.role === 'cleaner' && !(data.property_ids || []).length) throw new ApiError('Pick at least one property for a cleaner.', { status: 400 }); };
+// Managers and cleaners need at least one property, the same rule the server applies.
+export const needProperty = (data) => { if (['manager', 'cleaner'].includes(data.role) && !(data.property_ids || []).length) throw new ApiError(`Pick at least one property for a ${data.role}.`, { status: 400 }); };
 
 export async function settingsView(el, { rerender, query = {} }) {
   // Back from PayMongo checkout: confirm the payment with the server.
@@ -176,13 +177,16 @@ export async function settingsView(el, { rerender, query = {} }) {
 }
 
 // Audit actions in plain words. My account shows the same labels (it imports actionText from here).
-const ACTIONS = {
+export const ACTIONS = {
   'auth.login': 'Signed in', 'auth.password_changed': 'Changed your password', 'auth.password_reset': 'Reset a password', 'auth.signed_out_others': 'Signed out your other devices',
   'user.profile_updated': 'Updated your profile', 'user.notify_prefs_updated': 'Changed notification settings',
   'reservation.created': 'Added a reservation', 'reservation.updated': 'Edited a reservation', 'reservation.cancelled': 'Cancelled a reservation',
   'reservation.confirmation_sent': 'Sent a booking confirmation', 'reservation.receipt_sent': 'Sent a receipt', 'reservation.payment_recorded': 'Recorded a guest payment',
   'reservation.payment_voided': 'Voided a guest payment', 'reservation.charge_added': 'Added a charge to a reservation', 'reservation.charge_voided': 'Removed a charge from a reservation',
   'reservation.refund_recorded': 'Recorded a refund', 'reservation.refund_voided': 'Voided a refund', 'booking_group.updated': 'Edited a booking group',
+  'booking_group.created': 'Added a group booking', 'booking_group.room_added': 'Added a room to a group booking', 'booking_group.room_removed': 'Removed a room from a group booking', 'booking_group.cancelled': 'Cancelled a group booking',
+  'reservation.check_in': 'Checked a guest in', 'reservation.undo_check_in': 'Undid a guest check-in', 'reservation.check_out': 'Checked a guest out', 'reservation.undo_check_out': 'Undid a guest check-out',
+  'reservation.booked_online': 'Guest booked online', 'reservation.balance_paid_online': 'Guest paid the balance online',
   'deposit.received': 'Recorded a security deposit', 'deposit.settled': 'Returned or settled a deposit', 'deposit.reopened': 'Reopened a deposit',
   'damage.reported': 'Reported damage', 'damage.charged': 'Charged a guest for damage', 'damage.deducted': 'Deducted damage from a deposit', 'damage.waived': 'Waived a damage charge',
   'calendar.blocked': 'Blocked dates', 'calendar.unblocked': 'Unblocked dates', 'rates.updated': 'Changed nightly prices',
@@ -190,6 +194,8 @@ const ACTIONS = {
   'pricing_rule.created': 'Added a pricing rule', 'pricing_rule.updated': 'Edited a pricing rule', 'pricing_rule.removed': 'Removed a pricing rule',
   'season.created': 'Added a season price', 'season.removed': 'Removed a season price',
   'cleaning.task_created': 'Added a cleaning task', 'cleaning.task_updated': 'Updated a cleaning task', 'cleaning.checklist_updated': 'Edited the cleaning checklist', 'cleaning.inspected': 'Inspected a cleaning',
+  'cleaning.task_todo': 'Set a cleaning task back to to-do', 'cleaning.task_in_progress': 'Started a cleaning task', 'cleaning.task_done': 'Finished a cleaning task', 'cleaning.task_cancelled': 'Cancelled a cleaning task',
+  'cleaning.clean': 'Marked a listing clean', 'cleaning.dirty': 'Marked a listing dirty',
   'cleaner_rate.saved': 'Saved a cleaner rate', 'cleaner_rate.deleted': 'Removed a cleaner rate', 'cleaner_pay.paid': 'Marked a cleaner’s pay as paid', 'cleaner_pay.unpaid': 'Marked a cleaner’s pay as unpaid',
   'daily_close.saved': 'Saved a daily close',
   'guest.created': 'Added a guest', 'guest.updated': 'Updated a guest', 'checkin.link_replaced': 'Made a new check-in link',
@@ -208,13 +214,13 @@ const ACTIONS = {
   'property.gatepass_updated': 'Changed gate pass settings',
   'unit.created': 'Added a listing/unit', 'unit.updated': 'Edited a listing/unit', 'unit.archived': 'Archived a listing/unit', 'unit.restored': 'Restored a listing/unit',
   'unit_owner.created': 'Added a unit owner', 'unit_owner.updated': 'Edited a unit owner', 'unit_owner.archived': 'Archived a unit owner', 'unit_owner.statement_sent': 'Sent an owner statement',
-  'unit_owner.statement_published': 'Published an owner statement', 'unit_owner.statement_unpublished': 'Unpublished an owner statement',
+  'unit_owner.statement_published': 'Published an owner statement', 'unit_owner.statement_unpublished': 'Unpublished an owner statement', 'owner_statements.reminder_sent': 'Sent an owner statement reminder',
   'owner_payout.recorded': 'Recorded an owner payout', 'owner_payout.voided': 'Voided an owner payout',
   'owner_reserve.withdrawal_recorded': 'Recorded an owner reserve withdrawal', 'owner_reserve.withdrawal_voided': 'Voided an owner reserve withdrawal',
   'owner_portal.invited': 'Invited an owner to the portal', 'owner_portal.disabled': 'Turned off the owner portal',
   'owner_portal.block_created': 'Blocked dates for an owner', 'owner_portal.block_cancelled': 'Cancelled an owner block',
   'tenant.created': 'Added a tenant', 'tenant.updated': 'Edited a tenant', 'tenant.archived': 'Archived a tenant', 'tenant.restored': 'Restored a tenant', 'tenant.exported': 'Exported a tenant’s data',
-  'lease.created': 'Added a lease', 'lease.updated': 'Edited a lease', 'lease.cancelled': 'Cancelled a lease',
+  'lease.created': 'Added a lease', 'lease.updated': 'Edited a lease', 'lease.cancelled': 'Cancelled a lease', 'lease.ended': 'Ended a lease', 'lease.terminated': 'Terminated a lease',
   'payment.recorded': 'Recorded a rent payment', 'payment.voided': 'Voided a rent payment',
   'expense.recorded': 'Added an expense', 'expense.corrected': 'Corrected an expense', 'expense.voided': 'Voided an expense',
   'maintenance.created': 'Logged a repair request', 'maintenance.updated': 'Edited a repair request', 'maintenance.scheduled': 'Scheduled a repair',
@@ -237,20 +243,47 @@ export function actionText(action) {
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
-function summarize(details) {
+// Audit detail keys in plain words. A key not listed here is still shown, as plain words.
+const DETAIL_LABELS = {
+  email: 'Email', role: 'Role', name: 'Name', title: 'Title', code: 'Code', slug: 'Page address', note: 'Note', reason: 'Reason',
+  status: 'Status', from: 'From', to: 'To', method: 'Method', channel: 'Channel', category: 'Category', kind: 'Type', plan: 'Plan',
+  amount: 'Amount', amount_paid: 'Amount paid', total_amount: 'Total', price: 'Price', unit_price: 'Unit price', monthly_rent: 'Monthly rent',
+  estimated_cost: 'Estimated cost', payout: 'Payout', refund: 'Refund', deduction: 'Deduction', reserve_topup: 'Reserve top-up',
+  check_in: 'Check-in', check_out: 'Check-out', start: 'Start', end: 'End', end_date: 'End date', paid_on: 'Paid on', paid_until: 'Paid until',
+  month: 'Month', months: 'Months', enabled: 'Turned on', sent: 'Sent', count: 'Count', quantity: 'Quantity',
+};
+const MONEY_KEYS = new Set(['amount', 'amount_paid', 'total_amount', 'price', 'unit_price', 'monthly_rent', 'estimated_cost', 'payout', 'refund', 'deduction', 'reserve_topup']);
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// One detail value as text: pesos for money, dates as dates, yes or no for switches, known words as labels.
+function detailValue(k, v) {
+  if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+  if (MONEY_KEYS.has(k)) return v !== '' && Number.isFinite(Number(v)) ? peso(v) : '';
+  const s = String(v);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return fmtDate(s);
+  if (/^\d{4}-\d{2}$/.test(s)) return fmtMonth(s);
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return fmtDateTime(s);
+  return label(s);
+}
+
+// Audit details on one line. Ids (any *_id field, or any UUID value), empty values and nested data are left out.
+export function summarize(details) {
   if (!details) return '';
   const parts = [];
   for (const [k, v] of Object.entries(details)) {
-    if (v === null || typeof v === 'object') continue;
-    parts.push(`${k.replace(/_/g, ' ')}: ${v}`);
+    if (v === null || v === undefined || typeof v === 'object' || k.endsWith('_id') || UUID.test(String(v))) continue;
+    const text = detailValue(k, v);
+    if (text) parts.push(`${DETAIL_LABELS[k] || k.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())}: ${text}`);
   }
-  if (details.reason) parts.push(`reason: ${details.reason}`);
   const text = [...new Set(parts)].join(' · ');
   // Cut long details with an ellipsis so it is clear the text goes on.
   return text.length > 160 ? `${text.slice(0, 159)}…` : text;
 }
 
 // ---------------------------------------------------------------- plan
+// Plans count short-term listings only: units with a nightly rate (D-03), the same count the server checks.
+export const shortTermCount = (listings) => listings.filter((l) => l.nightly_rate != null).length;
+
 async function planCard(u) {
   const p = u.plan;
   let pub = { plans: [], contact_email: '' };
@@ -268,7 +301,7 @@ async function planCard(u) {
     status,
     h('dl', { class: 'dl', style: { marginTop: '12px' } },
       h('dt', null, 'Current plan'), h('dd', null, p.price ? `${p.name} — ₱${p.price.toLocaleString('en-PH')} / month` : p.name),
-      h('dt', null, 'Listings'), h('dd', null, `${listings.length} of ${p.listing_limit >= 1000 ? 'unlimited' : p.listing_limit}`),
+      h('dt', null, 'Listings'), h('dd', null, `${shortTermCount(listings)} of ${p.listing_limit >= 1000 ? 'unlimited' : p.listing_limit}`),
       p.paid_until && [h('dt', null, 'Paid until'), h('dd', null, p.paid_until)]),
     bill.online ? payOnline(p, bill) : [
       pub.plans.length > 0 && h('div', { class: 'plan-mini' }, pub.plans.map((x) => h('div', { class: `plan-mini__item${x.key === p.plan ? ' is-current' : ''}` },

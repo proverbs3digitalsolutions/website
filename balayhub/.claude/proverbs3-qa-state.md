@@ -2,13 +2,13 @@
 
 - run_status: running
 - stage: local
-- round: 1 done (local) · next: round 2 sweep on localhost
+- round: 2 · phase: 3 fix (sweep done, 93 real bugs, plan in <scratchpad>/qa/r2/STRATEGY.md)
 - local_clean_streak: 0/3
 - live_clean_streak: 0/3
 - merged: n/a (project rule: no merge to main) · deployed_live: false
 - live deploy: not yet (live site blocked by this environment's network policy; test password not yet available to the session)
 - browser_driver: playwright-fallback (no Chrome extension in the cloud container) · browser_retries: 0 · rounds are DEGRADED
-- watchdog_cron_id: 6aa14e94
+- watchdog_cron_id: e5ee2828
 - goal_set: false (no /goal command available in this harness)
 - model policy: Haiku classifier, Opus strategist, Haiku-high sweep, Haiku-xhigh fix, Sonnet on 3rd attempt, Opus on 4th, Haiku closure
 - dev DB snapshot: <scratchpad>/qa/dev-before-qa.dump
@@ -41,3 +41,15 @@
 - rvD: 27/28 held. Regression F1 (trial end +1 day per save) being fixed now (F10). New SEV3: no-change manual-payments save writes an audit row (proofs.js ~182-205); Ask button covers last line of launchpad at 390px.
 - Security: first review BLOCK (2 medium in login limits) -> fixed -> re-review PASS. Open LOW for round 2: silent per-email forgot cap lets a stranger suppress a victim's reset emails (consider de-dup by recent unused token instead); forgot-password timing difference (send without awaiting).
 - Full suite after security fixes: 719/719.
+
+## Round 2
+- Sweep: 12 lanes done. Strategist: 93 real bugs (3 SEV1: staff damage data via job detail, cleaner sees others' damage reports, quote saves at 0 from text), 13 deferred-with-default.
+- Fix wave: A01-A20 running; B21-B35 queued for free slots; B36 docs last. Test DBs balayhub_test_r2_01..20.
+- Local DB restored from dev-before-qa.dump after the sweep (also undoes the money lane's accidental void).
+- Note for round 3 sweep lanes: check an element is VISIBLE before reporting its text (hidden role=alert caused a false 'end date before start date' finding).
+- R2 follow-ups (F-r2, after owners finish): rent.js/money.js show "(archived)" not "(former)" when tenant_status='archived' (GET /rent select t.status AS tenant_status); reports.js view outstanding table same; tenants.js archive copy "until it is paid" (no write-off action); listings.js channels list + home.js SYNC_TEXT include p.host; test/housekeeping-phase3.test.js two stale asserts (cleaner no estimate/status/work orders; empty checklist via SQL); confirm A03 accepts {rooms:[...]} and counts confirmed rooms in GROUP_ROWS.
+- R2 follow-ups added 2026-10-13 (late lanes): test/filters-a.test.js:221 inbox bad ids now 200 not 404 (B27); housekeeping ?assignee=<bad> still 404s into page error state (A13 concern; client-side drop of non-uuid/non-keyword assignee in housekeeping.js view); groups view should show '-' / Cancelled for a cancelled group (rooms count now confirmed-only, A03); BLOCKERS question: should staff see "Your pay for this clean" card on a housekeeping job (A11 concern); tests posting payment over balance need confirm_over (A08).
+- 2026-10-14 00:45 UTC: usage limit hit, worker restarted; Postgres restarted; 5 cut-off lanes resumed (B21, B23, fixup, channel host, assistant); new lanes: public-pages fixup, shared image check. Watchdog now e5ee2828.
+- R3 candidates: stay report 'Direct bookings by source' shows 14 stays as 'No source' while the revenue table calls them 'Direct' (rvE).
+- R3 candidates: pricing all-listings clash text says a listing season 'wins the shared nights' when a third overlapping season takes some of them (rvC, SEV3, public/js/views/pricing.js clashText).
+- R3 candidates: two different reset links used at the same instant can deadlock (500 instead of 400); take the per-user advisory lock first in the reset transaction (security re-check, Low, auth.js:258-267).

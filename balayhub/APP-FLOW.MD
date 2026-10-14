@@ -690,5 +690,29 @@ Spec: `docs/specs/PHASE-5-PRICING-TEAM.md`. Decisions D-66 to D-74. Staff and cl
 
 ### 14.11 Menu (changes to 3)
 
-- Owners and managers in short-term workspaces see **Group bookings** and **Daily close**. Staff don't see them in the menu.
+- Owners and managers in short-term workspaces see **Group bookings** and **Daily close**. Staff see **Group bookings** (without money) and the read-only **Supplies** page in their menu since QA round 2; they still don't see Daily close.
 
+## 15. QA round 2 flow changes (2026-10-14)
+
+- **Inbox, mark unread:** after "Mark unread" the screen goes back to the conversation list.
+- **Inbox, send later:** if the chosen time has already passed, a dialog asks "That time has passed. Send it now?" with Send now or Cancel.
+- **Listings:** owners (short-term workspaces) get Archive and Restore on the Listings page. Managers and staff don't.
+- **Staff menu:** Group bookings and Supplies appear. Supplies has no add, edit, count or restock buttons for staff.
+- **Supplies, record use above what is on hand:** for an owner or manager, a dialog titled "Not enough on hand" asks first, with the button "Record what is on hand". If confirmed, the log shows the on-hand amount and "Asked for N" in its note. With none on hand, the save is refused with a message. For a cleaner saving from a job, the short item is skipped, the rest are saved, and a note names the skipped item. The note disappears after 4 seconds.
+- **Rent payments:** a payment above the tenant's balance asks first and shows how much becomes advance credit.
+- **Tenants:** archiving a tenant who owes money warns about the amount.
+- **Profit and loss:** an invalid month in the link shows a warning and opens the current month. The empty state shows only when there is no income, no expense and zero refunds.
+- **Help when logged out:** help links go to sign-up with the line "Create your account and ask us in Help & support".
+- **Help search:** whole words only, every meaningful word must match, titles first, filtered to the guides for the workspace's business type.
+- **Links with bad filter values:** the bad value is ignored. A backwards date range shows a message and applies nothing.
+- **Pricing:** a duplicate rule asks before replacing. Seasons that overlap show a warning that the newer one wins (and that listing seasons beat all-listings seasons). A bulk cut below the lowest price shows a warning in the preview.
+- **Listing edit:** a blank required field shows a message on that field; the postal code must be 4 digits.
+- **Group bookings:** adding rooms is all or nothing (1 to 20).
+- **Team:** inviting or editing a manager needs at least one property ("Pick at least one property for a manager.").
+- **Voiding a payment** that refunds depend on is refused: "Void the refund first, then this payment."
+- **Cancelled stays:** the guest pay page, booking detail and CSV show nothing owed; held money points to the Refunds card.
+- **Quotes:** the accommodation price is kept after a date change; a non-number or zero price is refused.
+- **Maintenance:** cancelling a request asks first.
+- **Guest check-in:** the heading changes after check-in; the form stays editable until check-out. Guest error pages have a heading by cause.
+- **Gate pass:** the header drops a repeat of the property name or city.
+- **Sign-up band:** the smallest plan reads "1–2 units".

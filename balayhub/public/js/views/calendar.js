@@ -1,7 +1,7 @@
 // Multi-calendar: listings down the side, dates across, reservations as bars,
 // nightly prices on open nights. Tap an open night to book, block or reprice.
 
-import { get, post, patch, api, qs } from '../api.js';
+import { get, post, patch, api, qs, ApiError } from '../api.js';
 import { h, icon, peso, fmtDate, field, formModal, openModal, confirmDialog, toast, emptyState, label } from '../ui.js';
 import { initFilters, filterBar, changed } from '../filters.js';
 import { state, navigate } from '../app.js';
@@ -11,6 +11,8 @@ const dayName = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { 
 const dayNum = (d) => Number(d.slice(8, 10));
 const monthName = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 const shortPeso = (v) => (v === null || v === undefined ? '' : `₱${Math.round(Number(v)).toLocaleString('en-PH')}`);
+// One sync problem as a line: its channel and link host, so two links on one listing read differently.
+const problemLine = (p) => `${CHANNEL_LABEL[p.channel] || 'Calendar'}${p.host ? ` (${p.host})` : ''}: ${p.message}`;
 
 export async function calendarView(el, { query }) {
   const canManage = state.user.role !== 'staff';
@@ -132,13 +134,15 @@ export async function calendarView(el, { query }) {
           onclick: (e) => { e.stopPropagation(); if (isBlock) blockMenu(b); else navigate(`#/reservations/${b.booking_id}`); },
         }, isBlock ? `🔒 ${b.block_reason || 'Blocked'}` : `${b.guest_name || 'Guest'}${b.num_guests ? ` · ${b.num_guests}` : ''}`);
       });
-      const warn = problems.get(l.unit_id);
+      const warn = problems.get(l.unit_id) || [];
+      // Each problem once: two identical overlap rows from one link show as one line.
+      const lines = [...new Set(warn.map(problemLine))];
       const row = h('div', { class: 'cal-row' },
         h('div', { class: 'cal-side' },
           h('a', { href: `#/listings?focus=${l.unit_id}`, class: 'cal-name' }, l.unit_name),
           h('span', { class: 'cal-prop' }, l.property_name),
           h('span', { class: `badge badge--${l.cleaning_status === 'dirty' ? 'overdue' : 'paid'}` }, l.cleaning_status === 'dirty' ? 'Dirty' : 'Clean'),
-          warn && h('a', { class: 'badge badge--partial cal-warn', href: `#/listings?focus=${l.unit_id}`, title: warn.map((p) => p.message).join(' '), 'aria-label': `Sync problem on ${l.unit_name}: ${warn.map((p) => p.message).join(' ')}` }, `⚠ ${warn.length > 1 ? `${warn.length} sync problems` : 'Sync problem'}`)),
+          lines.length > 0 && h('a', { class: 'badge badge--partial cal-warn', href: `#/listings?focus=${l.unit_id}`, title: lines.join(' '), 'aria-label': `Sync problem on ${l.unit_name}: ${lines.join(' ')}` }, `⚠ ${lines.length > 1 ? `${lines.length} sync problems` : 'Sync problem'}`)),
         h('div', { class: 'cal-days cal-days--body' }, cells, bars));
       if (canManage) {
         const ok = () => dragging && dragging.unit_id !== l.unit_id;
@@ -156,8 +160,8 @@ export async function calendarView(el, { query }) {
   async function moveBar(b, to) {
     const from = lastData.listings.find((x) => x.unit_id === b.unit_id);
     if (!await confirmDialog({ title: 'Move this reservation?', text: `Move ${b.guest_name || 'this guest'} from ${from?.unit_name || 'this listing'} to ${to.unit_name}? The price stays the same.`, confirmText: 'Move reservation' })) return;
-    // Show the server's field message (e.g. the guest limit), not the generic "check the highlighted fields".
-    try { await patch(`/reservations/${b.booking_id}`, { unit_id: to.unit_id }); toast('Reservation moved.'); } catch (err) { toast(Object.values(err.fields || {}).join(' ') || err.message, 'error'); }
+    // err.message is the server's reason: the stay or block in the way, or the field messages (already de-duplicated by api.js).
+    try { await patch(`/reservations/${b.booking_id}`, { unit_id: to.unit_id }); toast('Reservation moved.'); } catch (err) { toast(err.message, 'error'); }
     load();
   }
 
@@ -196,7 +200,14 @@ export async function calendarView(el, { query }) {
           field({ name: 'end_date', label: 'To night', type: 'date', required: true, value: date })),
         field({ name: 'price', label: 'Price per night', type: 'money', value: price, hint: 'A price set here wins over weekend, holiday and season rates. Leave empty to go back to those.' }),
       ],
-      onSubmit: async (d) => { await api('PUT', '/rates', { ...d, unit_id: listing.unit_id }); toast('Price saved.'); load(); },
+      onSubmit: async (d) => {
+        // 0 would make the night free; a blank still clears the price back to the usual rates.
+        if (d.price.trim() !== '' && Number(d.price) === 0) {
+          const m = 'Price must be greater than zero. Leave it blank to use your usual price.';
+          throw new ApiError('Please check the highlighted fields.', { status: 400, code: 'VALIDATION', fields: { price: m } });
+        }
+        await api('PUT', '/rates', { ...d, unit_id: listing.unit_id }); toast('Price saved.'); load();
+      },
     });
   }
 

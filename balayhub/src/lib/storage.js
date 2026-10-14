@@ -9,11 +9,21 @@ const crypto = require('crypto');
 const config = require('../config');
 const { one } = require('../db');
 
+// The first bytes alone are not enough for an image: a signature-only or cut-short file must be refused.
+const MIN_IMAGE_BYTES = 64;
+function imageIsComplete(mime, body) {
+  if (body.length < MIN_IMAGE_BYTES) return false;
+  if (mime === 'image/png') return body.subarray(12, 16).toString('latin1') === 'IHDR' && body.subarray(-8, -4).toString('latin1') === 'IEND';
+  // Trailing data after the end marker is allowed: phone motion photos append a video.
+  if (mime === 'image/jpeg') return body[3] >= 0xc0 && body[3] <= 0xfe && body.includes(Buffer.from([0xff, 0xd9]), 4);
+  return body.readUInt32LE(4) === body.length - 8 && ['VP8 ', 'VP8L', 'VP8X'].includes(body.subarray(12, 16).toString('latin1'));
+}
+
 const ALLOWED = {
   'application/pdf': { ext: 'pdf', magic: (b) => b.subarray(0, 4).toString('latin1') === '%PDF' },
-  'image/jpeg': { ext: 'jpg', magic: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
-  'image/png': { ext: 'png', magic: (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) },
-  'image/webp': { ext: 'webp', magic: (b) => b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP' },
+  'image/jpeg': { ext: 'jpg', magic: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff && imageIsComplete('image/jpeg', b) },
+  'image/png': { ext: 'png', magic: (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) && imageIsComplete('image/png', b) },
+  'image/webp': { ext: 'webp', magic: (b) => b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP' && imageIsComplete('image/webp', b) },
 };
 
 // Returns the spec for a valid upload, or null.

@@ -71,7 +71,7 @@ export async function dashboardView(el, { rerender }) {
   const tasks = [];
   for (const t of d.overdue_tenants) {
     tasks.push(h('li', null, h('a', { class: 'row', href: `#/tenants/${t.tenant_id}` },
-      h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, `Follow up: ${t.tenant_name}`), h('span', { class: 'row__sub' }, `${t.property_name} · ${unitLabel(t.unit_name)} · overdue since ${fmtDate(t.oldest_overdue)}`)),
+      h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, `Follow up: ${t.tenant_name}${t.tenant_status === 'archived' ? ' (archived)' : ''}`), h('span', { class: 'row__sub' }, `${t.property_name} · ${unitLabel(t.unit_name)} · overdue since ${fmtDate(t.oldest_overdue)}`)),
       h('div', { class: 'row__end' }, h('span', { class: 'amount amount--neg' }, peso(t.overdue)), badge('overdue')))));
   }
   for (const l of d.expiring_leases) {

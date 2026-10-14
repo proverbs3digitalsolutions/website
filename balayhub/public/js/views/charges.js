@@ -17,7 +17,9 @@ const CATEGORY = {
   extra_cleaning: 'Extra cleaning',
   other: 'Other',
 };
-const label = (c) => CATEGORY[c] || c;
+// Add-ons are bought by guests on the pay page, so hosts never pick this category; it is labelled, not offered.
+const LABEL = { ...CATEGORY, addon: 'Add-on' };
+const label = (c) => LABEL[c] || c;
 const PRESET_TEXTS = Object.values(CATEGORY);
 const inputOf = (wrap) => wrap.querySelector('input, select, textarea');
 

@@ -195,12 +195,13 @@ const CLEANER_NAV = [['/housekeeping', 'Cleaning', 'sparkle'], ['/my-pay', 'My p
 const CLEANER_PATHS = ['/housekeeping', '/my-pay', '/account', '/help'];
 const isCleanerPath = (path) => CLEANER_PATHS.some((p) => path === p || path.startsWith(`${p}/`));
 // Operations pages for owners and managers, placed after Housekeeping.
-const OPS_NAV = [['/cleaner-pay', 'Cleaner pay', 'wallet'], ['/supplies', 'Supplies', 'wallet'], ['/lost-found', 'Lost and found', 'file']];
+const OPS_NAV = [['/cleaner-pay', 'Cleaner pay', 'wallet'], ['/supplies', 'Supplies', 'wallet'], ['/lost-found', 'Lost and found', 'file']];// Staff see Supplies (assigned properties) but not pay or lost-and-found.
+const STAFF_OPS_NAV = OPS_NAV.filter(([p]) => p === '/supplies');
 // Staff don't see guest conversations; the platform admin gets an Admin link.
 const navFor = () => state.user?.role === 'cleaner' ? CLEANER_NAV : [...({ short_term: NAV_SHORT, both: NAV_BOTH }[state.user?.business_type] || NAV_LONG)
-  .filter(([p]) => (p !== '/inbox' || state.user?.role !== 'staff') && (!['/launchpad', '/owners'].includes(p) || state.user?.role === 'owner') && (!['/stay-reports', '/pnl'].includes(p) || state.user?.role !== 'staff') && (!['/quotes', '/addons', '/groups', '/daily-close'].includes(p) || ['owner', 'manager'].includes(state.user?.role))),
+  .filter(([p]) => (p !== '/inbox' || state.user?.role !== 'staff') && (!['/launchpad', '/owners'].includes(p) || state.user?.role === 'owner') && (!['/stay-reports', '/pnl'].includes(p) || state.user?.role !== 'staff') && (!['/quotes', '/addons', '/daily-close'].includes(p) || ['owner', 'manager'].includes(state.user?.role))),
 ['/help', 'Help & support', 'help'],
-...(state.user?.is_platform_admin ? [['/admin', 'Admin', 'shield']] : [])].flatMap((n) => (n[0] === '/housekeeping' && state.user?.business_type !== 'long_term' && state.user?.role !== 'staff' ? [n, ...OPS_NAV] : [n]));
+...(state.user?.is_platform_admin ? [['/admin', 'Admin', 'shield']] : [])].flatMap((n) => (n[0] === '/housekeeping' && state.user?.business_type !== 'long_term' ? [n, ...(state.user?.role === 'staff' ? STAFF_OPS_NAV : OPS_NAV)] : [n]));
 
 // Trial / read-only / demo notice at the top of every app page.
 function planBanner() {

@@ -93,11 +93,13 @@ function roomRow({ listings, roomTypes, defaults, onRemove }) {
 }
 
 // A 409 is ROOMS_TAKEN (data.rooms lists the taken listings and nights) or NO_FREE_ROOM (message only).
+// The form's error line already shows the message, so this box only lists the taken rooms, and is left out when there are none.
 function conflictList(err) {
   const items = err.code === 'ROOMS_TAKEN' ? err.data.rooms : [];
-  return h('div', { class: 'alert alert--error', role: 'alert' },
-    h('div', null, err.message),
-    items.length > 0 && h('ul', { class: 'grp-taken' }, items.map((x) => h('li', null, `${x.unit_name} · ${fmtDate(x.check_in)} – ${fmtDate(x.check_out)}`))));
+  if (!items.length) return [];
+  return [h('div', { class: 'alert alert--error', role: 'alert' },
+    h('div', null, 'These rooms are taken:'),
+    h('ul', { class: 'grp-taken' }, items.map((x) => h('li', null, `${x.unit_name} · ${fmtDate(x.check_in)} – ${fmtDate(x.check_out)}`))))];
 }
 
 async function loadChoices() {
@@ -192,7 +194,7 @@ export async function newGroupModal({ onSaved } = {}) {
         modal.close();
         if (onSaved) onSaved(res); else navigate(`#/groups/${res.group.group_id}`);
       } catch (err) {
-        if (err.status === 409) { conflicts.replaceChildren(conflictList(err)); conflicts.scrollIntoView?.({ block: 'nearest' }); }
+        if (err.status === 409) { conflicts.replaceChildren(...conflictList(err)); conflicts.scrollIntoView?.({ block: 'nearest' }); }
         throw err;
       }
     },
@@ -208,6 +210,9 @@ async function addRoomModal(g, onDone) {
   const ci = first?.check_in || todayManila();
   const row = roomRow({ ...choices, defaults: { check_in: ci, check_out: first?.check_out || addDays(ci, 1), num_guests: 2 } });
   const conflicts = h('div');
+  // A failed add keeps the dialog open with its message. Re-reading the page would remove the open dialog,
+  // so after a failure the table is re-read when the dialog closes instead.
+  let refreshOnClose = false;
   let modal;
   const form = makeForm({
     submitText: 'Add room', cancel: () => modal.close(),
@@ -217,16 +222,20 @@ async function addRoomModal(g, onDone) {
       let list;
       try { list = row.rooms(); } catch (e) { throw new ApiError(e.message, { status: 400 }); }
       try {
-        // The server takes one room per call.
-        for (const room of list) await post(`/booking-groups/${g.group_id}/rooms`, room);
+        // One request: the server adds every room or none.
+        await post(`/booking-groups/${g.group_id}/rooms`, { rooms: list });
       } catch (err) {
-        if (err.status === 409) conflicts.replaceChildren(conflictList(err));
+        if (err.status === 409) conflicts.replaceChildren(...conflictList(err));
+        if (!err.offline && !/Nothing was saved/.test(err.message)) err.message = `${err.message} Nothing was saved.`;
+        // A dropped connection can hide a save that did happen, so the table is re-read when the dialog closes.
+        refreshOnClose = true;
         throw err;
       }
+      refreshOnClose = false;
       toast('Room added.'); modal.close(); onDone();
     },
   });
-  modal = openModal({ title: 'Add a room', body: form, wide: true });
+  modal = openModal({ title: 'Add a room', body: form, wide: true, onClose: () => { if (refreshOnClose) onDone(); } });
 }
 
 // ---------------------------------------------------------------- list
@@ -259,7 +268,7 @@ export async function groupsView(el, { query }) {
           h('td', null, h('strong', null, g.name)),
           h('td', null, g.guest_name || '—'),
           h('td', null, g.check_in ? `${fmtDate(g.check_in)} – ${fmtDate(g.check_out)}` : '—'),
-          h('td', null, String(g.rooms)),
+          h('td', null, isCancelled(g) ? '—' : String(g.rooms)),
           h('td', null, isCancelled(g) ? h('span', { class: 'badge badge--voided' }, 'Cancelled') : h('span', { class: 'badge badge--active' }, 'Active')),
           canManage && h('td', { class: 'num' }, peso(g.total)),
           canManage && h('td', { class: `num${bal > 0 ? ' amount--neg' : ''}` }, isCancelled(g) ? '—' : peso(bal)));

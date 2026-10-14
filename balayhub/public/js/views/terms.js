@@ -4,6 +4,15 @@
 import { get } from '../api.js';
 import { h, brand } from '../ui.js';
 import { state } from '../app.js';
+import { t, extendTranslations } from '../i18n.js';
+
+// Taglish for the contact line only; the terms themselves are the English legal text.
+extendTranslations({
+  'Questions about these terms: ': 'May tanong tungkol sa mga terms na ito: ',
+  'Questions about these terms? ': 'May tanong tungkol sa mga terms na ito? ',
+  'Create your account': 'Gawin ang account mo',
+  ' and ask us in Help & support.': ' at magtanong sa Help & support.',
+});
 
 export async function termsView(el) {
   let contact = '';
@@ -47,6 +56,7 @@ export async function termsView(el) {
         'These terms are governed by the laws of the Republic of the Philippines. Disputes will be handled by the proper courts of the Philippines.'),
       ...section('12. Contact',
         contact
-          ? h('p', null, 'Questions about these terms: ', h('a', { href: `mailto:${contact}` }, contact), '.')
-          : h('p', null, 'Questions about these terms? Use ', h('a', { href: '#/help' }, 'Help & support'), '.'))))));
+          ? h('p', null, t('Questions about these terms: '), h('a', { href: `mailto:${contact}` }, contact), '.')
+          // No contact email yet: visitors create an account, then ask in Help & support (sign-up, not the log-in wall).
+          : h('p', null, t('Questions about these terms? '), h('a', { href: '#/signup' }, t('Create your account')), t(' and ask us in Help & support.')))))));
 }

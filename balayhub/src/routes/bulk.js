@@ -70,7 +70,7 @@ async function listingsFor(user, body, db, { lock }) {
     where.push(`$${params.length} = ANY(u.tags)`);
   }
   const { rows } = await db.query(
-    `SELECT u.unit_id, u.unit_name
+    `SELECT u.unit_id, u.unit_name, u.min_price
        FROM units u JOIN properties p ON p.property_id = u.property_id
       WHERE ${where.join(' AND ')} ORDER BY u.unit_id${lock ? ' FOR UPDATE OF u' : ''}`, params);
   if (body.unit_ids.length && rows.length !== body.unit_ids.length) throw notFound();
@@ -91,10 +91,12 @@ function changeBy(price, percent) {
 
 // Each night a price change touches: the price it has now (what the calendar shows) and the new one.
 // Preview and apply both call this, so they always agree. A night with no price at all can't be
-// changed by a percentage; those are reported, not guessed.
+// changed by a percentage; those are reported, not guessed. A cut that lands below the listing's lowest
+// price is still written (custom prices are used as set, D-74); `belowLowest` counts those nights for the preview.
 async function priceChanges(db, units, body) {
   const changes = [];
   const skipped = [];
+  let belowLowest = 0;
   for (const u of units) {
     const row = { unit_id: u.unit_id, unit_name: u.unit_name };
     if (body.action === 'clear') {
@@ -109,11 +111,15 @@ async function priceChanges(db, units, body) {
     for (const n of nights) {
       if (body.action === 'set') changes.push({ ...row, date: n.night, from_price: n.price, to_price: body.price });
       else if (n.price === null) unpriced += 1;
-      else changes.push({ ...row, date: n.night, from_price: n.price, to_price: changeBy(n.price, body.percent) });
+      else {
+        const toPrice = changeBy(n.price, body.percent);
+        changes.push({ ...row, date: n.night, from_price: n.price, to_price: toPrice });
+        if (u.min_price !== null && Number(toPrice) < Number(u.min_price)) belowLowest += 1;
+      }
     }
     if (unpriced) skipped.push({ ...row, reason: `No nightly rate on ${unpriced} night${unpriced === 1 ? '' : 's'}. Those nights were left alone.` });
   }
-  return { changes, skipped };
+  return { changes, skipped, belowLowest };
 }
 
 async function writePrices(db, user, body, units, changes) {
@@ -144,7 +150,7 @@ router.post('/bulk/prices', managers, ah(async (req, res) => {
   if (body.action === 'percent' && body.percent === null) throw validationError({ percent: 'Enter the percentage to change by.' });
   if (body.action === 'percent' && body.percent === 0) throw validationError({ percent: 'Choose a change other than 0%.' });
   await checkDates(body);
-  const { listings, changes, skipped } = await tx(async (db) => {
+  const { listings, changes, skipped, belowLowest } = await tx(async (db) => {
     const units = await listingsFor(req.user, body, db, { lock: !body.dry_run });
     const plan = await priceChanges(db, units, body);
     // A set price and a percentage change both end here, so the cap is checked once, for preview and apply alike.
@@ -156,7 +162,7 @@ router.post('/bulk/prices', managers, ah(async (req, res) => {
   });
   res.json({
     dry_run: body.dry_run, listings, changes: changes.slice(0, PREVIEW_ROWS), truncated: changes.length > PREVIEW_ROWS,
-    count: changes.length, skipped,
+    count: changes.length, skipped, below_lowest: belowLowest,
   });
 }));
 

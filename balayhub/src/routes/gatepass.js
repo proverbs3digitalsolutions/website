@@ -257,11 +257,23 @@ async function loadByToken(token) {
   return { gp, b };
 }
 
+// The page header reads "property · address", so the address must not repeat the
+// property name or the city (case-insensitive; "PASAY city" is the city Pasay).
+// ponytail: the name and the city are dropped only as a whole comma part, so "Name Tower 2" with no comma stays.
+function headerAddress(b) {
+  const name = (b.property_name || '').trim().toLowerCase();
+  const city = (b.city || '').trim();
+  const cityKey = city.toLowerCase().replace(/ city$/, '');
+  const parts = (b.address || '').split(',').map((s) => s.trim()).filter((s) => s && s.toLowerCase() !== name);
+  if (cityKey && !parts.some((s) => s.toLowerCase().replace(/ city$/, '') === cityKey)) parts.push(city);
+  return parts.join(', ');
+}
+
 publicRouter.get('/public/gatepass/:token', ah(async (req, res) => {
   const { gp, b } = await loadByToken(req.params.token);
   const r = b.registration;
   res.json({
-    workspace: b.workspace_name, property: b.property_name, address: [b.address, b.city].filter(Boolean).join(', '), unit: b.unit_name,
+    workspace: b.workspace_name, property: b.property_name, address: headerAddress(b), unit: b.unit_name,
     check_in: b.check_in, check_out: b.check_out, checkin_time: fmtTime(b.checkin_time), checkout_time: fmtTime(b.checkout_time),
     guests: guestNames(b), num_guests: b.num_guests, arrival_time: r?.arrival_time ? fmtTime(r.arrival_time) : null, vehicle_plate: r?.vehicle_plate || null,
     guest_phone: r?.phone || null, code: b.confirmation_code, notes: b.gatepass_notes,

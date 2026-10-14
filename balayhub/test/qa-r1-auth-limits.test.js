@@ -54,18 +54,19 @@ test('forgot-password: six different emails from one IP all pass', async () => {
   }
 });
 
-test('forgot-password: spam against one email is silent (200, no extra mail), never a 429 for the victim', async () => {
+test('forgot-password: repeat requests for one email send one email (de-duplicated), never a 429 for the victim', async () => {
   const { outbox } = require('../src/lib/mailer');
   assert.equal((await signup('victim@example.com')).status, 201);
   outbox.length = 0;
   let last;
   for (let i = 0; i < 6; i += 1) last = await client(srv.base).post('/api/auth/forgot-password', { email: i % 2 ? 'Victim@Example.com' : 'victim@example.com' });
   assert.equal(last.status, 200);
-  assert.equal(outbox.filter((m) => m.to === 'victim@example.com').length, 5);
+  await new Promise((r) => setTimeout(r, 150));
+  assert.equal(outbox.filter((m) => m.to === 'victim@example.com').length, 1);
   // The victim, from another IP, is never shown a 429 (and the response is identical).
   const other = await client(srv.base).raw('POST', '/api/auth/forgot-password', { email: 'victim@example.com' }, { 'X-Forwarded-For': '203.0.113.9' });
   assert.equal(other.status, 200);
-  assert.equal(outbox.filter((m) => m.to === 'victim@example.com').length, 5);
+  assert.equal(other.data.message, last.data.message);
 });
 
 test('signup: every attempt counts, the 11th from one IP in the hour gets 429', async () => {

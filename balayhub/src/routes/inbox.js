@@ -8,7 +8,7 @@
 const express = require('express');
 const { query, one } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
-const { validate, uuidParam, isValidDate } = require('../lib/validate');
+const { validate, uuidParam, isValidDate, UUID_RE } = require('../lib/validate');
 const { audit } = require('../lib/audit');
 const { requireRole, rateLimit } = require('../lib/auth');
 const { propertyScope } = require('../lib/access');
@@ -33,6 +33,10 @@ const applyLimit = (limiter, req, res) => new Promise((resolve, reject) => limit
 
 const TODAY = `(now() AT TIME ZONE 'Asia/Manila')::date`;
 const validationError = (fields) => new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields });
+// A DATE comes back as YYYY-MM-DD; shown as "Oct 20, 2026" (UTC, so the day never shifts).
+const dayText = (d) => new Date(`${String(d).slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+// A filter id that isn't a UUID is ignored, like a bad channel or view, so an old or edited link still loads the list.
+const uuidOrNull = (v) => (typeof v === 'string' && UUID_RE.test(v) ? v : null);
 
 // A mention in a note is stored as @[Full Name](user id).
 const MENTION_RE = /@\[([^\]\n]{1,120})\]\(([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\)/gi;
@@ -156,11 +160,14 @@ router.get('/inbox', ah(async (req, res) => {
   const qp = req.query;
   if (qp.unread === '1') where.push('c.unread');
   if (CHANNELS.includes(qp.channel)) { params.push(qp.channel); where.push(`b.channel = $${params.length}`); }
-  if (qp.property_id) { params.push(uuidParam(qp.property_id)); where.push(`p.property_id = $${params.length}`); }
-  if (qp.unit_id) { params.push(uuidParam(qp.unit_id)); where.push(`u.unit_id = $${params.length}`); }
+  const propertyId = uuidOrNull(qp.property_id);
+  if (propertyId) { params.push(propertyId); where.push(`p.property_id = $${params.length}`); }
+  const unitId = uuidOrNull(qp.unit_id);
+  if (unitId) { params.push(unitId); where.push(`u.unit_id = $${params.length}`); }
   if (STAYS[qp.stay]) where.push(STAYS[qp.stay]);
+  const assignee = uuidOrNull(qp.assigned);
   if (qp.assigned === 'unassigned') where.push('c.assigned_to IS NULL');
-  else if (qp.assigned) { params.push(uuidParam(qp.assigned)); where.push(`c.assigned_to = $${params.length}`); }
+  else if (assignee) { params.push(assignee); where.push(`c.assigned_to = $${params.length}`); }
   if (isValidDate(qp.msg_from)) { params.push(qp.msg_from); where.push(`(c.last_message_at AT TIME ZONE 'Asia/Manila')::date >= $${params.length}`); }
   if (isValidDate(qp.msg_to)) { params.push(qp.msg_to); where.push(`(c.last_message_at AT TIME ZONE 'Asia/Manila')::date <= $${params.length}`); }
   if (qp.attention === 'awaiting_reply') where.push(`last.direction = 'in'`);
@@ -292,7 +299,7 @@ router.patch('/inbox/:id', ah(async (req, res) => {
   if (body.assigned_to && body.assigned_to !== conv.assigned_to && body.assigned_to !== req.user.user_id) {
     await notifyUser(req.user.organization_id, body.assigned_to, 'assignment', {
       title: `${req.user.full_name} assigned you a conversation`,
-      body: `${conv.guest_name} · ${conv.unit_name}, ${conv.check_in}`,
+      body: `${conv.guest_name} · ${conv.unit_name}, ${dayText(conv.check_in)}`,
       url: `/#/inbox/${conv.conversation_id}`,
       propertyId: await push.propertyOfBooking(conv.booking_id),
     });

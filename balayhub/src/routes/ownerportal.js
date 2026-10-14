@@ -135,6 +135,12 @@ publicRouter.get('/owner-portal/statements', requireOwnerSession, ah(async (req,
   });
 }));
 
+// D-47: the snapshot keeps each stay's confirmation code for the host. Owners never get it.
+const withoutCodes = (snap) => {
+  if (!snap.stays) return snap;
+  return { ...snap, stays: snap.stays.map(({ confirmation_code: _code, ...stay }) => stay) };
+};
+
 // The frozen copy from publish (owner_statements.snapshot), plus that month's payouts.
 publicRouter.get('/owner-portal/statements/:month', requireOwnerSession, ah(async (req, res) => {
   const o = req.portalOwner;
@@ -151,7 +157,7 @@ publicRouter.get('/owner-portal/statements/:month', requireOwnerSession, ah(asyn
     `SELECT COALESCE(SUM(amount), 0)::numeric(12,2) AS paid FROM owner_payouts
       WHERE owner_id = $1 AND month = $2 AND voided_at IS NULL`, [o.owner_id, month]);
   res.json({
-    statement: { ...s.snapshot, month_label: monthLabel(month) },
+    statement: { ...withoutCodes(s.snapshot), month_label: monthLabel(month) },
     published_at: s.published_at, payouts, paid,
   });
 }));

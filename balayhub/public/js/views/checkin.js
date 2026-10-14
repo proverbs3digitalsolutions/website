@@ -13,6 +13,9 @@ const fmtTime = (t) => {
 };
 
 extendTranslations({
+  'Too many attempts': 'Napakaraming subok',
+  'Something went wrong': 'May nagkaproblema',
+  'Your check-in details': 'Ang check-in details mo',
   'House rules': 'Mga patakaran sa bahay',
   'I have read and agree to the house rules.': 'Nabasa ko at sumasang-ayon ako sa mga patakaran sa bahay.',
   'Please accept the house rules to continue.': 'Pakisang-ayunan ang mga patakaran sa bahay para magpatuloy.',
@@ -23,6 +26,9 @@ extendTranslations({
   'Your ID must be a JPG, PNG or WEBP photo.': 'Dapat JPG, PNG o WEBP na litrato ang ID mo.',
   'Please agree so your host can register you with the building.': 'Paki-agree para ma-register ka ng host sa building.',
 });
+
+// The heading follows the cause: only a 404 is a bad link.
+const failTitle = (err) => (err.status === 404 ? t('Link not found') : err.status === 429 ? t('Too many attempts') : t('Something went wrong'));
 
 // The ID photo types the server accepts (src/routes/checkin.js). Checked before anything is sent.
 const ID_PHOTO_TYPE = /^image\/(jpeg|png|webp)$/;
@@ -55,14 +61,14 @@ export async function guestCheckinView(el, { params }) {
   try {
     data = await get(`/public/checkin/${encodeURIComponent(token)}`);
   } catch (err) {
-    el.replaceChildren(page(h('div', { class: 'card' }, h('h1', null, t('Link not found')), h('p', { class: 'muted' }, err.message))));
+    el.replaceChildren(page(h('div', { class: 'card' }, h('h1', null, failTitle(err)), h('p', { class: 'muted' }, tServer(err.message)))));
     return;
   }
   const { stay: s, registration: r } = data;
   initGuestLang(s.guest_language);
   const header = h('div', { class: 'gc__stay card' },
     h('p', { class: 'gc__eyebrow' }, s.workspace_name),
-    h('h1', null, s.closed ? t('Guest registration') : s.guest_first_name ? t('Hi {name}! Please register before you arrive', { name: s.guest_first_name }) : t('Guest registration')),
+    h('h1', null, s.closed ? t('Guest registration') : s.checked_in ? t('Your check-in details') : s.guest_first_name ? t('Hi {name}! Please register before you arrive', { name: s.guest_first_name }) : t('Guest registration')),
     !s.closed && h('p', { class: 'muted' }, t('The building requires the names and a valid ID of everyone staying. It takes about 2 minutes.')),
     h('dl', { class: 'dl', style: { marginTop: '12px' } },
       h('dt', null, t('Stay')), h('dd', null, `${s.listing}, ${s.property}${s.city ? `, ${s.city}` : ''}`),

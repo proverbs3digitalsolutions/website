@@ -49,7 +49,7 @@ router.get('/pricing', ah(async (req, res) => {
       ORDER BY p.property_name, u.unit_name`, params);
   const { rows: seasons } = await query(
     `SELECT s.season_id, s.unit_id, u.unit_name, s.name, s.start_date::text AS start_date, s.end_date::text AS end_date,
-            s.nightly_rate, s.adjust_pct, s.min_nights
+            s.nightly_rate, s.adjust_pct, s.min_nights, s.created_at
        FROM seasons s LEFT JOIN units u ON u.unit_id = s.unit_id
       WHERE s.organization_id = $1 AND s.end_date >= $2 AND (s.unit_id IS NULL OR s.unit_id = ANY($3))
       ORDER BY s.start_date`, [req.user.organization_id, manilaToday(), listings.map((l) => l.unit_id)]);
@@ -80,21 +80,31 @@ router.post('/pricing/seasons', managers, ah(async (req, res) => {
     throw validationError({ nightly_rate: 'Set a nightly rate, a percentage change, a minimum stay, or a mix.' });
   }
   if (body.adjust_pct === 0) throw validationError({ adjust_pct: 'Enter a percentage other than 0.' });
-  if (body.unit_id) await loadUnit(req.user, body.unit_id);
+  let unit = null;
+  if (body.unit_id) unit = await loadUnit(req.user, body.unit_id);
   else if (req.user.role !== 'owner') throw validationError({ unit_id: 'Choose a listing. Only the owner can set seasons for every listing.' });
   const { rows: [{ n }] } = await query('SELECT COUNT(*)::int AS n FROM seasons WHERE organization_id = $1 AND end_date >= $2', [req.user.organization_id, manilaToday()]);
   if (n >= 200) throw new HttpError(409, 'You have too many upcoming seasons. Remove some first.', { code: 'LIMIT' });
-  // Overlaps on the same scope are allowed, but the saver is told which season prices the shared nights:
-  // the engine uses the one that starts later (a season that only sets a minimum stay never prices a night).
+  // Overlaps are allowed, and the saver is told which season prices each shared night (D-66, D-76). A listing
+  // season beats an all-listings season on that listing. Within one scope the season that starts later wins,
+  // and on equal starts the one created later, which is this one. A season that only sets a minimum stay never prices a night.
   const { rows: clash } = await query(
-    `SELECT name, start_date::text AS start_date, end_date::text AS end_date, nightly_rate, adjust_pct FROM seasons
-      WHERE organization_id = $1 AND unit_id IS NOT DISTINCT FROM $2 AND start_date <= $4 AND end_date >= $3 ORDER BY start_date`,
+    `SELECT s.name, s.start_date::text AS start_date, s.end_date::text AS end_date, s.nightly_rate, s.adjust_pct, s.unit_id, u.unit_name
+       FROM seasons s LEFT JOIN units u ON u.unit_id = s.unit_id
+      WHERE s.organization_id = $1 AND s.start_date <= $4 AND s.end_date >= $3
+        AND (s.unit_id IS NULL OR $2::uuid IS NULL OR s.unit_id = $2::uuid)
+      ORDER BY s.start_date`,
     [req.user.organization_id, body.unit_id, body.start_date, body.end_date]);
   const prices = (x) => x.nightly_rate !== null || x.adjust_pct !== null;
-  const overlaps = clash.map((o) => ({
-    name: o.name, start_date: o.start_date, end_date: o.end_date,
-    wins: !prices(body) || !prices(o) || o.start_date === body.start_date ? null : (body.start_date > o.start_date ? 'new' : 'existing'),
-  }));
+  const overlaps = clash.map((o) => {
+    const mixed = Boolean(o.unit_id) !== Boolean(body.unit_id);
+    let wins = null;
+    if (prices(body) && prices(o)) {
+      if (mixed) wins = body.unit_id ? 'new' : 'existing';
+      else wins = body.start_date >= o.start_date ? 'new' : 'existing';
+    }
+    return { name: o.name, start_date: o.start_date, end_date: o.end_date, on: mixed ? (body.unit_id ? unit.unit_name : o.unit_name) : null, wins };
+  });
   const s = await one(
     `INSERT INTO seasons (organization_id, unit_id, name, start_date, end_date, nightly_rate, adjust_pct, min_nights, created_by)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING season_id`,

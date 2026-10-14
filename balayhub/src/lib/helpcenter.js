@@ -3,6 +3,8 @@
 // Help center articles: shown in Help, suggested while writing a ticket, and
 // used by the BalayHub assistant as its knowledge of the platform.
 // Each article: slug, title, category, roles who can do it, keywords, steps/text.
+// Optional module: 'stay' (short-term guides) or 'rent' (monthly-rent guides). Without one, the
+// guide shows for every workspace type.
 
 const CATEGORIES = [
   ['start', 'Getting started'],
@@ -28,14 +30,6 @@ const ARTICLES = [
     keywords: 'new update changes whats new what is new news release latest',
     body: [
       "Read the lines that match your role. Owners see everything. Managers see most of it, except owner-only settings. Staff see stays and check-ins without money details. Cleaners see only their own cleaning jobs, their own pay and the help pages.",
-      "Money (owners and managers):",
-      "Extra charges: add a late check-out, extra guest or damage charge to a stay, and void it with a reason. See “Extra charges and pay links”.",
-      "Payment proofs: guests send a GCash or bank transfer screenshot from their pay page, and you confirm or reject it. See “Payment proofs: GCash and bank transfer screenshots”.",
-      "Refunds and cancellation policies: pick a policy, see a suggested refund, and record refunds. See “Cancellation policies and refunds”.",
-      "Deposit percentage per listing: choose 10% to 90% for online bookings. See “Deposit percentage per listing”.",
-      "You keep: the reservation shows what you keep after channel fees. See “Create and manage reservations”.",
-      "Message variables for the cancellation policy and payment links. See “Guest inbox, templates and automatic messages”.",
-      "Reports and owner statements now include extra charges and refunds. See “Reports and income summary for taxes”.",
       "Owners:",
       "Owner portal: unit owners sign in with an emailed link to see their statements, payouts and bookings. See “Give unit owners their own portal”.",
       "Fee types: percent of net (the default), percent of gross, or a flat monthly fee. See “Fee types: percent of net, percent of gross, or flat monthly”.",
@@ -44,12 +38,37 @@ const ARTICLES = [
       "Profit and loss per unit, with a CSV download. See “Profit and loss per unit”.",
       "Cleaning and operations (owners and managers, and cleaners where it says so):",
       "Cleaner role: cleaners sign in to a short menu and see only their own jobs and pay. Owners invite them. See “Invite a cleaner and what they can see”.",
-      "Status board: each unit shows Dirty, Clean or Inspected, with inspections and cleaner scores. See “Status board, calendar and inspections”.",
       "Damage reports: charge the guest, deduct from the deposit, or waive. Cleaners report damage from a job. See “Damage reports: charge the guest, deduct from deposit, or waive” and “Report damage from a cleaning job”.",
-      "Cleaner pay: rates per clean or per hour, mark paid, and an optional cleaning expense. Cleaners see their own pay. See “Cleaner pay: rates, marking paid and expenses” and “See your pay”.",
+      "Cleaners see their own pay. See “See your pay”.",
       "Supplies with par levels and low-stock alerts; cleaners record what they used. See “Supplies, par levels and low stock”.",
       "Lost and found, and work orders raised from a cleaning job. See “Lost and found: log an item and return it” and “Raise a work order from a cleaning job”.",
       "Recurring maintenance, such as aircon cleaning every three months. See “Recurring maintenance, such as aircon cleaning every 3 months”.",
+      "Earlier this week (everyone):",
+      "My account page: your name, password, notifications and language in one place, with Log out always visible. See “Choose which alerts you get”.",
+      "Help center and support tickets: search these articles, and follow a ticket from Received to Resolved. See “Contact support”.",
+      "Filters on every list page. See “Getting started with BalayHub”.",
+      "Light and dark mode. See “Dark mode and language”.",
+      "Launchpad setup checklist. See “Getting started with BalayHub”.",
+      "Plan payments by PayMongo. See “Plans, free trial and paying for BalayHub”.",
+      "Installable app and push notifications on your phone. See “Use BalayHub on your phone and get notifications”.",
+      "Security deposits. See “Security deposits”.",
+      "Choose which alerts you get. See “Choose which alerts you get”.",
+    ],
+  },
+  {
+    slug: 'whats-new-stays', category: 'start', roles: CREW, module: 'stay', title: 'What’s new for short-term stays',
+    keywords: 'new update changes whats new what is new news release latest',
+    body: [
+      "Money (owners and managers):",
+      "Extra charges: add a late check-out, extra guest or damage charge to a stay, and void it with a reason. See “Extra charges and pay links”.",
+      "Payment proofs: guests send a GCash or bank transfer screenshot from their pay page, and you confirm or reject it. See “Payment proofs: GCash and bank transfer screenshots”.",
+      "Refunds and cancellation policies: pick a policy, see a suggested refund, and record refunds. See “Cancellation policies and refunds”.",
+      "Deposit percentage per listing: choose 10% to 90% for online bookings. See “Deposit percentage per listing”.",
+      "You keep: the reservation shows what you keep after channel fees. See “Create and manage reservations”.",
+      "Message variables for the cancellation policy and payment links. See “Guest inbox, templates and automatic messages”.",
+      "Reports and owner statements now include extra charges and refunds. See “Reports and income summary for taxes”.",
+      "Status board: each unit shows Dirty, Clean or Inspected, with inspections and cleaner scores. See “Status board, calendar and inspections”.",
+      "Cleaner pay: rates per clean or per hour, mark paid, and an optional cleaning expense. See “Cleaner pay: rates, marking paid and expenses”.",
       "Guests and direct booking (owners and managers):",
       "Guidebook per listing, in English or Taglish, with a private link. Wi-Fi and the door code show from the day before check-in. See “Guidebook and door code: what guests see, and when”.",
       "House rules: guests tick an agreement before paying and at check-in. See “House rules: guests agree before paying and at check-in”.",
@@ -64,19 +83,13 @@ const ARTICLES = [
       "Tags, room types, and group bookings for several rooms. See “Tags and room types” and “Group bookings: several rooms for one guest”.",
       "Move a booking to another listing by dragging it on the Calendar. See “Move a reservation to another listing”.",
       "Reservation activity: who did what, and when. See “Reservation activity: who did what, and when”.",
-      "Assign conversations to a teammate and @mention them in notes. Choose which alerts you get. See “Assign conversations and mention a teammate” and “Choose which alerts you get”.",
+      "Assign conversations to a teammate and @mention them in notes. See “Assign conversations and mention a teammate”.",
       "Daily close: check the day before you log off. See “Daily close: check the day before you log off”.",
       "Calendar sync warnings for stale calendars and overlapping channel bookings. See “Calendar sync warnings: stale calendars and overlapping bookings”.",
-      "Earlier this week (everyone):",
-      "My account page: your name, password, notifications and language in one place, with Log out always visible. See “Choose which alerts you get”.",
-      "Help center and support tickets: search these articles, and follow a ticket from Received to Resolved. See “Contact support”.",
-      "Filters on every list page. See “Getting started with BalayHub”.",
-      "Light and dark mode. See “Dark mode and language”.",
       "Taglish guest pages and messages. See “Guest inbox, templates and automatic messages”.",
-      "Launchpad setup checklist and the guest check-in form. See “Getting started with BalayHub” and “Guest check-in form (names and IDs)”.",
-      "Plan payments by PayMongo, and online payments for guests. See “Plans, free trial and paying for BalayHub” and “Take payments online (PayMongo, GCash, Maya)”.",
-      "Installable app and push notifications on your phone. See “Use BalayHub on your phone and get notifications”.",
-      "Security deposits and condo gate passes. See “Security deposits” and “Send the gate pass to the condo admin”.",
+      "Guest check-in form. See “Guest check-in form (names and IDs)”.",
+      "Online payments for guests. See “Take payments online (PayMongo, GCash, Maya)”.",
+      "Condo gate passes. See “Send the gate pass to the condo admin”.",
       "Reviews, repeat guests and discount codes. See “Guest reviews, repeat guests, VIP and Do not rebook” and “Discount codes for your booking page”.",
     ],
   },
@@ -90,7 +103,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'add-listing', category: 'start', roles: MANAGERS, title: 'Add a listing (unit)',
+    slug: 'add-listing', category: 'start', roles: MANAGERS, module: 'stay', title: 'Add a listing (unit)',
     keywords: 'listing unit condo add new property building nightly rate cleaning fee',
     body: [
       'Go to Listings → Add listing.',
@@ -100,7 +113,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'calendar-sync', category: 'bookings', roles: MANAGERS, title: 'Connect Airbnb, Booking.com and Agoda calendars',
+    slug: 'calendar-sync', category: 'bookings', roles: MANAGERS, module: 'stay', title: 'Connect Airbnb, Booking.com and Agoda calendars',
     keywords: 'ical calendar sync airbnb booking.com agoda vrbo expedia trip.com channel import export double booking',
     body: [
       'Open Listings, choose a listing, then Channels.',
@@ -111,7 +124,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'reservations', category: 'bookings', roles: ALL, title: 'Create and manage reservations',
+    slug: 'reservations', category: 'bookings', roles: ALL, module: 'stay', title: 'Create and manage reservations',
     keywords: 'reservation booking new create edit cancel check in check out guest stay',
     body: [
       'Reservations → New reservation (owners and managers). Pick the listing and dates; the price fills in from your rates, discounts and holiday prices. You can change it.',
@@ -122,7 +135,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'block-dates-prices', category: 'bookings', roles: MANAGERS, title: 'Block dates or change a night\'s price',
+    slug: 'block-dates-prices', category: 'bookings', roles: MANAGERS, module: 'stay', title: 'Block dates or change a night\'s price',
     keywords: 'block dates owner stay repairs price override calendar nightly price',
     body: [
       'Open Calendar and tap an open night on a listing.',
@@ -131,7 +144,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'pricing-rules', category: 'money', roles: MANAGERS, title: 'Weekend, holiday and season prices, discounts',
+    slug: 'pricing-rules', category: 'money', roles: MANAGERS, module: 'stay', title: 'Weekend, holiday and season prices, discounts',
     keywords: 'pricing weekend holiday holy week christmas season minimum nights weekly monthly discount rate',
     body: [
       'Per listing (Listings → Edit → Pricing helpers): weekend rate (Fri & Sat nights), holiday rate, weekly (7+ nights) and monthly (28+ nights) discounts.',
@@ -141,7 +154,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'record-payment', category: 'money', roles: ALL, title: 'Record a payment and send a receipt',
+    slug: 'record-payment', category: 'money', roles: ALL, module: 'stay', title: 'Record a payment and send a receipt',
     keywords: 'payment record gcash maya cash bank transfer receipt void balance channel payout',
     body: [
       'Open the reservation → Record payment. Choose GCash, Maya, cash, bank transfer, card or channel payout, and tick "Email a receipt" for guest payments.',
@@ -152,7 +165,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'online-payments', category: 'money', roles: MANAGERS, title: 'Take payments online (PayMongo, GCash, Maya)',
+    slug: 'online-payments', category: 'money', roles: MANAGERS, module: 'stay', title: 'Take payments online (PayMongo, GCash, Maya)',
     keywords: 'paymongo online payment gcash maya card direct booking page payment link balance deposit percentage',
     body: [
       'Settings → Direct booking page (owners only) → connect your own PayMongo secret key (start with a test key sk_test_…). Money goes to your PayMongo account.',
@@ -162,7 +175,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'extra-charges', category: 'money', roles: MANAGERS, title: 'Extra charges and pay links',
+    slug: 'extra-charges', category: 'money', roles: MANAGERS, module: 'stay', title: 'Extra charges and pay links',
     keywords: 'extra charge late check-out early check-in extra guest extra bed damage cleaning airport transfer add void pay link balance',
     body: [
       'Open the reservation → Extra charges → Add charge. Pick a category (late check-out, extra guest, damage…), adjust the description, quantity and price.',
@@ -173,7 +186,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'payment-proofs', category: 'money', roles: MANAGERS, title: 'Payment proofs: GCash and bank transfer screenshots',
+    slug: 'payment-proofs', category: 'money', roles: MANAGERS, module: 'stay', title: 'Payment proofs: GCash and bank transfer screenshots',
     keywords: 'payment proof screenshot gcash maya bank transfer manual payments confirm reject instructions pay page',
     body: [
       'Settings → Manual payments (owner): turn it on and type the GCash number, bank name and account name guests should pay.',
@@ -184,7 +197,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'cancellation-refunds', category: 'money', roles: MANAGERS, title: 'Cancellation policies and refunds',
+    slug: 'cancellation-refunds', category: 'money', roles: MANAGERS, module: 'stay', title: 'Cancellation policies and refunds',
     keywords: 'cancellation policy refund flexible moderate strict non-refundable custom suggested refund guest cancel',
     body: [
       'Listings → Edit → Cancellation policy: Flexible, Moderate, Strict, Non-refundable or your own wording. Guests see it on your booking page before they pay, and in the {{cancellation_policy}} message variable.',
@@ -195,7 +208,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'deposit-percentage', category: 'money', roles: MANAGERS, title: 'Deposit percentage per listing',
+    slug: 'deposit-percentage', category: 'money', roles: MANAGERS, module: 'stay', title: 'Deposit percentage per listing',
     keywords: 'deposit percentage percent down payment booking page partial pay later balance 50% per listing',
     body: [
       'Listings → Edit → Deposit (% of the total): the share a guest pays now on your booking page, from 10% to 90%. The default is 50%.',
@@ -204,7 +217,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'discount-codes', category: 'money', roles: OWNER, title: 'Discount codes for your booking page',
+    slug: 'discount-codes', category: 'money', roles: OWNER, module: 'stay', title: 'Discount codes for your booking page',
     keywords: 'discount code promo returning guests coupon',
     body: [
       'Guests → Discount codes → New code. Choose percent or peso off (accommodation only), optional dates, minimum nights, usage limit, or returning guests only.',
@@ -212,7 +225,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'inbox-messages', category: 'guests', roles: MANAGERS, title: 'Guest inbox, templates and automatic messages',
+    slug: 'inbox-messages', category: 'guests', roles: MANAGERS, module: 'stay', title: 'Guest inbox, templates and automatic messages',
     keywords: 'inbox message email template automation confirmation check-in instructions thank you reminder ai draft taglish',
     body: [
       'Inbox shows every guest conversation. Write a reply, insert a template, or use AI draft (if available) and edit before sending.',
@@ -223,7 +236,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'checkin-form', category: 'guests', roles: MANAGERS, title: 'Guest check-in form (names and IDs)',
+    slug: 'checkin-form', category: 'guests', roles: MANAGERS, module: 'stay', title: 'Guest check-in form (names and IDs)',
     keywords: 'check-in form registration guest ids names plate building requirement',
     body: [
       'Every reservation has a private check-in form link (on the reservation, and in the {{checkin_link}} message variable).',
@@ -232,7 +245,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'gate-pass', category: 'operations', roles: MANAGERS, title: 'Send the gate pass to the condo admin',
+    slug: 'gate-pass', category: 'operations', roles: MANAGERS, module: 'stay', title: 'Send the gate pass to the condo admin',
     keywords: 'gate pass condo admin building security guest registration ids authorization',
     body: [
       'Listings → Gate pass → press Set up next to the building: admin email(s), send automatically N days before check-in, notes (e.g. parking slot), and "Authorized by".',
@@ -261,7 +274,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'cleaning-board', category: 'operations', roles: MANAGERS, title: 'Status board, calendar and inspections',
+    slug: 'cleaning-board', category: 'operations', roles: MANAGERS, module: 'stay', title: 'Status board, calendar and inspections',
     keywords: 'board status dirty clean inspected calendar week reassign cleaner inspection pass fail score quality scores',
     body: [
       'Housekeeping → Board shows every unit as Dirty, Clean or Inspected, with who is in it now, the next arrival, the open job and the last inspection score.',
@@ -305,7 +318,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'cleaner-pay', category: 'business', roles: MANAGERS, title: 'Cleaner pay: rates, marking paid and expenses',
+    slug: 'cleaner-pay', category: 'business', roles: MANAGERS, module: 'stay', title: 'Cleaner pay: rates, marking paid and expenses',
     keywords: 'cleaner pay rate per clean per hour paid gcash maya cash bank reference mark paid expense cleaning monthly unpaid undo',
     body: [
       'Owners set each cleaner\'s rate, per clean or per hour, on the Cleaner pay page, in the rates section (owners only). A cleaner is either a team member or an outside cleaner typed by name.',
@@ -368,7 +381,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'reviews-guests', category: 'guests', roles: MANAGERS, title: 'Guest reviews, repeat guests, VIP and Do not rebook',
+    slug: 'reviews-guests', category: 'guests', roles: MANAGERS, module: 'stay', title: 'Guest reviews, repeat guests, VIP and Do not rebook',
     keywords: 'review rating repeat guest vip do not rebook blacklist returning',
     body: [
       'The thank-you message includes a private review link; ratings appear on the reservation, the guest profile and Guests → Reviews. Low ratings send a notification.',
@@ -450,7 +463,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'long-term-setup', category: 'longterm', roles: MANAGERS, title: 'Set up monthly rentals: properties, tenants and leases',
+    slug: 'long-term-setup', category: 'longterm', roles: MANAGERS, module: 'rent', title: 'Set up monthly rentals: properties, tenants and leases',
     keywords: 'long-term monthly tenant lease boarding house apartment dorm room bedspace contract rent due day advance deposit renew end lease',
     body: [
       'For monthly rentals (apartments, boarding houses, dorms, bedspaces), an owner adds the property under Properties → Add property. Then open the property under Properties and press Add unit, with the monthly rent.',
@@ -460,7 +473,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'rent-payments', category: 'longterm', roles: ALL, title: 'Record rent payments and see who is overdue',
+    slug: 'rent-payments', category: 'longterm', roles: ALL, module: 'rent', title: 'Record rent payments and see who is overdue',
     keywords: 'rent payment collect overdue unpaid partial receipt gcash cash bank void tenant balance monthly',
     body: [
       'Go to Rent & Expenses → Record payment. Choose the tenant/lease, amount, date and method (cash, GCash, Maya, bank transfer, check) and add the reference number if any.',
@@ -470,7 +483,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'expenses-maintenance', category: 'longterm', roles: ALL, title: 'Expenses, repairs and maintenance requests',
+    slug: 'expenses-maintenance', category: 'longterm', roles: ALL, module: 'rent', title: 'Expenses, repairs and maintenance requests',
     keywords: 'expense repair maintenance plumber electricity water association dues taxes cost receipt request fix broken',
     body: [
       'Expenses: Rent & Expenses → Expenses tab → Add expense (category, amount, date, vendor). Attach the receipt photo. Expenses appear in Reports.',
@@ -522,7 +535,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'guidebook', category: 'guests', roles: MANAGERS, title: 'Guidebook and door code: what guests see, and when',
+    slug: 'guidebook', category: 'guests', roles: MANAGERS, module: 'stay', title: 'Guidebook and door code: what guests see, and when',
     keywords: 'guidebook guide wifi password door code gate arrival parking local tips emergency link private message',
     body: [
       'Listings → pick a listing → Guidebook. Fill in arrival, parking, building and gate notes, local tips and emergency contacts. Add a Taglish version of any section if you want; guests see the language set for your workspace, with a switch.',
@@ -534,7 +547,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'house-rules-acceptance', category: 'guests', roles: MANAGERS, title: 'House rules: guests agree before paying and at check-in',
+    slug: 'house-rules-acceptance', category: 'guests', roles: MANAGERS, module: 'stay', title: 'House rules: guests agree before paying and at check-in',
     keywords: 'house rules agree accept checkbox consent terms check-in booking page guest',
     body: [
       'If a listing has house rules (Listings → Edit), guests must tick "I agree to the house rules" on the booking page before they can pay, and again on the check-in form before they submit it.',
@@ -543,7 +556,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'addons', category: 'money', roles: MANAGERS, title: 'Paid add-ons: airport pickup, early check-in and more',
+    slug: 'addons', category: 'money', roles: MANAGERS, module: 'stay', title: 'Paid add-ons: airport pickup, early check-in and more',
     keywords: 'add-on addon extra optional airport pickup early check-in extra bed breakfast upsell price per night per guest',
     body: [
       'Owners add, change and archive them under Add-ons (managers can see the list): name, optional Taglish name, description, price, and how the price works. Choices are per stay, per night, per guest, or per guest per night. Set a maximum quantity (1 to 20) and choose which listings offer it (none picked means all).',
@@ -553,7 +566,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'quotes', category: 'bookings', roles: MANAGERS, title: 'Send a quote to a Facebook or Messenger inquiry',
+    slug: 'quotes', category: 'bookings', roles: MANAGERS, module: 'stay', title: 'Send a quote to a Facebook or Messenger inquiry',
     keywords: 'quote offer inquiry facebook messenger viber price custom booking send link pay expire cancel',
     body: [
       'Quotes → New quote. Pick the listing, dates, number of guests, guest name, and an email or mobile number. The price fills in from your rates; you can change the accommodation, cleaning fee, add-ons and discount.',
@@ -565,7 +578,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'share-links-sources', category: 'bookings', roles: MANAGERS, title: 'Share links and where guests came from',
+    slug: 'share-links-sources', category: 'bookings', roles: MANAGERS, module: 'stay', title: 'Share links and where guests came from',
     keywords: 'share link source facebook instagram messenger viber tiktok google whatsapp referral report campaign tag',
     body: [
       'Open a listing\'s booking page and add ?src= with a source to the end of the link, for example ?src=facebook. Copy that link into your post or message. Sources: Facebook, Instagram, Messenger, Viber, TikTok, Google, WhatsApp, email, referral, or other.',
@@ -575,7 +588,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'public-reviews', category: 'guests', roles: OWNER, title: 'Public review links: ask happy guests to post a review',
+    slug: 'public-reviews', category: 'guests', roles: OWNER, module: 'stay', title: 'Public review links: ask happy guests to post a review',
     keywords: 'review google facebook public share links rating 4 5 stars private feedback thank you',
     body: [
       'Settings → Guest experience → Public review links. Add up to 4 links to your own pages (Google, Facebook or another page). Each must start with https:// and be 300 characters or fewer.',
@@ -584,7 +597,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'returning-guest-codes', category: 'money', roles: OWNER, title: 'Returning-guest discount codes',
+    slug: 'returning-guest-codes', category: 'money', roles: OWNER, module: 'stay', title: 'Returning-guest discount codes',
     keywords: 'returning guest welcome back personal code discount repeat guest loyalty thank you message',
     body: [
       'Settings → Guest experience → Returning-guest discount. Enter a percentage from 1 to 50, or leave it blank to turn it off.',
@@ -593,7 +606,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'abandoned-booking-followup', category: 'bookings', roles: OWNER, title: 'Follow up guests who didn\'t finish paying',
+    slug: 'abandoned-booking-followup', category: 'bookings', roles: OWNER, module: 'stay', title: 'Follow up guests who didn\'t finish paying',
     keywords: 'abandoned unfinished unpaid booking follow up email reminder checkout expired failed still want',
     body: [
       'Settings → Guest experience → tick “Send one follow-up email when someone starts a direct booking but does not pay”. It is off by default.',
@@ -602,7 +615,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'listing-pages-google', category: 'bookings', roles: MANAGERS, title: 'Listing pages for Google and search',
+    slug: 'listing-pages-google', category: 'bookings', roles: MANAGERS, module: 'stay', title: 'Listing pages for Google and search',
     keywords: 'seo google search listing page address sitemap public web page stay find search engine indexing',
     body: [
       'Each listing with direct booking turned on has its own public page, for example /stay/your-workspace/your-listing. Set its address under Listings → Page address.',
@@ -612,7 +625,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'booking-window-prices', category: 'money', roles: MANAGERS, title: 'Last-minute, far-out and gap-night prices',
+    slug: 'booking-window-prices', category: 'money', roles: MANAGERS, module: 'stay', title: 'Last-minute, far-out and gap-night prices',
     keywords: 'last minute far out gap night early booking discount fortnight 14 nights lowest price floor preview price rule percent season',
     body: [
       'Open Pricing rules. A rule changes the price of stays by a percentage. Use a minus sign for a discount, for example -10.',
@@ -627,7 +640,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'bulk-prices-blocks', category: 'bookings', roles: MANAGERS, title: 'Change prices or block dates for many listings at once',
+    slug: 'bulk-prices-blocks', category: 'bookings', roles: MANAGERS, module: 'stay', title: 'Change prices or block dates for many listings at once',
     keywords: 'bulk change many listings tag price percent clear block unblock preview apply several units dates multiple',
     body: [
       'Open Pricing rules and choose Bulk changes (owners and managers). Pick listings with the checkboxes or by tag, then the first and last night. You can change up to 50 listings and up to a year at a time.',
@@ -638,7 +651,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'tags-room-types', category: 'bookings', roles: MANAGERS, title: 'Tags and room types',
+    slug: 'tags-room-types', category: 'bookings', roles: MANAGERS, module: 'stay', title: 'Tags and room types',
     keywords: 'tag tags room type studio 1-bedroom any free room group filter listing type label bulk',
     body: [
       'Tags are short labels for listings, such as "azure" or "beachfront". Open Listings, choose the listing, then Edit. Add up to 10 tags. Each tag can be up to 30 characters, and tags are saved in lowercase.',
@@ -649,7 +662,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'reservation-activity', category: 'bookings', roles: MANAGERS, title: 'Reservation activity: who did what, and when',
+    slug: 'reservation-activity', category: 'bookings', roles: MANAGERS, module: 'stay', title: 'Reservation activity: who did what, and when',
     keywords: 'activity history log audit who changed what payment charge refund check in check out timeline proof deposit damage',
     body: [
       'Open a reservation. The Activity card lists what happened, newest first, in plain English: check-ins, changes, payments, charges, refunds, payment proofs, deposits, damage, cleaning, quotes and messages sent to the guest.',
@@ -660,7 +673,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'assign-mentions', category: 'business', roles: MANAGERS, title: 'Assign conversations and mention a teammate',
+    slug: 'assign-mentions', category: 'business', roles: MANAGERS, module: 'stay', title: 'Assign conversations and mention a teammate',
     keywords: 'assign assigned inbox conversation mention @ note team notify push email owner manager',
     body: [
       'In the Inbox, open a conversation and choose who it is assigned to. That person gets a push alert, or an email if they have no device. Home shows "Assigned to you" with a count.',
@@ -681,7 +694,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'group-bookings', category: 'bookings', roles: ALL, title: 'Group bookings: several rooms for one guest',
+    slug: 'group-bookings', category: 'bookings', roles: ALL, module: 'stay', title: 'Group bookings: several rooms for one guest',
     keywords: 'group booking family reunion several rooms listings lead guest one booking all or nothing add room remove cancel party',
     body: [
       'Open Group bookings and choose New group booking (owners and managers). Enter a name, the lead guest, then 2 to 20 rooms.',
@@ -694,7 +707,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'move-booking-calendar', category: 'bookings', roles: MANAGERS, title: 'Move a reservation to another listing',
+    slug: 'move-booking-calendar', category: 'bookings', roles: MANAGERS, module: 'stay', title: 'Move a reservation to another listing',
     keywords: 'move drag calendar another listing room change unit swap same dates price stays cleaning',
     body: [
       'On the Calendar, drag a reservation bar onto another listing\'s row, then confirm. The dates and the price stay the same.',
@@ -704,7 +717,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'daily-close', category: 'operations', roles: MANAGERS, title: 'Daily close: check the day before you log off',
+    slug: 'daily-close', category: 'operations', roles: MANAGERS, module: 'stay', title: 'Daily close: check the day before you log off',
     keywords: 'daily close checklist end of day arrivals departures cleaning payments balances proofs damage sync close the day note history',
     body: [
       'Open Daily close from the menu (owners and managers). It opens today, Philippine time. You can pick another day, up to tomorrow.',
@@ -716,7 +729,7 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'sync-warnings', category: 'bookings', roles: MANAGERS, title: 'Calendar sync warnings: stale calendars and overlapping bookings',
+    slug: 'sync-warnings', category: 'bookings', roles: MANAGERS, module: 'stay', title: 'Calendar sync warnings: stale calendars and overlapping bookings',
     keywords: 'sync warning stale failing calendar not updated overlap double booking alert airbnb booking.com agoda ical problem',
     body: [
       'BalayHub shows a warning on Home, and a "Sync problem" mark on the Calendar, when a channel calendar hasn\'t refreshed for 3 hours or its last refresh failed.',
@@ -729,17 +742,41 @@ const ARTICLES = [
 ];
 
 const norm = (s) => String(s || '').toLowerCase();
+const wordsOf = (s) => norm(s).split(/[^a-z0-9]+/).filter(Boolean);
+// Words that carry no topic, so "how do I add a listing" searches for "add" and "listing" only.
+const STOPWORDS = new Set(['the', 'and', 'for', 'how', 'what', 'can', 'does', 'with', 'from', 'this', 'that', 'you', 'your',
+  'are', 'not', 'about', 'when', 'where', 'why', 'who', 'into', 'have', 'will', 'its', 'our']);
+// The assistant sends a whole chat message, so its "any" mode also drops everyday English and
+// Tagalog filler: "paano mag-add ng listing" searches "add" and "listing" only. Two-letter words
+// such as ng, sa and ko are already dropped by the length rule.
+const FILLER = new Set(['would', 'could', 'should', 'show', 'make', 'use', 'get', 'want', 'need', 'help', 'like', 'just',
+  'also', 'please', 'there', 'some', 'any', 'they', 'them', 'paano', 'mag', 'nang', 'ang', 'mga', 'para', 'din', 'rin',
+  'may', 'yung', 'kung', 'ito', 'lang', 'ano', 'ako', 'sana']);
 
-// Simple keyword search: title and keywords count more than the text.
-function searchArticles(q, role, limit = 6) {
-  const words = norm(q).split(/[^a-z0-9.@-]+/).filter((w) => w.length > 2);
-  const visible = ARTICLES.filter((a) => !role || a.roles.includes(role));
-  if (!words.length) return [];
-  return visible.map((a) => {
-    const title = norm(a.title); const kw = norm(a.keywords); const body = norm(a.body.join(' '));
-    const score = words.reduce((s, w) => s + (title.includes(w) ? 5 : 0) + (kw.includes(w) ? 3 : 0) + (body.includes(w) ? 1 : 0), 0);
-    return { a, score };
-  }).filter((x) => x.score > 0).sort((x, y) => y.score - x.score).slice(0, limit).map((x) => x.a);
+// Workspace type decides which guides show: a long-term-only workspace gets no stay guides and a
+// short-term-only one gets no monthly-rent guides. No type, or both, shows everything.
+const HIDDEN_MODULE = { short_term: 'rent', long_term: 'stay' };
+function articlesFor(role, businessType) {
+  const hidden = HIDDEN_MODULE[businessType];
+  return ARTICLES.filter((a) => (!role || a.roles.includes(role)) && (!hidden || a.module !== hidden));
 }
 
-module.exports = { CATEGORIES, ARTICLES, searchArticles };
+// Whole-word search: every meaningful word must appear as a whole word somewhere in the article,
+// so "script" doesn't match "subscription" and one unrelated word drops the article. Title hits
+// rank above keyword hits, and keyword hits above body text.
+// `{ mode: 'any' }` (the assistant) instead keeps every article that matches at least one meaningful
+// word, ranked by the same weights, and ignores FILLER words.
+function searchArticles(q, role, limit = 6, businessType, { mode } = {}) {
+  const anyWord = mode === 'any';
+  const words = [...new Set(wordsOf(q))].filter((w) => w.length > 2 && !STOPWORDS.has(w) && !(anyWord && FILLER.has(w)));
+  if (!words.length) return [];
+  return articlesFor(role, businessType).map((a) => {
+    const title = new Set(wordsOf(a.title)); const kw = new Set(wordsOf(a.keywords)); const body = new Set(wordsOf(a.body.join(' ')));
+    const matched = words.filter((w) => title.has(w) || kw.has(w) || body.has(w)).length;
+    if (!matched || (!anyWord && matched < words.length)) return null;
+    const score = words.reduce((s, w) => s + (title.has(w) ? 5 : 0) + (kw.has(w) ? 3 : 0) + (body.has(w) ? 1 : 0), 0);
+    return { a, score };
+  }).filter(Boolean).sort((x, y) => y.score - x.score).slice(0, limit).map((x) => x.a);
+}
+
+module.exports = { CATEGORIES, ARTICLES, articlesFor, searchArticles };

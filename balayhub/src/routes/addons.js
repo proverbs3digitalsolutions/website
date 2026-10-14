@@ -56,11 +56,11 @@ async function assertUnits(orgId, unitIds) {
 // Archived ones don't count. ponytail: check then insert, so two creates at the same instant could both pass; a partial unique index on (organization_id, lower(btrim(name))) WHERE active would close that.
 async function assertNameFree(db, orgId, name, exceptId = null) {
   const { rows } = await db.query(
-    `SELECT 1 FROM listing_addons
-      WHERE organization_id = $1 AND active AND lower(btrim(name)) = lower(btrim($2)) AND addon_id IS DISTINCT FROM $3`,
+    `SELECT btrim(name) AS name FROM listing_addons
+      WHERE organization_id = $1 AND active AND lower(btrim(name)) = lower(btrim($2)) AND addon_id IS DISTINCT FROM $3 LIMIT 1`,
     [orgId, name, exceptId]);
   if (rows.length) {
-    throw new HttpError(409, 'That name is already in use.', { code: 'DUPLICATE', fields: { name: 'You already have an active add-on with this name. Choose another name, or archive that one first.' } });
+    throw new HttpError(409, 'That name is already in use.', { code: 'DUPLICATE', fields: { name: `You already have an add-on called ${rows[0].name}.` } });
   }
 }
 

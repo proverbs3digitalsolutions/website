@@ -41,6 +41,7 @@ extendTranslations({
   'Qty': 'Dami', 'Used': 'Nagamit', 'Restocked': 'Nadagdag', 'Save': 'I-save', 'Cancel': 'Kanselahin',
   'No supplies are set up for this property yet.': 'Wala pang supplies na naka-set up para sa property na ito.',
   'Enter a quantity for at least one item.': 'Maglagay ng dami sa kahit isang gamit.', 'Supplies saved.': 'Na-save ang supplies.',
+  '{name} was out of stock, so it wasn\'t recorded.': 'Ubos na ang {name}, kaya hindi ito na-record.', 'Tell your manager.': 'Sabihan ang manager mo.',
   'Title': 'Pamagat', 'What needs fixing?': 'Ano ang kailangang ayusin?', 'Priority': 'Prayoridad',
   'Low': 'Mababa', 'Medium': 'Katamtaman', 'High': 'Mataas', 'Urgent': 'Madalian',
   'Send to host': 'Ipadala sa host', 'Sent to the host. Thank you.': 'Naipadala na sa host. Salamat.',
@@ -101,19 +102,43 @@ async function copyText(text) {
 // staff assigned to it (property_ids is null for owners).
 const eligibleFor = (assignees, propertyId) => assignees.filter((a) => !a.property_ids || (propertyId && a.property_ids.includes(propertyId)));
 
+// A team member and a typed outside name are one choice: picking a member clears the
+// name, and typing a name clears the member, so neither is dropped without a word.
+export function linkAssignee(memberSelect, nameInput) {
+  memberSelect.addEventListener('change', () => { if (memberSelect.value) nameInput.value = ''; });
+  nameInput.addEventListener('input', () => { if (nameInput.value.trim()) memberSelect.value = ''; });
+}
+
+// A check that belongs under one field. makeForm would also draw err.message in the form's top
+// box, so that box is emptied again once drawn: the message shows once, under the field.
+export function fieldError(name, msg) {
+  const err = new ApiError(msg, { status: 400, fields: { [name]: msg } });
+  err.onRender = (box) => box.replaceChildren();
+  return err;
+}
+
+// Sends one assignee only. Both at once is refused here, with the same message the server uses.
+export function assigneeChoice(d) {
+  if (d.assigned_to && d.assignee_name?.trim()) {
+    const msg = 'Pick a team member or type a name, not both.';
+    throw fieldError('assignee_name', msg);
+  }
+  return { assigned_to: d.assigned_to || null, assignee_name: d.assignee_name || null };
+}
+
 async function assignModal(t, onSaved) {
   const assignees = eligibleFor((await get('/cleaning-assignees')).assignees, t.property_id);
+  const memberField = field({ name: 'assigned_to', label: 'Team member', type: 'select', value: t?.assigned_to, placeholderOption: 'Not a team member',
+    options: assignees.map((a) => [a.user_id, `${a.full_name}${a.role === 'staff' ? '' : ` (${a.role})`}`]) });
+  const nameField = field({ name: 'assignee_name', label: 'Or a cleaner without a BalayHub login', value: t?.assignee_name, maxlength: 80, placeholder: 'e.g. Aling Rosa',
+    hint: 'Use "Copy for cleaner" to send them the task by Messenger or Viber.' });
+  linkAssignee(memberField.querySelector('select'), nameField.querySelector('input'));
   formModal({
     title: 'Assign cleaning',
     submitText: 'Save',
-    fields: [
-      field({ name: 'assigned_to', label: 'Team member', type: 'select', value: t?.assigned_to, placeholderOption: 'Not a team member',
-        options: assignees.map((a) => [a.user_id, `${a.full_name}${a.role === 'staff' ? '' : ` (${a.role})`}`]) }),
-      field({ name: 'assignee_name', label: 'Or a cleaner without a BalayHub login', value: t?.assignee_name, maxlength: 80, placeholder: 'e.g. Aling Rosa',
-        hint: 'Use "Copy for cleaner" to send them the task by Messenger or Viber.' }),
-    ],
+    fields: [memberField, nameField],
     onSubmit: async (d) => {
-      await patch(`/cleaning-tasks/${t.task_id}`, { assigned_to: d.assigned_to || null, assignee_name: d.assigned_to ? null : (d.assignee_name || null) });
+      await patch(`/cleaning-tasks/${t.task_id}`, assigneeChoice(d));
       toast('Assignment saved.');
       onSaved();
     },
@@ -128,6 +153,8 @@ async function newTaskModal(onSaved) {
     hint: 'Only people who can see this listing are shown.' });
   const unitSelect = unitField.querySelector('select');
   const memberSelect = memberField.querySelector('select');
+  const nameField = field({ name: 'assignee_name', label: 'Or a cleaner without a login', maxlength: 80 });
+  linkAssignee(memberSelect, nameField.querySelector('input'));
   const fillMembers = () => {
     const propertyId = listings.find((l) => l.unit_id === unitSelect.value)?.property_id;
     const keep = memberSelect.value;
@@ -144,7 +171,7 @@ async function newTaskModal(onSaved) {
       unitField,
       field({ name: 'due_date', label: 'Date', type: 'date', required: true, value: todayManila() }),
       memberField,
-      field({ name: 'assignee_name', label: 'Or a cleaner without a login', maxlength: 80 }),
+      nameField,
       field({ name: 'notes', label: 'Notes', type: 'textarea', maxlength: 1000, placeholder: 'e.g. Deep clean, change curtains' }),
     ],
     onSubmit: async (d) => {
@@ -152,9 +179,9 @@ async function newTaskModal(onSaved) {
       if (d.due_date && d.due_date < todayManila()
         && !(await confirmDialog({ title: 'Date is in the past', text: `${fmtDate(d.due_date)} has already passed, so this task will show as overdue. Add it anyway?`, confirmText: 'Add task' }))) {
         const msg = 'Change the date, or press Add task again and confirm.';
-        throw new ApiError(msg, { status: 400, fields: { due_date: msg } });
+        throw fieldError('due_date', msg);
       }
-      await post('/cleaning-tasks', d); toast('Cleaning task added.'); onSaved();
+      await post('/cleaning-tasks', { ...d, ...assigneeChoice(d) }); toast('Cleaning task added.'); onSaved();
     },
   });
 }
@@ -169,7 +196,9 @@ async function checklistModal() {
       h('p', { class: 'hint' }, 'Used for new cleaning tasks. Tasks already created keep their checklist.'),
     ],
     onSubmit: async (d) => {
-      await api('PUT', '/cleaning-checklist', { items: d.items.split('\n').map((x) => x.trim()).filter(Boolean) });
+      const list = d.items.split('\n').map((x) => x.trim()).filter(Boolean);
+      if (!list.length) { const msg = 'Add at least one checklist item.'; throw fieldError('items', msg); }
+      await api('PUT', '/cleaning-checklist', { items: list });
       toast('Checklist saved.');
     },
   });
@@ -184,6 +213,23 @@ const PRIORITIES = [['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['ur
 
 const photoInput = () => h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', class: 'input', capture: 'environment', 'aria-label': T('Photo (optional)') });
 const photoField = (input) => h('div', { class: 'field' }, h('label', null, T('Photo (optional)')), input);
+
+// Unticked checklist items, counted from the checkbox states on screen.
+export function uncheckedCount(states) {
+  return states.filter((checked) => !checked).length;
+}
+
+// A hand-typed ?assignee= must be a team member's id or one of the two keywords the filter offers
+// ("unassigned", "outside"). Anything else makes the server answer 404, so it is dropped before the first fetch.
+export function cleanAssigneeFilter(value) {
+  const id = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return value === 'unassigned' || value === 'outside' || (typeof value === 'string' && id.test(value)) ? value : '';
+}
+
+// The "a · b" line under a record; a part the server left out is skipped.
+export function metaLine(...parts) {
+  return parts.filter(Boolean).join(' · ');
+}
 
 // Attach a photo to a record just created. A failed upload never loses the record.
 async function attachPhoto(type, id, input) {
@@ -222,6 +268,7 @@ async function tasksTab(box, query) {
   const defaults = { view: 'today', q: '', mine: '', status: '', property_id: '', unit_id: '', assignee: '', from: '', to: '', late: '', turnover: '', sort: '' };
   const filters = initFilters('housekeeping', query, defaults);
   if (!TABS.some(([v]) => v === filters.view)) filters.view = 'today';
+  filters.assignee = cleanAssigneeFilter(filters.assignee);
   const [{ properties }, { listings }, { assignees }] = await Promise.all([
     cleaner ? { properties: [] } : get('/properties'), cleaner ? { listings: [] } : get('/listings'), manager ? get('/cleaning-assignees') : { assignees: [] },
   ]);
@@ -461,8 +508,8 @@ async function suppliesModal(task, onSaved) {
     onSubmit: async () => {
       const items = rows.filter((r) => Number(r.qty.value) > 0).map((r) => ({ supply_id: r.sp.supply_id, kind: r.kind.value, quantity: Math.floor(Number(r.qty.value)) }));
       if (!items.length) throw new ApiError(T('Enter a quantity for at least one item.'), { status: 400 });
-      await post(`/cleaning-tasks/${task.task_id}/supplies`, { items });
-      toast(T('Supplies saved.'));
+      const { skipped } = await post(`/cleaning-tasks/${task.task_id}/supplies`, { items });
+      toast(skipped.length ? [...skipped.map((name) => T('{name} was out of stock, so it wasn\'t recorded.', { name })), T('Tell your manager.')].join(' ') : T('Supplies saved.'), skipped.length ? 'error' : 'info');
       onSaved();
     },
   });
@@ -535,7 +582,7 @@ export async function housekeepingDetailView(el, { params, rerender }) {
     try { await post(`/cleaning-tasks/${t.task_id}/status`, { status }); toast(msg); rerender(); } catch (err) { toast(err.message, 'error'); }
   };
   const finish = async () => {
-    const left = t.item_count - t.done_count;
+    const left = uncheckedCount([...items.querySelectorAll('input[type="checkbox"]')].map((b) => b.checked));
     if (left > 0 && !await confirmDialog({ title: T('Mark as done?'), text: T('{n} checklist item(s) not ticked yet.', { n: left }), confirmText: T('Mark done anyway'), cancelText: T('Cancel') })) return;
     setStatus('done', T('Cleaning done. Listing marked clean.'));
   };
@@ -564,7 +611,7 @@ export async function housekeepingDetailView(el, { params, rerender }) {
   const payCard = isManager
     ? (t.status === 'done' || t.pay_amount != null) && h('div', { class: 'card' },
       h('div', { class: 'card__head' }, h('h2', null, 'Cleaner pay'), t.pay_status && badge(t.pay_status === 'paid' ? 'paid' : 'unpaid', t.pay_status === 'paid' ? 'Paid' : 'Unpaid')),
-      h('p', null, t.pay_amount != null ? h('strong', null, peso(t.pay_amount)) : h('span', { class: 'muted' }, 'Pay not set — add the hours, or set the amount.')),
+      h('p', null, t.pay_amount != null ? h('strong', null, peso(t.pay_amount)) : h('span', { class: 'muted' }, 'Pay not set. Use Set pay.')),
       t.pay_status !== 'paid' && h('button', { class: 'btn btn--secondary', onclick: () => payModal(t, rerender) }, t.pay_amount != null ? 'Edit pay' : 'Set pay'))
     : t.pay_amount != null && h('div', { class: 'card' },
       h('div', { class: 'card__head' }, h('h2', null, T('Your pay for this clean')), badge(t.pay_status === 'paid' ? 'paid' : 'unpaid', T(t.pay_status === 'paid' ? 'Paid' : 'Not paid yet'))),
@@ -596,8 +643,10 @@ export async function housekeepingDetailView(el, { params, rerender }) {
         inspections.length > 0 && h('div', { class: 'card' },
           h('div', { class: 'card__head' }, h('h2', null, 'Inspections')),
           h('ul', { class: 'hk-history' }, inspections.map((i) => h('li', null,
-            h('div', { class: 'hk-card__top' }, h('strong', null, `${i.score}%`), badge(i.passed ? 'paid' : 'overdue', i.passed ? 'Passed' : 'Failed')),
-            h('div', { class: 'small muted' }, `${fmtDateTime(i.created_at)}${i.inspected_by_name ? ` · ${i.inspected_by_name}` : ''}`),
+            h('div', { class: 'hk-card__top' },
+              i.score != null && h('strong', null, `${i.score}%`),
+              typeof i.passed === 'boolean' && badge(i.passed ? 'paid' : 'overdue', i.passed ? 'Passed' : 'Failed')),
+            h('div', { class: 'small muted' }, metaLine(i.created_at && fmtDateTime(i.created_at), i.inspected_by_name)),
             (i.items || []).some((x) => !x.pass) && h('div', { class: 'small' }, `Failed: ${i.items.filter((x) => !x.pass).map((x) => x.text).join(', ')}`),
             i.notes && h('div', { class: 'small', style: { whiteSpace: 'pre-wrap' } }, i.notes))))),
         damageReports.length > 0 && h('div', { class: 'card' },
@@ -610,7 +659,7 @@ export async function housekeepingDetailView(el, { params, rerender }) {
           h('div', { class: 'card__head' }, h('h2', null, T('Found an item'))),
           h('ul', { class: 'hk-history' }, lostFound.map((l) => h('li', null,
             h('div', { class: 'hk-card__top' }, h('strong', null, l.description), l.status && h('span', { class: 'small muted' }, l.status)),
-            h('div', { class: 'small muted' }, `${l.found_where ? `${l.found_where} · ` : ''}${fmtDate(l.found_on)}${l.found_by_name ? ` · ${l.found_by_name}` : ''}`),
+            h('div', { class: 'small muted' }, metaLine(l.found_where, l.found_on && fmtDate(l.found_on), l.found_by_name)),
             thumbs(l.files))))),
         workOrders.length > 0 && h('div', { class: 'card' },
           h('div', { class: 'card__head' }, h('h2', null, T('Linked work orders'))),

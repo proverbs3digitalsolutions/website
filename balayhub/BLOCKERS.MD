@@ -2,7 +2,7 @@
 
 Things only the founder can do or decide before related work can go ahead. Automated runs add items here. The founder clears them by doing the item and ticking it, or by writing the decision in DECISIONS.MD.
 
-Last updated: 2026-10-13 (QA round 1 questions added)
+Last updated: 2026-10-14 (QA round 2 questions added)
 
 ## Security — do first
 
@@ -71,9 +71,9 @@ Last updated: 2026-10-13 (QA round 1 questions added)
 Each one has the default we will use if you don't answer. None of them stops the work.
 
 - [ ] **Terms and Privacy drafts.** The Terms and Privacy pages still say "Draft pending review by a Philippine lawyer". Has the legal review been done, so the notice can come off? *Default: keep the notice until you confirm.*
-- [ ] **Contact email on the live server.** Is a contact email set on the live server, so "Message us" on the home page has somewhere to go? Without one, the public "Help & support" links need a login, so a visitor who can't log in has no way to reach you. *Default: if none is set, the copy points to Help & support.*
+- [ ] **Contact email on the live server.** Is a contact email set on the live server, so "Message us" on the home page has somewhere to go? Without one, the public "Help & support" links need a login, so a visitor who can't log in has no way to reach you. *Default (updated in round 2): with no contact email, logged-out help links go to sign-up with "Create your account and ask us in Help & support", so a visitor is never sent to a login wall.*
 - [ ] **Weak passwords.** Passwords only need 8 characters, so "password" works. Should we also refuse the most common passwords? *Default: add a short block list of common passwords (small and easy to undo).*
-- [ ] **Starter plan card.** The landing page card says "1 to 3 units" but the Starter plan allows 2 listings. Should it say "1 to 2 units"? *Default: change the copy to "1 to 2 units".*
+- [ ] **Starter plan card.** The landing page card says "1 to 3 units" but the Starter plan allows 2 listings. Should it say "1 to 2 units"? *Default: change the copy to "1 to 2 units". Applied in round 2.*
 - [ ] **Sign-up and taken emails.** Sign-up says an email is already registered, which tells anyone that address has an account. Keep the friendly message, or use a neutral one? *Default: keep it, as most apps do.*
 - [ ] **Building-wide expenses on statements.** Expenses for the whole building (such as association dues) never reach an owner statement; they only show on your profit and loss as "Not linked to a unit". Is that what you want? *Default: keep it (D-44).*
 - [ ] **Cleaner pay in the owner portal.** The owner portal's recent activity lists cleaner pay as an expense, but statements never deduct it. Hide it from owners, or deduct it on statements? *Default: hide it from the owner portal activity.*
@@ -81,3 +81,28 @@ Each one has the default we will use if you don't answer. None of them stops the
 - [ ] **Live Reyes manual-payment instructions.** During QA the Reyes manual-payment instructions were cleared on the local test copy only (no live data was touched). If the live Reyes workspace has instructions, please check they are still there. *Default: nothing to do unless you see them missing.*
 - [ ] **Landing page description wording.** Check the short description search engines show for the home page (the page's meta description) and tell us if you want different words. *Default: keep the current wording.*
 - [ ] **Share image (optional).** Add a 1200 by 630 picture that shows when the site link is shared in chat apps or on social media. *Default: keep the square app icon as the share picture for now.*
+
+## Questions from QA round 2 (2026-10-14)
+
+Each one has the default already applied. None of them stops the work.
+
+- [ ] **Live-site QA stage is blocked.** The live-site sweep can't start until the network allowlist lets the test machine reach the live site and the `QA_TEST_PASSWORD` secret is set for the dedicated test account. *Default: keep sweeping the local copy only.*
+- [ ] **Staff and "Your pay for this clean".** Should staff see the cleaner pay on a cleaning job? Today they do when pay is set. *Default: leave it as is.*
+- [ ] **Blank deposit percentage on a listing.** Leaving it blank leaves the saved value unchanged rather than clearing it. Keep that? *Default: yes, unchanged.*
+- [ ] **Cleaner's out-of-stock note.** When a cleaner's supply use skips an item, the note disappears after 4 seconds. Is that long enough? *Default: 4 seconds.*
+- [ ] **Taglish check.** The Taglish drafts for the new supply note and the privacy line need a Taglish speaker to read them. *Default: keep the drafts.*
+- [ ] **Audit history without ids.** History no longer shows which booking or unit an entry refers to, because raw ids are hidden. Is that OK, or should it show a name instead? *Default: hidden.*
+- [ ] **Add-on limits.** Is a maximum quantity of 1 one per stay or one each time the guest buys? *Default: per stay.*
+- [ ] **Archived tenants who still owe rent.** Should the amount keep counting on the dashboard? *Default: yes, labelled "(archived)", and archiving warns.*
+- [ ] **Two "net" numbers.** The stay report net ignores refunds; profit and loss subtracts them. *Default: keep both, label the stay report "Net (before refunds)".*
+- [ ] **Send-later time in the past.** *Default: it asks "Send it now?".*
+- [ ] **Rent payment far above the balance.** *Default: it asks first.*
+- [ ] **Bulk price cuts below your lowest price.** *Default: allowed, with a warning in the preview.*
+- [ ] **PayMongo key check.** We only check the key looks right. *Default: keep it; a wrong key shows at the first guest payment.*
+- [ ] **Managers without properties.** *Default: at least one property is required.*
+- [ ] **Public contact email.** Publish one so visitors can ask before signing up? *Default: sign-up page says to ask in Help & support after creating an account.*
+- [ ] **Confirmation codes for unit owners.** *Default: no; the owner portal never sends them.*
+- [ ] **Reassigning a finished clean.** Pay and inspection score move to the new person. *Default: yes (D-52).*
+- [ ] **Logo colour.** The light green "HUB" is hard to read on white. *Default: keep it (logos are exempt).*
+- [ ] **Sharing booking links.** `#/book/...` links show the home card; `/stay/...` links show the listing. *Default: no change; recommend sharing the `/stay/` address.*
+- [ ] **Check-in form after arrival.** *Default: editable until check-out; only the heading changes.*

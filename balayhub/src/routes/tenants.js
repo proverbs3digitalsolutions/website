@@ -29,7 +29,8 @@ router.get('/tenants', ah(async (req, res) => {
   params.push(req.query.status === 'archived' ? 'archived' : 'active');
   where.push(`t.status = $${params.length}`);
   if (req.query.q) {
-    params.push(`%${String(req.query.q).slice(0, 100)}%`);
+    // % and _ are wildcards in ILIKE, so escape them to match what the user typed.
+    params.push(`%${String(req.query.q).slice(0, 100).replace(/[%_\\]/g, '\\$&')}%`);
     const n = params.length;
     // Staff and cleaners can't see contact details, so they can't search by them either.
     const contact = ['staff', 'cleaner'].includes(req.user.role) ? '' : ` OR t.email ILIKE $${n} OR t.phone ILIKE $${n}`;

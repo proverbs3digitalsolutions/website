@@ -195,6 +195,8 @@ router.patch('/workspace/manual-payments', owners, ah(async (req, res) => {
     if (next.enabled && !next.instructions) {
       throw validationError({ instructions: 'Add the GCash number, bank name or account name guests should pay to.' });
     }
+    // Nothing changed: no write and no audit row.
+    if (next.enabled === cur.manual_payments_enabled && next.instructions === cur.manual_payment_instructions) return next;
     await db.query('UPDATE organizations SET manual_payments_enabled = $2, manual_payment_instructions = $3 WHERE organization_id = $1',
       [req.user.organization_id, next.enabled, next.instructions]);
     await audit(db, req.user, 'workspace.manual_payments_updated', 'organization', req.user.organization_id, { enabled: next.enabled });

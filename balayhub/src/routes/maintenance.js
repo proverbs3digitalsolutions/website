@@ -55,7 +55,7 @@ router.get('/maintenance', ah(async (req, res) => {
   if (req.query.cost === 'none') where.push(`${spent} = 0`);
   if (req.query.cost === 'estimate_only') where.push(`${spent} = 0 AND m.estimated_cost IS NOT NULL`);
   if (req.query.q) {
-    params.push(`%${String(req.query.q).slice(0, 100)}%`);
+    params.push(`%${String(req.query.q).slice(0, 100).replace(/[%_\\]/g, '\\$&')}%`);
     const n = params.length;
     where.push(`(m.title ILIKE $${n} OR m.description ILIKE $${n} OR p.property_name ILIKE $${n} OR u.unit_name ILIKE $${n} OR m.reported_by ILIKE $${n} OR m.assigned_to ILIKE $${n})`);
   }

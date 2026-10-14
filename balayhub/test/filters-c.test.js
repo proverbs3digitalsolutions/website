@@ -11,7 +11,8 @@ let srv; let owner;
 const today = manilaToday();
 const plusDays = (n) => { const d = new Date(`${today}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 const dayOfMonth = Number(today.slice(8));
-const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(20)]);
+// A real 1x1 PNG: the upload check now needs the header and end chunks, not just the signature.
+const png = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a3a30000000049454e44ae426082', 'hex');
 const ids = {};
 const names = (rows, k = 'full_name') => rows.map((r) => r[k]).sort();
 

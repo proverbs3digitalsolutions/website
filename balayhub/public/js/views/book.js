@@ -26,6 +26,7 @@ extendTranslations({
   'Due now': 'Babayaran ngayon',
   'Choose your dates first, then apply your code.': 'Piliin muna ang dates mo, saka i-apply ang code mo.',
   'This place allows up to {n} guests.': 'Hanggang {n} guests lang ang puwede sa lugar na ito.',
+  'At least 1 guest.': 'Hindi bababa sa 1 guest.',
   "We couldn't confirm the cancellation. Your dates may stay on hold for a short while. Please try again, or contact the host.": 'Hindi namin makumpirma ang pagkansela. Puwedeng ma-hold pa nang saglit ang dates mo. Pakisubukan ulit, o i-contact ang host.',
 });
 
@@ -333,7 +334,7 @@ export async function bookListingView(el, { params, query }) {
     const phone = String(d.phone).trim();
     const errors = {};
     if (!String(d.name).trim()) errors.name = tServer('Full name is required.');
-    if (!Number.isInteger(guests) || guests < 1) errors.num_guests = tServer('Guests is required.');
+    if (!Number.isInteger(guests) || guests < 1) errors.num_guests = t('At least 1 guest.');
     else if (guests > (l.max_guests || 50)) errors.num_guests = t('This place allows up to {n} guests.', { n: l.max_guests || 50 });
     if (!email) errors.email = tServer('Email is required.');
     else if (!EMAIL_RE.test(email)) errors.email = tServer('Enter a valid email address.');

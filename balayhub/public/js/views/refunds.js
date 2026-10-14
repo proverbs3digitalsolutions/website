@@ -7,14 +7,21 @@ import { state } from '../app.js';
 
 const METHOD_LABEL = { cash: 'Cash', bank_transfer: 'Bank transfer', gcash: 'GCash', maya: 'Maya', card: 'Card', other: 'Other' };
 
+// The policy's suggested refund. On a live reservation it is only what the policy would refund if cancelled today.
+export function suggestionText(s, cancelled) {
+  const lead = cancelled ? 'Suggested refund' : 'If cancelled today, suggested refund';
+  return `${lead}: ${peso(s.amount)} (${s.percent}%). ${s.rule}.`;
+}
+
 export async function refundsCard(reservation, rerender) {
   const data = await get(`/reservations/${reservation.booking_id}/refunds`);
   const canManage = state.user.role !== 'staff';
+  const cancelled = reservation.status === 'cancelled';
 
   const recordRefund = () => formModal({
     title: 'Record refund', submitText: 'Save refund', idempotent: true,
     fields: [
-      field({ name: 'amount', label: 'Amount refunded', type: 'money', required: true, value: data.suggestion?.amount,
+      field({ name: 'amount', label: 'Amount refunded', type: 'money', required: true, value: cancelled ? data.suggestion?.amount : undefined,
         hint: `Up to ${peso(data.refundable)} is left to refund.` }),
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'refund_date', label: 'Date refunded', type: 'date', required: true, value: todayManila(), max: todayManila() }),
@@ -39,7 +46,7 @@ export async function refundsCard(reservation, rerender) {
     ? h('p', null, h('strong', null, data.policy.label), ` · ${data.policy.en}`)
     : h('p', { class: 'muted small' }, 'No cancellation policy set for this listing. Set one in the listing\'s Edit form.');
   const suggestion = data.suggestion
-    ? h('div', { class: 'alert alert--info' }, `Suggested refund: ${peso(data.suggestion.amount)} (${data.suggestion.percent}%). ${data.suggestion.rule}.`)
+    ? h('div', { class: 'alert alert--info' }, suggestionText(data.suggestion, cancelled))
     : data.policy?.key === 'custom' && h('p', { class: 'muted small' }, 'Custom policy: no automatic amount. Decide the refund from your own wording.');
   const totals = h('p', { class: 'muted small' }, `Paid ${peso(data.paid)} · Refunded ${peso(data.refunded)} · Left to refund ${peso(data.refundable)}`);
 

@@ -252,7 +252,7 @@ export async function tenantDetailView(el, { params, query, rerender }) {
 
   const leaseDocs = async (lease) => {
     const { files } = await get(`/leases/${lease.lease_id}`);
-    const input = h('input', { type: 'file', accept: 'application/pdf,image/jpeg,image/png,image/webp', class: 'input' });
+    const input = h('input', { type: 'file', accept: 'application/pdf,image/jpeg,image/png,image/webp', class: 'input', 'aria-label': 'Lease document' });
     const status = h('div');
     openModal({
       title: `Lease documents — ${unitLabel(lease.unit_name)}`,
@@ -311,7 +311,8 @@ export async function tenantDetailView(el, { params, query, rerender }) {
         canManage && !active && !archived && h('button', {
           class: 'btn btn--danger',
           onclick: async () => {
-            if (!await confirmDialog({ title: 'Archive tenant?', text: 'Their lease and payment history is kept. You can restore them later.', confirmText: 'Archive', danger: true })) return;
+            const owed = totals.outstanding > 0 ? ` They still owe ${peso(totals.outstanding)}. The unpaid balance stays on record until it is paid.` : '';
+            if (!await confirmDialog({ title: 'Archive tenant?', text: `Their lease and payment history is kept. You can restore them later.${owed}`, confirmText: 'Archive', danger: true })) return;
             try { await post(`/tenants/${tenant.tenant_id}/archive`); toast('Tenant archived.'); rerender(); } catch (err) { toast(err.message, 'error'); }
           },
         }, 'Archive'),

@@ -45,7 +45,7 @@ function proofRow(p, rerender, guestEmail) {
       p.payer_name && [h('dt', null, 'Payer'), h('dd', null, p.payer_name)],
       h('dt', null, 'Sent'), h('dd', null, fmtDateTime(p.submitted_at)),
       p.status === 'rejected' && [h('dt', null, 'Reason'), h('dd', null, p.reject_reason)]),
-    shots.length ? shots : h('p', { class: 'muted small' }, 'No screenshot was attached.'),
+    shots.length ? shots : h('p', { class: 'muted small' }, p.status === 'pending' ? 'No screenshot yet.' : 'No screenshot was attached.'),
     actions);
 }
 

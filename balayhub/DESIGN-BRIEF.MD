@@ -366,7 +366,7 @@ Icons are inline SVG on a 24×24 grid with no fill, a `currentColor` stroke at 1
 
 | Area | What is built |
 |---|---|
-| Focus | A global `:focus-visible` uses `box-shadow: var(--focus)` (a 3px green ring that is themed for dark). Inputs add a `--teal` border. Clickable table rows, review stars and booking days use 2px outlines. The assistant button uses a 3px `--sand` outline. |
+| Focus | A global `:focus-visible` draws a 2px solid outline in `--focus-ring` (Forest `#0f5132` in light, `#8fd0a6` in dark) with a 2px offset, so it keeps 3:1 contrast on the page (QA round 2). `--focus` is now a two-layer ring (surface gap, then `--focus-ring`) for inputs. Inputs add a `--teal` border. Clickable table rows, review stars and booking days use 2px outlines. The assistant button uses a 3px `--sand` outline. |
 | Landmarks and nav | `<aside>` sidebar, `<header>` topbar, `<nav aria-label="Main">` (both the sidebar and bottom navs), and `<main id="main">`. The current page has `aria-current="page"`. |
 | ARIA | The theme switch is a radiogroup with radios and `aria-checked`. The language toggle uses `aria-pressed`. The More filters button has `aria-expanded`. Filter chips are labelled "Remove filter …". Field errors use `role="alert"` and `aria-describedby`, and invalid inputs get `aria-invalid`. Toasts use `role="status"` in an `aria-live` region. Modals are native `<dialog>` with `aria-label`. Charts use `role="img"` with an `aria-label` and offer a table. The tracker step has `aria-current="step"`. The unread badge is labelled "{n} unread". Icons are `aria-hidden`, and `.sr-only` exists. |
 | Reduced motion | `@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }` stops the skeleton shimmer, the typing dots and button transitions. |
@@ -450,3 +450,15 @@ Printable views are built from `.receipt` (with a 2px `--navy` rule under the he
 | 13 | No spacing, type-size or breakpoint tokens. Radius values of 12, 16, 18 and 20px are hard-coded alongside `--radius` and `--radius-sm`. `--navy-2` is unused. `--teal` and `--forest` are duplicate aliases. | `app.css` |
 | 14 | There is no "skip to content" link, even though `main#main` exists. The More sheet uses `role="menu"` without menu keyboard handling and has no Esc-to-close or focus management. | `app.js` |
 | 15 | The `theme-color` meta follows the device theme, not a forced `bh-theme` choice. The nav label "Rent & Expenses" breaks sentence case. | `index.html`, `app.js` |
+
+---
+
+## 11. Patterns added in QA round 2 (2026-10-14)
+
+- **Phone row stacking.** At 480px and narrower, a `.row` whose end holds buttons, chips or a label wraps so the actions sit on their own line. Add `.row--stack-sm` to force this on any other row.
+- **Scroll cues.** `.table-wrap` and `.tabs` show a faint edge fade only on the side where more content is hidden (`background-attachment: local` over `scroll`). Use it on any new wide table or tab strip.
+- **Focus ring token.** `--focus-ring` replaces the old translucent ring (see section 6).
+- **Muted text instead of opacity.** Cancelled messages use `var(--muted)` with a dashed border rather than `opacity`, so contrast holds. Mentions use `--teal-ink`; today's calendar day and the Airbnb bar colour were darkened for contrast.
+- **Compact Ask button on phones.** Below 560px the assistant button is a 48px icon-only circle (its `aria-label` stays), and the page gets extra bottom padding so it never covers the last line.
+- **Stat values** no longer break mid-number: they stay on one line and the font shrinks (`clamp(1rem, 4.2vw, 1.45rem)`).
+- **Logo exemption.** The light-green "HUB" in the wordmark keeps its colour. WCAG exempts logo text from the contrast rule (founder question in BLOCKERS).

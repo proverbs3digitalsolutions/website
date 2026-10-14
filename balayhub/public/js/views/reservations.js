@@ -34,6 +34,18 @@ function nightsNote(q) {
   return parts.length ? ` · includes ${parts.join(', ')}` : '';
 }
 
+// Pure money/edit helpers (no DOM), unit-tested in test/qa-r2-reservations-view.test.js.
+// Overpaid means still owed back: the surplus minus refunds already recorded.
+export function overpaidAfterRefunds(balance, refunded) {
+  return Math.max(0, Math.round((-Number(balance) - Number(refunded || 0)) * 100) / 100);
+}
+// Only the fields the host actually changed, so the activity log isn't noisy.
+export function changedFields(orig, d) {
+  const same = (a, b) => (a === '' || a == null || b === '' || b == null) ? (a ?? '') === (b ?? '')
+    : (!isNaN(a) && !isNaN(b) ? Number(a) === Number(b) : String(a) === String(b));
+  return Object.fromEntries(Object.entries(d).filter(([k, v]) => !same(orig[k], v)));
+}
+
 export const CHANNEL_LABEL = { direct: 'Direct', airbnb: 'Airbnb', booking: 'Booking.com', agoda: 'Agoda', vrbo: 'Vrbo', expedia: 'Expedia', tripcom: 'Trip.com', other: 'Other' };
 export const SOURCE_LABEL = { facebook: 'Facebook', instagram: 'Instagram', messenger: 'Messenger', viber: 'Viber', tiktok: 'TikTok', google: 'Google', whatsapp: 'WhatsApp', email: 'Email', referral: 'Referral', quote: 'Quote', other: 'Other' };
 const METHOD_LABEL = { cash: 'Cash', bank_transfer: 'Bank transfer', gcash: 'GCash', maya: 'Maya', card: 'Card', channel_payout: 'Channel payout', other: 'Other' };
@@ -402,7 +414,11 @@ export async function reservationDetailView(el, { params, rerender }) {
         field({ name: 'channel_fee', label: 'Channel fee / commission', type: 'money', value: r.channel_fee, hint: 'What the channel keeps. Used in owner statements.' })),
       field({ name: 'notes', label: 'Notes', type: 'textarea', value: r.notes, maxlength: 1000 }),
     ],
-    onSubmit: async (d) => { await patch(`/reservations/${r.booking_id}`, d); toast('Reservation updated.'); rerender(); },
+    onSubmit: async (d) => {
+      const changes = changedFields(r, d);
+      if (Object.keys(changes).length) await patch(`/reservations/${r.booking_id}`, changes);
+      toast(Object.keys(changes).length ? 'Reservation updated.' : 'No changes to save.'); rerender();
+    },
   });
 
   const cancel = async () => {
@@ -430,9 +446,12 @@ export async function reservationDetailView(el, { params, rerender }) {
   const activity = canManage ? await activityCard(r).catch(() => null) : null;
   const grp = r.group;
   // Overpaid and "You keep" apply to live bookings only. A cancelled booking that still holds money points to the Refunds card instead.
-  const overpaid = canManage && confirmed && Number(r.balance) < 0 ? Math.abs(Number(r.balance)) : 0;
-  const heldInfo = canManage && !confirmed ? await get(`/reservations/${r.booking_id}/refunds`).catch(() => null) : null;
-  const stillToRefund = heldInfo ? Number(heldInfo.refundable) : 0;
+  const heldInfo = canManage && (!confirmed || Number(r.balance) < 0) ? await get(`/reservations/${r.booking_id}/refunds`).catch(() => null) : null;
+  const overpaid = canManage && confirmed && heldInfo ? overpaidAfterRefunds(r.balance, heldInfo.refunded) : 0;
+  // A cancelled booking owes back what the cancellation policy suggests, not everything paid.
+  const sug = heldInfo?.suggestion;
+  const stillToRefund = heldInfo && !confirmed && Number(heldInfo.refundable) > 0 ? Number(sug ? sug.amount : heldInfo.refundable) : 0;
+  const nonRefundable = heldInfo && !confirmed && Number(heldInfo.refundable) > 0 && sug && !(Number(sug.amount) > 0);
   const keep = Number(r.total_amount) - Number(r.channel_fee);
   const feeSaved = r.channel === 'direct' ? Math.round(Number(r.accommodation_total) * 15) / 100 : 0;
 
@@ -507,8 +526,9 @@ export async function reservationDetailView(el, { params, rerender }) {
             `Guest overpaid by ${peso(overpaid)} — `,
             h('a', { href: '#refunds-card', onclick: goRefunds }, 'record a refund')),
           stillToRefund > 0 && h('div', { class: 'alert alert--warn', role: 'alert', style: { marginBottom: '12px' } },
-            `Cancelled: ${peso(stillToRefund)} still to refund — `,
+            `Cancelled: policy suggests refunding ${peso(stillToRefund)} of ${peso(heldInfo.paid)} paid — `,
             h('a', { href: '#refunds-card', onclick: goRefunds }, 'see the Refunds card')),
+          nonRefundable && h('div', { class: 'alert alert--info', style: { marginBottom: '12px' } }, 'Cancelled: non-refundable, nothing is due back.'),
           h('div', { class: 'card__head' }, h('h2', null, 'Payment'), h('div', { class: 'chips' },
             canManage && confirmed && Number(r.balance) > 0 && h('button', { class: 'btn btn--secondary btn--sm', onclick: copyPayLink }, 'Copy payment link'),
             confirmed && h('button', { class: 'btn btn--primary btn--sm', onclick: recordPayment }, 'Record payment'))),
@@ -516,10 +536,12 @@ export async function reservationDetailView(el, { params, rerender }) {
             h('dt', null, 'Accommodation'), h('dd', null, peso(r.accommodation_total)),
             h('dt', null, 'Cleaning fee'), h('dd', null, peso(r.cleaning_fee)),
             Number(r.other_fees) > 0 && [h('dt', null, 'Other fees'), h('dd', null, peso(r.other_fees))],
+            Number(r.extras_total) > 0 && [h('dt', null, 'Extras'), h('dd', null, peso(r.extras_total))],
             h('dt', null, 'Total'), h('dd', null, h('strong', null, peso(r.total_amount))),
             Number(r.channel_fee) > 0 && [h('dt', null, 'Channel fee'), h('dd', { class: 'muted' }, `− ${peso(r.channel_fee)}`)],
             h('dt', null, 'Paid'), h('dd', null, peso(r.amount_paid)),
-            h('dt', null, 'Balance'), h('dd', { class: Number(r.balance) > 0 ? 'amount--neg' : '' }, h('strong', null, peso(r.balance)))),
+            confirmed ? [h('dt', null, 'Balance'), h('dd', { class: Number(r.balance) > 0 ? 'amount--neg' : '' }, h('strong', null, peso(r.balance)))]
+              : [h('dt', null, 'Balance'), h('dd', { class: 'muted' }, 'Cancelled — not owed')]),
           canManage && confirmed && h('div', { class: 'keep-line' },
             h('div', null, 'You keep ', h('strong', null, peso(keep))),
             feeSaved > 0 && h('div', { class: 'keep-line__save' }, `No channel fee — about ${peso(feeSaved)} saved vs a 15% channel fee`),

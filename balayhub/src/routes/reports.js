@@ -51,7 +51,7 @@ router.get('/dashboard', ah(async (req, res) => {
   scope = propertyScope(user, params);
   const { rows: leaseRows } = await query(
     `WITH ${LEASE_BALANCE_CTE}
-     SELECT lb.*, l.lease_status, t.tenant_id, t.full_name AS tenant_name, u.unit_name, p.property_id, p.property_name,
+     SELECT lb.*, l.lease_status, t.tenant_id, t.full_name AS tenant_name, t.status AS tenant_status, u.unit_name, p.property_id, p.property_name,
             (SELECT MIN(c.due_date) FROM charges c WHERE c.lease_id = l.lease_id AND c.status = 'overdue') AS oldest_overdue
        FROM lease_balance lb
        JOIN leases l ON l.lease_id = lb.lease_id
@@ -220,7 +220,7 @@ async function buildReport(user, from, to, propertyId, propertyType = null) {
   params = [org];
   const { rows: outstanding } = await query(
     `WITH ${LEASE_BALANCE_CTE}
-     SELECT t.tenant_id, t.full_name AS tenant_name, u.unit_name, p.property_name, l.lease_status,
+     SELECT t.tenant_id, t.full_name AS tenant_name, t.status AS tenant_status, u.unit_name, p.property_name, l.lease_status,
             lb.outstanding, lb.overdue,
             (SELECT MIN(c.due_date) FROM charges c WHERE c.lease_id = l.lease_id AND c.status = 'overdue') AS oldest_overdue
        FROM lease_balance lb JOIN leases l ON l.lease_id = lb.lease_id

@@ -62,7 +62,7 @@ router.get('/rent', ah(async (req, res) => {
   if (req.query.unit_id) { params.push(uuidParam(req.query.unit_id)); where.push(`u.unit_id = $${params.length}`); }
   if (req.query.month && /^\d{4}-\d{2}$/.test(req.query.month) && isValidDate(`${req.query.month}-01`)) { params.push(`${req.query.month}-01`); where.push(`c.period = $${params.length}::date`); }
   if (req.query.q) {
-    params.push(`%${String(req.query.q).slice(0, 100)}%`);
+    params.push(`%${String(req.query.q).slice(0, 100).replace(/[%_\\]/g, '\\$&')}%`);
     where.push(`(t.full_name ILIKE $${params.length} OR u.unit_name ILIKE $${params.length} OR p.property_name ILIKE $${params.length})`);
   }
   // Current tenants vs. people who have moved out but still owe.
@@ -84,7 +84,7 @@ router.get('/rent', ah(async (req, res) => {
   };
   const { rows } = await query(
     `WITH ${CHARGE_STATUS_CTE}
-     SELECT c.*, l.tenant_id, t.full_name AS tenant_name, u.unit_id, u.unit_name, p.property_id, p.property_name, l.lease_status
+     SELECT c.*, l.tenant_id, t.full_name AS tenant_name, t.status AS tenant_status, u.unit_id, u.unit_name, p.property_id, p.property_name, l.lease_status
        FROM charges c
        JOIN leases l ON l.lease_id = c.lease_id
        JOIN tenants t ON t.tenant_id = l.tenant_id
@@ -120,7 +120,7 @@ router.get('/rent/leases', ah(async (req, res) => {
   const scope = propertyScope(req.user, params);
   const { rows } = await query(
     `WITH ${LEASE_BALANCE_CTE}
-     SELECT l.lease_id, l.lease_status, l.monthly_rent, t.tenant_id, t.full_name AS tenant_name, u.unit_name, p.property_name,
+     SELECT l.lease_id, l.lease_status, l.monthly_rent, t.tenant_id, t.full_name AS tenant_name, t.status AS tenant_status, u.unit_name, p.property_name,
             lb.outstanding, lb.overdue, lb.credit
        FROM leases l
        JOIN lease_balance lb ON lb.lease_id = l.lease_id
@@ -149,7 +149,7 @@ router.get('/payments', ah(async (req, res) => {
   amountRange(req.query, 'pm.amount_paid', params, where);
   receiptFilter(req.query.receipt, 'payment', 'pm.payment_id', params, where);
   if (req.query.q) {
-    params.push(`%${String(req.query.q).slice(0, 100)}%`);
+    params.push(`%${String(req.query.q).slice(0, 100).replace(/[%_\\]/g, '\\$&')}%`);
     const n = params.length;
     where.push(`(t.full_name ILIKE $${n} OR u.unit_name ILIKE $${n} OR p.property_name ILIKE $${n} OR pm.reference_number ILIKE $${n} OR pm.notes ILIKE $${n})`);
   }
@@ -208,6 +208,7 @@ router.post('/payments', ah(async (req, res) => {
     payment_method: { type: 'enum', values: PAYMENT_METHODS, required: true, label: 'Payment method' },
     reference_number: { type: 'string', max: 100, label: 'Reference number' },
     notes: { type: 'text', max: 500, label: 'Notes' },
+    confirm_over: { type: 'bool' },
   });
   const key = idempotencyKey(req);
   const org = req.user.organization_id;
@@ -220,6 +221,20 @@ router.post('/payments', ah(async (req, res) => {
   }
   const lease = await loadLease(req.user, body.lease_id);
   if (lease.lease_status === 'cancelled') throw new HttpError(409, 'This lease was cancelled. Payments cannot be recorded on it.', { code: 'LEASE_CANCELLED' });
+  // Paying more than the tenant owes is allowed (it becomes advance credit), but only when the request says it was meant.
+  if (!body.confirm_over) {
+    await syncCharges(org);
+    const { rows: [b] } = await query(
+      `WITH ${LEASE_BALANCE_CTE} SELECT outstanding, total_paid, total_charged FROM lease_balance WHERE lease_id = $2`, [org, lease.lease_id]);
+    const owed = Math.max(0, Math.round(Number(b.outstanding) * 100));
+    const amount = Math.round(Number(body.amount_paid) * 100);
+    if (amount > owed) {
+      const credit = Math.max(0, Math.round((Number(b.total_paid) - Number(b.total_charged)) * 100) + amount);
+      const fmt = (c) => `₱${(c / 100).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      throw new HttpError(409, `This is ${fmt(amount - owed)} more than the ${fmt(owed)} owed. Confirm to record it; ${fmt(credit)} becomes advance credit.`,
+        { code: 'PAYMENT_OVER_BALANCE', owed: (owed / 100).toFixed(2), credit_after: (credit / 100).toFixed(2) });
+    }
+  }
   let paymentId;
   try {
     paymentId = await tx(async (db) => {
@@ -333,13 +348,13 @@ router.get('/expenses', ah(async (req, res) => {
   if (EXPENSE_CATEGORIES.includes(req.query.category)) { params.push(req.query.category); where.push(`e.category = $${params.length}`); }
   if (req.query.include_voided === 'only') where.push('e.voided_at IS NOT NULL');
   else if (req.query.include_voided !== '1') where.push('e.voided_at IS NULL');
-  if (req.query.vendor) { params.push(`%${String(req.query.vendor).slice(0, 120)}%`); where.push(`e.vendor_name ILIKE $${params.length}`); }
+  if (req.query.vendor) { params.push(`%${String(req.query.vendor).slice(0, 120).replace(/[%_\\]/g, '\\$&')}%`); where.push(`e.vendor_name ILIKE $${params.length}`); }
   if (req.query.source === 'maintenance') where.push('e.maintenance_request_id IS NOT NULL');
   if (req.query.source === 'direct') where.push('e.maintenance_request_id IS NULL');
   amountRange(req.query, 'e.amount', params, where);
   receiptFilter(req.query.receipt, 'expense', 'e.expense_id', params, where);
   if (req.query.q) {
-    params.push(`%${String(req.query.q).slice(0, 100)}%`);
+    params.push(`%${String(req.query.q).slice(0, 100).replace(/[%_\\]/g, '\\$&')}%`);
     where.push(`(e.description ILIKE $${params.length} OR e.vendor_name ILIKE $${params.length} OR p.property_name ILIKE $${params.length})`);
   }
   const SORTS = {

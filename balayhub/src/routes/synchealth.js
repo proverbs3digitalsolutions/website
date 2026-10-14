@@ -12,6 +12,12 @@ const { feedProblem, problemText, STALE_MS } = require('../lib/synchealth');
 
 const router = express.Router();
 
+// The host of a calendar link (e.g. "cal.example.org"), so two links on one listing can be told apart.
+// Only the host goes out: the path and any token in the link stay on the server.
+function hostOf(url) {
+  try { return new URL(url).host; } catch { return null; }
+}
+
 router.get('/sync-health', requireRole('owner', 'manager'), ah(async (req, res) => {
   const cutoff = new Date(Date.now() - STALE_MS);
   const params = [];
@@ -19,7 +25,7 @@ router.get('/sync-health', requireRole('owner', 'manager'), ah(async (req, res) 
   // Archived listings and properties are left out (they still sync).
   const live = `u.status = 'active' AND p.status = 'active'`;
   const { rows: feeds } = await pool.query(
-    `SELECT f.feed_id, f.unit_id, f.channel, f.last_synced_at, f.last_status, f.last_message, f.created_at,
+    `SELECT f.feed_id, f.unit_id, f.channel, f.url, f.last_synced_at, f.last_status, f.last_message, f.created_at,
             f.problem_since, u.unit_name
        FROM ical_feeds f
        JOIN units u ON u.unit_id = f.unit_id
@@ -27,7 +33,7 @@ router.get('/sync-health', requireRole('owner', 'manager'), ah(async (req, res) 
       WHERE ${scope} AND ${live}
       ORDER BY u.unit_name`, params);
   const { rows: overlaps } = await pool.query(
-    `SELECT c.feed_id, c.unit_id, c.check_in, c.check_out, c.first_seen_at, f.channel, u.unit_name
+    `SELECT c.feed_id, c.unit_id, c.check_in, c.check_out, c.first_seen_at, f.channel, f.url, u.unit_name
        FROM ical_conflicts c
        JOIN ical_feeds f ON f.feed_id = c.feed_id
        JOIN units u ON u.unit_id = c.unit_id
@@ -45,6 +51,7 @@ router.get('/sync-health', requireRole('owner', 'manager'), ah(async (req, res) 
       unit_id: f.unit_id,
       unit_name: f.unit_name,
       channel: f.channel,
+      host: hostOf(f.url),
       since: f.problem_since || f.last_synced_at || f.created_at,
       ...problemText(f, kind),
     });
@@ -56,6 +63,7 @@ router.get('/sync-health', requireRole('owner', 'manager'), ah(async (req, res) 
       unit_id: c.unit_id,
       unit_name: c.unit_name,
       channel: c.channel,
+      host: hostOf(c.url),
       since: c.first_seen_at,
       message: 'Overlaps dates already taken in BalayHub, so it was not added.',
       detail: null,
@@ -67,3 +75,4 @@ router.get('/sync-health', requireRole('owner', 'manager'), ah(async (req, res) 
 }));
 
 module.exports = router;
+module.exports.hostOf = hostOf; // shared with GET /units/:id/channels (src/routes/stays.js)

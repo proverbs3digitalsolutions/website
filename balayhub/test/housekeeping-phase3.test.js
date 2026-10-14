@@ -249,13 +249,12 @@ test('the task detail adds inspections, damage, lost and found and work orders; 
   assert.equal(c.task.inspections.length, 2);
   const dmg = c.task.damage_reports[0];
   assert.equal(dmg.description, 'Cracked bathroom tile');
-  assert.equal(dmg.status, 'charged');
-  assert.equal(dmg.estimated_cost, '450.00');
   assert.equal(dmg.files.length, 1, 'a cleaner sees the photos on a report');
-  for (const key of ['charge_id', 'resolution_note', 'resolved_at', 'resolved_by_name']) assert.equal(key in dmg, false, key);
+  // A cleaner sees no amount, status, charge or resolution on a report.
+  for (const key of ['estimated_cost', 'status', 'charge_id', 'resolution_note', 'resolved_at', 'resolved_by_name']) assert.equal(key in dmg, false, key);
   assert.equal(c.task.lost_found[0].description, 'Phone charger');
   assert.equal('status_note' in c.task.lost_found[0], false);
-  assert.equal(c.task.work_orders.length, 1);
+  assert.deepEqual(c.task.work_orders, [], 'a cleaner gets no work orders');
   assert.equal(c.task.pay_status, 'paid');
   assert.equal(c.task.pay_amount, '900.00');
   assert.equal(JSON.stringify(c).includes('Charged 450'), false);
@@ -372,13 +371,15 @@ test('signed-out requests are refused, and malformed input gets a 4xx, never a 5
 });
 
 test('a clean with no checklist items cannot be inspected', async () => {
+  // The API refuses an empty default checklist, so this test sets one with SQL.
   const saved = (await owner.get('/api/cleaning-checklist')).data.items;
-  assert.equal((await owner.raw('PUT', '/api/cleaning-checklist', { items: [] })).status, 200);
+  assert.equal((await owner.raw('PUT', '/api/cleaning-checklist', { items: [] })).status, 400);
+  await sql('UPDATE organizations SET cleaning_checklist = $2 WHERE organization_id = $1', [orgId, JSON.stringify([])]);
   const t = (await owner.post('/api/cleaning-tasks', { unit_id: unitB.unit_id, due_date: d(0) })).data.task;
   assert.equal(t.checklist.length, 0);
   assert.equal((await owner.post(`/api/cleaning-tasks/${t.task_id}/status`, { status: 'done' })).status, 200);
   const r = await owner.post(`/api/cleaning-tasks/${t.task_id}/inspect`, { items: [] });
   assert.equal(r.status, 400);
   assert.ok(r.data.fields.items);
-  assert.equal((await owner.raw('PUT', '/api/cleaning-checklist', { items: saved })).status, 200);
+  await sql('UPDATE organizations SET cleaning_checklist = $2 WHERE organization_id = $1', [orgId, JSON.stringify(saved)]);
 });

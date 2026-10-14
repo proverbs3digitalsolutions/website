@@ -174,10 +174,12 @@ async function assignedAlert() {
   return h('a', { class: 'alert alert--info', href: '#/inbox?view=mine', style: { display: 'block' } }, `Assigned to you (${n})`);
 }
 
+// The channel and the link's host, so two links on one listing read differently.
+const feedName = (p) => `${label(p.channel)}${p.host ? ` (${p.host})` : ''}`;
 const SYNC_TEXT = {
-  stale: (p) => `${p.unit_name}: the ${label(p.channel)} calendar hasn’t updated since ${fmtDate(manilaDay(p.since))}. Bookings may be out of date.`,
-  failing: (p) => (p.channel ? `${p.unit_name} (${label(p.channel)}): ${p.message}` : `${p.unit_name}: ${p.message}`),
-  overlap: (p) => `${p.unit_name}: a ${label(p.channel)} booking overlaps another (${fmtDate(p.check_in)} to ${fmtDate(p.check_out)}). Fix it to avoid a double booking.`,
+  stale: (p) => `${p.unit_name}: the ${feedName(p)} calendar hasn’t updated since ${fmtDate(manilaDay(p.since))}. Bookings may be out of date.`,
+  failing: (p) => (p.channel ? `${p.unit_name} · ${feedName(p)}: ${p.message}` : `${p.unit_name}: ${p.message}`),
+  overlap: (p) => `${p.unit_name}: a ${feedName(p)} booking overlaps another (${fmtDate(p.check_in)} to ${fmtDate(p.check_out)}). Fix it to avoid a double booking.`,
 };
 // Owners and managers: calendar sync problems.
 async function syncAlert() {

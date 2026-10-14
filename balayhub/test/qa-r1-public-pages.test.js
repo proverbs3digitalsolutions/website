@@ -46,16 +46,19 @@ test('#66 terms page keeps its draft notice (founder decision pending)', () => {
   assert.match(read('js/views/terms.js'), /Draft pending review by a Philippine lawyer/);
 });
 
-test('#72 terms page points at Help & support when no contact email is set', () => {
+test('#72 terms page sends visitors to sign up, then Help & support, when no contact email is set', () => {
   const src = read('js/views/terms.js');
-  assert.match(src, /href: '#\/help'/);
-  assert.match(src, /Help & support/);
+  assert.doesNotMatch(src, /#\/help/);
+  assert.match(src, /href: '#\/signup'/);
+  assert.ok(src.includes("t(' and ask us in Help & support.')"));
 });
 
 test('#72 privacy page no longer sends visitors to contact details that may be hidden', () => {
   const src = read('js/views/privacy.js');
   assert.doesNotMatch(src, /contact details on our home page/);
-  assert.match(src, /href: '#\/help'/);
+  assert.doesNotMatch(src, /#\/help/);
+  assert.match(src, /href: '#\/signup'/);
+  assert.ok(src.includes("t(' and ask us in Help & support.')"));
 });
 
 test('#66 privacy page keeps its draft notice (founder decision pending)', () => {
@@ -76,21 +79,22 @@ test('#72 landing custom-plan note is not hidden when no contact email is set', 
   assert.doesNotMatch(src, /pricing\.contact_email && h\('p', \{ class: 'lp-note' \}/);
 });
 
-test('#72 landing contact routes fall back to Help & support (pricing note and footer)', () => {
+test('#72 landing contact routes fall back to sign-up, then Help & support (pricing note and footer)', () => {
   const src = read('js/views/landing.js');
-  assert.ok((src.match(/href: '#\/help'/g) || []).length >= 2, 'pricing note and footer need the Help & support fallback');
+  assert.doesNotMatch(src, /#\/help/);
+  assert.ok((src.match(/href: '#\/signup'/g) || []).length >= 2, 'pricing note and footer need the sign-up fallback');
 });
 
 test('#72 landing FAQ says "Message us" only when a contact email is configured', () => {
   const src = read('js/views/landing.js');
   assert.match(src, /pricing\.contact_email\s*\?\s*'Monthly, by GCash, Maya or bank transfer\. Message us/);
-  assert.match(src, /Ask Help & support when you\\'re ready/);
+  assert.match(src, /Create your account, then ask us in Help & support when you\\'re ready/);
 });
 
 test('#72 new Help & support copy has a Taglish translation', () => {
   const src = read('js/views/landing.js');
-  assert.match(src, /'Help & support': 'Help & support'/);
-  assert.match(src, /Magtanong sa Help & support kapag handa ka na/);
+  assert.match(src, /' and ask us in Help & support about a custom plan\.':/);
+  assert.match(src, /Gumawa ng account, saka magtanong sa Help & support kapag handa ka na/);
 });
 
 test('lane files never use window.alert, confirm or prompt', () => {

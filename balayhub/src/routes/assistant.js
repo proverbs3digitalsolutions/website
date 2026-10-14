@@ -10,7 +10,7 @@ const express = require('express');
 const Anthropic = require('@anthropic-ai/sdk');
 const config = require('../config');
 const { HttpError, ah } = require('../lib/http');
-const { CATEGORIES, ARTICLES, searchArticles } = require('../lib/helpcenter');
+const { CATEGORIES, articlesFor, searchArticles } = require('../lib/helpcenter');
 const { PLANS, PUBLIC_PLANS } = require('../lib/plans');
 
 const router = express.Router();
@@ -31,12 +31,14 @@ const ROLE_TEXT = {
   staff: 'Staff: sees reservations, calendar, housekeeping and deposits for their assigned properties (and long-term rent, expenses and reports for those properties); guest contact details, the guest inbox, stay reports, pricing changes, team and billing are hidden from staff.',
 };
 
-// One stable system prompt per role, so the long knowledge part is cached.
+// One stable system prompt per role and workspace type, so the long knowledge part is cached.
 const systemCache = new Map();
-function knowledge(role) {
-  if (systemCache.has(role)) return systemCache.get(role);
-  const visible = ARTICLES.filter((a) => a.roles.includes(role));
-  const hidden = ARTICLES.filter((a) => !a.roles.includes(role)).map((a) => a.title);
+function knowledge(role, businessType) {
+  const key = `${role}|${businessType || ''}`;
+  if (systemCache.has(key)) return systemCache.get(key);
+  const visible = articlesFor(role, businessType);
+  // Guides this workspace type has, that this role can't use (no short-term guides on a long-term workspace).
+  const hidden = articlesFor(null, businessType).filter((a) => !a.roles.includes(role)).map((a) => a.title);
   const plans = PUBLIC_PLANS.map((k) => `${PLANS[k].name}: ₱${PLANS[k].price}/month, up to ${PLANS[k].listings} listings${PLANS[k].ai ? ', AI reply drafts' : ''}`).join('; ');
   const text = `You are the BalayHub assistant, the in-app helper inside BalayHub.
 
@@ -61,7 +63,7 @@ ${CATEGORIES.map(([key, name]) => {
     const list = visible.filter((a) => a.category === key);
     return list.length ? `\n## ${name}\n${list.map((a) => `### ${a.title}\n${a.body.join('\n')}`).join('\n\n')}` : '';
   }).join('\n')}`;
-  systemCache.set(role, text);
+  systemCache.set(key, text);
   return text;
 }
 
@@ -127,7 +129,7 @@ router.post('/assistant/chat', ah(async (req, res) => {
       max_tokens: 16000,
       output_config: { effort: 'low' },
       system: [
-        { type: 'text', text: knowledge(req.user.role), cache_control: { type: 'ephemeral' } },
+        { type: 'text', text: knowledge(req.user.role, req.user.business_type), cache_control: { type: 'ephemeral' } },
         { type: 'text', text: userContext(req.user, page) },
       ],
       messages,
@@ -157,7 +159,7 @@ router.post('/assistant/chat', ah(async (req, res) => {
   reply = reply.split(TICKET_MARK).join('').trim();
   if (!reply) reply = "Sorry, I couldn't come up with an answer. Please try asking another way, or contact support.";
   if (response.stop_reason === 'max_tokens') reply += ' …';
-  const articles = searchArticles(messages.at(-1).content, req.user.role, 3).map(({ slug, title, body }) => ({ slug, title, body }));
+  const articles = searchArticles(messages.at(-1).content, req.user.role, 3, req.user.business_type, { mode: 'any' }).map(({ slug, title, body }) => ({ slug, title, body }));
   res.json({ reply, offer_ticket: offerTicket, articles });
 }));
 

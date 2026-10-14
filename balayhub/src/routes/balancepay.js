@@ -99,14 +99,17 @@ async function loadByToken(token) {
 // Sums are done in SQL so the centavos are exact.
 async function billFor(b) {
   const [charges, payments, paid] = await Promise.all([
-    query(`SELECT description, quantity, unit_price, amount FROM booking_charges
-            WHERE booking_id = $1 AND voided_at IS NULL ORDER BY created_at`, [b.booking_id]),
+    // name_tl: the add-on's Taglish name through addon_id (null for other charges, or no Taglish name set).
+    query(`SELECT c.description, c.quantity, c.unit_price, c.amount, a.name_tl FROM booking_charges c
+             LEFT JOIN listing_addons a ON a.addon_id = c.addon_id
+            WHERE c.booking_id = $1 AND c.voided_at IS NULL ORDER BY c.created_at`, [b.booking_id]),
     query(`SELECT amount, payment_date, payment_method FROM booking_payments
             WHERE booking_id = $1 AND voided_at IS NULL ORDER BY payment_date, created_at`, [b.booking_id]),
     one(`SELECT COALESCE(SUM(amount), 0)::numeric(12,2) AS paid FROM booking_payments WHERE booking_id = $1 AND voided_at IS NULL`, [b.booking_id]),
   ]);
   return {
     nights: b.nights, accommodation_total: b.accommodation_total, cleaning_fee: b.cleaning_fee, other_fees: b.other_fees,
+    owed: b.status === 'confirmed', // a cancelled stay keeps its lines but owes nothing
     charges: charges.rows, extras_total: b.extras_total, total: b.total_amount,
     payments: payments.rows, paid: paid.paid,
     // Anything else already settled for this stay (e.g. through a booking platform), as one neutral line
@@ -117,11 +120,13 @@ async function billFor(b) {
 
 publicRouter.get('/public/pay/:token', ah(async (req, res) => {
   const b = await loadByToken(req.params.token);
+  const cancelled = b.status !== 'confirmed';
+  const due = !cancelled && Number(b.balance) > 0 ? b.balance : '0.00';
   res.json({
     host: b.host_name, listing: b.unit_name, property: b.property_name, check_in: b.check_in, check_out: b.check_out,
     code: b.confirmation_code, guest_first_name: String(b.guest_name || '').split(' ')[0] || null,
-    total: b.total_amount, paid: (Number(b.total_amount) - Number(b.balance)).toFixed(2), balance: Number(b.balance) > 0 ? b.balance : '0.00',
-    accepting: b.accepting, test_mode: b.test_mode, cancelled: b.status !== 'confirmed', guest_language: b.guest_language,
+    total: b.total_amount, paid: (Number(b.total_amount) - Number(b.balance)).toFixed(2), balance: due, balance_due: due,
+    accepting: b.accepting, test_mode: b.test_mode, cancelled, guest_language: b.guest_language,
     bill: await billFor(b),
     // Only when the host turned manual payments on: their instructions, and whether a proof can be sent now.
     manual_payments: b.manual_payments_enabled ? { instructions: b.manual_payment_instructions, accepting: !manualRefusal(b) } : null,
@@ -152,7 +157,7 @@ function requestKeyOf(req) {
 publicRouter.get('/public/pay/:token/addons', ah(async (req, res) => {
   const b = await loadByToken(req.params.token);
   const open = !addonRefusal(b);
-  res.json({ addons: open ? await listAddonsForUnit(pool, b.organization_id, b.unit_id, 'before_arrival') : [] });
+  res.json({ addons: open ? await listAddonsForUnit(pool, b.organization_id, b.unit_id, 'before_arrival', b.booking_id) : [] });
 }));
 
 // A retry with the same key (a double tap, a dropped connection) gets the bill the first try made,
@@ -180,7 +185,7 @@ publicRouter.post('/public/pay/:token/addons', addonsLimiter, ah(async (req, res
       if (key && (await db.query('SELECT 1 FROM booking_charges WHERE booking_id = $1 AND starts_with(request_key, $2)',
         [b.booking_id, `${key}:`])).rowCount) return false;
       const { items } = await priceAddons(db, {
-        orgId: now.organization_id, unitId: now.unit_id, nights: now.nights, guests: now.num_guests, selections, context: 'before_arrival',
+        orgId: now.organization_id, unitId: now.unit_id, nights: now.nights, guests: now.num_guests, selections, context: 'before_arrival', bookingId: b.booking_id,
       });
       await createAddonCharges(db, b.booking_id, items, null, key);
       return true;

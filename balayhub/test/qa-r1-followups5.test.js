@@ -24,10 +24,12 @@ test('keyboard: a clickable row opens on Enter and on Space, and Space does not 
   }
 });
 
-test('calendar sync: a failing calendar names the unit and the channel, then the server sentence as it is', () => {
+test('calendar sync: a failing calendar names the unit, the channel and host, then the server sentence as it is', () => {
   const src = read('home.js');
-  // With a channel: "Unit (Channel): sentence". Without one: "Unit: sentence" (no "(undefined)").
-  assert.match(src, /failing: \(p\) => \(p\.channel \? `\$\{p\.unit_name\} \(\$\{label\(p\.channel\)\}\): \$\{p\.message\}` : `\$\{p\.unit_name\}: \$\{p\.message\}`\),/);
+  // feedName gives "Channel (host)", with the host only when present. With a channel the line reads
+  // "Unit · Channel (host): sentence". Without one it reads "Unit: sentence" (no "(undefined)").
+  assert.match(src, /const feedName = \(p\) => `\$\{label\(p\.channel\)\}\$\{p\.host \? ` \(\$\{p\.host\}\)` : ''\}`;/);
+  assert.match(src, /failing: \(p\) => \(p\.channel \? `\$\{p\.unit_name\} · \$\{feedName\(p\)\}: \$\{p\.message\}` : `\$\{p\.unit_name\}: \$\{p\.message\}`\),/);
   assert.doesNotMatch(src, /\(\$\{p\.message\}\)/, 'the message is still wrapped in brackets with extra copy');
 });
 

@@ -117,43 +117,38 @@ router.get('/cleaning-tasks', ah(async (req, res) => {
   res.json({ view, tasks: rows.map((r) => presentTask(req.user, r)), counts });
 }));
 
-// A cleaner sees a damage report's estimate and status only on reports they filed.
-function reportForViewer({ filed_by_you: filed, ...report }, cleaner) {
-  if (cleaner && !filed) {
-    delete report.estimated_cost;
-    delete report.status;
-  }
-  return report;
-}
-
 // One task with its checklist files, inspections, damage reports, lost and
-// found items and the work orders raised from it. A cleaner doesn't see
-// charges, resolution notes or lost-and-found status notes.
+// found items and the work orders raised from it. Owners and managers see all
+// of it (section 6.1). Staff and cleaners see only the damage reports and lost
+// items they filed, and never an amount, charge, resolution or status note
+// (D-51). Staff get no inspections; cleaners get them on their own jobs only and no work orders.
 router.get('/cleaning-tasks/:id', ah(async (req, res) => {
   const task = await loadTask(req.user, uuidParam(req.params.id));
+  const full = ['owner', 'manager'].includes(req.user.role);
   const cleaner = isCleaner(req.user);
+  const mine = full ? '' : ' AND d.reported_by = $2';
+  const mineLost = full ? '' : ' AND l.found_by = $2';
   const [files, inspections, damage, lostFound, workOrders] = await Promise.all([
     query(
       `SELECT file_id, file_name, mime_type, size_bytes, uploaded_at FROM files
         WHERE related_record_type = 'cleaning' AND related_record_id = $1 ORDER BY uploaded_at`, [task.task_id]),
-    query(
+    (req.user.role === 'staff' || (cleaner && task.assigned_to !== req.user.user_id)) ? { rows: [] } : query(
       `SELECT i.inspection_id, i.score, i.passed, i.items, i.notes, i.created_at, iu.full_name AS inspected_by_name
          FROM cleaning_inspections i LEFT JOIN users iu ON iu.user_id = i.inspected_by
         WHERE i.task_id = $1 ORDER BY i.created_at DESC`, [task.task_id]),
     query(
-      `SELECT d.report_id, d.description, d.estimated_cost, d.status, d.created_at, reporter.full_name AS reported_by_name,
-              d.reported_by = $2 AS filed_by_you
-              ${cleaner ? '' : ', d.charge_id, d.resolution_note, d.resolved_at, resolver.full_name AS resolved_by_name'}
+      `SELECT d.report_id, d.description, d.created_at, reporter.full_name AS reported_by_name
+              ${full ? ', d.estimated_cost, d.status, d.charge_id, d.resolution_note, d.resolved_at, resolver.full_name AS resolved_by_name' : ''}
          FROM damage_reports d
          LEFT JOIN users reporter ON reporter.user_id = d.reported_by
          LEFT JOIN users resolver ON resolver.user_id = d.resolved_by
-        WHERE d.task_id = $1 ORDER BY d.created_at DESC`, [task.task_id, req.user.user_id]),
+        WHERE d.task_id = $1${mine} ORDER BY d.created_at DESC`, full ? [task.task_id] : [task.task_id, req.user.user_id]),
     query(
       `SELECT l.item_id, l.description, l.found_where, l.found_on, l.status, l.created_at, finder.full_name AS found_by_name
-              ${cleaner ? '' : ', l.status_note'}
+              ${full ? ', l.status_note' : ''}
          FROM lost_found_items l LEFT JOIN users finder ON finder.user_id = l.found_by
-        WHERE l.task_id = $1 ORDER BY l.created_at DESC`, [task.task_id]),
-    query(
+        WHERE l.task_id = $1${mineLost} ORDER BY l.created_at DESC`, full ? [task.task_id] : [task.task_id, req.user.user_id]),
+    cleaner ? { rows: [] } : query(
       `SELECT request_id, title, status FROM maintenance_requests WHERE cleaning_task_id = $1 ORDER BY created_at DESC`, [task.task_id]),
   ]);
   // Photos attached to the damage reports and lost items above.
@@ -168,7 +163,7 @@ router.get('/cleaning-tasks/:id', ah(async (req, res) => {
     task: {
       ...task,
       inspections: inspections.rows,
-      damage_reports: damage.rows.map((r) => ({ ...reportForViewer(r, cleaner), files: photosOf('damage', r.report_id) })),
+      damage_reports: damage.rows.map((r) => ({ ...r, files: photosOf('damage', r.report_id) })),
       lost_found: lostFound.rows.map((r) => ({ ...r, files: photosOf('lost_found', r.item_id) })),
       work_orders: workOrders.rows,
     },
@@ -225,9 +220,10 @@ router.patch('/cleaning-tasks/:id', managers, ah(async (req, res) => {
     assignee_name: { type: 'string', max: 80, label: 'Cleaner name' },
     due_date: { type: 'date', label: 'Date' },
     notes: { type: 'text', max: 1000, label: 'Notes' },
-    pay_amount: { type: 'money', label: 'Pay' },
+    pay_amount: { type: 'money', positive: true, label: 'Pay' },
   }, { partial: true });
   // A task goes to either a team member or a named cleaner, not both.
+  if (body.assigned_to && body.assignee_name) throw validationError({ assignee_name: 'Pick a team member or type a name, not both.' });
   if (body.assigned_to) body.assignee_name = null;
   else if (body.assignee_name) body.assigned_to = null;
   if ('due_date' in body && !body.due_date) delete body.due_date;
@@ -549,6 +545,7 @@ router.get('/cleaning-checklist', ah(async (req, res) => {
 
 router.put('/cleaning-checklist', owners, ah(async (req, res) => {
   const items = Array.isArray(req.body?.items) ? req.body.items.map((x) => (typeof x === 'string' ? x.trim() : '')).filter(Boolean) : null;
+  if (items && !items.length) throw validationError({ items: 'Add at least one checklist item.' });
   if (!items || items.length > 40 || items.some((x) => x.length > 120)) {
     throw validationError({ items: 'Enter up to 40 checklist items, each up to 120 characters.' });
   }

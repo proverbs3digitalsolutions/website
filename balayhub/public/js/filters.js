@@ -8,11 +8,50 @@
 // Field: { name, label, type: 'select' | 'date' | 'daterange' | 'number' | 'check', options: [[value, text]], all: 'All …' }
 // A daterange field uses `${name}_from` / `${name}_to` (or from/to keys given as `keys`).
 // A range that ends before it starts is flagged inline and never applied.
+// initFilters() drops impossible dates and non-UUID ids before any page fetches.
 
 import { h, fmtDate } from './ui.js';
 import { state } from './app.js';
 
 const storeKey = (key) => `bh-filters:${state.user?.user_id || 'anon'}:${key}`;
+
+// Dates typed in a backwards range (from a shared link or a saved filter), kept so the bar can show them once with the message.
+const typedBack = new WeakMap();
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// True for a real calendar day. 2026-02-30 and 2026-13-01 are not.
+function realDate(v) {
+  const [y, m, d] = v.split('-').map(Number);
+  const t = new Date(0);
+  t.setUTCFullYear(y, m - 1, d);
+  return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d;
+}
+
+// Runs before any page fetches, so a bad value never reaches the server. An impossible date and a non-UUID *_id are
+// dropped. A date range that runs backwards is not applied; its dates stay in typedBack for the bar to show.
+// ponytail: date keys are found by their from/to names, which every range in the app uses. A range with other key
+// names would need its pair passed in here to be checked.
+function sanitise(out, defaults) {
+  const typed = {};
+  for (const k of Object.keys(out)) {
+    const v = out[k];
+    const impossible = /(^|_)(from|to)$/.test(k) && DATE_RE.test(v) && !realDate(v);
+    const badId = k.endsWith('_id') && v !== '' && !UUID_RE.test(v);
+    if (impossible || badId) out[k] = defaults[k] ?? '';
+  }
+  for (const k of Object.keys(out)) {
+    if (!/(^|_)from$/.test(k)) continue;
+    const to = k.replace(/from$/, 'to');
+    if (!(to in out) || !out[k] || !out[to] || out[to] >= out[k]) continue;
+    typed[k] = out[k];
+    typed[to] = out[to];
+    out[k] = defaults[k] ?? '';
+    out[to] = defaults[to] ?? '';
+  }
+  typedBack.set(out, typed);
+  return out;
+}
 
 // URL query wins (shared links), then this person's last filters, then defaults.
 export function initFilters(key, query, defaults) {
@@ -24,7 +63,7 @@ export function initFilters(key, query, defaults) {
     const v = urlHas ? query[k] : saved[k];
     if (v !== undefined && v !== null) out[k] = String(v);
   }
-  return out;
+  return sanitise(out, defaults);
 }
 
 export function rememberFilters(key, values) {
@@ -45,13 +84,21 @@ function control(f, values, emit, defaults = {}) {
   if (f.type === 'daterange') {
     const [a, b] = rangeKeys(f);
     const errId = `${id}-err`;
-    const from = h('input', { class: 'input', type: 'date', id, value: values[a] || '', 'aria-label': `${f.label} from`, 'aria-describedby': errId });
-    const to = h('input', { class: 'input', type: 'date', value: values[b] || '', 'aria-label': `${f.label} to`, 'aria-describedby': errId });
-    const err = h('div', { id: errId, role: 'alert', style: { color: 'var(--red)', fontSize: '.84rem', fontWeight: '650' } }, BACKWARDS);
+    // A backwards range that initFilters() held back shows its typed dates once, then the bar reads the applied values.
+    const typed = typedBack.get(values) || {};
+    const shownA = typed[a] ?? values[a];
+    const shownB = typed[b] ?? values[b];
+    delete typed[a];
+    delete typed[b];
+    const from = h('input', { class: 'input', type: 'date', id, value: shownA || '', 'aria-label': `${f.label} from`, 'aria-describedby': errId });
+    const to = h('input', { class: 'input', type: 'date', value: shownB || '', 'aria-label': `${f.label} to`, 'aria-describedby': errId });
+    const err = h('div', { id: errId, role: 'alert', style: { color: 'var(--red)', fontSize: '.84rem', fontWeight: '650' } });
     // Dates are YYYY-MM-DD, so string order is calendar order. A backwards range is flagged, never written.
+    // The message text is set only while the range is backwards, so the alert is empty otherwise.
     const check = () => {
       const bad = Boolean(from.value && to.value && to.value < from.value);
       err.hidden = !bad;
+      err.replaceChildren(bad ? BACKWARDS : '');
       for (const input of [from, to]) { if (bad) input.setAttribute('aria-invalid', 'true'); else input.removeAttribute('aria-invalid'); }
       return bad;
     };

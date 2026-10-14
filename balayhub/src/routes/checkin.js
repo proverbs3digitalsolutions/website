@@ -69,7 +69,7 @@ const uploadLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 30, key: (req) 
 async function loadByToken(token) {
   if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{20,40}$/.test(token)) throw notFound('This check-in link is not valid. Please ask your host for a new one.');
   const b = await one(
-    `SELECT b.booking_id, b.organization_id, b.check_in, b.check_out, b.num_guests, b.status, b.confirmation_code, b.rules_accepted_at,
+    `SELECT b.booking_id, b.organization_id, b.check_in, b.check_out, b.num_guests, b.status, b.confirmation_code, b.rules_accepted_at, (b.checked_in_at IS NOT NULL) AS checked_in,
             u.unit_name, u.max_guests, u.house_rules, to_char(u.checkin_time, 'HH24:MI') AS checkin_time, to_char(u.checkout_time, 'HH24:MI') AS checkout_time,
             p.property_name, p.city, o.name AS workspace_name, o.is_demo, o.guest_language,
             COALESCE(g.full_name, b.guest_label) AS guest_name,
@@ -90,7 +90,7 @@ publicRouter.get('/public/checkin/:token', ah(async (req, res) => {
       workspace_name: b.workspace_name, listing: b.unit_name, property: b.property_name, city: b.city,
       check_in: b.check_in, check_out: b.check_out, checkin_time: b.checkin_time, checkout_time: b.checkout_time,
       guests_allowed: b.max_guests || 20, num_guests: b.num_guests, code: b.confirmation_code,
-      guest_first_name: String(b.guest_name || '').split(' ')[0] || null, closed: b.closed,
+      guest_first_name: String(b.guest_name || '').split(' ')[0] || null, closed: b.closed, checked_in: b.checked_in,
       id_retention_days: config.guestIdRetentionDays, guest_language: b.guest_language,
       house_rules: b.house_rules || null, rules_accepted_at: b.rules_accepted_at,
     },

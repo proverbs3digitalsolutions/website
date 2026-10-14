@@ -276,7 +276,8 @@ test('roles: managers see only assigned properties; staff are limited', async ()
 test('file uploads: type checked, private, scoped', async () => {
   const payments = await owner.get('/api/payments');
   const pid = payments.data.payments[0].payment_id;
-  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(20)]);
+  // A real 1x1 PNG: the upload check now needs the header and end chunks, not just the signature.
+  const png = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a3a30000000049454e44ae426082', 'hex');
   const up = await owner.raw('POST', `/api/files?record_type=payment&record_id=${pid}`, png, { 'Content-Type': 'image/png', 'X-File-Name': 'receipt.png' });
   assert.equal(up.status, 201, JSON.stringify(up.data));
   const fake = await owner.raw('POST', `/api/files?record_type=payment&record_id=${pid}`, Buffer.from('not a png'), { 'Content-Type': 'image/png' });

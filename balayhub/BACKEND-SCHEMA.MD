@@ -790,31 +790,60 @@ The cleaner role is denied by default in code (`cleanerGuard`, D-48). Any row no
 
 | Data area | Owner | Manager | Staff | Cleaner |
 |---|---|---|---|---|
-| Cleaning jobs (list, detail, tick, start, done, reopen) | Full | Assigned; can cancel | Assigned | Own jobs and unassigned jobs in assigned properties. No cancel, no edit, no reassign. Guest first name only |
+| Cleaning jobs (list, detail, tick, start, done, reopen) | Full | Assigned; can cancel | Assigned | Own jobs and unassigned jobs in assigned properties. No cancel, no edit, no reassign. Guest first name only. What the job detail returns for each role is in section 6.1a |
 | Cleaning board and calendar | Full | Assigned | Assigned | Own and unassigned jobs only |
 | Inspect a finished job | Yes | Yes (assigned) | No | No |
-| Inspection results and cleaner scores | View | View (assigned) | No | Result on own jobs only; no scores |
+| Inspection results and cleaner scores | View | View (assigned) | No (none on the job detail either) | Result on own jobs only; no scores |
 | Damage reports: report | Yes | Yes | Yes (jobs and stays they can see) | Yes, on own jobs only |
-| Damage reports: list and resolve (charge, deduct, waive) | Yes, with amounts | Yes (assigned) | No | No. Sees only reports it filed, with no amounts |
+| Damage reports: list and resolve (charge, deduct, waive) | Yes, with amounts | Yes (assigned) | No (list and resolve). On a job they see only the reports they filed, with no amounts | No. Sees only reports it filed, with no amounts |
 | Suggested deposit deduction | Yes | Yes | No | No |
 | Lost and found: log | Yes | Yes | Yes (stays and jobs they can see) | Yes, on own jobs |
-| Lost and found: list and status | Full | Assigned | No | Own items only |
+| Lost and found: list and status | Full | Assigned | No (page). On a job they see only items they logged, with no status note | Own items only |
 | Cleaner rates | View, set, delete | No | No | No |
 | Cleaner pay list and mark paid | View, mark paid, undo | View and mark paid (assigned); no undo | No | No |
 | My pay | Own, as worker | Own, as worker | Own, as worker | Own pay only |
 | Expenses made by mark paid | Yes | Yes (assigned) | No | No |
-| Supplies: list | Full | Assigned | Assigned | Names and counts only (assigned). No costs exist |
+| Supplies: list | Full | Assigned | Assigned; the Supplies page opens read-only (no add, edit, count or restock buttons) | Names and counts only (assigned). No costs exist |
 | Supplies: add, edit, archive, count, restock | Yes | Yes (assigned) | No | No |
 | Supplies: movement history (`GET /supplies/:id/movements`, last 20) | Yes | Yes (assigned) | No | No |
 | Supplies: record used or restocked on a job | Yes | Yes | Yes (jobs they can see) | Yes, on own and unassigned jobs |
 | Work orders (maintenance requests from a job) | Full | Assigned | As section 6 | Create only. Cannot read the Maintenance page or repair costs. No photos |
 | Maintenance schedules | Full | Create, edit, pause (assigned) | No (403) | No |
 | Files on cleaning records | Full | Assigned | Assigned | Own and unassigned jobs |
-| Files on damage and lost-and-found records | Full | Assigned | Assigned | Only records they filed |
+| Files on damage and lost-and-found records | Full | Assigned | Only records they filed (on the job detail) | Only records they filed |
 | Files on inspections | Full | Assigned | No | No |
 | Guest phone, email and notes on lost items | Yes | Yes | No | No |
 | Invite a cleaner (team) | Yes | No | No | No |
 | Account, notifications, help and support | Own | Own | Own | Own |
+
+### 6.1a QA round 2 additions (2026-10-14)
+
+**Job detail (`GET /api/cleaning-tasks/:id`) per role.**
+- **Owner and manager (assigned):** the whole record: checklist files, inspections, every damage report with `estimated_cost`, `status`, `charge_id`, `resolution_note`, `resolved_at` and `resolved_by_name`, every lost item with `status_note`, and the work orders (`request_id`, `title`, `status`).
+- **Staff (assigned properties):** checklist files, and only the damage reports and lost items they filed. Damage reports carry `report_id`, `description`, `created_at`, `reported_by_name` and photos; lost items carry `item_id`, `description`, `found_where`, `found_on`, `status`, `created_at`, `found_by_name` and photos. No amounts, charge, resolution, status note or inspections. Work orders as in section 6.
+- **Cleaner (own and unassigned jobs):** the same filed-by-them damage and lost-item fields as staff. Inspections appear only when the job is assigned to that cleaner. `work_orders` is always empty. No estimate, no damage status, no charge, no resolution, no status note.
+
+**Staff pages.** Staff may open Group bookings (rooms and stays, without money, only when every room is in their properties; section 6.3) and the Supplies page (read-only). The screen route block (`public/js/routeaccess.js`) and the menu no longer hide them. Housekeeping is a stay-only page; cleaners keep it.
+
+**Supply movements (`supply_movements`).**
+- Using more than is on hand: owners and managers are asked first; a confirmed use logs only the on-hand amount, with "Asked for N, only M on hand." added to the note (the note is shortened to fit its length limit). On hand never goes below zero.
+- A use with nothing on hand is refused for owners and managers (a 400 on `quantity`), because the log takes uses of at least 1.
+- A cleaner's save from a job skips the short item, saves the others, and names the skipped item.
+- Movement history stays owner and manager only (section 6.1).
+
+**Owner portal.** The statement responses no longer include `confirmation_code`. The stored snapshot keeps it (D-47, D-77).
+
+**API notes added this round.**
+- `POST /booking-groups/:id/rooms {rooms:[]}` adds 1 to 20 rooms, all or nothing. Cancelled rooms do not count.
+- `POST /payments` on a tenant returns 409 `PAYMENT_OVER_BALANCE` with the amount owed and the credit after; the retry sends `confirm_over`.
+- Voiding a stay payment that refunds depend on returns 409 `REFUNDS_EXCEED_PAYMENTS`: "Void the refund first, then this payment."
+- The guest pay token response includes what was bought and what is left per add-on, the Taglish name (`name_tl`) and the cancelled state.
+- Assigning a cleaning task to someone who can't see the property returns 400 (D-29).
+- Forgot-password sends one reset email per account per 5 minutes; the reply is always the same.
+- A PATCH that changes nothing writes no audit row. Audit entries returned to the screen leave out fields ending in `_id`.
+- Listing edit: the postal code must be 4 digits; blank required fields return field messages; blank fees and discounts are saved as 0; a blank deposit percentage is left unchanged.
+- Manager invitations and later manager edits require at least one property.
+- Uploads: the shared check in `src/lib/storage.js` (structure plus a 64-byte minimum for images) covers every upload route.
 
 ### 6.2 Phase 4 access matrix (guests, quotes, add-ons, settings)
 

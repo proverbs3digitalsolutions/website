@@ -68,7 +68,7 @@ router.get('/unit-owners', ownersOnly, ah(async (req, res) => {
   const where = ['o.organization_id = $1', 'o.archived_at IS NULL'];
   const having = [];
   if (q.q) {
-    params.push(`%${String(q.q).slice(0, 100)}%`);
+    params.push(`%${String(q.q).slice(0, 100).replace(/[%_\\]/g, '\\$&')}%`);
     where.push(`(o.full_name ILIKE $${params.length} OR o.email ILIKE $${params.length} OR o.phone ILIKE $${params.length})`);
   }
   if (q.has_units === 'yes') having.push('COUNT(u.unit_id) > 0');

@@ -22,8 +22,9 @@ async function validPropertyIds(orgId, ids) {
   return ids;
 }
 
-// A cleaner only sees the properties they're assigned to, so they need at least one.
-const noPropertyForCleaner = () => new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { property_ids: 'Pick at least one property for a cleaner.' } });
+// Managers and cleaners only see the properties they're assigned to, so they need at least one.
+const needsProperty = (role) => role === 'manager' || role === 'cleaner';
+const noProperty = (role) => new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { property_ids: `Pick at least one property for a ${role}.` } });
 
 router.get('/team', ownerOnly, ah(async (req, res) => {
   const org = req.user.organization_id;
@@ -48,7 +49,7 @@ router.post('/team/invitations', ownerOnly, ah(async (req, res) => {
   });
   const org = req.user.organization_id;
   const propertyIds = await validPropertyIds(org, body.property_ids);
-  if (body.role === 'cleaner' && !propertyIds.length) throw noPropertyForCleaner();
+  if (needsProperty(body.role) && !propertyIds.length) throw noProperty(body.role);
   const existing = await query('SELECT organization_id FROM users WHERE lower(email) = $1', [body.email]);
   if (existing.rowCount) {
     throw new HttpError(409, 'This email already has a BalayHub account. Team members must use a separate email for each workspace in this version.', { code: 'EMAIL_TAKEN', fields: { email: 'Already registered.' } });
@@ -103,10 +104,11 @@ router.patch('/team/members/:id', ownerOnly, ah(async (req, res) => {
   }, { partial: true });
   const org = req.user.organization_id;
   const ids = body.property_ids ? await validPropertyIds(org, body.property_ids) : null;
-  if ((body.role || member.role) === 'cleaner') {
+  const role = body.role || member.role;
+  if (needsProperty(role)) {
     // Keeps the properties they already have when this request doesn't change them.
     const kept = ids ? ids.length : (await one('SELECT COUNT(*)::int AS n FROM property_assignments WHERE user_id = $1', [member.user_id])).n;
-    if (!kept) throw noPropertyForCleaner();
+    if (!kept) throw noProperty(role);
   }
   await tx(async (db) => {
     if (body.role) await db.query('UPDATE users SET role = $1 WHERE user_id = $2', [body.role, member.user_id]);

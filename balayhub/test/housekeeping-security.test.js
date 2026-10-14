@@ -2,8 +2,8 @@
 
 // Housekeeping rules from the security review: a cleaner can't reopen a finished clean or
 // take over one someone else finished, the finisher becomes the payee of an unassigned clean,
-// a paid clean keeps its cleaner, and a cleaner sees a damage report's cost and status only
-// on reports they filed. Own file so the phase 3 story stays readable.
+// a paid clean keeps its cleaner, and a cleaner sees only the damage reports they filed, with no amount.
+// Own file so the phase 3 story stays readable.
 // TEST_DATABASE_URL=postgres://balayhub:balayhub@localhost:5432/balayhub_test_c node --test --test-concurrency=1 test/housekeeping-security.test.js
 
 const test = require('node:test');
@@ -114,19 +114,16 @@ test('a paid clean keeps its cleaner and its name: changing them is refused, not
   assert.equal(row.pay_status, 'paid');
 });
 
-test('a cleaner sees the estimated cost and status only on damage reports they filed', async () => {
+test('a cleaner sees only the damage reports they filed, and never an amount or status (D-51)', async () => {
   const id = await newTask({ assigned_to: ana.id });
   assert.equal((await ana.c.post(`/api/cleaning-tasks/${id}/damage`, { description: 'Cracked tile', estimated_cost: '120' })).status, 201);
   assert.equal((await owner.post(`/api/cleaning-tasks/${id}/damage`, { description: 'Stain on the sofa', estimated_cost: '800' })).status, 201);
 
   const reports = (await ana.c.get(`/api/cleaning-tasks/${id}`)).data.task.damage_reports;
   const mine = reports.find((r) => r.description === 'Cracked tile');
-  const theirs = reports.find((r) => r.description === 'Stain on the sofa');
-  assert.equal(mine.estimated_cost, '120.00');
-  assert.equal(mine.status, 'open');
-  assert.equal(theirs.reported_by_name, 'Maria Santos');
-  assert.equal('estimated_cost' in theirs, false, 'the owner\'s estimate is not sent to the cleaner');
-  assert.equal('status' in theirs, false);
+  assert.equal(reports.length, 1, 'the owner\'s report is not sent to the cleaner');
+  assert.equal(mine.estimated_cost, undefined, 'a cleaner gets no amount, even on her own report');
+  assert.equal('status' in mine, false);
 
   const ownerReports = (await owner.get(`/api/cleaning-tasks/${id}`)).data.task.damage_reports;
   assert.equal(ownerReports.find((r) => r.description === 'Stain on the sofa').estimated_cost, '800.00');

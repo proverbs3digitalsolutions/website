@@ -422,3 +422,56 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 - **Maintenance schedules stay owner and manager only;** staff get 403 (confirms BACKEND-SCHEMA 6.1).
 
 *Why:* each call picks the safest reading of the existing decisions and keeps the founder's money rules exact. The open questions that remain are in BLOCKERS.MD.
+
+**D-77 · 2026-10-14 · QA round 2 calls (2026-10-13 sweep, fixed 2026-10-14).** The second QA sweep (12 lanes, 119 entries) found problems that needed a product decision. These are the calls made, with the default we are using until the founder says otherwise. Open questions are in BLOCKERS.MD.
+
+*Access*
+- **Job detail shows each role only its own.** Staff and cleaners see only the damage reports and lost items they filed. Nobody but owners and managers sees amounts, resolution notes, charge links or the status note. Staff get no inspections. Cleaners get inspections on their own jobs only and no work orders. This follows D-51 and BACKEND-SCHEMA section 6.1; the old code comment that said otherwise is retired.
+- **Staff may open Group bookings (without money) and Supplies (read-only).** This confirms D-70 and section 6.1; the screen block and the menu hiding are removed. Housekeeping is a stay-only page, but cleaners keep it.
+- **Owner portal statements never send confirmation codes.** This completes D-47: codes stay in the stored copy and never reach the owner.
+- **Audit history hides raw ids** (any field ending in `_id`) and shows plain labels and peso amounts.
+
+*Money*
+- **Add-on maximum quantity counts per stay** (the sum over the booking), so a guest can't buy the airport pickup twice by accident. The founder may change it.
+- **A cancelled booking owes nothing on screen** (pay page, detail and CSV). Held money points to the Refunds card with the policy suggestion.
+- **The overpaid alert accounts for refunds;** the balance itself is unchanged (D-34 stands).
+- **Voiding a payment that refunds depend on is refused:** "Void the refund first, then this payment." (`REFUNDS_EXCEED_PAYMENTS`).
+- **The channel fee can't exceed the stay total.** Changing it closes open payment links (extends D-31).
+- **Zero is refused** for the calendar nightly override, quote accommodation price and per-clean pay. This extends D-76; the cleaning fee may still be 0.
+- **Rent payments above the balance need a confirmation** (`PAYMENT_OVER_BALANCE`, then a retry with `confirm_over`), the same as owner payouts. The screen shows how much becomes advance credit.
+- **Archived tenants' balances still count on the dashboard,** labelled "(archived)". Archiving a tenant who owes money warns about the amount.
+- **The stay report's net is labelled "Net (before refunds)"** with a note pointing to profit and loss. Definitions are unchanged.
+- **Plan usage counts only listings with a nightly rate** (D-03).
+- **The P&L empty state also needs zero refunds.** An invalid month in the link shows a warning and the current month.
+- **The PayMongo key is checked by its format only,** and that stays. A wrong key shows up at the guest's first payment.
+
+*Supplies*
+- **Using more than is on hand:** owners and managers are asked first, then only the on-hand amount is logged, with "Asked for N" in the log note. A use with nothing on hand is refused for owners and managers. A cleaner's save skips that item, saves the rest, and names the skipped item.
+
+*Messages and help*
+- **A past send-later time asks "That time has passed. Send it now?"** The server keeps its rule.
+- **Help search matches whole words,** every meaningful word must match, and titles come first. Guides are tagged stay, rent or both and filtered by the workspace's business type. The AI assistant uses a looser ranked search for its suggestions (`mode: 'any'` in `src/lib/helpcenter.js`, used by `src/routes/assistant.js`).
+- **Logged-out help links go to sign-up** ("Create your account and ask us in Help & support"), because there is no public contact email yet. This replaces the round 1 default of pointing at Help & support, which was itself a dead end for a visitor.
+- **The smallest sign-up band reads "1–2 units";** the saved key stays `1-3`. This applies the round 1 default that was never applied.
+- **The gate pass header drops a repeat of the property name or city** (whole-part match; "X City" counts as "X").
+- **Searching with % or _ matches those literal characters everywhere.**
+
+*Prices, listings and rules*
+- **Seasons that start on the same day: the newer one wins.** Listing seasons beat all-listings seasons, and overlaps across scopes warn. A duplicate rule asks before replacing.
+- **A bulk percentage cut below the lowest price is still allowed** (custom prices are used as set, D-74), and the preview warns how many nights fall below.
+- **Listing edit:** a blank required field is refused with a field message; blank fees and discounts become 0; the postal code must be 4 digits. A blank deposit percentage is left unchanged rather than cleared (question in BLOCKERS).
+- **Listing Archive and Restore** are on the Listings page, for owners only.
+- **Group rooms are added all or nothing** (1 to 20 rooms per request). Cancelled rooms do not count.
+- **A manager must have at least one property,** both on invite and on later edits (the same rule as cleaners).
+- **A PATCH that changes nothing writes no audit row.**
+- **The image upload check covers structure and a 64-byte minimum.** The shared check lives in `src/lib/storage.js` and covers every upload (files, check-in photos, direct booking photos and payment proofs).
+- **Forgot-password:** one reset email per account per 5 minutes (de-duplicated), not a silent per-email cap. The answer is sent before any work, so timing doesn't reveal accounts. This supersedes the D-76 sign-in limits bullet for forgot-password only.
+
+*Operations and brand*
+- **Reassigning a finished clean moves its pay and score to the new person** (D-52). It is how a wrong assignment is corrected; awaiting the founder.
+- **Bad filter values in links are ignored,** and a backwards date range shows a message and applies nothing.
+- **Brand wordmark "HUB" keeps its colour** under the WCAG logo exemption (recorded in DESIGN-BRIEF).
+- **Link previews:** share the `/stay/` addresses (D-63); `#/book` links show the home card because crawlers don't run JavaScript. No code change.
+- **Check-in form after arrival** stays editable until check-out as built; only the heading changes.
+
+*Why:* each call picks the safest reading of the existing decisions and keeps the founder's money rules exact. The open questions are in BLOCKERS.MD under "Questions from QA round 2".

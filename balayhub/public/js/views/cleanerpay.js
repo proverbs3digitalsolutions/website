@@ -15,6 +15,14 @@ const whoOf = (x) => x.cleaner_name || 'Not assigned';
 const unitOf = (x) => `${x.unit_name || 'Unit'}${x.property_name ? ` · ${x.property_name}` : ''}`;
 const doneDay = (x) => manilaDay(x.completed_at || x.cleaning_date || x.due_date);
 
+// One cleaner's status in the By cleaner card. A clean with no pay set is never "All paid".
+export const cleanerStatus = (c) => {
+  const parts = [];
+  if (cents(c.unpaid)) parts.push(`${peso(c.unpaid)} to pay`);
+  if (c.unpriced) parts.push(`${c.unpriced} with pay not set`);
+  return parts.join(' · ') || 'All paid';
+};
+
 function stat(lbl, value, sub, cls = '') {
   return h('div', { class: `stat stat--flat ${cls}` }, h('div', { class: 'stat__value' }, value), h('div', { class: 'stat__label' }, lbl), sub && h('div', { class: 'muted small' }, sub));
 }
@@ -111,13 +119,13 @@ export async function cleanerPayView(el, { query = {} } = {}) {
 
     box.replaceChildren(
       h('div', { class: 'grid grid--3 stats' },
-        stat('Still to pay', peso(fromCents(unpaidC)), missing ? `${missing} clean${missing === 1 ? ' has' : 's have'} no rate set` : null, unpaidC ? 'stat--alert' : ''),
+        stat('Still to pay', peso(fromCents(unpaidC)), missing ? `${missing} clean${missing === 1 ? '' : 's'} with no pay set yet. Use Set pay.` : null, unpaidC ? 'stat--alert' : ''),
         stat('Paid this month', peso(fromCents(paidC))),
         stat('Cleans done', String(data.tasks.length), perCleaner.length ? `${perCleaner.length} cleaner${perCleaner.length === 1 ? '' : 's'}` : null)),
       perCleaner.length > 1 && h('div', { class: 'card ops-card' }, h('h2', null, 'By cleaner'),
         h('ul', { class: 'list' }, perCleaner.map((c) => h('li', { class: 'ops-line' },
-          h('span', { class: 'ops-line__main' }, h('strong', null, c.name || 'Not assigned'), h('span', { class: 'muted small' }, ` ${c.count} clean${c.count === 1 ? '' : 's'}${c.unpriced ? `, ${c.unpriced} with pay not set` : ''}`)),
-          h('span', { class: 'ops-line__end' }, cents(c.unpaid) ? `${peso(c.unpaid)} to pay` : 'All paid', cents(c.paid) ? h('span', { class: 'muted small' }, ` · ${peso(c.paid)} paid`) : null))))),
+          h('span', { class: 'ops-line__main' }, h('strong', null, c.name || 'Not assigned'), h('span', { class: 'muted small' }, ` ${c.count} clean${c.count === 1 ? '' : 's'}`)),
+          h('span', { class: 'ops-line__end' }, cleanerStatus(c), cents(c.paid) ? h('span', { class: 'muted small' }, ` · ${peso(c.paid)} paid`) : null))))),
       rows.length
         ? h('div', { class: 'card card--flush' },
           h('div', { class: 'ops-bar' }, h('span', { class: 'muted small' }, `${rows.length} clean${rows.length === 1 ? '' : 's'}`), markBtn),
@@ -133,7 +141,7 @@ export async function cleanerPayView(el, { query = {} } = {}) {
                 h('td', { dataset: { label: 'Date' } }, fmtDate(doneDay(x))),
                 h('td', { dataset: { label: 'Unit' } }, unitOf(x)),
                 h('td', { dataset: { label: 'Cleaner' } }, whoOf(x)),
-                h('td', { class: 'num', dataset: { label: 'Pay' } }, x.pay_amount == null ? h('span', { class: 'muted' }, 'Pay not set — add the hours') : peso(x.pay_amount)),
+                h('td', { class: 'num', dataset: { label: 'Pay' } }, x.pay_amount == null ? h('span', { class: 'muted' }, 'Pay not set. Use Set pay.') : peso(x.pay_amount)),
                 h('td', { dataset: { label: 'Status' } }, x.pay_status === 'paid'
                   ? h('span', null, h('span', { class: 'badge badge--paid' }, 'Paid'), h('span', { class: 'muted small ops-note' }, ` ${x.paid_on ? fmtDate(manilaDay(x.paid_on)) : ''}${x.paid_method ? ` · ${label(x.paid_method)}` : ''}`))
                   : h('span', { class: 'badge badge--unpaid' }, 'Unpaid')),

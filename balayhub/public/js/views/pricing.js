@@ -17,16 +17,30 @@ export function ruleSummary(r) {
   if (r.kind === 'far_out') return `Stays starting more than ${n} days away: ${pctWords(r.adjust_pct)}`;
   return `Gaps of up to ${n} night${n === 1 ? '' : 's'} between bookings: ${pctWords(r.adjust_pct)}`;
 }
+// What changes when a rule takes the place of the rule of its kind already on the same listing (or on every listing).
+export function replaceRuleText(old, next) {
+  return `${old.unit_name || 'All listings'} already has a ${RULE_KINDS[next.kind].label} rule: “${ruleSummary(old)}”. It will change to “${ruleSummary(next)}”.${old.active ? '' : ' It is off now, so this turns it on.'}`;
+}
 const KIND_LABEL = { custom: 'Custom price', holiday: 'Holiday', season: 'Season', weekend: 'Weekend', base: 'Base rate' };
 
 const prices = (s) => s.nightly_rate !== null || s.adjust_pct !== null;
-// Which season prices a shared night: the one that starts later (the engine's order), within the same scope.
-// Returns the seasons that overlap `s` (same listing, or both for all listings) with who wins; `wins` is null when it is not a price clash.
+// Which season prices a shared night (D-66, D-76): a listing season beats an all-listings season on that listing;
+// within one scope the season that starts later wins, and on equal starts the one created later.
+// Returns the seasons that overlap `s` with who wins (`wins` is null when it is not a price clash). `on` names the
+// listing when the overlap is with an all-listings season, so it only touches that one listing.
 export function seasonClashes(s, seasons) {
-  return seasons.filter((o) => o !== s && (o.unit_id || null) === (s.unit_id || null) && o.start_date <= s.end_date && o.end_date >= s.start_date)
-    .map((o) => ({ name: o.name, wins: !prices(s) || !prices(o) || o.start_date === s.start_date ? null : (s.start_date > o.start_date ? 'this' : 'other') }));
+  return seasons.filter((o) => o !== s && o.start_date <= s.end_date && o.end_date >= s.start_date && (!s.unit_id || !o.unit_id || o.unit_id === s.unit_id))
+    .map((o) => {
+      const mixed = Boolean(s.unit_id) !== Boolean(o.unit_id);
+      let wins = null;
+      if (prices(s) && prices(o)) {
+        if (mixed) wins = s.unit_id ? 'this' : 'other';
+        else wins = (s.start_date !== o.start_date ? s.start_date > o.start_date : s.created_at > o.created_at) ? 'this' : 'other';
+      }
+      return { name: o.name, on: mixed ? (s.unit_id ? s.unit_name : o.unit_name) : null, wins };
+    });
 }
-export const clashText = (c) => `Overlaps ${c.name}${c.wins === 'this' ? ': this season wins the shared nights' : c.wins === 'other' ? `: ${c.name} wins the shared nights` : ''}.`;
+export const clashText = (c) => `Overlaps ${c.name}${c.on ? ` on ${c.on}` : ''}${c.wins === 'this' ? ': this season wins the shared nights' : c.wins === 'other' ? `: ${c.name} wins the shared nights` : ''}.`;
 const pctNum = (v) => (v === '' || v === undefined || v === null ? v : Number(v));
 
 export async function pricingView(el, { rerender }) {
@@ -57,8 +71,8 @@ export async function pricingView(el, { rerender }) {
       else body.adjust_pct = pctNum(body.adjust_pct);
       if (body.adjust_pct === '') delete body.adjust_pct;
       const { overlaps } = await post('/pricing/seasons', body);
-      const clash = overlaps.map((o) => `${o.name}${o.wins === 'new' ? ' (this season wins)' : o.wins === 'existing' ? ' (that one wins)' : ''}`);
-      toast(clash.length ? `Season saved. It overlaps ${clash.join(', ')} on shared nights.` : 'Season saved.'); rerender();
+      const clash = overlaps.map((o) => `${o.name}${o.on ? ` on ${o.on}` : ''}${o.wins === 'new' ? ' (this season wins)' : o.wins === 'existing' ? ' (that one wins)' : ''}`);
+      toast(clash.length ? `Season saved. It overlaps ${clash.join(', ')}.` : 'Season saved.'); rerender();
     },
   }));
   const modeSync = (m) => {
@@ -77,6 +91,12 @@ export async function pricingView(el, { rerender }) {
     try { await post(`/pricing/seasons/${s.season_id}/remove`); toast('Season removed.'); rerender(); } catch (err) { toast(err.message, 'error'); }
   };
 
+  // A rule of a kind that already exists on this listing is changed, not added: say what changes, and ask first.
+  const replaceRule = async (old, next) => {
+    if (!await confirmDialog({ title: 'Change the existing rule?', text: replaceRuleText(old, next), confirmText: 'Change rule' })) return false;
+    await patch(`/pricing/rules/${old.rule_id}`, { days: next.days, adjust_pct: next.adjust_pct, active: true });
+    return true;
+  };
   const editRule = (r) => {
     const kindSel = field({ name: 'kind', label: 'Rule', type: 'select', required: true, value: r?.kind || 'last_minute', placeholderOption: false,
       options: Object.entries(RULE_KINDS).map(([k, v]) => [k, v.label]) });
@@ -96,14 +116,14 @@ export async function pricingView(el, { rerender }) {
         if (r) await patch(`/pricing/rules/${r.rule_id}`, { days: body.days, adjust_pct: body.adjust_pct });
         else {
           const dup = rules.find((x) => x.kind === body.kind && (x.unit_id || null) === body.unit_id);
-          if (dup) await patch(`/pricing/rules/${dup.rule_id}`, { days: body.days, adjust_pct: body.adjust_pct, active: true });
+          if (dup) { if (!await replaceRule(dup, body)) return; }
           else {
             try { await post('/pricing/rules', body); } catch (err) {
               if (err.status !== 409 || err.code !== 'DUPLICATE') throw err;
-              // Someone added the same rule meanwhile: change that one instead.
+              // Someone added the same rule meanwhile: ask, then change that one instead.
               const fresh = (await get('/pricing')).rules.find((x) => x.kind === body.kind && (x.unit_id || null) === body.unit_id);
               if (!fresh) throw err;
-              await patch(`/pricing/rules/${fresh.rule_id}`, { days: body.days, adjust_pct: body.adjust_pct, active: true });
+              if (!await replaceRule(fresh, body)) return;
             }
           }
         }
@@ -246,7 +266,7 @@ function previewCard(listings, seasons) {
   load();
   return h('div', { class: 'card' },
     h('div', { class: 'card__head' }, h('h2', null, 'Price preview')),
-    h('p', { class: 'muted small' }, 'The next 60 nights as guests would be quoted them. Select a night to see why.'),
+    h('p', { class: 'muted small' }, 'Each night priced as a one-night stay. Longer stays can get gap, weekly or monthly prices; the quote shows the exact total. Select a night to see why.'),
     h('div', { class: 'form-row form-row--2 pr-controls' },
       h('div', { class: 'field' }, h('label', { for: 'pr-unit' }, 'Listing'), sel),
       h('div', { class: 'field' }, h('label', { for: 'pr-from' }, 'Starting'), from)),
@@ -347,6 +367,7 @@ async function bulkModal({ listings, rerender }) {
       total = r.count;
       result.replaceChildren(
         h('p', null, h('strong', null, `${total} night${total === 1 ? '' : 's'} would change.`), total > rows.length ? ` Showing the first ${rows.length}.` : ''),
+        r.below_lowest ? h('div', { class: 'alert alert--warn' }, `${r.below_lowest} night${r.below_lowest === 1 ? '' : 's'} will be below their listing's lowest price. Those prices will be used as set.`) : null,
         rows.length ? tableOf(['Listing', 'Night', 'Now', 'New'], rows.map((x) => [x.unit_name, fmtDate(x.date), x.from_price === null ? '—' : peso(x.from_price), x.to_price === null ? 'Usual price' : peso(x.to_price)])) : null,
         skipped(r.skipped));
     }

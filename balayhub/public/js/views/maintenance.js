@@ -177,6 +177,7 @@ export async function maintenanceDetailView(el, { params, rerender }) {
   const statusButtons = canManage && STATUSES.filter((s) => s !== m.status).map((s) => h('button', {
     class: `btn btn--sm ${s === 'resolved' ? 'btn--primary' : 'btn--secondary'}`,
     onclick: async (e) => {
+      if (s === 'cancelled' && !await confirmDialog({ title: 'Cancel this request?', text: 'Recorded costs stay on the books.', confirmText: 'Cancel request', cancelText: 'Keep request' })) return;
       e.target.disabled = true;
       try { await patch(`/maintenance/${m.request_id}`, { status: s }); toast(`Marked ${label(s).toLowerCase()}.`); rerender(); } catch (err) { toast(err.message, 'error'); e.target.disabled = false; }
     },
@@ -208,7 +209,7 @@ export async function maintenanceDetailView(el, { params, rerender }) {
     onSubmit: async (data, { idempotencyKey }) => { await post(`/maintenance/${m.request_id}/costs`, data, { idempotencyKey }); toast('Cost recorded.'); rerender(); },
   });
 
-  const upload = h('input', { type: 'file', class: 'input', accept: 'image/jpeg,image/png,image/webp,application/pdf' });
+  const upload = h('input', { type: 'file', class: 'input', accept: 'image/jpeg,image/png,image/webp,application/pdf', 'aria-label': 'Upload photo or document' });
 
   el.replaceChildren(
     pageHead({

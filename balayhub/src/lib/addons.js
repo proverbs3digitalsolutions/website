@@ -45,12 +45,27 @@ function parsePicks(selections) {
   });
 }
 
+// How many of each add-on a booking already has on its bill (voided charges don't count), as a Map of addon_id
+// to quantity. Counted by name (case-insensitive, trimmed) across the workspace's add-ons, so a second copy of
+// 'Airport pickup' sees the first copy's purchase. The maximum quantity is per stay, so this is what it is checked against.
+async function boughtByName(db, orgId, bookingId) {
+  const { rows } = await db.query(
+    `SELECT a.addon_id, SUM(c.quantity)::int AS n
+       FROM listing_addons a
+       JOIN listing_addons p ON p.organization_id = a.organization_id AND lower(btrim(p.name)) = lower(btrim(a.name))
+       JOIN booking_charges c ON c.addon_id = p.addon_id
+      WHERE a.organization_id = $1 AND c.booking_id = $2 AND c.voided_at IS NULL
+      GROUP BY a.addon_id`, [orgId, bookingId]);
+  return new Map(rows.map((r) => [r.addon_id, r.n]));
+}
+
 // Price a guest's picks for one stay. Each line's unit_price is the price for one
 // unit of the add-on (so per-night and per-guest add-ons already include the
 // nights or guests), and amount = unit_price × quantity. Money is returned as
 // strings. Throws a 400 whose field is `addons` if an add-on is unknown, inactive,
-// not offered for this listing or in this context, over its maximum, or repeated.
-async function priceAddons(db, { orgId, unitId, nights, guests, selections, context }) {
+// not offered for this listing or in this context, over its maximum (per stay: with `bookingId`, what
+// that booking already bought counts too, and that refusal is a 409), or repeated.
+async function priceAddons(db, { orgId, unitId, nights, guests, selections, context, bookingId = null }) {
   const ctx = CONTEXTS[context];
   if (!ctx) throw new Error(`unknown add-on context: ${context}`);
   const picks = parsePicks(selections);
@@ -61,6 +76,7 @@ async function priceAddons(db, { orgId, unitId, nights, guests, selections, cont
     [orgId, picks.map((p) => p.addon_id)]);
   const byId = new Map(rows.map((r) => [r.addon_id, r]));
   const listing = String(unitId).toLowerCase();
+  const had = bookingId ? await boughtByName(db, orgId, bookingId) : new Map();
   const items = [];
   let total = 0;
   for (const { addon_id: id, quantity } of picks) {
@@ -69,6 +85,11 @@ async function priceAddons(db, { orgId, unitId, nights, guests, selections, cont
     if (a.unit_ids.length && !a.unit_ids.includes(listing)) throw addonsError(`${a.name} is not offered for this listing.`);
     if (!ctx.offered(a)) throw addonsError(`${a.name} is not offered here.`);
     if (quantity > a.max_quantity) throw addonsError(`You can add up to ${a.max_quantity} of ${a.name}.`);
+    const left = a.max_quantity - (had.get(id) || 0);
+    if (quantity > left) {
+      const msg = left > 0 ? `You can add up to ${left} more of ${a.name}.` : `${a.name} is already on your bill.`;
+      throw new HttpError(409, msg, { code: 'ADDON_LIMIT', fields: { addons: msg } });
+    }
     const times = { per_stay: 1, per_night: nights, per_guest: guests, per_guest_night: guests * nights }[a.pricing];
     const unitCentavos = toCentavos(a.price) * times;
     const amountCentavos = unitCentavos * quantity;
@@ -106,7 +127,8 @@ async function createAddonCharges(db, bookingId, items, user, requestKey = null)
 }
 
 // The add-ons offered for one listing in one context, for the page that shows them.
-async function listAddonsForUnit(db, orgId, unitId, context) {
+// With `bookingId`, each add-on also says how many that stay already has (`bought`) and how many more it can take (`left`).
+async function listAddonsForUnit(db, orgId, unitId, context, bookingId = null) {
   const ctx = CONTEXTS[context];
   if (!ctx) throw new Error(`unknown add-on context: ${context}`);
   const { rows } = await db.query(
@@ -115,7 +137,9 @@ async function listAddonsForUnit(db, orgId, unitId, context) {
       WHERE organization_id = $1 AND active AND (cardinality(unit_ids) = 0 OR $2::uuid = ANY(unit_ids)) AND ${ctx.sql}
       ORDER BY sort_order, created_at, addon_id`,
     [orgId, String(unitId).toLowerCase()]);
-  return rows;
+  if (!bookingId) return rows;
+  const had = await boughtByName(db, orgId, bookingId);
+  return rows.map((a) => ({ ...a, bought: had.get(a.addon_id) || 0, left: Math.max(0, a.max_quantity - (had.get(a.addon_id) || 0)) }));
 }
 
 module.exports = { priceAddons, createAddonCharges, listAddonsForUnit, PRICING };

@@ -1,12 +1,22 @@
 // Supplies per property with par levels. Anything below par is flagged as low.
 
 import { get, post, patch, qs } from '../api.js';
-import { h, field, formModal, confirmDialog, emptyState, pageHead, toast, errorState, skeleton, openModal, fmtDate, manilaDay } from '../ui.js';
+import { h, field, formModal, makeForm, confirmDialog, emptyState, pageHead, toast, errorState, skeleton, openModal, fmtDate, manilaDay } from '../ui.js';
 import { state } from '../app.js';
 import { initFilters, filterBar, changed } from '../filters.js';
 
 const isLow = (s) => Number(s.on_hand) < Number(s.par_level);
 const MOVED = { used: 'Used', restocked: 'Added', count: 'Counted' };
+
+// The unit word for a count: "1 roll", "2 rolls". Units are typed freely, so the singular is a plain
+// English guess ("boxes" to "box", "batteries" to "battery"). "pcs" is an abbreviation and stays.
+export function unitWord(n, unit) {
+  if (Number(n) !== 1 || unit.toLowerCase() === 'pcs') return unit;
+  if (/ies$/.test(unit)) return unit.replace(/ies$/, 'y');
+  if (/(s|x|z|ch|sh)es$/.test(unit)) return unit.slice(0, -2);
+  return unit.replace(/s$/, '');
+}
+export const qtyLabel = (n, unit) => `${n} ${unitWord(n, unit)}`;
 
 export async function suppliesView(el, { query = {} } = {}) {
   const defaults = { property_id: '', low: '', q: '' };
@@ -35,16 +45,29 @@ export async function suppliesView(el, { query = {} } = {}) {
     },
   });
 
-  const move = (s, kind) => formModal({
-    title: { count: 'Count stock', restocked: 'Add stock', used: 'Record use' }[kind] + `: ${s.name}`,
-    submitText: 'Save',
-    fields: [
-      h('p', { class: 'muted small' }, `On hand now: ${s.on_hand} ${s.unit_label}. Keep at least ${s.par_level}.`),
-      field({ name: 'quantity', label: kind === 'count' ? `How many ${s.unit_label} are there now?` : `How many ${s.unit_label}?`, type: 'number', min: kind === 'count' ? 0 : 1, step: 1, required: true, value: kind === 'count' ? s.on_hand : '' }),
-      field({ name: 'note', label: 'Note (optional)', maxlength: 200 }),
-    ],
-    onSubmit: async (d) => { await post(`/supplies/${s.supply_id}/movements`, { kind, quantity: Number(d.quantity), note: d.note || undefined }); toast(kind === 'used' ? 'Use recorded.' : 'Stock updated.'); load(); },
-  });
+  // Recording more use than is on hand asks first. If the owner goes back, the form stays open.
+  const move = (s, kind) => {
+    let modal;
+    const form = makeForm({
+      submitText: 'Save',
+      cancel: () => modal.close(),
+      fields: [
+        h('p', { class: 'muted small' }, `On hand now: ${qtyLabel(s.on_hand, s.unit_label)}. Keep at least ${qtyLabel(s.par_level, s.unit_label)}.`),
+        field({ name: 'quantity', label: kind === 'count' ? `How many ${s.unit_label} are there now?` : `How many ${s.unit_label}?`, type: 'number', min: kind === 'count' ? 0 : 1, step: 1, required: true, value: kind === 'count' ? s.on_hand : '' }),
+        field({ name: 'note', label: 'Note (optional)', maxlength: 200 }),
+      ],
+      onSubmit: async (d) => {
+        const quantity = Number(d.quantity);
+        if (kind === 'used' && s.on_hand > 0 && quantity > s.on_hand && !await confirmDialog({
+          title: 'Not enough on hand',
+          text: `You asked to record ${qtyLabel(quantity, s.unit_label)} used. On hand is ${qtyLabel(s.on_hand, s.unit_label)}, so only that much is logged as used, and on hand goes to 0.`,
+          confirmText: 'Record what is on hand' })) return;
+        await post(`/supplies/${s.supply_id}/movements`, { kind, quantity, note: d.note || undefined });
+        toast(kind === 'used' ? 'Use recorded.' : 'Stock updated.'); load(); modal.close();
+      },
+    });
+    modal = openModal({ title: { count: 'Count stock', restocked: 'Add stock', used: 'Record use' }[kind] + `: ${s.name}`, body: form });
+  };
 
   async function archive(s) {
     if (!await confirmDialog({ title: `Archive ${s.name}?`, text: 'It disappears from the list and from cleaners. Its history is kept.', confirmText: 'Archive', danger: true })) return;
@@ -60,7 +83,7 @@ export async function suppliesView(el, { query = {} } = {}) {
         const { movements } = await get(`/supplies/${s.supply_id}/movements`);
         body.replaceChildren(movements.length
           ? h('ul', { class: 'list' }, movements.map((m) => h('li', { class: 'row' }, h('div', { class: 'row__main' },
-            h('span', { class: 'row__title' }, `${MOVED[m.kind]} ${m.quantity} ${s.unit_label}`),
+            h('span', { class: 'row__title' }, `${MOVED[m.kind]} ${qtyLabel(m.quantity, s.unit_label)}`),
             h('span', { class: 'row__sub' }, `${m.recorded_by_name || 'Someone'} · ${fmtDate(manilaDay(m.created_at))}`),
             m.note && h('span', { class: 'row__sub' }, m.note)))))
           : h('p', { class: 'muted small' }, 'Nothing has been recorded for this item yet.'));
@@ -96,8 +119,8 @@ export async function suppliesView(el, { query = {} } = {}) {
         h('ul', { class: 'list' }, list.map((s) => h('li', { class: `ops-supply${isLow(s) ? ' is-low' : ''}` },
           h('div', { class: 'ops-supply__main' },
             h('span', { class: 'row__title' }, s.name, isLow(s) && h('span', { class: 'ops-low' }, 'Low stock')),
-            h('span', { class: 'row__sub' }, `Keep at least ${s.par_level} ${s.unit_label}`)),
-          h('div', { class: 'ops-supply__count', 'aria-label': `${s.on_hand} ${s.unit_label} on hand` }, h('strong', null, String(s.on_hand)), h('span', { class: 'muted small' }, ` ${s.unit_label}`)),
+            h('span', { class: 'row__sub' }, `Keep at least ${qtyLabel(s.par_level, s.unit_label)}`)),
+          h('div', { class: 'ops-supply__count', 'aria-label': `${qtyLabel(s.on_hand, s.unit_label)} on hand` }, h('strong', null, String(s.on_hand)), h('span', { class: 'muted small' }, ` ${unitWord(s.on_hand, s.unit_label)}`)),
           canManage && h('div', { class: 'ops-supply__actions' },
             h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => move(s, 'restocked') }, 'Add stock'),
             h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => move(s, 'count') }, 'Count'),

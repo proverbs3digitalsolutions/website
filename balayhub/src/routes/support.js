@@ -13,7 +13,7 @@ const { query, one, tx } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
 const { validate, uuidParam } = require('../lib/validate');
 const { requireAuth } = require('../lib/auth');
-const { CATEGORIES, ARTICLES, searchArticles } = require('../lib/helpcenter');
+const { CATEGORIES, articlesFor, searchArticles } = require('../lib/helpcenter');
 
 const router = express.Router();
 const adminRouter = express.Router();
@@ -28,10 +28,10 @@ const ticketLink = (id) => `${config.appUrl}/#/help/tickets/${id}`;
 router.get('/help/articles', ah(async (req, res) => {
   const role = req.user.role;
   const q = String(req.query.q || '').slice(0, 200);
-  const visible = ARTICLES.filter((a) => a.roles.includes(role));
+  const visible = articlesFor(role, req.user.business_type);
   res.json({
     categories: CATEGORIES.map(([key, name]) => ({ key, name })),
-    articles: (q ? searchArticles(q, role, 8) : visible).map(({ slug, title, category, body }) => ({ slug, title, category, body })),
+    articles: (q ? searchArticles(q, role, 8, req.user.business_type) : visible).map(({ slug, title, category, body }) => ({ slug, title, category, body })),
   });
 }));
 
@@ -114,7 +114,7 @@ router.get('/support/tickets', ah(async (req, res) => {
   if (['open', 'resolved', 'all'].includes(req.query.view) && req.query.view !== 'all') {
     where.push(req.query.view === 'open' ? `t.status IN ('new', 'in_progress', 'waiting_on_customer')` : `t.status IN ('resolved', 'closed')`);
   }
-  if (req.query.q) { params.push(`%${String(req.query.q).slice(0, 100)}%`); where.push(`(t.subject ILIKE $${params.length} OR ('T-' || t.ticket_no) ILIKE $${params.length})`); }
+  if (req.query.q) { params.push(`%${String(req.query.q).slice(0, 100).replace(/[%_\\]/g, '\\$&')}%`); where.push(`(t.subject ILIKE $${params.length} OR ('T-' || t.ticket_no) ILIKE $${params.length})`); }
   const { rows } = await query(
     `SELECT t.ticket_id, t.ticket_no, t.subject, t.category, t.priority, t.status, t.created_at, t.updated_at, u.full_name AS created_by_name,
             (SELECT COUNT(*)::int FROM support_messages m WHERE m.ticket_id = t.ticket_id AND NOT m.internal) AS messages
@@ -216,7 +216,7 @@ adminRouter.get('/admin/support/tickets', ah(async (req, res) => {
   if (req.query.category && CATEGORY_LABEL[req.query.category]) { params.push(req.query.category); where.push(`t.category = $${params.length}`); }
   if (req.query.priority === 'urgent') where.push(`t.priority = 'urgent'`);
   if (req.query.mine === '1') { params.push(req.user.user_id); where.push(`t.assigned_to = $${params.length}`); }
-  if (req.query.q) { params.push(`%${String(req.query.q).slice(0, 100)}%`); const n = params.length; where.push(`(t.subject ILIKE $${n} OR ('T-' || t.ticket_no) ILIKE $${n} OR o.name ILIKE $${n} OR u.email ILIKE $${n})`); }
+  if (req.query.q) { params.push(`%${String(req.query.q).slice(0, 100).replace(/[%_\\]/g, '\\$&')}%`); const n = params.length; where.push(`(t.subject ILIKE $${n} OR ('T-' || t.ticket_no) ILIKE $${n} OR o.name ILIKE $${n} OR u.email ILIKE $${n})`); }
   const { rows } = await query(
     `SELECT t.ticket_id, t.ticket_no, t.subject, t.category, t.priority, t.status, t.created_at, t.updated_at, t.first_response_at,
             o.name AS workspace, u.full_name AS created_by_name, u.email AS created_by_email, a.full_name AS assigned_name

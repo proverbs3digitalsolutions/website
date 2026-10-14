@@ -114,7 +114,7 @@ extendTranslations({
   'Invite your team': 'I-invite ang team mo', 'Your co-host and cleaners get their own logins with just the access they need.': 'May sariling login ang co-host at cleaners mo, sa access lang na kailangan nila.',
   // who
   'Who BalayHub is for': 'Para kanino ang BalayHub',
-  'Starting out': 'Nagsisimula pa lang', '1–3 units': '1–3 unit', 'One calendar, automatic messages and receipts, so hosting fits around your day job.': 'Iisang calendar, automatic messages at resibo, para kasya ang hosting sa trabaho mo.',
+  'Starting out': 'Nagsisimula pa lang', '1–2 units': '1–2 unit', 'One calendar, automatic messages and receipts, so hosting fits around your day job.': 'Iisang calendar, automatic messages at resibo, para kasya ang hosting sa trabaho mo.',
   'Growing host': 'Lumalaking host', '4–10 units': '4–10 unit', 'A team, cleaning schedule, direct bookings and reports for every unit.': 'Team, cleaning schedule, direct bookings at reports para sa bawat unit.',
   'Managing for owners': 'Nagma-manage para sa owners', 'More than 10 units': 'Higit 10 unit', 'Owner statements with your management fee, and access per building.': 'Owner statements na may management fee mo, at access kada building.',
   // pricing
@@ -150,7 +150,7 @@ extendTranslations({
   'No. BalayHub runs in your phone or computer browser. On a phone you can add it to your home screen like an app and get notifications.': 'Wala. Gumagana ang BalayHub sa browser ng phone o computer mo. Sa phone, puwede mo itong idagdag sa home screen na parang app at makatanggap ng notifications.',
   // final + footer
   'Spend less time managing and more time hosting.': 'Mas kaunting oras sa pag-manage, mas maraming oras sa pag-host.',
-  'Terms of service': 'Terms of service', 'Privacy notice': 'Privacy notice',
+  'Terms of service': 'Mga tuntunin ng serbisyo', 'Privacy notice': 'Paunawa sa privacy',
   // get started popup
   'Step': 'Hakbang',
   'How many units do you manage?': 'Ilang unit ang hawak mo?',
@@ -166,12 +166,13 @@ extendTranslations({
   'Already have an account? ': 'May account ka na? ',
   'Sign up with Google': 'Mag-sign up gamit ang Google',
   'Please fill in the highlighted fields.': 'Pakisagutan ang mga naka-highlight.',
+  'Enter your first name.': 'Ilagay ang first name mo.', 'Enter your last name.': 'Ilagay ang last name mo.', 'Enter your business name.': 'Ilagay ang business name mo.',
   'More than 10': 'Higit 10',
   'BalayHub is made for 1 to 10 units. For more, we\'ll set up a custom plan with you after your trial.': 'Para sa 1 hanggang 10 unit ang BalayHub. Kung higit pa, gagawa tayo ng custom plan pagkatapos ng trial mo.',
-  // contact fallback, used when no contact email is set (Help & support instead)
-  'Ask ': 'Magtanong sa ', 'Help & support': 'Help & support',
-  'Monthly, by GCash, Maya or bank transfer. Ask Help & support when you\'re ready and we\'ll activate your plan.':
-    'Buwanan, sa GCash, Maya o bank transfer. Magtanong sa Help & support kapag handa ka na at ia-activate namin ang plan mo.',
+  // contact fallback, used when no contact email is set: visitors sign up, then ask in Help & support
+  ' and ask us in Help & support about a custom plan.': ' at magtanong sa Help & support tungkol sa custom plan.',
+  'Monthly, by GCash, Maya or bank transfer. Create your account, then ask us in Help & support when you\'re ready and we\'ll activate your plan.':
+    'Buwanan, sa GCash, Maya o bank transfer. Gumawa ng account, saka magtanong sa Help & support kapag handa ka na at ia-activate namin ang plan mo.',
 });
 
 export async function tryDemo(e) {
@@ -256,12 +257,12 @@ const NEWS = [
   ['chat', 'Quotes for Messenger', 'Send a price with a pay link to guests who ask on Facebook or Messenger.'],
 ];
 
-const UNIT_BANDS = [['1-3', '1–3 units'], ['4-10', '4–10 units'], ['10+', 'More than 10']];
+const UNIT_BANDS = [['1-3', '1–2 units'], ['4-10', '4–10 units'], ['10+', 'More than 10']];
 
-// Where a guest sends a question: the team's email when one is set, otherwise Help & support.
+// Where a guest sends a question: the team's email when one is set. Until then, visitors sign up first and ask in Help & support.
 const askNodes = (pricing) => (pricing.contact_email
   ? [h('a', { href: `mailto:${pricing.contact_email}` }, t('Talk to us')), t(' about a custom plan.')]
-  : [t('Ask '), h('a', { href: '#/help' }, t('Help & support')), t(' about a custom plan.')]);
+  : [h('a', { href: '#/signup' }, t('Create your account')), t(' and ask us in Help & support about a custom plan.')]);
 
 // ---------------------------------------------------------------- language menu
 function langMenu(onChange) {
@@ -316,7 +317,9 @@ export function openGetStarted(preset = {}) {
         h('form', { class: 'form', novalidate: true, onsubmit: (e) => {
           e.preventDefault(); read();
           const errs = {};
-          for (const k of ['first_name', 'last_name', 'business_name']) if (!data[k]) errs[k] = t('Please fill in the highlighted fields.');
+          if (!data.first_name) errs.first_name = t('Enter your first name.');
+          if (!data.last_name) errs.last_name = t('Enter your last name.');
+          if (!data.business_name) errs.business_name = t('Enter your business name.');
           if (Object.keys(errs).length) { showErrors(errs); return; }
           step = 3; draw();
         } },
@@ -402,17 +405,29 @@ export async function landingView(el) {
   const scrollTo = (id) => (e) => { e.preventDefault(); document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' }); };
   const getStarted = (preset) => () => openGetStarted(preset);
   let activeGroup = 0;
-  const groupPanel = h('div', { class: 'lp-tabpanel', role: 'tabpanel' });
-  const groupTabs = h('div', { class: 'lp-tabs', role: 'tablist' });
-  function drawGroup() {
+  const groupPanel = h('div', { class: 'lp-tabpanel', id: 'lp-panel', role: 'tabpanel' });
+  const groupTabs = h('div', { class: 'lp-tabs', role: 'tablist', 'aria-label': t('Features') });
+  // Roving tabindex: only the selected tab is in the Tab order; arrow keys, Home and End move between tabs.
+  function drawGroup(moveFocus = false) {
     groupTabs.replaceChildren(...GROUPS.map(([ic, name], i) => h('button', {
-      type: 'button', role: 'tab', 'aria-selected': String(i === activeGroup), class: i === activeGroup ? 'is-on' : '',
-      onclick: () => { activeGroup = i; drawGroup(); },
+      type: 'button', id: `lp-tab-${i}`, role: 'tab', 'aria-controls': 'lp-panel', 'aria-selected': String(i === activeGroup),
+      tabindex: i === activeGroup ? '0' : '-1', class: i === activeGroup ? 'is-on' : '',
+      onclick: () => { activeGroup = i; drawGroup(true); },
+      onkeydown: (e) => {
+        const last = GROUPS.length - 1;
+        const next = { ArrowRight: activeGroup === last ? 0 : activeGroup + 1, ArrowLeft: activeGroup === 0 ? last : activeGroup - 1, Home: 0, End: last }[e.key];
+        if (next === undefined) return;
+        e.preventDefault();
+        activeGroup = next;
+        drawGroup(true);
+      },
     }, icon(ic), h('span', null, t(name)))));
     const [, name, text, items] = GROUPS[activeGroup];
+    groupPanel.setAttribute('aria-labelledby', `lp-tab-${activeGroup}`);
     groupPanel.replaceChildren(
       h('div', null, h('h3', null, t(name)), h('p', { class: 'lp-tabpanel__lead' }, t(text))),
       h('ul', { class: 'lp-checks' }, items.map((x) => h('li', null, t(x)))));
+    if (moveFocus) groupTabs.children[activeGroup].focus();
   }
   drawGroup();
 
@@ -473,7 +488,7 @@ export async function landingView(el) {
       h('section', { class: 'lp-section lp-section--alt' },
         h('div', { class: 'lp-wrap' },
           h('h2', { class: 'lp-h2' }, t('Who BalayHub is for')),
-          h('div', { class: 'lp-who' }, [['1-3', 'Starting out', '1–3 units', 'One calendar, automatic messages and receipts, so hosting fits around your day job.'],
+          h('div', { class: 'lp-who' }, [['1-3', 'Starting out', '1–2 units', 'One calendar, automatic messages and receipts, so hosting fits around your day job.'],
             ['4-10', 'Growing host', '4–10 units', 'A team, cleaning schedule, direct bookings and reports for every unit.'],
             ['10+', 'Managing for owners', 'More than 10 units', 'Owner statements with your management fee, and access per building.']]
             .map(([band, title, units, text]) => h('div', { class: 'lp-who__card' },
@@ -510,7 +525,7 @@ export async function landingView(el) {
               ? 'Online with GCash, Maya, card or GrabPay, for 1, 3 or 12 months (12 months gets 2 months free). Your plan activates right away.'
               : pricing.contact_email
                 ? 'Monthly, by GCash, Maya or bank transfer. Message us when you\'re ready and we\'ll activate your plan.'
-                : 'Monthly, by GCash, Maya or bank transfer. Ask Help & support when you\'re ready and we\'ll activate your plan.'],
+                : 'Monthly, by GCash, Maya or bank transfer. Create your account, then ask us in Help & support when you\'re ready and we\'ll activate your plan.'],
             ['Can my co-host or cleaner use it?', 'Yes. Invite a manager, staff member or cleaner and choose which properties they can see. Cleaners see only their own cleaning jobs and pay, in English or Taglish. Staff never see guests\' phone numbers or email addresses.'],
             ['Do owners get their own login?', 'Yes. You invite an owner and they sign in with a one-time link sent to their email. They see only their own units: published statements, payouts, repairs reserve and profit and loss. They never see your other units.'],
             ['Do I need to install anything?', 'No. BalayHub runs in your phone or computer browser. On a phone you can add it to your home screen like an app and get notifications.'],
@@ -526,6 +541,6 @@ export async function landingView(el) {
         h('span', null, `© ${new Date().getFullYear()} BalayHub`),
         h('a', { href: '#/terms' }, t('Terms of service')),
         h('a', { href: '#/privacy' }, t('Privacy notice')),
-        pricing.contact_email ? h('a', { href: `mailto:${pricing.contact_email}` }, pricing.contact_email) : h('a', { href: '#/help' }, t('Help & support')),
+        pricing.contact_email ? h('a', { href: `mailto:${pricing.contact_email}` }, pricing.contact_email) : h('a', { href: '#/signup' }, t('Create your account')),
         themeSwitch({ compact: true })))));
 }

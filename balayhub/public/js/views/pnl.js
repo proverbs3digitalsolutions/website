@@ -6,6 +6,8 @@ import { initFilters, filterBar, rememberFilters, changed } from '../filters.js'
 
 const neg = (v) => Number(v) < 0;
 const money = (v) => h('span', { class: neg(v) ? 'amount--neg' : null }, peso(v));
+const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+const monthName = (ym) => new Date(`${ym}-01T00:00:00Z`).toLocaleDateString('en-PH', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
 function stat(label, value, sub) {
   return h('div', { class: 'stat stat--flat' }, h('div', { class: 'stat__value' }, value), h('div', { class: 'stat__label' }, label), sub && h('div', { class: 'muted small' }, sub));
@@ -17,6 +19,8 @@ export async function pnlView(el, { query = {} } = {}) {
   const thisMonth = todayManila().slice(0, 7);
   const exportLink = h('a', { class: 'btn btn--secondary', download: '' }, 'Download CSV');
   const box = h('div', { 'aria-live': 'polite' }, h('p', { class: 'muted' }, 'Loading…'));
+  const notice = h('div');
+  const monthInput = h('input', { class: 'input input--sm', type: 'month', value: filters.month || thisMonth, 'aria-label': 'Month', onchange: (e) => { if (e.target.value) { filters.month = e.target.value; rememberFilters('pnl', filters); load(); } } });
 
   let properties = [];
   try {
@@ -25,7 +29,12 @@ export async function pnlView(el, { query = {} } = {}) {
   } catch { /* the property filter just stays hidden */ }
 
   async function load() {
-    const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(filters.month) ? filters.month : thisMonth;
+    // A month that isn't YYYY-MM is dropped and the page says so, instead of quietly showing this month.
+    const bad = filters.month && !MONTH_RE.test(filters.month);
+    if (bad) filters.month = '';
+    const month = filters.month || thisMonth;
+    notice.replaceChildren(bad ? h('div', { class: 'alert alert--warn', role: 'alert' }, `That month isn't valid. Showing ${monthName(month)}.`) : '');
+    monthInput.value = month;
     history.replaceState(null, '', `#/pnl${qs(changed(filters, defaults))}`);
     exportLink.href = `/api/reports/pnl.csv${qs({ month, property_id: filters.property_id })}`;
     let r;
@@ -34,11 +43,12 @@ export async function pnlView(el, { query = {} } = {}) {
       box.replaceChildren(h('div', { class: 'card' }, emptyState({ iconName: 'chart', title: 'Couldn\'t load profit and loss', text: err.message })));
       return;
     }
-    if (!r.rows.length) {
+    const t = r.totals;
+    // Empty means no activity. Every unit in scope gets a row, so the row count says nothing.
+    if (!t.stays && !Number(t.expenses) && !Number(t.refunds)) {
       box.replaceChildren(h('div', { class: 'card' }, emptyState({ iconName: 'chart', title: 'Nothing for this month', text: 'No stays or expenses were recorded for this month. Choose another month.' })));
       return;
     }
-    const t = r.totals;
     const cells = (x) => [x.stays, x.nights].map((n) => h('td', { class: 'num' }, String(n)))
       .concat([x.gross, x.channel_fees, x.refunds, x.expenses].map((n) => h('td', { class: 'num' }, peso(n))), h('td', { class: 'num' }, h('strong', null, money(x.net))));
     box.replaceChildren(
@@ -58,9 +68,9 @@ export async function pnlView(el, { query = {} } = {}) {
 
   const bar = filterBar({
     key: 'pnl', values: filters, defaults, onChange: load,
-    extra: h('input', { class: 'input input--sm', type: 'month', value: filters.month || thisMonth, 'aria-label': 'Month', onchange: (e) => { if (e.target.value) { filters.month = e.target.value; rememberFilters('pnl', filters); load(); } } }),
+    extra: monthInput,
     quick: properties.length > 1 ? [{ name: 'property_id', label: 'Property', all: 'All properties', options: properties }] : [],
   });
   await load();
-  el.replaceChildren(pageHead({ title: 'Profit and loss', sub: 'Per unit, by month', actions: exportLink }), bar, box);
+  el.replaceChildren(pageHead({ title: 'Profit and loss', sub: 'Per unit, by month', actions: exportLink }), bar, notice, box);
 }

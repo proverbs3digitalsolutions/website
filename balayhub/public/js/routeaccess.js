@@ -1,9 +1,9 @@
 // Which hash routes a signed-in user may open (the menu already hides the rest; this stops URL access).
 
-const STAY_ONLY = ['/home', '/launchpad', '/inbox', '/inbox-settings', '/calendar', '/reservations', '/groups', '/daily-close', '/listings', '/guests', '/quotes', '/addons', '/owners', '/stay-reports', '/pnl', '/pricing', '/reviews', '/discount-codes', '/gatepass-settings', '/receipts', '/cleaner-pay', '/supplies', '/lost-found'];
+const STAY_ONLY = ['/home', '/launchpad', '/inbox', '/inbox-settings', '/calendar', '/reservations', '/groups', '/daily-close', '/listings', '/guests', '/quotes', '/addons', '/owners', '/stay-reports', '/pnl', '/pricing', '/reviews', '/discount-codes', '/gatepass-settings', '/receipts', '/cleaner-pay', '/supplies', '/lost-found', '/housekeeping'];
 const RENTAL_ONLY = ['/dashboard']; // /properties, /tenants and /rent are linked from stay screens too
 const OWNER_ONLY = ['/launchpad', '/owners'];
-const STAFF_BLOCKED = ['/launchpad', '/owners', '/inbox', '/inbox-settings', '/stay-reports', '/pnl', '/quotes', '/addons', '/groups', '/daily-close', '/gatepass-settings', '/discount-codes', '/cleaner-pay', '/supplies', '/lost-found'];
+const STAFF_BLOCKED = ['/launchpad', '/owners', '/inbox', '/inbox-settings', '/stay-reports', '/pnl', '/quotes', '/addons', '/daily-close', '/gatepass-settings', '/discount-codes', '/cleaner-pay', '/lost-found'];
 
 const under = (path, list) => list.some((p) => path === p || path.startsWith(`${p}/`));
 
@@ -12,7 +12,8 @@ export function routeAllowed(path, user) {
   if (!user) return true;
   if (under(path, ['/admin'])) return Boolean(user.is_platform_admin);
   const type = user.business_type;
-  if (type === 'long_term' && under(path, STAY_ONLY)) return false;
+  // Cleaners keep /housekeeping (their home page) whatever the workspace type, so the redirect can't loop.
+  if (type === 'long_term' && under(path, STAY_ONLY) && user.role !== 'cleaner') return false;
   if (type === 'short_term' && under(path, RENTAL_ONLY)) return false;
   if (user.role === 'staff' && under(path, STAFF_BLOCKED)) return false;
   if (user.role === 'manager' && under(path, OWNER_ONLY)) return false;

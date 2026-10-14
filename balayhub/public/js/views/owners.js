@@ -1,6 +1,6 @@
 // Unit owners (people whose units you manage) and their monthly statements.
 
-import { get, post, patch, qs } from '../api.js';
+import { get, post, patch, qs, ApiError } from '../api.js';
 import { h, peso, fmtDate, fmtDateTime, field, formModal, confirmDialog, emptyState, pageHead, badge, toast, todayManila } from '../ui.js';
 import { navigate } from '../app.js';
 import { CHANNEL_LABEL } from './reservations.js';
@@ -269,7 +269,7 @@ export async function ownerStatementView(el, { params, query = {}, rerender }) {
       try { await post(`${base}/payouts`, { ...d, month }, { idempotencyKey }); } catch (err) {
         if (err.code !== 'PAYOUT_OVER_DUE') throw err;
         // Paying more than the statement says is allowed, but only if the host confirms it.
-        if (!await confirmDialog({ title: 'Pay more than the statement?', text: err.message, confirmText: 'Record anyway' })) throw new Error('Payout not saved.');
+        if (!await confirmDialog({ title: 'Pay more than the statement?', text: err.message, confirmText: 'Record anyway' })) throw new ApiError('Payout not saved.', { status: 400 });
         await post(`${base}/payouts`, { ...d, month, confirm_over: true }, { idempotencyKey });
       }
       toast('Payout recorded.'); rerender();

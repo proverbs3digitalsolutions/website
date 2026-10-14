@@ -173,7 +173,7 @@ router.get('/deposits', managers, ah(async (req, res) => {
   if (isValidDate(q.to)) { params.push(q.to); where.push(`d.received_date <= $${params.length}`); }
   if (q.deducted === '1') where.push('d.deduction_amount > 0');
   if (q.q) {
-    params.push(`%${String(q.q).slice(0, 100)}%`);
+    params.push(`%${String(q.q).slice(0, 100).replace(/[%_\\]/g, '\\$&')}%`);
     where.push(`(g.full_name ILIKE $${params.length} OR b.guest_label ILIKE $${params.length} OR b.confirmation_code ILIKE $${params.length})`);
   }
   const { rows } = await query(

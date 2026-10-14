@@ -1,6 +1,6 @@
 // Screen 6 — Rent & Expenses.
 
-import { get, post, patch, qs, uploadFile } from '../api.js';
+import { get, post, patch, qs, uploadFile, ApiError } from '../api.js';
 import {
   h, icon, peso, fmtDate, fmtDateTime, fmtMonth, badge, label, options, field, formModal, confirmDialog, emptyState,
   pageHead, toast, todayManila, filesList, openModal, unitLabel } from '../ui.js';
@@ -8,12 +8,14 @@ import { state, navigate } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 
 const METHODS = ['cash', 'bank_transfer', 'gcash', 'maya', 'check', 'other'];
-const CATEGORIES = ['repairs', 'utilities', 'taxes', 'insurance', 'association_dues', 'supplies', 'salaries', 'cleaning', 'other'];
+// A tenant who is archived reads "(archived)"; one who has moved out reads "(former)".
+const tenantTag = (x) => (x.tenant_status === 'archived' ? ' (archived)' : x.lease_status !== 'active' ? ' (former)' : '');
+const CATEGORIES =['repairs', 'utilities', 'taxes', 'insurance', 'association_dues', 'supplies', 'salaries', 'cleaning', 'other'];
 
 function receiptField() {
   return h('div', { class: 'field' },
-    h('label', null, 'Receipt or proof of payment (optional)'),
-    h('input', { type: 'file', class: 'input', name: '__receipt', accept: 'application/pdf,image/jpeg,image/png,image/webp' }),
+    h('label', { for: 'receipt-input' }, 'Receipt or proof of payment (optional)'),
+    h('input', { id: 'receipt-input', type: 'file', class: 'input', name: '__receipt', accept: 'application/pdf,image/jpeg,image/png,image/webp' }),
     h('div', { class: 'hint' }, 'Photo or PDF, up to 10 MB.'));
 }
 
@@ -40,7 +42,7 @@ export async function recordPaymentModal({ leaseId, onSaved } = {}) {
   };
   const leaseField = field({
     name: 'lease_id', label: 'Tenant', type: 'select', required: true, value: leaseId,
-    options: leases.map((l) => [l.lease_id, `${l.tenant_name} — ${l.property_name}, ${unitLabel(l.unit_name)}${l.lease_status !== 'active' ? ' (former)' : ''}`]),
+    options: leases.map((l) => [l.lease_id, `${l.tenant_name} — ${l.property_name}, ${unitLabel(l.unit_name)}${tenantTag(l)}`]),
   });
   const amountField = field({ name: 'amount_paid', label: 'Amount paid', type: 'money', required: true, hint: 'Partial payments are fine — the remaining balance is kept.' });
   leaseField.querySelector('select').addEventListener('change', (e) => {
@@ -72,7 +74,13 @@ export async function recordPaymentModal({ leaseId, onSaved } = {}) {
     ],
     onSubmit: async (data, { idempotencyKey, form }) => {
       delete data.__receipt;
-      const res = await post('/payments', data, { idempotencyKey });
+      let res;
+      try { res = await post('/payments', data, { idempotencyKey }); } catch (err) {
+        if (err.code !== 'PAYMENT_OVER_BALANCE') throw err;
+        // More than is owed becomes advance credit, but only if the host confirms it.
+        if (!await confirmDialog({ title: 'Record more than is owed?', text: `Record ${peso(data.amount_paid)}? ${peso(err.data.credit_after)} becomes advance credit.`, confirmText: 'Record anyway' })) throw new ApiError('Payment not saved.', { status: 400 });
+        res = await post('/payments', { ...data, confirm_over: true }, { idempotencyKey });
+      }
       await attachReceipt(form, 'payment', res.payment.payment_id);
       toast(res.duplicate ? 'This payment was already saved.' : `Payment saved. New balance: ${peso(res.balance?.outstanding ?? 0)}`);
       if (onSaved) onSaved(res.payment); else navigate(`#/payments/${res.payment.payment_id}`);
@@ -212,7 +220,7 @@ export async function rentView(el, { query }) {
       ? [filtered && h('p', { class: 'muted small' }, `Showing ${charges.length} charge${charges.length === 1 ? '' : 's'} · ${peso(due)} still to collect`),
         h('ul', { class: 'list' }, charges.map((c) => h('li', null, h('div', { class: 'row' },
           h('a', { class: 'row__main', href: `#/tenants/${c.tenant_id}`, style: { color: 'inherit', textDecoration: 'none' } },
-            h('span', { class: 'row__title' }, c.tenant_name, c.lease_status !== 'active' ? h('span', { class: 'muted small' }, ' (former)') : ''),
+            h('span', { class: 'row__title' }, c.tenant_name, tenantTag(c) && h('span', { class: 'muted small' }, tenantTag(c))),
             h('span', { class: 'row__sub' }, `${c.property_name} · ${unitLabel(c.unit_name)} · ${fmtMonth(c.period)} · due ${fmtDate(c.due_date)}`),
             Number(c.amount_applied) > 0 && c.status !== 'paid' && h('span', { class: 'row__sub' }, `Paid ${peso(c.amount_applied)} of ${peso(c.amount_due)}`)),
           h('div', { class: 'row__end' },
@@ -373,7 +381,7 @@ export async function rentView(el, { query }) {
 export async function paymentDetailView(el, { params, rerender }) {
   const { payment: p, files } = await get(`/payments/${params.id}`);
   const canVoid = state.user.role !== 'staff' && !p.voided_at;
-  const upload = h('input', { type: 'file', class: 'input', accept: 'application/pdf,image/jpeg,image/png,image/webp' });
+  const upload = h('input', { type: 'file', class: 'input', 'aria-label': 'Choose a receipt or proof file', accept: 'application/pdf,image/jpeg,image/png,image/webp' });
   el.replaceChildren(
     pageHead({
       title: `Payment · ${peso(p.amount_paid)}`, sub: `${p.tenant_name} · ${p.property_name}, ${unitLabel(p.unit_name)}`,
@@ -420,7 +428,7 @@ export async function paymentDetailView(el, { params, rerender }) {
 export async function expenseDetailView(el, { params, rerender }) {
   const { expense: x, files } = await get(`/expenses/${params.id}`);
   const canEdit = state.user.role !== 'staff' && !x.voided_at;
-  const upload = h('input', { type: 'file', class: 'input', accept: 'application/pdf,image/jpeg,image/png,image/webp' });
+  const upload = h('input', { type: 'file', class: 'input', 'aria-label': 'Choose a receipt or proof file', accept: 'application/pdf,image/jpeg,image/png,image/webp' });
   el.replaceChildren(
     pageHead({
       title: `Expense · ${peso(x.amount)}`, sub: `${label(x.category)} · ${x.property_name}${x.unit_name ? `, ${unitLabel(x.unit_name)}` : ''}`,

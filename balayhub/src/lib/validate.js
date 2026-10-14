@@ -5,7 +5,8 @@ const { HttpError } = require('./http');
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
-const MONEY_RE = /^-?\d{1,10}(\.\d{1,2})?$/;
+// No digit cap here: an amount that is too big must reach the "too large" check in validate().
+const MONEY_RE = /^-?\d+(\.\d{1,2})?$/;
 
 function isValidDate(s) {
   const m = DATE_RE.exec(s);

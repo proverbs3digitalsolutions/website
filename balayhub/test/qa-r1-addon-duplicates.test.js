@@ -28,7 +28,7 @@ test('#82 a second active add-on with the same name is refused, and nothing is s
   assert.equal(dupe.status, 409, JSON.stringify(dupe.data));
   assert.equal(dupe.data.code, 'DUPLICATE');
   assert.deepEqual(Object.keys(dupe.data.fields), ['name']);
-  assert.match(dupe.data.fields.name, /active add-on/i);
+  assert.match(dupe.data.fields.name, /You already have an add-on called Airport pickup\./);
   assert.equal((await named('Airport pickup')).length, 1);
 });
 

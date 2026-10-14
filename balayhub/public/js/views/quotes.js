@@ -8,7 +8,11 @@ const STATUS = { open: 'Open', paid: 'Paid', expired: 'Expired', cancelled: 'Can
 const STATUS_BADGE = { open: 'open', paid: 'paid', expired: 'archived', cancelled: 'voided' };
 const statusBadge = (s) => badge(STATUS_BADGE[s] || 'archived', STATUS[s] || s);
 const quoteUrl = (q) => q.url;
-const money = (v) => Math.round((Number(String(v ?? '').replace(/,/g, '')) || 0) * 100) / 100;
+// An empty box is 0; text that is not an amount is NaN, so it can never pass as a PHP 0 price.
+const money = (v) => {
+  const s = String(v ?? '').replace(/[₱,\s]/g, '');
+  return s === '' ? 0 : /^\d+(\.\d+)?$/.test(s) ? Math.round(Number(s) * 100) / 100 : NaN;
+};
 const nightsBetween = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
 
 // Shared by the host pages (quotes, reservations, listings, charges, check-in). If the browser blocks the clipboard,
@@ -66,14 +70,16 @@ async function newQuoteModal(listings, onSaved) {
     onSubmit: async (d) => {
       const n = nightsBetween(d.check_in, d.check_out);
       if (!(n > 0)) { throw new ApiError('Check-out must be after check-in.', { status: 400, fields: { check_out: 'Check-out must be after check-in.' } }); }
-      // An empty box means the 48-hour default; anything typed must be at least 1 hour (0 is not silently replaced).
+      // An empty box means the 48-hour default; anything typed must be 1 to 336 (0 is not silently replaced).
       const hours = String(d.expires_in_hours).trim() === '' ? 48 : Number(d.expires_in_hours);
-      if (!(hours >= 1)) { throw new ApiError('Valid for at least 1 hour.', { status: 400, fields: { expires_in_hours: 'Valid for at least 1 hour.' } }); }
+      if (!(Number.isInteger(hours) && hours >= 1 && hours <= 336)) { const m = 'Hours must be between 1 and 336 (14 days).'; throw new ApiError(m, { status: 400, fields: { expires_in_hours: m } }); }
+      // The amounts go to the server as typed, so it can name a box that is not an amount instead of saving PHP 0.
+      const amt = (v) => String(v ?? '').trim() || undefined;
       const selections = [...picks].map(([addon_id, input]) => ({ addon_id, quantity: Number(input.value) || 0 })).filter((s) => s.quantity > 0);
       const body = {
         unit_id: d.unit_id, check_in: d.check_in, check_out: d.check_out, num_guests: Number(d.num_guests),
         guest_name: d.guest_name, guest_email: d.guest_email || undefined, guest_phone: d.guest_phone || undefined,
-        accommodation_total: money(d.accommodation_total), cleaning_fee: money(d.cleaning_fee), discount_amount: money(d.discount_amount),
+        accommodation_total: amt(d.accommodation_total), cleaning_fee: amt(d.cleaning_fee), discount_amount: amt(d.discount_amount),
         addons: selections, pay_type: d.pay_type, expires_in_hours: hours, note: d.note || undefined,
       };
       const r = await post('/quotes', body);
@@ -92,7 +98,7 @@ async function newQuoteModal(listings, onSaved) {
     let add = 0;
     for (const a of addons) add += addonCost(a, n, guests(), Number(picks.get(a.addon_id)?.value) || 0);
     const total = money(el('accommodation_total').value) + money(el('cleaning_fee').value) + add - money(el('discount_amount').value);
-    totalLine.textContent = `Total for the guest: ${peso(Math.max(total, 0))}${add ? ` (add-ons ${peso(add)})` : ''}`;
+    totalLine.textContent = Number.isNaN(total) ? 'Total for the guest: -' : `Total for the guest: ${peso(Math.max(total, 0))}${add ? ` (add-ons ${peso(add)})` : ''}`;
   }
   function drawAddons() {
     const unit = el('unit_id').value;
@@ -110,21 +116,31 @@ async function newQuoteModal(listings, onSaved) {
     }));
     if (!picks.size) addonBox.replaceChildren(h('p', { class: 'muted small' }, 'No add-ons for this listing.'));
   }
+  // Once the host types a price, a date change keeps it; the rate-card price is offered as a button instead.
+  let edited = false; let rate = null;
+  const useRate = h('button', { class: 'btn btn--secondary btn--sm', type: 'button', hidden: true, onclick: () => {
+    el('accommodation_total').value = rate.accommodation_total ?? ''; el('cleaning_fee').value = rate.cleaning_fee ?? '';
+    edited = false; useRate.hidden = true; drawTotal();
+  } });
+  preview.after(useRate);
   async function loadPreview() {
     const unit = el('unit_id').value;
     if (!unit || !el('check_in').value || !el('check_out').value || nights() < 1) { preview.textContent = ''; drawTotal(); return; }
     preview.textContent = 'Checking the price…';
     try {
       const p = await get(`/units/${unit}/price-preview${qs({ check_in: el('check_in').value, check_out: el('check_out').value, guests: guests() })}`);
-      el('accommodation_total').value = p.accommodation_total ?? '';
-      el('cleaning_fee').value = p.cleaning_fee ?? '';
+      rate = p;
+      if (edited) { useRate.textContent = `Use rate-card price ${peso(p.accommodation_total)}`; useRate.hidden = false; } else {
+        el('accommodation_total').value = p.accommodation_total ?? '';
+        el('cleaning_fee').value = p.cleaning_fee ?? '';
+      }
       preview.textContent = `Price from your rates: ${nights()} night${nights() === 1 ? '' : 's'}, ${peso(p.accommodation_total)} plus ${peso(p.cleaning_fee)} cleaning. You can change the amounts.${p.available ? '' : ' Warning: these dates are already booked, so this quote cannot be created.'}`;
       preview.setAttribute('role', 'status');
     } catch (e) { preview.textContent = `Couldn't price these dates: ${e.message} Enter the amounts yourself.`; }
     drawTotal();
   }
   for (const n of ['unit_id', 'check_in', 'check_out', 'num_guests']) el(n).addEventListener('change', () => { if (n === 'unit_id') drawAddons(); loadPreview(); });
-  for (const n of ['accommodation_total', 'cleaning_fee', 'discount_amount']) el(n).addEventListener('input', drawTotal);
+  for (const n of ['accommodation_total', 'cleaning_fee', 'discount_amount']) el(n).addEventListener('input', () => { if (n !== 'discount_amount') edited = true; drawTotal(); });
   drawAddons(); drawTotal();
 }
 

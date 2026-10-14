@@ -257,12 +257,21 @@ test('void frees the cap again; voiding twice is refused; a reason is required; 
   assert.equal(voided.voided_by_name, 'Maria Santos');
   assert.equal((await owner.post(`/api/reservations/${id}/refunds`, refundBody({ amount: '1500.00' }))).status, 201, 'the cap is free again');
 
-  // Voiding the payment after refunding leaves nothing refundable (never negative).
+  // A payment can't be voided while live refunds still need it: the refunds go first (REFUNDS_EXCEED_PAYMENTS).
   const [pay1] = await sql('SELECT payment_id FROM booking_payments WHERE booking_id = $1', [id]);
+  const blocked = await owner.post(`/api/booking-payments/${pay1.payment_id}/void`, { reason: 'Wrong guest' });
+  assert.equal(blocked.status, 409);
+  assert.equal(blocked.data.code, 'REFUNDS_EXCEED_PAYMENTS');
+  assert.equal(blocked.data.error, 'Void the refund first, then this payment.');
+  assert.equal((await refundLog(id)).data.paid, '2000.00', 'a refused void leaves the payment counting');
+
+  // Voiding the refunds, then the payment, leaves nothing paid, refunded or refundable (never negative).
+  const live = await sql('SELECT refund_id FROM booking_refunds WHERE booking_id = $1 AND voided_at IS NULL', [id]);
+  for (const r of live) assert.equal((await owner.post(`/api/refunds/${r.refund_id}/void`, { reason: 'Wrong guest' })).status, 200);
   assert.equal((await owner.post(`/api/booking-payments/${pay1.payment_id}/void`, { reason: 'Wrong guest' })).status, 200);
   const none = (await refundLog(id)).data;
   assert.equal(none.paid, '0.00');
-  assert.equal(none.refunded, '2000.00', 'the 500 and the re-recorded 1500 are still active');
+  assert.equal(none.refunded, '0.00');
   assert.equal(none.refundable, '0.00');
 });
 

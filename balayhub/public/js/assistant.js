@@ -2,7 +2,7 @@
 // questions from the help center, and hands off to a support ticket.
 
 import { get, post } from './api.js';
-import { h, icon, toast } from './ui.js';
+import { h, icon } from './ui.js';
 import { state, navigate } from './app.js';
 
 const KEY = 'bh-assistant';
@@ -13,6 +13,8 @@ let enabled = null; // null = not checked yet
 let panel = null;
 
 export async function assistantEnabled() {
+  // Cleaners are refused the assistant, so don't ask the server for them (rbac#4).
+  if (state.user?.role === 'cleaner') return false;
   if (enabled === null) {
     try { enabled = (await get('/assistant')).enabled; } catch { enabled = false; }
   }
@@ -67,7 +69,13 @@ function buildPanel() {
     m.articles?.length > 0 && h('div', { class: 'assist__articles' },
       h('div', { class: 'small muted' }, 'Related guides'),
       m.articles.map((a) => h('details', { class: 'help-article' }, h('summary', null, a.title), h('div', { class: 'help-article__body' }, a.body.map((p) => h('p', null, p)))))),
-    m.offer_ticket && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => toTicket(msgs) }, 'Contact support with this chat'));
+    m.offer_ticket && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => toTicket(msgs) }, 'Contact support with this chat'),
+    m.failed && h('div', { class: 'alert alert--error', role: 'alert' }, "Couldn't answer. ",
+      h('button', { class: 'link-btn', type: 'button', style: { color: 'inherit' }, onclick: () => retry(m) }, 'Try again'), ' or ',
+      h('button', { class: 'link-btn', type: 'button', style: { color: 'inherit' }, onclick: () => toTicket(msgs) }, 'contact support'), '.'));
+
+  // Ask the same question again: take the failed bubble out and send it as a new question.
+  const retry = (m) => { const i = msgs.indexOf(m); if (busy || i < 0) return; msgs.splice(i, 1); input.value = m.content; form.requestSubmit(); };
 
   function draw() {
     const starters = state.user.business_type === 'long_term' ? STARTERS_LONG : (STARTERS[state.user.role] || STARTERS.owner);
@@ -84,16 +92,17 @@ function buildPanel() {
     e.preventDefault();
     const q = input.value.trim();
     if (!q || busy) return;
-    msgs.push({ role: 'user', content: q });
+    const asked = { role: 'user', content: q };
+    msgs.push(asked);
     input.value = '';
     busy = true; sendBtn.disabled = true; draw();
     try {
-      const res = await post('/assistant/chat', { messages: msgs.map(({ role, content }) => ({ role, content })), page: location.hash.split('?')[0] });
+      // Failed questions stay on screen but are not sent back as history.
+      const res = await post('/assistant/chat', { messages: msgs.filter((m) => !m.failed).map(({ role, content }) => ({ role, content })), page: location.hash.split('?')[0] });
       msgs.push({ role: 'assistant', content: res.reply, articles: res.articles, offer_ticket: res.offer_ticket });
-    } catch (err) {
-      msgs.pop();
-      input.value = q;
-      toast(err.message, 'error');
+    } catch {
+      // Keep the question in the chat with an inline note, so it isn't lost.
+      asked.failed = true;
     } finally {
       busy = false; sendBtn.disabled = false; save(msgs); draw(); input.focus();
     }

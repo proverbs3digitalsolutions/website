@@ -15,6 +15,11 @@ const PROOF_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
 const MAX_PROOF_BYTES = 10 * 1024 * 1024;
 
 extendTranslations({
+  'Too many attempts': 'Napakaraming subok',
+  'Something went wrong': 'May nagkaproblema',
+  'Already on your bill': 'Nasa bill mo na',
+  '{n} already on your bill': '{n} na ang nasa bill mo',
+  'Upload a JPG, PNG, WEBP or PDF file up to 10 MB.': 'Mag-upload ng JPG, PNG, WEBP o PDF na file na hanggang 10 MB.',
   'Accommodation (1 night)': 'Tirahan (1 gabi)',
   'Accommodation ({n} nights)': 'Tirahan ({n} na gabi)',
   'Cleaning fee': 'Bayad sa paglilinis',
@@ -40,8 +45,6 @@ extendTranslations({
   'Enter the amount you paid.': 'Ilagay ang halagang binayad mo.',
   'This is more than the balance of {amount}.': 'Mas malaki ito sa balanseng {amount}.',
   'Choose a screenshot or receipt.': 'Pumili ng screenshot o resibo.',
-  'The file is too large. Please use one up to 10 MB.': 'Masyadong malaki ang file. Gumamit ng file na hanggang 10 MB.',
-  'Please use a JPG, PNG, WEBP or PDF file.': 'Gumamit ng JPG, PNG, WEBP o PDF na file.',
   'Uploading the screenshot…': 'Ina-upload ang screenshot…',
   'Thank you! Your proof was sent.': 'Salamat! Naipadala na ang patunay.',
   '{host} will check the payment and confirm it. You will get an email when it is confirmed.': 'Titingnan ni {host} ang bayad at kukumpirmahin ito. Makakatanggap ka ng email kapag kumpirmado na.',
@@ -59,6 +62,9 @@ extendTranslations({
   'per guest per night': 'bawat bisita bawat gabi',
 });
 
+// The heading follows the cause: only a 404 is a bad link.
+const failTitle = (err) => (err.status === 404 ? t('Link not found') : err.status === 429 ? t('Too many attempts') : t('Something went wrong'));
+
 const PRICING_TEXT = { per_stay: 'per stay', per_night: 'per night', per_guest: 'per guest', per_guest_night: 'per guest per night' };
 
 export async function payBalanceView(el, { params, query }) {
@@ -70,7 +76,7 @@ export async function payBalanceView(el, { params, query }) {
     h('p', { class: 'gc__foot muted small' }, t('Payments are processed securely by PayMongo. '), h('a', { href: '#/privacy' }, t('Privacy notice'))));
   let d;
   try { d = await get(`/public/pay/${encodeURIComponent(token)}`); } catch (err) {
-    el.replaceChildren(page(h('div', { class: 'card' }, h('h1', null, t('Link not found')), h('p', { class: 'muted' }, err.message))));
+    el.replaceChildren(page(h('div', { class: 'card' }, h('h1', null, failTitle(err)), h('p', { class: 'muted' }, tServer(err.message)))));
     return;
   }
   initGuestLang(d.guest_language);
@@ -117,7 +123,7 @@ export async function payBalanceView(el, { params, query }) {
             : d.manual_payments?.accepting ? null
               : h('div', { class: 'alert alert--info' }, t('Online payment is not available for this booking. Please contact your host.'))),
     !d.cancelled && addonsCard(token, () => payBalanceView(el, { params, query: {} })),
-    d.manual_payments?.accepting && manualCard(d, token)));
+    !d.cancelled && d.manual_payments?.accepting && manualCard(d, token)));
 }
 
 // Pre-arrival extras the host offers (airport pickup, early check-in…). Hidden when there are none or the
@@ -131,7 +137,9 @@ function addonsCard(token, reload) {
     const err = h('div', { role: 'alert' });
     const rows = list.map((a) => {
       const name = (guestLang() === 'tl' && a.name_tl) || a.name;
-      const max = Math.max(1, Number(a.max_quantity) || 1);
+      // `left` is what the stay can still add (the limit counts per stay); older servers don't send it.
+      const left = a.left == null ? null : Math.max(0, Number(a.left) || 0);
+      const max = left == null ? Math.max(1, Number(a.max_quantity) || 1) : left;
       const input = h('input', { class: 'input', type: 'number', min: 0, max, value: 0, inputmode: 'numeric', id: `addon-${a.addon_id}`, 'aria-label': t('Quantity for {name}', { name }) });
       // The box shows the number that will be bought: an entry over the maximum or below zero is clamped and written back.
       input.addEventListener('input', () => {
@@ -140,9 +148,11 @@ function addonsCard(token, reload) {
         if (input.value !== '' && Number(input.value) !== n) input.value = String(n);
       });
       return h('div', { class: 'gp-addon' },
-        h('div', null, h('strong', null, name), a.description && h('div', { class: 'muted small' }, a.description)),
+        h('div', null, h('strong', null, name), a.description && h('div', { class: 'muted small' }, a.description),
+          left > 0 && Number(a.bought) > 0 && h('div', { class: 'muted small' }, t('{n} already on your bill', { n: Number(a.bought) }))),
         h('div', { class: 'gp-addon__price' }, `${peso(a.price)} `, h('span', { class: 'muted small' }, t(PRICING_TEXT[a.pricing] || ''))),
-        max > 1 ? h('div', { class: 'gp-addon__qty' }, h('label', { for: input.id, class: 'small' }, t('Quantity for {name}', { name })), input)
+        left === 0 ? h('div', { class: 'gp-addon__qty muted small' }, t('Already on your bill'))
+          : max > 1 ? h('div', { class: 'gp-addon__qty' }, h('label', { for: input.id, class: 'small' }, t('Quantity for {name}', { name })), input)
           : h('label', { class: 'check gp-addon__qty' }, h('input', { type: 'checkbox', 'aria-label': name, onchange: (e) => { qty[a.addon_id] = e.target.checked ? 1 : 0; } }), h('span', null, t('Add to my bill'))));
     });
     const btn = h('button', { class: 'btn btn--primary btn--block', type: 'button' }, t('Add to my bill'));
@@ -177,11 +187,15 @@ function billSection(d) {
     line(b.nights === 1 ? t('Accommodation (1 night)') : t('Accommodation ({n} nights)', { n: b.nights }), peso(b.accommodation_total)),
     Number(b.cleaning_fee) > 0 && line(t('Cleaning fee'), peso(b.cleaning_fee)),
     Number(b.other_fees) > 0 && line(t('Other fees'), peso(b.other_fees)),
-    b.charges.map((c) => line(c.quantity > 1 ? `${c.description} (${c.quantity} × ${peso(c.unit_price)})` : c.description, peso(c.amount))),
+    b.charges.map((c) => {
+      const name = (guestLang() === 'tl' && c.name_tl) || c.description;
+      return line(c.quantity > 1 ? `${name} (${c.quantity} × ${peso(c.unit_price)})` : name, peso(c.amount));
+    }),
     line(t('Total'), h('strong', null, peso(b.total))),
     b.payments.map((p) => line(`${t('Payment received')} · ${fmtDate(p.payment_date)} · ${METHOD_TEXT[p.payment_method] || p.payment_method}`, `−${peso(p.amount)}`)),
     Number(b.adjustments) > 0 && line(t('Adjustments'), `−${peso(b.adjustments)}`),
-    line(t('Balance due'), h('strong', null, peso(d.balance))));
+    // A cancelled booking owes nothing (APP-FLOW 6.4), so there is no balance line.
+    !d.cancelled && line(t('Balance due'), h('strong', null, peso(d.balance))));
 }
 
 // Pay by GCash, Maya or bank transfer: the host's payment details, then a form to send the proof.
@@ -234,8 +248,8 @@ function proofForm(d, token, onSent) {
     else if (amount > Number(d.balance)) problems.amount = t('This is more than the balance of {amount}.', { amount: peso(d.balance) });
     if (Object.keys(problems).length) { showErrors(form, problems); return; }
     if (!file) { formError.replaceChildren(alertBox(t('Choose a screenshot or receipt.'))); return; }
-    if (file.size > MAX_PROOF_BYTES) { formError.replaceChildren(alertBox(t('The file is too large. Please use one up to 10 MB.'))); return; }
-    if (!PROOF_TYPES.includes(file.type)) { formError.replaceChildren(alertBox(t('Please use a JPG, PNG, WEBP or PDF file.'))); return; }
+    if (file.size > MAX_PROOF_BYTES) { formError.replaceChildren(alertBox(t('Upload a JPG, PNG, WEBP or PDF file up to 10 MB.'))); return; }
+    if (!PROOF_TYPES.includes(file.type)) { formError.replaceChildren(alertBox(t('Upload a JPG, PNG, WEBP or PDF file up to 10 MB.'))); return; }
     submit.disabled = true;
     submit.textContent = t('Sending…');
     try {

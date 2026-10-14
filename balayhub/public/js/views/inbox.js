@@ -5,7 +5,7 @@ import { get, post, patch, qs } from '../api.js';
 import {
   h, icon, peso, fmtDate, fmtDateTime, badge, field, formModal, confirmDialog, emptyState, toast, openModal, todayManila,
 } from '../ui.js';
-import { state } from '../app.js';
+import { state, navigate } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 import { CHANNEL_LABEL } from './reservations.js';
 
@@ -78,7 +78,15 @@ export async function inboxView(el, { params, query, rerender }) {
   async function load() {
     history.replaceState(null, '', href(selected));
     viewSelect.value = filters.view;
-    const list = await get(`/inbox${qs(changed(filters, { ...defaults, view: '' }))}`);
+    el.querySelector('.inbox__back')?.setAttribute('href', href(null));
+    let list;
+    try {
+      list = await get(`/inbox${qs(changed(filters, { ...defaults, view: '' }))}`);
+    } catch (err) {
+      // A bad filter in the address must not replace the whole page; the filter bar stays so it can be cleared.
+      items.replaceChildren(emptyState({ title: "Couldn't load conversations", text: err.message }));
+      return;
+    }
     const filtered = Object.keys(changed(filters, defaults)).some((k) => k !== 'view' && k !== 'sort');
     items.replaceChildren(list.conversations.length
       ? h('ul', { class: 'list inbox__items' }, list.conversations.map((c) => h('li', null,
@@ -90,7 +98,7 @@ export async function inboxView(el, { params, query, rerender }) {
           h('div', { class: 'inbox__preview' },
             c.last_direction === 'out' && h('span', { class: 'muted' }, 'You: '),
             c.last_direction === 'note' && h('span', { class: 'muted' }, 'Note: '),
-            c.last_body || h('span', { class: 'muted' }, 'No messages yet')),
+            previewText(c.last_body) || h('span', { class: 'muted' }, 'No messages yet')),
           h('div', { class: 'chips' },
             Number(c.failed_count) > 0 && badge('voided', 'Not sent'),
             Number(c.scheduled_count) > 0 && badge('unpaid', `${c.scheduled_count} scheduled`),
@@ -98,7 +106,6 @@ export async function inboxView(el, { params, query, rerender }) {
       : emptyState(filtered ? { title: 'No results found', text: 'Try removing a filter.' }
         : filters.view === 'open' ? { title: 'No conversations yet', text: 'Open a reservation and choose "Message guest" to start one. Guest replies show up here.' }
           : { title: 'Nothing here', text: 'Try another view.' }));
-    el.querySelector('.inbox__back')?.setAttribute('href', href(null));
   }
 
   const bar = filterBar({
@@ -183,6 +190,11 @@ async function renderThread(pane, id, { status, back, rerender }) {
     });
   };
 
+  // Back to the list, not the thread: re-opening the thread would mark it read again.
+  const markUnread = async () => {
+    try { await patch(`/inbox/${id}`, { unread: true }); toast('Marked as unread.'); navigate(back, { replace: true }); } catch (err) { toast(err.message, 'error'); }
+  };
+
   const header = h('div', { class: 'inbox__head' },
     h('a', { class: 'back inbox__back', href: back }, '‹ Inbox'),
     h('div', { class: 'inbox__head-main' },
@@ -197,7 +209,7 @@ async function renderThread(pane, id, { status, back, rerender }) {
         c.snoozed_until && new Date(c.snoozed_until) > new Date()
           ? h('button', { class: 'btn btn--secondary btn--sm', onclick: () => act(() => patch(`/inbox/${id}`, { snoozed_until: null }), 'Unsnoozed.') }, 'Unsnooze')
           : h('button', { class: 'btn btn--secondary btn--sm', onclick: snooze }, 'Snooze'),
-        h('button', { class: 'btn btn--secondary btn--sm', onclick: () => act(() => patch(`/inbox/${id}`, { unread: true }), 'Marked as unread.') }, 'Mark unread'),
+        h('button', { class: 'btn btn--secondary btn--sm', onclick: markUnread }, 'Mark unread'),
         c.status === 'open'
           ? h('button', { class: 'btn btn--secondary btn--sm', onclick: () => act(() => patch(`/inbox/${id}`, { status: 'archived' }), 'Archived.') }, 'Archive')
           : h('button', { class: 'btn btn--secondary btn--sm', onclick: () => act(() => patch(`/inbox/${id}`, { status: 'open' }), 'Moved to open.') }, 'Unarchive'))));
@@ -280,6 +292,11 @@ function renderMentions(text) {
   return out;
 }
 
+// The list preview shows a mention as "@Name" with no user id.
+export function previewText(text) {
+  return String(text ?? '').replace(MENTION, (_m, name) => `@${name}`);
+}
+
 // Typing "@" in the note box lists teammates; arrows + Enter pick, Esc closes.
 function mentionPicker(body, people) {
   const list = h('ul', { class: 'mention-list', role: 'listbox', id: `ml-${Math.random().toString(36).slice(2, 7)}`, 'aria-label': 'Team members', hidden: true });
@@ -342,8 +359,10 @@ function composer(c, templates, status, rerender, assignees = []) {
   body.addEventListener('input', updateCounter);
   const errId = `cerr-${c.conversation_id}`;
   const sendAt = h('input', { class: 'input input--sm', type: 'datetime-local', 'aria-label': 'Send later at', 'aria-describedby': errId });
-  sendAt.addEventListener('input', () => sendAt.removeAttribute('aria-invalid'));
   const err = h('div', { class: 'error', role: 'alert', id: errId });
+  // Typing, or changing or clearing the send-later time, drops a stale error so it doesn't sit on screen.
+  body.addEventListener('input', () => { err.textContent = ''; });
+  ['input', 'change'].forEach((ev) => sendAt.addEventListener(ev, () => { sendAt.removeAttribute('aria-invalid'); err.textContent = ''; }));
   const modeHint = h('div', { class: 'small muted', role: 'status' });
   const sendBtn = h('button', { class: 'btn btn--primary', type: 'submit' }, 'Send');
   const draftKey = `bh-draft:msg:${c.conversation_id}`;
@@ -396,7 +415,7 @@ function composer(c, templates, status, rerender, assignees = []) {
     sendBtn.textContent = mode === 'note' ? 'Save note' : 'Send';
     if (mode !== 'note') picker.close();
     body.placeholder = mode === 'note' ? 'Only your team sees notes.' : `Write to ${c.guest_name}…`;
-    modeHint.textContent = mode === 'note' ? 'Internal note: only your team sees this. It is not emailed to the guest.' : `This will be emailed to ${c.guest_name}.`;
+    modeHint.textContent = mode === 'note' ? 'Internal note: only your team sees this. It is not emailed to the guest.' : c.guest_email ? `This will be emailed to ${c.guest_name}.` : 'Add an email address before you can send this.';
   };
 
   const noEmail = !c.guest_email && h('div', { class: 'alert alert--warn small' },
@@ -416,13 +435,19 @@ function composer(c, templates, status, rerender, assignees = []) {
           text: 'The message contains internal mention text (@[Name](id)) or an unfilled {{variable}}. The guest will see it exactly as typed.',
           confirmText: 'Send anyway',
         })) return;
+      // A send-later time that has already passed would go out at once with no warning; ask first.
+      let scheduleFor = mode === 'message' && sendAt.value ? new Date(sendAt.value) : null;
+      if (scheduleFor && scheduleFor <= new Date()) {
+        if (!await confirmDialog({ title: 'That time has passed. Send it now?', text: 'The message goes out straight away instead of at the time you picked.', confirmText: 'Send now' })) return;
+        scheduleFor = null;
+      }
       busy = true;
       sendBtn.disabled = true;
       try {
         const payload = { body: body.value, note: mode === 'note' };
         if (mode === 'message') {
           if (subject.value.trim()) payload.subject = subject.value.trim();
-          if (sendAt.value) payload.send_at = new Date(sendAt.value).toISOString();
+          if (scheduleFor) payload.send_at = scheduleFor.toISOString();
         }
         const r = await post(`/inbox/${c.conversation_id}/messages`, payload);
         try { sessionStorage.removeItem(draftKey); } catch { /* ignore */ }
@@ -571,7 +596,7 @@ export async function inboxSettingsView(el, { rerender }) {
       h('div', { class: 'card__head' }, h('h2', null, 'Automatic messages'),
         canEdit && h('button', { class: 'btn btn--primary btn--sm', onclick: () => editAutomation(null) }, icon('plus'), 'Add')),
       !canEdit && h('p', { class: 'muted small' }, 'Only the workspace owner can change these.'),
-      automations.length ? h('ul', { class: 'list' }, automations.map((a) => h('li', null, h('div', { class: 'row' },
+      automations.length ? h('ul', { class: 'list' }, automations.map((a) => h('li', null, h('div', { class: 'row row--stack-sm' },
         h('div', { class: 'row__main' },
           h('span', { class: 'row__title' }, a.name),
           h('span', { class: 'row__sub' }, `${describeAutomation(a)} · sends "${a.template_name}"`),

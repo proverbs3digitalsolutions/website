@@ -71,15 +71,19 @@ async function lockSupply(db, user, id) {
   return s || null;
 }
 
-// Apply one movement to a locked supply row and log it. On hand never goes below zero:
-// using more than is on hand sets it to zero, and the log says what was asked for.
+// Apply one movement to a locked supply row and log it. On hand never goes below zero: using more
+// than is on hand uses up what is there, and the log records that amount, with the ask in the note.
 async function applyMovement(db, user, supply, { kind, quantity, note = null, taskId = null }) {
   let onHand;
+  let logged = quantity;
   let logNote = note;
   if (kind === 'count') onHand = quantity;
   else if (kind === 'restocked') onHand = supply.on_hand + quantity;
   else if (quantity > supply.on_hand) {
+    // The log takes uses of at least 1, so with nothing on hand there is nothing to record.
+    if (supply.on_hand === 0) throw validationError({ quantity: `${supply.name} is out of stock, so nothing can be recorded as used.` });
     onHand = 0;
+    logged = supply.on_hand;
     // The log note holds MAX_NOTE characters, so a long note gives way to the message.
     const short = `Asked for ${quantity}, only ${supply.on_hand} on hand.`;
     logNote = [note?.slice(0, MAX_NOTE - short.length - 1), short].filter(Boolean).join(' ');
@@ -87,9 +91,9 @@ async function applyMovement(db, user, supply, { kind, quantity, note = null, ta
   await db.query(
     `INSERT INTO supply_movements (organization_id, supply_id, kind, quantity, task_id, note, recorded_by)
      VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-    [user.organization_id, supply.supply_id, kind, quantity, taskId, logNote, user.user_id]);
+    [user.organization_id, supply.supply_id, kind, logged, taskId, logNote, user.user_id]);
   await db.query('UPDATE supplies SET on_hand = $2, updated_at = now() WHERE supply_id = $1', [supply.supply_id, onHand]);
-  await audit(db, user, 'supply.movement', 'supply', supply.supply_id, { kind, quantity, on_hand: onHand, task_id: taskId });
+  await audit(db, user, 'supply.movement', 'supply', supply.supply_id, { kind, quantity: logged, on_hand: onHand, task_id: taskId });
 }
 
 // Turn "this property already has an item with that name" into a field error.
@@ -203,22 +207,28 @@ router.get('/supplies/:id/movements', managers, ah(async (req, res) => {
 }));
 
 // Cleaners record what they used or restocked on a task. Supplies must belong to the task's
-// property. Rows are locked in id order so two tasks can't deadlock each other.
+// property. Rows are locked in id order so two tasks can't deadlock each other. A used item with
+// nothing on hand is skipped and named back, so the rest of the job's supplies still save.
 router.post('/cleaning-tasks/:id/supplies', ah(async (req, res) => {
   const task = await loadWorkableTask(req.user, uuidParam(req.params.id));
   const raw = req.body?.items;
   if (!Array.isArray(raw) || !raw.length || raw.length > 50) throw validationError({ items: 'Add between 1 and 50 supplies.' });
   const items = raw.map((x) => validate(x, TASK_ITEM_FIELDS)).sort((a, b) => (a.supply_id < b.supply_id ? -1 : 1));
+  const skipped = [];
   await tx(async (db) => {
     for (const item of items) {
       const supply = await lockSupply(db, req.user, item.supply_id);
       if (!supply || supply.property_id !== task.property_id) {
         throw validationError({ items: "One of these supplies isn't in this property." });
       }
+      if (item.kind === 'used' && supply.on_hand === 0) {
+        skipped.push(supply.name);
+        continue;
+      }
       await applyMovement(db, req.user, supply, { ...item, taskId: task.task_id });
     }
   });
-  res.json({ supplies: await listSupplies(req.user, { ids: items.map((i) => i.supply_id) }) });
+  res.json({ supplies: await listSupplies(req.user, { ids: items.map((i) => i.supply_id) }), skipped });
 }));
 
 module.exports = router;

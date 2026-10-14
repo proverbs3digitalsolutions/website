@@ -4,6 +4,14 @@
 import { get } from '../api.js';
 import { h, brand } from '../ui.js';
 import { state } from '../app.js';
+import { t, extendTranslations } from '../i18n.js';
+
+// Taglish for the contact line only; the notice itself is the English legal text.
+extendTranslations({
+  'For privacy questions or requests, contact your host, or ': 'Para sa tanong o request tungkol sa privacy, kontakin ang host mo, o ',
+  'Create your account': 'Gawin ang account mo',
+  ' and ask us in Help & support.': ' at magtanong sa Help & support.',
+});
 
 export async function privacyView(el) {
   let contact = '';
@@ -43,5 +51,6 @@ export async function privacyView(el) {
         'Under the Data Privacy Act you may request access to, correction of, or deletion or blocking of your personal data, object to processing, and file a complaint with the National Privacy Commission. Tenants should contact their landlord first; the landlord can export the tenant’s record from BalayHub to respond.'),
       ...section('Contact',
         contact ? `For privacy questions or requests, contact the BalayHub Data Protection Officer at ${contact}. Guests can also contact their host directly.`
-          : h('p', null, 'For privacy questions or requests, contact your host, or use ', h('a', { href: '#/help' }, 'Help & support'), '.'))))));
+          // No contact email yet: visitors create an account, then ask in Help & support (sign-up, not the log-in wall).
+          : h('p', null, t('For privacy questions or requests, contact your host, or '), h('a', { href: '#/signup' }, t('Create your account')), t(' and ask us in Help & support.')))))));
 }

@@ -198,7 +198,7 @@ async function photosModal(listing) {
   const m = openModal({ title: `Photos · ${listing.unit_name}`, body: box, wide: true });
   async function draw() {
     const { photos } = await get(`/units/${listing.unit_id}/photos`);
-    const input = h('input', { type: 'file', accept: 'image/*', multiple: true, class: 'input' });
+    const input = h('input', { type: 'file', accept: 'image/*', multiple: true, class: 'input', 'aria-label': 'Listing photos' });
     const status = h('span', { class: 'muted small', 'aria-live': 'polite' });
     box.replaceChildren(
       h('p', { class: 'muted small' }, 'Shown on your booking page. The first photo is the cover. Up to 12 photos; large photos are resized automatically.'),
@@ -227,13 +227,21 @@ async function photosModal(listing) {
   try { await draw(); } catch (err) { m.close(); toast(err.message, 'error'); }
 }
 
+// A failed sync's own text is raw (DNS, HTTP or file errors), so the toast uses the plain sentence the
+// channel list shows for that feed. The raw text stays under "Technical details" there (D-76).
+async function syncToastText(unitId, feedId, sync) {
+  if (sync.ok || String(sync.message).startsWith('Synced:')) return sync.message; // "Synced:" = synced, some overlaps skipped
+  const feed = await get(`/units/${unitId}/channels`).then((r) => r.feeds.find((f) => f.feed_id === feedId)).catch(() => null);
+  return feed?.problem_message || "Couldn't reach the calendar link. Check the link on the listing's Channels page.";
+}
+
 async function channelsModal(listing, onChange) {
   let data;
   try { data = await get(`/units/${listing.unit_id}/channels`); } catch (err) { toast(err.message, 'error'); return; }
   const exportInput = h('input', { class: 'input', readonly: true, value: data.export_url, 'aria-label': 'BalayHub calendar link' });
   const feedRow = (f) => h('li', null, h('div', { class: 'row' },
     h('div', { class: 'row__main' },
-      h('span', { class: 'row__title' }, CHANNEL_LABEL[f.channel]),
+      h('span', { class: 'row__title' }, `${CHANNEL_LABEL[f.channel]}${f.host ? ` (${f.host})` : ''}`),
       h('span', { class: 'row__sub', style: { wordBreak: 'break-all' } }, f.url),
       h('span', { class: `row__sub ${f.last_status === 'error' ? 'amount--neg' : ''}` }, f.last_synced_at ? `${fmtDateTime(f.last_synced_at)} — ${f.problem_message || f.last_message || ''}` : 'Not synced yet'),
       // Support still needs the raw text, so it stays under a muted label when a plain message replaced it.
@@ -241,11 +249,11 @@ async function channelsModal(listing, onChange) {
     h('div', { class: 'row__end' }, h('div', { class: 'chips' },
       h('button', { class: 'btn btn--secondary btn--sm', onclick: async (e) => {
         e.target.disabled = true;
-        try { const r = await post(`/ical-feeds/${f.feed_id}/sync`); toast(r.sync.message, r.sync.ok ? 'info' : 'error'); m.close(); channelsModal(listing, onChange); onChange(); } catch (err) { toast(err.message, 'error'); e.target.disabled = false; }
+        try { const r = await post(`/ical-feeds/${f.feed_id}/sync`); toast(await syncToastText(listing.unit_id, f.feed_id, r.sync), r.sync.ok ? 'info' : 'error'); m.close(); channelsModal(listing, onChange); onChange(); } catch (err) { toast(err.message, 'error'); e.target.disabled = false; }
       } }, 'Sync now'),
       h('button', { class: 'btn btn--ghost btn--sm', onclick: async () => {
-        if (!await confirmDialog({ title: `Disconnect ${CHANNEL_LABEL[f.channel]}?`, text: 'Future stays and blocks imported from this calendar are removed. Past stays and any stays with payments are kept.', confirmText: 'Disconnect', danger: true })) return;
-        await post(`/ical-feeds/${f.feed_id}/remove`); toast('Calendar disconnected.'); m.close(); channelsModal(listing, onChange); onChange();
+        if (!await confirmDialog({ title: `Disconnect ${CHANNEL_LABEL[f.channel]}?`, text: 'Future stays from this channel are cancelled, and its calendar blocks are removed. Past stays and any stays with payments are kept.', confirmText: 'Disconnect', danger: true })) return;
+        try { await post(`/ical-feeds/${f.feed_id}/remove`); toast('Calendar disconnected.'); m.close(); channelsModal(listing, onChange); onChange(); } catch (err) { toast(err.message, 'error'); }
       } }, 'Disconnect')))));
   const status = h('div');
   const addForm = h('form', { class: 'form', novalidate: true },
@@ -260,7 +268,8 @@ async function channelsModal(listing, onChange) {
     btn.disabled = true; btn.textContent = 'Connecting…';
     try {
       const r = await post('/ical-feeds', { unit_id: listing.unit_id, channel: addForm.elements.channel.value, url: addForm.elements.url.value });
-      toast(r.sync.ok ? `Connected. ${r.sync.message}` : `Connected, but the first sync failed: ${r.sync.message}`, r.sync.ok ? 'info' : 'error');
+      const text = await syncToastText(listing.unit_id, r.feed_id, r.sync);
+      toast(r.sync.ok ? `Connected. ${text}` : `Connected, but the first sync failed: ${text}`, r.sync.ok ? 'info' : 'error');
       m.close(); channelsModal(listing, onChange); onChange();
     } catch (err) {
       status.replaceChildren(h('div', { class: 'alert alert--error' }, err.fields?.url || err.message));
@@ -395,15 +404,45 @@ function matchListing(l, f, bookable) {
   return true;
 }
 
+// Archive keeps a listing's history and hides it from the listings; Restore brings it back. Owners only.
+async function changeArchive(listing, action, onDone) {
+  if (action === 'archive' && !await confirmDialog({ title: `Archive ${listing.unit_name}?`, text: 'Its history is kept. You can restore it later.', confirmText: 'Archive', danger: true })) return;
+  try {
+    await post(`/units/${listing.unit_id}/${action}`);
+    toast(action === 'archive' ? 'Listing archived.' : 'Listing restored.');
+    onDone();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
 export async function listingsView(el, { query }) {
   const canManage = state.user.role !== 'staff';
-  const defaults = { q: '', cleaning: '', property_id: '', tag: '', unit_type: '', occupancy: '', channels: '', direct: '', min_guests: '', sort: '' };
+  const isOwner = state.user.role === 'owner';
+  const defaults = { q: '', cleaning: '', property_id: '', tag: '', unit_type: '', occupancy: '', channels: '', direct: '', min_guests: '', sort: '', status: '' };
   const filters = initFilters('listings', query, defaults);
   if (!['', 'dirty', 'clean'].includes(filters.cleaning)) filters.cleaning = '';
+  if (!isOwner || !['', 'archived'].includes(filters.status)) filters.status = '';
   const [{ properties }, tagList] = await Promise.all([get('/properties'), get('/tags').then((r) => r.tags).catch(() => [])]);
   const box = h('div');
+  // Archived units are not in GET /listings, so they are read from each building's own page.
+  async function loadArchived() {
+    bar.hidden = false;
+    const perBuilding = await Promise.all(properties.map((p) => get(`/properties/${p.property_id}`).then((r) => r.units
+      .filter((u) => u.status === 'archived').map((u) => ({ ...u, property_name: p.property_name, city: p.city })))));
+    const q = filters.q.toLowerCase();
+    const shown = perBuilding.flat().filter((u) => (!q || [u.unit_name, u.property_name, u.city].some((x) => (x || '').toLowerCase().includes(q)))
+      && (!filters.property_id || u.property_id === filters.property_id));
+    box.replaceChildren(shown.length
+      ? h('div', { class: 'listing-grid' }, shown.map((u) => h('article', { class: 'card listing' },
+        h('div', { class: 'card__head' },
+          h('div', null, h('h2', null, u.unit_name), h('p', { class: 'muted small' }, `${u.property_name}${u.city ? ` · ${u.city}` : ''}`)),
+          badge('voided', 'Archived')),
+        h('div', { class: 'chips', style: { marginTop: '12px' } },
+          h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `Restore ${u.unit_name}`, onclick: () => changeArchive(u, 'restore', load) }, 'Restore')))))
+      : h('div', { class: 'card' }, emptyState({ iconName: 'building', title: 'No archived listings', text: 'Archived listings are hidden from your listings. Restore one to bring it back.' })));
+  }
   async function load() {
     history.replaceState(null, '', `#/listings${qs(changed(filters, defaults))}`);
+    if (filters.status === 'archived') return loadArchived();
     const { listings } = await get(`/listings${qs({ tag: filters.tag })}`);
     // Calendar sync problems per listing (owners and managers; the page works without them).
     const problems = new Map();
@@ -422,7 +461,8 @@ export async function listingsView(el, { query }) {
       h('button', { role: 'tab', 'aria-selected': String(!filters.cleaning), onclick: () => setCleaning('') }, `All (${base.length})`),
       h('button', { role: 'tab', 'aria-selected': String(filters.cleaning === 'dirty'), onclick: () => setCleaning('dirty') }, `Needs cleaning (${dirtyCount})`),
       h('button', { role: 'tab', 'aria-selected': String(filters.cleaning === 'clean'), onclick: () => setCleaning('clean') }, `Clean (${base.length - dirtyCount})`));
-    bar.hidden = !listings.length;
+    // Owners keep the filter bar even with no active listings, so they can reach the archived ones.
+    bar.hidden = !listings.length && !isOwner;
     if (!listings.length) {
       box.replaceChildren(h('div', { class: 'card' }, emptyState({ iconName: 'building', title: 'No listings yet', text: 'Add each unit you rent out per night, with its base nightly rate and cleaning fee.', action: canManage && h('button', { class: 'btn btn--primary', onclick: () => addListingModal(load) }, icon('plus'), 'Add listing') })));
       return;
@@ -439,7 +479,7 @@ export async function listingsView(el, { query }) {
       problems.has(l.unit_id) && h('div', { class: 'alert alert--warn sync-alert', role: 'status' },
         h('strong', null, 'Calendar sync problem'),
         h('ul', { class: 'sync-alert__list' }, problems.get(l.unit_id).map((p) => h('li', null,
-          `${CHANNEL_LABEL[p.channel]}: ${p.message}${p.kind === 'overlap' ? ` (${fmtDate(p.check_in)} to ${fmtDate(p.check_out)})` : ''}`))),
+          `${CHANNEL_LABEL[p.channel]}${p.host ? ` (${p.host})` : ''}: ${p.message}${p.kind === 'overlap' ? ` (${fmtDate(p.check_in)} to ${fmtDate(p.check_out)})` : ''}`))),
         canManage && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => channelsModal(l, load) }, 'Open channels')),
       h('dl', { class: 'dl' },
         h('dt', null, 'Nightly rate'), h('dd', null, l.nightly_rate ? peso(l.nightly_rate) : '—'),
@@ -464,6 +504,7 @@ export async function listingsView(el, { query }) {
           formModal({ title: `Edit ${l.unit_name}`, submitText: 'Save changes', fields: listingFields({ ...unit, tags: unit.tags }, roomTypes),
             onSubmit: async (d) => { await patch(`/units/${l.unit_id}`, prepUnit(d)); toast('Listing updated.'); load(); } });
         } }, 'Edit'),
+        isOwner && h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Archive ${l.unit_name}`, onclick: () => changeArchive(l, 'archive', load) }, 'Archive'),
         h('a', { class: 'btn btn--ghost btn--sm', href: `#/reservations?q=${encodeURIComponent(l.unit_name)}&view=all` }, 'Bookings')))))
       : h('div', { class: 'card' }, empty));
   }
@@ -474,6 +515,7 @@ export async function listingsView(el, { query }) {
       properties.length > 1 && { name: 'property_id', label: 'Property', all: 'All properties', options: properties.map((p) => [p.property_id, p.property_name]) },
       tagList.length > 0 && { name: 'tag', label: 'Tag', all: 'All tags', options: tagList.map((t) => [t.tag, `${t.tag} (${t.count})`]) },
       { name: 'occupancy', label: 'Occupancy', all: 'Any occupancy', options: [['vacant', 'Vacant tonight'], ['occupied', 'Guest staying now'], ['arriving', 'Arrival in the next 7 days'], ['no_next', 'No upcoming booking']] },
+      isOwner && { name: 'status', label: 'Show', all: 'Active listings', options: [['archived', 'Archived listings']] },
     ].filter(Boolean),
     more: [
       { name: 'unit_type', label: 'Type', all: 'Any type', options: UNIT_TYPES.map((t) => [t, t[0].toUpperCase() + t.slice(1)]) },
