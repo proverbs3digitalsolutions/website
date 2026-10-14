@@ -1,6 +1,6 @@
 // Unit owners (people whose units you manage) and their monthly statements.
 
-import { get, post, patch, qs, ApiError } from '../api.js';
+import { get, post, patch, qs } from '../api.js';
 import { h, peso, fmtDate, fmtDateTime, field, formModal, confirmDialog, emptyState, pageHead, badge, toast, todayManila } from '../ui.js';
 import { navigate } from '../app.js';
 import { CHANNEL_LABEL } from './reservations.js';
@@ -46,12 +46,14 @@ const feeText = (o) => (FEE_SHORT[o.fee_model || 'net_pct'] || FEE_SHORT.net_pct
 function ownerForm(units, o = {}) {
   const model = field({ name: 'fee_model', label: 'How you are paid', type: 'select', required: true, value: o.fee_model || 'net_pct', placeholderOption: false, options: FEE_MODELS,
     hint: 'Percent of net is after channel fees, cleaning fees and refunds. Percent of gross is the booking total minus refunds. A flat fee is charged every month, even with no stays.' });
-  const pct = h('div', null, field({ name: 'management_fee_pct', label: 'Management fee (%)', type: 'number', inputmode: 'decimal', step: 0.01, min: 0, max: 100, value: o.management_fee_pct ?? '20' }));
+  const pct = h('div', null, field({ name: 'management_fee_pct', label: 'Management fee (%)', type: 'number', inputmode: 'decimal', step: 0.01, min: 0, max: 100, required: true, value: o.management_fee_pct ?? '20' }));
   const flat = h('div', null, field({ name: 'flat_monthly_fee', label: 'Flat fee per month', type: 'money', value: o.flat_monthly_fee ?? '0', hint: 'Charged in any month this owner has a unit, even with no stays.' }));
   const sync = () => {
     const v = model.querySelector('select').value;
     pct.hidden = v === 'flat';
     flat.hidden = v !== 'flat';
+    // A blank percentage is refused on a percentage model; a flat fee has no percentage to fill in.
+    pct.querySelector('input').required = v !== 'flat';
   };
   model.querySelector('select').addEventListener('change', sync);
   sync();
@@ -128,8 +130,8 @@ export async function ownersView(el, { rerender, query = {} }) {
       h('div', { class: 'grid grid--2' }, owners.map((o) => h('div', { class: 'card' },
         h('div', { class: 'card__head' }, h('h2', null, o.full_name),
           h('div', { class: 'chips' },
-            h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => edit(o) }, 'Edit'),
-            h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => archive(o) }, 'Remove'))),
+            h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Edit ${o.full_name}`, onclick: () => edit(o) }, 'Edit'),
+            h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Remove ${o.full_name}`, onclick: () => archive(o) }, 'Remove'))),
         h('dl', { class: 'dl' },
           h('dt', null, 'Units'), h('dd', null, o.unit_ids.map(unitName).filter(Boolean).join(', ') || 'None yet'),
           h('dt', null, 'Management fee'), h('dd', null, `${feeText(o)}${o.cleaning_to_manager ? ' · cleaning fees kept for cleaning' : ''}`),
@@ -138,30 +140,31 @@ export async function ownersView(el, { rerender, query = {} }) {
           o.email && [h('dt', null, 'Email'), h('dd', null, o.email)],
           o.phone && [h('dt', null, 'Mobile'), h('dd', null, o.phone)]),
         h('div', { class: 'chips', style: { marginTop: '12px' } },
-          h('a', { class: 'btn btn--primary btn--sm', href: `#/owners/${o.owner_id}/statement?month=${lastMonth()}` }, 'Statement for last month'),
-          h('a', { class: 'btn btn--secondary btn--sm', href: `#/owners/${o.owner_id}/statement?month=${todayManila().slice(0, 7)}` }, 'This month so far'),
+          h('a', { class: 'btn btn--primary btn--sm', href: `#/owners/${o.owner_id}/statement?month=${lastMonth()}`, 'aria-label': `Statement for last month, ${o.full_name}` }, 'Statement for last month'),
+          h('a', { class: 'btn btn--secondary btn--sm', href: `#/owners/${o.owner_id}/statement?month=${todayManila().slice(0, 7)}`, 'aria-label': `This month so far, ${o.full_name}` }, 'This month so far'),
           o.portal_enabled
-            ? [h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => disablePortal(o) }, 'Turn off portal access'),
-              h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => invite(o) }, 'Send the invite again')]
-            : h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => invite(o) }, o.portal_invited_at ? 'Invite again' : 'Invite to owner portal'))))));
+            ? [h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Turn off portal access, ${o.full_name}`, onclick: () => disablePortal(o) }, 'Turn off portal access'),
+              h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'aria-label': `Send the invite again, ${o.full_name}`, onclick: () => invite(o) }, 'Send the invite again')]
+            : h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `${o.portal_invited_at ? 'Invite again' : 'Invite to owner portal'}, ${o.full_name}`, onclick: () => invite(o) }, o.portal_invited_at ? 'Invite again' : 'Invite to owner portal'))))));
   }
   async function load() {
     history.replaceState(null, '', `#/owners${qs(changed(filters, defaults))}`);
     ({ owners, units, total } = await get(`/unit-owners${qs(changed(filters, defaults))}`));
     draw();
   }
-  draw();
   // No filter bar for a single owner (unless a filter is still on from before).
   const showBar = total > 1 || Object.keys(changed(filters, defaults)).length > 0;
   const bar = showBar && filterBar({
     key: 'owners', values: filters, defaults, onChange: load,
     search: { placeholder: 'Search name, email or mobile' },
-    quick: [{ name: 'has_units', label: 'Units', all: 'Any', options: [['yes', 'Has units'], ['no', 'No units yet']] }],
+    quick: [{ name: 'has_units', label: 'Units', all: 'Any number of units', options: [['yes', 'Has units'], ['no', 'No units yet']] }],
     more: [
       units.length > 0 && { name: 'unit_id', label: 'Owns listing', all: 'Any listing', options: units.map((u) => [u.unit_id, `${u.unit_name} · ${u.property_name}`]) },
       { name: 'sort', label: 'Sort by', all: 'Name (A–Z)', options: [['units', 'Most units'], ['fee', 'Highest management fee'], ['newest', 'Newest first']] },
     ].filter(Boolean),
   });
+  // Drawn after the bar: the bar drops a filter value that is not an option, and the count line must not count it.
+  draw();
 
   el.replaceChildren(
     pageHead({
@@ -200,7 +203,7 @@ export async function ownerStatementsView(el, { query = {} }) {
             h('td', null, status(r)),
             h('td', { class: `num${Number(r.payout) < 0 ? ' amount--neg' : ''}` }, Number(r.payout) < 0 ? `Owes you ${peso(-Number(r.payout))}` : peso(r.payout)),
             h('td', null, r.sent_at ? manilaDay(r.sent_at) : '—'),
-            h('td', { class: 'num' }, h('a', { class: 'btn btn--secondary btn--sm', href: `#/owners/${r.owner_id}/statement?month=${month}` }, r.status === 'published' ? 'Open' : 'Review'))))))))]
+            h('td', { class: 'num' }, h('a', { class: 'btn btn--secondary btn--sm', href: `#/owners/${r.owner_id}/statement?month=${month}`, 'aria-label': `${r.status === 'published' ? 'Open' : 'Review'} statement, ${r.full_name}` }, r.status === 'published' ? 'Open' : 'Review'))))))))]
       : h('div', { class: 'card' }, emptyState({ iconName: 'file', title: 'No owners with units yet', text: 'Add a unit owner and assign their units to get statements here.', action: h('a', { class: 'btn btn--primary', href: '#/owners' }, 'Go to unit owners') })));
 }
 
@@ -285,8 +288,8 @@ export async function ownerStatementView(el, { params, query = {}, rerender }) {
     onSubmit: async (d, { idempotencyKey }) => {
       try { await post(`${base}/payouts`, { ...d, month }, { idempotencyKey }); } catch (err) {
         if (err.code !== 'PAYOUT_OVER_DUE') throw err;
-        // Paying more than the statement says is allowed, but only if the host confirms it.
-        if (!await confirmDialog({ title: 'Pay more than the statement?', text: err.message, confirmText: 'Record anyway' })) throw new ApiError('Payout not saved.', { status: 400 });
+        // Paying more than the statement says is allowed, but only if the host confirms it. Cancel returns false: nothing is posted and the form stays open with no message.
+        if (!await confirmDialog({ title: 'Pay more than the statement?', text: err.message, confirmText: 'Record anyway' })) return false;
         await post(`${base}/payouts`, { ...d, month, confirm_over: true }, { idempotencyKey });
       }
       toast('Payout recorded.'); rerender();
@@ -309,7 +312,7 @@ export async function ownerStatementView(el, { params, query = {}, rerender }) {
               h('span', { class: `row__title${p.voided ? ' strike' : ''}` }, `${peso(p.amount)} · ${METHOD_LABEL[p.method] || p.method}`),
               h('span', { class: 'row__sub' }, `${fmtDate(p.paid_on)}${p.reference_number ? ` · Ref ${p.reference_number}` : ''}${p.note ? ` · ${p.note}` : ''}`),
               p.voided && h('span', { class: 'row__sub' }, `Voided: ${p.void_reason}`)),
-            h('div', { class: 'row__end' }, p.voided ? badge('voided', 'Voided') : h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => voidPayout(p) }, 'Void'))))))
+            h('div', { class: 'row__end' }, p.voided ? badge('voided', 'Voided') : h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Void payout of ${peso(p.amount)} on ${fmtDate(p.paid_on)}`, onclick: () => voidPayout(p) }, 'Void'))))))
           : h('p', { class: 'muted small' }, 'No payouts recorded for this month yet.')]
       : h('p', { class: 'muted small' }, 'Payouts could not be loaded. Refresh the page to try again.'));
 
@@ -343,7 +346,7 @@ export async function ownerStatementView(el, { params, query = {}, rerender }) {
           h('span', { class: `row__title${e.voided ? ' strike' : ''}` }, `${e.kind === 'deposit' ? 'Top-up' : 'Withdrawal'} · ${peso(e.amount)}`),
           h('span', { class: 'row__sub' }, `${fmtDate(e.entry_date)}${e.note ? ` · ${e.note}` : ''}`),
           e.voided && h('span', { class: 'row__sub' }, `Voided${e.void_reason ? `: ${e.void_reason}` : ''}`)),
-        h('div', { class: 'row__end' }, e.voided ? badge('voided', 'Voided') : (e.kind === 'withdrawal' && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => voidEntry(e) }, 'Void')))))))
+        h('div', { class: 'row__end' }, e.voided ? badge('voided', 'Voided') : (e.kind === 'withdrawal' && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Void withdrawal of ${peso(e.amount)} on ${fmtDate(e.entry_date)}`, onclick: () => voidEntry(e) }, 'Void')))))))
       : h('p', { class: 'muted small' }, 'No reserve activity yet.'));
 
   el.replaceChildren(

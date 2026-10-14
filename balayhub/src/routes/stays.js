@@ -6,8 +6,10 @@
 const express = require('express');
 const { query, one, tx } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
+const { own } = require('../lib/pick');
 const { validate, uuidParam, isValidDate } = require('../lib/validate');
 const { audit } = require('../lib/audit');
+const { changedKeys } = require('../lib/auditdiff');
 const { requireRole } = require('../lib/auth');
 const { propertyScope, loadUnit } = require('../lib/access');
 const ical = require('../lib/ical');
@@ -204,7 +206,7 @@ router.get('/guests', ah(async (req, res) => {
     where.push(staff ? `g.full_name ILIKE $${n}` : `(g.full_name ILIKE $${n} OR g.email ILIKE $${n} OR g.phone ILIKE $${n})`);
   }
   const SEGMENTS = { vip: 'g.vip', do_not_rebook: 'g.do_not_rebook', repeat: 's.stays >= 2', first: 's.stays = 1', no_stays: 's.stays = 0' };
-  if (SEGMENTS[qp.segment]) where.push(SEGMENTS[qp.segment]);
+  if (own(SEGMENTS, qp.segment)) where.push(own(SEGMENTS, qp.segment));
   if (qp.stay === 'upcoming') where.push('s.next_stay IS NOT NULL');
   if (qp.stay === 'in_house') where.push('s.in_house');
   if (qp.stay === 'none_upcoming') where.push('s.next_stay IS NULL AND NOT s.in_house');
@@ -222,7 +224,7 @@ router.get('/guests', ah(async (req, res) => {
   if (qp.rating === '4') where.push('rv.avg_rating >= 4');
   if (qp.rating === 'low') where.push('rv.avg_rating < 3');
   if (qp.rating === 'none') where.push('rv.avg_rating IS NULL');
-  const order = (!staff || qp.sort !== 'spent') && GUEST_SORTS[qp.sort] ? GUEST_SORTS[qp.sort] : GUEST_SORTS.name;
+  const order = (!staff || qp.sort !== 'spent') && own(GUEST_SORTS, qp.sort) ? own(GUEST_SORTS, qp.sort) : GUEST_SORTS.name;
   const { rows } = await query(
     `SELECT g.*, s.stays, s.last_stay, s.next_stay, s.in_house, s.total_spent, rv.avg_rating
        FROM guests g
@@ -274,7 +276,7 @@ router.post('/guests', managers, ah(async (req, res) => {
 router.patch('/guests/:id', managers, ah(async (req, res) => {
   const guest = await loadGuest(req.user, uuidParam(req.params.id));
   const body = validate(req.body, guestSpec, { partial: true });
-  const keys = Object.keys(body);
+  const keys = changedKeys(guest, body);
   if (keys.length) {
     await query(`UPDATE guests SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')} WHERE guest_id = $1`,
       [guest.guest_id, ...keys.map((k) => body[k])]);
@@ -299,7 +301,7 @@ const VIEWS = {
 };
 
 function reservationQuery(req) {
-  const view = VIEWS[req.query.view] ? req.query.view : 'upcoming';
+  const view = own(VIEWS, req.query.view) ? req.query.view : 'upcoming';
   const params = [];
   const where = [propertyScope(req.user, params), `b.kind = 'reservation'`, VIEWS[view].where];
   if (req.query.q) {
@@ -329,7 +331,7 @@ function reservationQuery(req) {
   if (req.query.checkin_form === 'missing') where.push(`NOT EXISTS (SELECT 1 FROM guest_registrations r WHERE r.booking_id = b.booking_id AND r.submitted_at IS NOT NULL)`);
   if (req.query.checkin_form === 'done') where.push(`EXISTS (SELECT 1 FROM guest_registrations r WHERE r.booking_id = b.booking_id AND r.submitted_at IS NOT NULL)`);
   const SORTS = { checkin: 'b.check_in, b.created_at', checkin_desc: 'b.check_in DESC, b.created_at DESC', checkout: 'b.check_out', created: 'b.created_at DESC', total: 'b.total_amount DESC', balance: `(b.total_amount - ${fee} - ${paid}) DESC` };
-  const order = SORTS[req.query.sort] || VIEWS[view].order;
+  const order = own(SORTS, req.query.sort) || VIEWS[view].order;
   return { view, sql: `${BOOKING_SELECT} WHERE ${where.join(' AND ')} ORDER BY ${order} LIMIT 1000`, params };
 }
 
@@ -357,12 +359,16 @@ router.get('/reservations/export', ah(async (req, res) => {
 }));
 
 router.get('/reservations/quote', ah(async (req, res) => {
-  const unit = await loadUnit(req.user, uuidParam(req.query.unit_id));
   const { check_in: ci, check_out: co } = req.query;
+  // Without unit_id, a room type at a property: quote the listing a reservation would take now (free, not on a lease).
+  const byType = !req.query.unit_id && req.query.room_type;
+  const room = byType ? { property_id: uuidParam(req.query.property_id), room_type: String(req.query.room_type).slice(0, 40), check_in: ci, check_out: co } : null;
+  const unit = byType ? null : await loadUnit(req.user, uuidParam(req.query.unit_id));
   if (!isValidDate(ci) || !isValidDate(co) || co <= ci) throw validationError({ check_out: 'Check-out must be after check-in.' });
   if (nightsBetween(ci, co) > 366) throw validationError({ check_out: 'Stays are limited to one year.' });
-  const q = await quote(unit.unit_id, ci, co);
-  res.json({ ...q, cleaning_fee: unit.cleaning_fee, max_guests: unit.max_guests });
+  const picked = byType ? await pickListing(req.user, room) : unit;
+  const q = await quote(picked.unit_id, ci, co);
+  res.json({ ...q, cleaning_fee: picked.cleaning_fee, max_guests: picked.max_guests, ...(byType && { unit_id: picked.unit_id, unit_name: picked.unit_name }) });
 }));
 
 router.get('/reservations/:id', ah(async (req, res) => {
@@ -1001,7 +1007,7 @@ router.patch('/booking-groups/:id', managers, ah(async (req, res) => {
     name: { type: 'string', required: true, max: 120, label: 'Group name' },
     notes: { type: 'text', max: 1000, label: 'Notes' },
   }, { partial: true });
-  const keys = Object.keys(body);
+  const keys = changedKeys(group, body);
   if (keys.length) {
     await tx(async (db) => {
       await db.query(`UPDATE booking_groups SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')} WHERE group_id = $1`,

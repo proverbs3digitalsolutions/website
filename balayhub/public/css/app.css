@@ -302,6 +302,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 
 .card { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; }
 .card + .card, .stack > * + * { margin-top: 16px; }
+.grid > .card + .card { margin-top: 0; }
 .card__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
 .card__head a { font-weight: 700; font-size: .9rem; text-decoration: none; }
 .grid { display: grid; gap: 16px; }
@@ -385,7 +386,7 @@ table.table { width: 100%; border-collapse: collapse; font-size: .92rem; }
   padding: 8px 14px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line-2);
   font-weight: 700; font-size: .88rem; color: var(--muted); text-decoration: none; white-space: nowrap; cursor: pointer;
 }
-.tabs [aria-current="true"], .tabs [aria-selected="true"] { background: var(--forest); border-color: var(--forest); color: #fff; }
+.tabs [aria-current="true"], .tabs [aria-selected="true"], .tabs [aria-pressed="true"] { background: var(--forest); border-color: var(--forest); color: #fff; }
 
 .empty { text-align: center; padding: 32px 16px; display: grid; gap: 10px; justify-items: center; }
 .empty svg { width: 48px; height: 48px; color: var(--line-2); }
@@ -415,6 +416,8 @@ textarea.input { min-height: 96px; resize: vertical; }
 /* Date inputs focus inside their shadow fields; keep a ring on the box. */
 .input:focus-visible, .input:focus-within { outline: 2px solid var(--teal); outline-offset: 1px; }
 .field--invalid .input { border-color: var(--red); }
+/* The error stands in place of the hint, so each problem is said once, at its field. */
+.field--invalid > .hint { display: none; }
 .input-money { position: relative; }
 .input-money::before { content: "₱"; position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-weight: 700; }
 .input-money .input { padding-left: 28px; }
@@ -814,6 +817,7 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .gc__eyebrow { color: var(--accent); font-weight: 800; font-size: .85rem; margin-bottom: 4px; }
 .gc h1 { font-size: 1.35rem; color: var(--navy); }
 .gc .form h2 { font-size: 1.02rem; margin-top: 6px; }
+.gc__pending h3 { margin-top: 6px; }
 .gc__guests { display: grid; gap: 8px; }
 .gc__guest { display: flex; gap: 6px; align-items: center; }
 .gc__done { text-align: center; display: grid; gap: 10px; justify-items: center; padding: 32px 18px; }

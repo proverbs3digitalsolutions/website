@@ -52,6 +52,8 @@ const addDays = (s, n) => { const x = new Date(`${s}T00:00:00Z`); x.setUTCDate(x
 const fmtTime = (t) => { if (!t) return ''; const [hh, mm] = t.split(':').map(Number); return `${((hh + 11) % 12) + 1}:${String(mm).padStart(2, '0')} ${hh < 12 ? 'AM' : 'PM'}`; };
 
 let redraw = () => {};
+// What the guest has filled in on a listing, held across a language-switch redraw (which rebuilds the whole page). Read once, then cleared.
+let keep = null;
 function shell(hostName, slug, ...children) {
   return h('div', { class: 'bk' },
     h('header', { class: 'bk__top' }, h('div', { class: 'bk__wrap bk__top-inner' },
@@ -80,7 +82,7 @@ export async function bookHostView(el, { params, query }) {
   }
   const { host, listings } = data;
   initGuestLang(host.guest_language);
-  document.title = `${host.name} — Book direct`;
+  document.title = `${host.name} — ${t('Book direct')}`;
   el.replaceChildren(shell(host.name, params.slug,
     h('section', { class: 'bk-hero' }, h('h1', null, host.name), host.intro && h('p', null, host.intro),
       host.demo && h('p', { class: 'alert alert--info' }, t('This is a demo booking page. Bookings and payments are turned off.')),
@@ -113,10 +115,12 @@ export async function bookListingView(el, { params, query }) {
   initGuestLang(host.guest_language);
   const l = data.listings.find((x) => x.unit_id === params.unitId);
   if (!l) {
-    el.replaceChildren(shell(host.name, slug, h('div', { class: 'card' }, h('h1', null, t('Not available')), h('p', null, h('a', { href: `#/book/${slug}` }, t('See all places'))))));
+    el.replaceChildren(shell(host.name, slug, h('div', { class: 'card' }, h('h1', null, t('Not available')), h('p', { class: 'muted' }, t("This place isn't taking online bookings right now.")), h('p', null, h('a', { href: `#/book/${slug}` }, t('See all places'))))));
     return;
   }
   document.title = `${l.unit_name} — ${host.name}`;
+  const kept = keep?.unitId === l.unit_id ? keep : null;
+  keep = null;
   if (query.cancelled) {
     // Release the held dates right away so they can be booked again. Only say "cancelled" once the release has worked.
     history.replaceState(null, '', `#/book/${slug}/${params.unitId}${srcQs()}`);
@@ -137,7 +141,7 @@ export async function bookListingView(el, { params, query }) {
   // Availability calendar: pick check-in, then check-out.
   let checkIn = null; let checkOut = null;
   let days = new Map();
-  let monthStart = todayManila().slice(0, 7);
+  let monthStart = kept?.monthStart || todayManila().slice(0, 7);
   const calBox = h('div', { class: 'bk-cal' });
   const summary = h('div', { class: 'bk-summary' });
   async function loadDays(fromMonth) {
@@ -236,7 +240,7 @@ export async function bookListingView(el, { params, query }) {
     };
     box.addEventListener('change', () => { sync(); updateQuote(); });
     qtyInput.addEventListener('change', () => { sync(); updateQuote(); });
-    return { a, sync, node: h('li', { class: 'bk-addon' },
+    return { a, sync, box, qtyInput, node: h('li', { class: 'bk-addon' },
       h('label', { class: 'check bk-addon__main' }, box,
         h('span', null, h('strong', null, (guestLang() === 'tl' && a.name_tl) || a.name),
           h('span', { class: 'small muted bk-addon__price' }, t(PRICING_KEY[a.pricing] || PRICING_KEY.per_stay, { price: peso(a.price) })),
@@ -276,6 +280,7 @@ export async function bookListingView(el, { params, query }) {
       return;
     }
     // A count below 1 is not quoted; its "At least 1 guest." is already in the Guests box.
+    if (!guestCountOk()) summary.replaceChildren(h('p', { class: 'muted' }, t('Enter the number of guests to see the total.')));
     if (!guestCountOk()) return;
     try {
       const promo = promoCode ? `&code=${encodeURIComponent(promoCode)}` : '';
@@ -416,6 +421,32 @@ export async function bookListingView(el, { params, query }) {
   await loadDays(monthStart);
   await loadDays(nextMonth(monthStart));
   if (pre && !takenBetween(query.check_in, query.check_out)) { checkIn = query.check_in; checkOut = query.check_out; }
+  if (kept) {
+    // A language switch: put back what the guest had filled in; the quote below runs again with it.
+    if (!kept.checkOut || !takenBetween(kept.checkIn, kept.checkOut)) { checkIn = kept.checkIn; checkOut = kept.checkOut; }
+    for (const [name, v] of Object.entries(kept.values)) if (form.elements[name]) form.elements[name].value = v;
+    for (const name of kept.ticked) if (form.elements[name]) form.elements[name].checked = true;
+    const payRadio = form.querySelector(`input[name=pay][value=${kept.pay}]`);
+    if (payRadio) payRadio.checked = true;
+    promoCode = kept.code;
+    codeInput.value = kept.code;
+    if (kept.code) codeBox.open = true;
+    for (const r of addonRows) {
+      const qty = kept.addons.get(r.a.id || r.a.addon_id);
+      if (qty) { r.box.checked = true; r.qtyInput.value = String(qty); r.sync(); }
+    }
+    setGuestsError(guestCountOk() ? '' : t('At least 1 guest.'));
+  }
+  // From here a language switch keeps the guest's entries.
+  redraw = () => {
+    keep = {
+      unitId: l.unit_id, monthStart, checkIn, checkOut, code: codeInput.value.trim(), pay: form.querySelector('input[name=pay]:checked')?.value,
+      values: Object.fromEntries(['name', 'num_guests', 'email', 'phone', 'notes'].map((n) => [n, form.elements[n].value])),
+      ticked: ['consent', 'accept_rules'].filter((n) => form.elements[n]?.checked),
+      addons: new Map(picked),
+    };
+    return bookListingView(el, { params, query: {} });
+  };
   // The lowest price on the open nights shown (weekend, holiday and season rates differ).
   const open = [...days.values()].filter((x) => !x.taken && x.price !== null && x.date >= todayManila()).map((x) => Number(x.price));
   const fromPrice = open.length ? Math.min(...open) : Number(l.nightly_rate);

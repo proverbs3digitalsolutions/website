@@ -92,6 +92,8 @@ function validate(body, spec, { partial = false } = {}) {
       }
       case 'date':
         if (typeof v !== 'string' || !isValidDate(v)) { fields[key] = `${label} must be a valid date.`; break; }
+        // YYYY-MM-DD text sorts in date order, so a plain comparison checks the range.
+        if (v < '2000-01-01' || v > '2100-12-31') { fields[key] = `${label} must be between 2000 and 2100.`; break; }
         out[key] = v;
         break;
       case 'time':

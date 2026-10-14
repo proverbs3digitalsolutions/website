@@ -9,6 +9,7 @@ const { one, query, tx } = require('../db');
 const { HttpError, ah } = require('../lib/http');
 const { validate } = require('../lib/validate');
 const { audit } = require('../lib/audit');
+const { changedKeys } = require('../lib/auditdiff');
 const { sendMail } = require('../lib/mailer');
 const { hashPassword, verifyPassword, requireAuth, requireRole, rateLimit } = require('../lib/auth');
 const account = require('../lib/account');
@@ -110,8 +111,15 @@ router.patch('/account/profile', requireAuth, ah(async (req, res) => {
     full_name: { type: 'string', required: true, max: 120, label: 'Full name' },
     phone: { type: 'phone', label: 'Mobile number' },
   });
-  await query('UPDATE users SET full_name = $2, phone = $3 WHERE user_id = $1', [req.user.user_id, body.full_name, body.phone || null]);
-  await audit(null, req.user, 'user.profile_updated', 'user', req.user.user_id);
+  const phone = body.phone || null;
+  await tx(async (db) => {
+    const { rows: [now] } = await db.query('SELECT full_name, phone FROM users WHERE user_id = $1 FOR UPDATE', [req.user.user_id]);
+    // Names the fields that really changed, never their values; a save that changes nothing writes nothing.
+    const fields = changedKeys(now, { full_name: body.full_name, phone });
+    if (!fields.length) return;
+    await db.query('UPDATE users SET full_name = $2, phone = $3 WHERE user_id = $1', [req.user.user_id, body.full_name, phone]);
+    await audit(db, req.user, 'user.profile_updated', 'user', req.user.user_id, { fields });
+  });
   res.json({ ok: true });
 }));
 

@@ -8,6 +8,7 @@
 const express = require('express');
 const { query, one } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
+const { own } = require('../lib/pick');
 const { validate, uuidParam, isValidDate, UUID_RE } = require('../lib/validate');
 const { audit } = require('../lib/audit');
 const { changedKeys } = require('../lib/auditdiff');
@@ -38,7 +39,7 @@ const validationError = (fields) => new HttpError(400, 'Please check the highlig
 const dayText = (d) => new Date(`${String(d).slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 // A filter id that isn't a UUID is ignored, like a bad channel or view, so an old or edited link still loads the list.
 const uuidOrNull = (v) => (typeof v === 'string' && UUID_RE.test(v) ? v : null);
-// A listing or property filter counts only when this workspace has that row; any other id is ignored like a bad one.
+// A listing, property or person filter counts only when this workspace has that row; any other id is ignored like a bad one.
 // The caller's own property scope still applies to the rows themselves.
 async function inWorkspace(user, sql, id) {
   if (!id) return null;
@@ -130,7 +131,7 @@ const VIEWS = {
 };
 
 function viewSql(view, params, user) {
-  let sql = VIEWS[view] || VIEWS.open;
+  let sql = own(VIEWS, view) || VIEWS.open;
   if (sql.includes('$USER')) { params.push(user.user_id); sql = sql.replace('$USER', `$${params.length}`); }
   return sql;
 }
@@ -155,7 +156,7 @@ const INBOX_SORTS = {
 // ---------------------------------------------------------------- conversations
 router.get('/inbox', ah(async (req, res) => {
   await defaults(req.user.organization_id);
-  const view = VIEWS[req.query.view] ? req.query.view : 'open';
+  const view = own(VIEWS, req.query.view) ? req.query.view : 'open';
   const params = [];
   const where = [propertyScope(req.user, params), viewSql(view, params, req.user)];
   const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 100) : '';
@@ -172,8 +173,8 @@ router.get('/inbox', ah(async (req, res) => {
   const unitId = await inWorkspace(req.user, `SELECT 1 FROM units u JOIN properties p ON p.property_id = u.property_id
                                                WHERE u.unit_id = $1 AND p.organization_id = $2`, uuidOrNull(qp.unit_id));
   if (unitId) { params.push(unitId); where.push(`u.unit_id = $${params.length}`); }
-  if (STAYS[qp.stay]) where.push(STAYS[qp.stay]);
-  const assignee = uuidOrNull(qp.assigned);
+  if (own(STAYS, qp.stay)) where.push(own(STAYS, qp.stay));
+  const assignee = await inWorkspace(req.user, `SELECT 1 FROM users WHERE user_id = $1 AND organization_id = $2 AND account_status = 'active'`, uuidOrNull(qp.assigned));
   if (qp.assigned === 'unassigned') where.push('c.assigned_to IS NULL');
   else if (assignee) { params.push(assignee); where.push(`c.assigned_to = $${params.length}`); }
   if (isValidDate(qp.msg_from)) { params.push(qp.msg_from); where.push(`(c.last_message_at AT TIME ZONE 'Asia/Manila')::date >= $${params.length}`); }
@@ -181,7 +182,7 @@ router.get('/inbox', ah(async (req, res) => {
   if (qp.attention === 'awaiting_reply') where.push(`last.direction = 'in'`);
   if (qp.attention === 'failed') where.push(`EXISTS (SELECT 1 FROM messages s WHERE s.conversation_id = c.conversation_id AND s.status = 'failed')`);
   if (qp.attention === 'scheduled') where.push(`EXISTS (SELECT 1 FROM messages s WHERE s.conversation_id = c.conversation_id AND s.status = 'scheduled')`);
-  const order = INBOX_SORTS[qp.sort] || INBOX_SORTS.unread;
+  const order = own(INBOX_SORTS, qp.sort) || INBOX_SORTS.unread;
   const { rows } = await query(
     `SELECT ${CONV_COLS}, last.body AS last_body, last.direction AS last_direction, last.status AS last_status,
             (SELECT COUNT(*) FROM messages s WHERE s.conversation_id = c.conversation_id AND s.status = 'scheduled') AS scheduled_count,
@@ -478,11 +479,13 @@ router.patch('/message-templates/:id', owners, ah(async (req, res) => {
   const t = await loadTemplate(req.user, uuidParam(req.params.id));
   const body = validate(req.body, templateSpec, { partial: true });
   await checkTemplate(req.user.organization_id, body, t);
-  const keys = Object.keys(body).filter((k) => body[k] !== null);
+  // Only the fields whose stored text really changed are written and logged, by name; a save with no change writes nothing.
+  const sent = Object.keys(body).filter((k) => body[k] !== null);
+  const keys = changedKeys(t, Object.fromEntries(sent.map((k) => [k, body[k]])));
   if (keys.length) {
     await query(`UPDATE message_templates SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')}, updated_at = now() WHERE template_id = $1`,
       [t.template_id, ...keys.map((k) => body[k])]);
-    await audit(null, req.user, 'template.updated', 'message_template', t.template_id);
+    await audit(null, req.user, 'template.updated', 'message_template', t.template_id, { fields: keys, name: t.name });
   }
   res.json({ template: await loadTemplate(req.user, t.template_id) });
 }));
@@ -531,7 +534,7 @@ router.get('/automations', ah(async (req, res) => {
             to_char(a.send_time, 'HH24:MI') AS send_time, a.enabled,
             (SELECT COUNT(*) FROM automation_runs r WHERE r.automation_id = a.automation_id AND r.message_id IS NOT NULL) AS sent_count
        FROM automations a JOIN message_templates t USING (template_id)
-      WHERE a.organization_id = $1 ORDER BY a.created_at`, [req.user.organization_id]);
+      WHERE a.organization_id = $1 ORDER BY a.created_at, a.automation_id`, [req.user.organization_id]);
   res.json({ automations: rows, can_edit: req.user.role === 'owner', sending: mailEnabled() });
 }));
 
@@ -554,16 +557,16 @@ router.patch('/automations/:id', owners, ah(async (req, res) => {
   const days = body.offset_days === undefined ? a.offset_days : body.offset_days;
   if (DAY_TRIGGERS.includes(body.trigger_event || a.trigger_event) && days === null) throw validationError({ offset_days: 'Enter the number of days.' });
   const keys = Object.keys(body).filter((k) => body[k] !== null);
+  // Only the fields whose stored value really changed are written and logged, by name; a save with no change writes nothing.
+  const fields = changedKeys(a, Object.fromEntries(keys.map((k) => [k, body[k]])));
   if (body.template_id) await loadTemplate(req.user, body.template_id);
-  if (keys.length) {
+  if (fields.length) {
     // Turning an automation on (again) starts counting from now, so it never
     // catches up on stays whose send time passed while it was off.
     const restart = body.enabled === true && !a.enabled ? ', created_at = now()' : '';
-    await query(`UPDATE automations SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')}${restart} WHERE automation_id = $1`,
-      [a.automation_id, ...keys.map((k) => body[k])]);
-    // Only the fields whose stored value really changed are logged, by name; a save with no change logs nothing.
-    const fields = changedKeys(a, Object.fromEntries(keys.map((k) => [k, body[k]])));
-    if (fields.length) await audit(null, req.user, 'automation.updated', 'automation', a.automation_id, { fields, name: a.name });
+    await query(`UPDATE automations SET ${fields.map((k, i) => `${k} = $${i + 2}`).join(', ')}${restart} WHERE automation_id = $1`,
+      [a.automation_id, ...fields.map((k) => body[k])]);
+    await audit(null, req.user, 'automation.updated', 'automation', a.automation_id, { fields, name: a.name });
   }
   res.json({ automation: await loadAutomation(req.user, a.automation_id) });
 }));

@@ -87,8 +87,9 @@ test('list puts Total and Balance right after the dates and hides Channel and Co
     assert.match(head, new RegExp(`class: 'col-sm-hide' \\}, '${name}'`), `hidden on phones: ${name}`);
   }
   const body = src.slice(src.indexOf("h('tbody'"), src.indexOf('viewSelect.addEventListener'));
-  assert.ok(body.indexOf('peso(r.total_amount)') < body.indexOf('r.guest_name ||'), 'Total cell before Guest cell');
-  assert.ok(body.indexOf('peso(r.balance)') < body.indexOf('r.guest_name ||'), 'Balance cell before Guest cell');
+  // The guest cell is the strong name; the check-in link's aria-label (QA round 8 #42) also mentions the guest name, so it is not matched.
+  assert.ok(body.indexOf('peso(r.total_amount)') < body.indexOf("h('strong', null, r.guest_name"), 'Total cell before Guest cell');
+  assert.ok(body.indexOf('peso(r.balance)') < body.indexOf("h('strong', null, r.guest_name"), 'Balance cell before Guest cell');
   assert.match(body, /h\('td', null, fmtDate\(r\.check_out\)\)/);
   assert.match(body, /h\('td', null, r\.unit_name/);
   assert.match(body, /h\('td', \{ class: 'col-sm-hide' \}, channelBadge/);

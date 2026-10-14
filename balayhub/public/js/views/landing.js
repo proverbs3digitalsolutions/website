@@ -158,7 +158,7 @@ extendTranslations({
   'We\'ll set up BalayHub for the way you host.': 'Ise-setup namin ang BalayHub ayon sa paraan ng pag-host mo.',
   'First name': 'Pangalan', 'Last name': 'Apelyido', 'Business name': 'Pangalan ng negosyo', 'e.g. Santos Staycations': 'hal. Santos Staycations',
   'Mobile number': 'Mobile number', 'What do you rent out?': 'Ano ang pinauupahan mo?',
-  'Short-term stays (Airbnb, staycations)': 'Panandaliang stays (Airbnb, staycation)', 'Long-term rentals (monthly tenants)': 'Long-term rentals (buwanang tenants)', 'Both': 'Pareho',
+  'Short-term stays (Airbnb, staycations)': 'Panandaliang stays (Airbnb, staycation)', 'Long-term rentals (monthly tenants)': 'Pangmatagalang upa (buwanan)', 'Both': 'Pareho',
   'Continue': 'Tuloy', 'Back': 'Bumalik',
   'Create your account': 'Gawin ang account mo', 'Email': 'Email', 'Password': 'Password', 'At least 8 characters.': 'Hindi bababa sa 8 characters.',
   'I agree to the ': 'Sumasang-ayon ako sa ', 'Terms of Service': 'Terms of Service', ' and have read the ': ' at nabasa ko ang ', 'Privacy Notice': 'Privacy Notice',
@@ -303,13 +303,28 @@ export function openGetStarted(preset = {}) {
     h('div', { class: 'error', role: 'alert' }));
   const showErrors = (fields) => {
     for (const el of box.querySelectorAll('[data-field] .error')) el.textContent = '';
+    for (const el of box.querySelectorAll('[aria-invalid]')) el.removeAttribute('aria-invalid');
     for (const [k, msg] of Object.entries(fields || {})) {
       const f = box.querySelector(`[data-field="${k}"] .error`);
-      if (f) f.textContent = msg;
+      if (!f) continue;
+      f.textContent = msg;
+      // The message is tied to its control, so a screen reader reads it with the field and knows the field is wrong.
+      f.id ||= `gs-${k}-err`;
+      const control = f.parentElement.querySelector('input, select, textarea');
+      control?.setAttribute('aria-invalid', 'true');
+      if (control && !(control.getAttribute('aria-describedby') || '').split(' ').includes(f.id)) {
+        control.setAttribute('aria-describedby', [control.getAttribute('aria-describedby'), f.id].filter(Boolean).join(' '));
+      }
     }
     // Focus the first field (in form order) that now has a message, so keyboard and screen-reader users land on it.
     const first = [...box.querySelectorAll('[data-field]')].find((field) => field.querySelector('.error')?.textContent);
     first?.querySelector('input, select, textarea')?.focus();
+  };
+  // Kept for the setup page, tied to the email (Google: not known yet, so the time is what ties it). Never the password.
+  const saveSetup = (email) => {
+    try {
+      localStorage.setItem('bh-setup', JSON.stringify({ email: email ? email.toLowerCase() : null, name: data.business_name, business_type: data.business_type, units_band: data.units_band, phone: data.phone || undefined, saved_at: Date.now() }));
+    } catch { /* private mode: the setup page simply asks again */ }
   };
   const read = () => { for (const el of box.querySelectorAll('input[name], select[name]')) data[el.name] = el.type === 'checkbox' ? el.checked : el.value.trim(); };
 
@@ -373,9 +388,9 @@ export function openGetStarted(preset = {}) {
             full_name: `${data.first_name} ${data.last_name}`.trim(), email: data.email, password: data.password, confirm_password: data.password,
             accept_privacy: Boolean(data.accept_privacy),
           });
-          // The workspace is created with these answers right after sign-up (see setupView).
+          // The setup page fills its form with these answers (see setupView); the person presses the button.
+          saveSetup(data.email);
           try {
-            localStorage.setItem('bh-setup', JSON.stringify({ name: data.business_name, business_type: data.business_type, units_band: data.units_band, phone: data.phone || undefined }));
             if (res.devVerificationLink) sessionStorage.setItem('bh-dev-verify', res.devVerificationLink);
             if (res.emailFailed) sessionStorage.setItem('bh-email-failed', '1');
           } catch { /* private mode: the setup page simply asks again */ }
@@ -423,7 +438,7 @@ export function openGetStarted(preset = {}) {
           box.querySelector('.gs-google')?.replaceChildren(g);
           g.querySelector('a')?.addEventListener('click', () => {
             read();
-            try { localStorage.setItem('bh-setup', JSON.stringify({ name: data.business_name, business_type: data.business_type, units_band: data.units_band, phone: data.phone || undefined })); } catch { /* ignore */ }
+            saveSetup(null);
           });
         }
       }).catch(() => {});

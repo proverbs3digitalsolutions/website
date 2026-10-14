@@ -49,7 +49,7 @@ function notifyCard(role) {
     const propList = h('div', { class: 'stack notify__props', hidden: all }, propBoxes);
     const radio = (v, t) => h('label', { class: 'check' }, h('input', { type: 'radio', name: 'scope', value: v, checked: (v === 'all') === all, onchange: () => { all = v === 'all'; propList.hidden = all; } }), h('span', null, t));
     const err = h('div', { class: 'error', role: 'alert' });
-    const save = h('button', { class: 'btn btn--primary btn--sm', type: 'submit' }, 'Save');
+    const save = h('button', { class: 'btn btn--primary btn--sm', type: 'submit', 'aria-label': 'Save notifications' }, 'Save');
     card.replaceChildren(
       h('div', { class: 'card__head' }, h('h2', null, 'Notifications')),
       h('form', {

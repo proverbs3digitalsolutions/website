@@ -46,7 +46,9 @@ const photos = () => between('async function photosModal(', '// A failed sync');
 test('a base rate must be an amount above zero: 0, negative and unreadable rates are refused, real amounts are not', () => {
   const baseRateError = new Function('parseAmount', `${baseRateHelper()}\nreturn baseRateError;`)(ui.parseAmount);
   const refused = 'Nightly rate must be greater than zero.';
-  for (const text of ['-100', '0', '0.00', '-0.01', 'abc', '1,5']) assert.equal(baseRateError(text), refused, `"${text}" is refused`);
+  for (const text of ['-100', '0', '0.00', '-0.01']) assert.equal(baseRateError(text), refused, `"${text}" is refused`);
+  // QA round 8 (#19): an unreadable rate has its own sentence; the zero and negative sentence stays for real numbers.
+  for (const text of ['abc', '1,5']) assert.equal(baseRateError(text), 'Nightly rate must be a valid amount (e.g. 8500 or 8500.50).', `"${text}" is unreadable`);
   for (const text of ['2500', '2,500', '₱2,500.50', ' 2500 ']) assert.equal(baseRateError(text), null, `"${text}" is fine`);
 });
 
@@ -56,7 +58,7 @@ test('the listing save refuses a bad base rate on the field, through the same fi
   assert.throws(() => checkBaseRate({ nightly_rate: '-100' }), (err) => err.status === 400
     && err.message === 'Please check the highlighted fields.'
     && err.fields.nightly_rate === 'Nightly rate must be greater than zero.');
-  assert.throws(() => checkBaseRate({ nightly_rate: 'abc' }), (err) => err.fields.nightly_rate === 'Nightly rate must be greater than zero.');
+  assert.throws(() => checkBaseRate({ nightly_rate: 'abc' }), (err) => err.fields.nightly_rate === 'Nightly rate must be a valid amount (e.g. 8500 or 8500.50).');
   assert.doesNotThrow(() => checkBaseRate({ nightly_rate: '2500' }));
 });
 

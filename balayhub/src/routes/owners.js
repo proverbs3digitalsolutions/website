@@ -9,8 +9,10 @@ const express = require('express');
 const config = require('../config');
 const { query, one, tx } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
+const { own } = require('../lib/pick');
 const { validate, uuidParam } = require('../lib/validate');
 const { audit } = require('../lib/audit');
+const { changedKeys } = require('../lib/auditdiff');
 const { requireRole } = require('../lib/auth');
 const { ownerStatement, statementText, monthHasEnded, reserveBalance } = require('../lib/statements');
 
@@ -35,10 +37,17 @@ const ownerSpec = {
 };
 
 const normEmail = (e) => (e ? e.toLowerCase() : null);
+// Sorted ids, so the same units in another order compare equal.
+const sortedIds = (ids) => [...ids].sort().join(',');
 
-function checkFee(body) {
+// A percentage fee needs a number: a box sent blank is refused, not kept as the old fee or replaced by the 20% default.
+// A flat-fee owner has no percentage, and an add that leaves the fee out (not sent at all) takes the default.
+function checkFee(raw, body, model) {
   if (body.management_fee_pct !== null && body.management_fee_pct !== undefined && Number(body.management_fee_pct) > 100) {
     throw validationError({ management_fee_pct: 'Management fee must be at most 100%.' });
+  }
+  if (model !== 'flat' && Object.hasOwn(raw, 'management_fee_pct') && body.management_fee_pct === null) {
+    throw validationError({ management_fee_pct: 'Management fee is required.' });
   }
 }
 
@@ -73,12 +82,19 @@ router.get('/unit-owners', ownersOnly, ah(async (req, res) => {
   }
   if (q.has_units === 'yes') having.push('COUNT(u.unit_id) > 0');
   if (q.has_units === 'no') having.push('COUNT(u.unit_id) = 0');
-  if (q.unit_id) { params.push(uuidParam(q.unit_id)); where.push(`EXISTS (SELECT 1 FROM units x WHERE x.owner_id = o.owner_id AND x.unit_id = $${params.length})`); }
+  if (q.unit_id) {
+    // A unit that is not in this workspace is ignored, so the list shows every owner (as reviews and the inbox do).
+    const unitId = uuidParam(q.unit_id);
+    if (await one('SELECT 1 FROM units u JOIN properties p USING (property_id) WHERE u.unit_id = $1 AND p.organization_id = $2', [unitId, org])) {
+      params.push(unitId);
+      where.push(`EXISTS (SELECT 1 FROM units x WHERE x.owner_id = o.owner_id AND x.unit_id = $${params.length})`);
+    }
+  }
   const { rows: owners } = await query(
     `SELECT o.*, COALESCE(array_agg(u.unit_id) FILTER (WHERE u.unit_id IS NOT NULL), '{}') AS unit_ids
        FROM unit_owners o LEFT JOIN units u ON u.owner_id = o.owner_id AND u.status = 'active'
       WHERE ${where.join(' AND ')} GROUP BY o.owner_id ${having.length ? `HAVING ${having.join(' AND ')}` : ''}
-      ORDER BY ${OWNER_SORTS[q.sort] || OWNER_SORTS.name}`, params);
+      ORDER BY ${own(OWNER_SORTS, q.sort) || OWNER_SORTS.name}`, params);
   const { rows: units } = await query(
     `SELECT u.unit_id, u.unit_name, p.property_name, u.owner_id FROM units u JOIN properties p USING (property_id)
       WHERE p.organization_id = $1 AND u.status = 'active' AND p.status = 'active' ORDER BY p.property_name, u.unit_name`, [org]);
@@ -88,7 +104,7 @@ router.get('/unit-owners', ownersOnly, ah(async (req, res) => {
 
 router.post('/unit-owners', ownersOnly, ah(async (req, res) => {
   const body = validate(req.body, ownerSpec);
-  checkFee(body);
+  checkFee(req.body, body, body.fee_model || 'net_pct');
   const { n } = await one('SELECT COUNT(*)::int AS n FROM unit_owners WHERE organization_id = $1 AND archived_at IS NULL', [req.user.organization_id]);
   if (n >= 100) throw new HttpError(409, 'You can have up to 100 unit owners.', { code: 'LIMIT' });
   const id = await tx(async (db) => {
@@ -111,13 +127,19 @@ router.post('/unit-owners', ownersOnly, ah(async (req, res) => {
 router.patch('/unit-owners/:id', ownersOnly, ah(async (req, res) => {
   const o = await loadOwner(req.user, uuidParam(req.params.id));
   const body = validate(req.body, ownerSpec, { partial: true });
-  checkFee(body);
+  checkFee(req.body, body, body.fee_model || o.fee_model);
   const cols = ['full_name', 'email', 'phone', 'management_fee_pct', 'cleaning_to_manager', 'notes',
     'fee_model', 'flat_monthly_fee', 'reserve_target', 'reserve_monthly']
     .filter((k) => k in body && (body[k] !== null || ['email', 'phone', 'notes'].includes(k)));
   await tx(async (db) => {
-    // Locked first, so the old email compared below is the one this update replaces.
-    const { rows: [before] } = await db.query('SELECT email FROM unit_owners WHERE owner_id = $1 FOR UPDATE', [o.owner_id]);
+    // Locked first, so the stored row compared below is the one this update replaces.
+    const { rows: [before] } = await db.query('SELECT * FROM unit_owners WHERE owner_id = $1 FOR UPDATE', [o.owner_id]);
+    const { rows: owned } = await db.query(`SELECT unit_id FROM units WHERE owner_id = $1 AND status = 'active'`, [o.owner_id]);
+    // Only the fields whose stored value really changes are named (names, never values). A save that changes nothing writes nothing.
+    const sent = Object.fromEntries(cols.map((k) => [k, body[k]]));
+    const unitsChanged = body.unit_ids !== undefined && sortedIds(body.unit_ids) !== sortedIds(owned.map((r) => r.unit_id));
+    const fields = [...changedKeys(before, sent), ...(unitsChanged ? ['unit_ids'] : [])];
+    if (!fields.length) return;
     const emailChanged = cols.includes('email') && normEmail(before.email) !== normEmail(body.email);
     if (cols.length) {
       await db.query(`UPDATE unit_owners SET ${cols.map((k, i) => `${k} = $${i + 2}`).join(', ')} WHERE owner_id = $1`, [o.owner_id, ...cols.map((k) => body[k])]);
@@ -131,7 +153,7 @@ router.patch('/unit-owners/:id', ownersOnly, ah(async (req, res) => {
       if (body.email === null) await db.query('UPDATE unit_owners SET portal_enabled = false WHERE owner_id = $1', [o.owner_id]);
     }
     await audit(db, req.user, 'unit_owner.updated', 'unit_owner', o.owner_id,
-      { fields: [...cols, ...(body.unit_ids ? ['unit_ids'] : [])], ...(emailChanged ? { portal_signed_out: true } : {}) });
+      { fields, ...(emailChanged ? { portal_signed_out: true } : {}) });
   });
   res.json({ ok: true });
 }));

@@ -3,6 +3,7 @@
 const express = require('express');
 const { query, one, tx } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
+const { own } = require('../lib/pick');
 const { validate, uuidParam, isValidDate } = require('../lib/validate');
 const { audit } = require('../lib/audit');
 const { changedKeys } = require('../lib/auditdiff');
@@ -69,7 +70,7 @@ router.get('/maintenance', ah(async (req, res) => {
   };
   const { rows } = await query(
     `${SELECT} WHERE ${where.join(' AND ')}
-     ORDER BY ${SORTS[req.query.sort] || `(m.status IN ('open','in_progress')) DESC,
+     ORDER BY ${own(SORTS, req.query.sort) || `(m.status IN ('open','in_progress')) DESC,
               array_position(ARRAY['urgent','high','medium','low'], m.priority), m.created_at DESC`}
      LIMIT 500`, params);
   // Names used in "Assigned to", for the filter list.
@@ -137,17 +138,25 @@ router.patch('/maintenance/:id', managers, ah(async (req, res) => {
     throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { title: 'Issue is required.' } });
   }
   for (const k of ['priority', 'status']) if (k in body && body[k] === null) delete body[k];
-  const keys = Object.keys(body);
-  if (!keys.length) return res.json({ request });
-  const sets = keys.map((k, i) => `${k} = $${i + 2}`);
-  if (body.status) {
-    sets.push(body.status === 'resolved' ? 'resolved_at = COALESCE(resolved_at, now())' : 'resolved_at = NULL');
-  }
+  if (!Object.keys(body).length) return res.json({ request });
   await tx(async (db) => {
+    // Compare with the row as it is now, locked for the write. A save that changes nothing writes nothing.
+    const { rows: [current] } = await db.query(
+      `SELECT title, description, priority, status, assigned_to, estimated_cost FROM maintenance_requests WHERE request_id = $1 FOR UPDATE`,
+      [request.request_id]);
+    const fields = changedKeys(current, body);
+    if (!fields.length) return;
+    const sets = fields.map((k, i) => `${k} = $${i + 2}`);
+    if (fields.includes('status')) {
+      sets.push(body.status === 'resolved' ? 'resolved_at = COALESCE(resolved_at, now())' : 'resolved_at = NULL');
+    }
     await db.query(`UPDATE maintenance_requests SET ${sets.join(', ')} WHERE request_id = $1`,
-      [request.request_id, ...keys.map((k) => body[k])]);
-    await audit(db, req.user, body.status && body.status !== request.status ? 'maintenance.status_changed' : 'maintenance.updated',
-      'maintenance', request.request_id, { before: Object.fromEntries(keys.map((k) => [k, request[k]])), after: body });
+      [request.request_id, ...fields.map((k) => body[k])]);
+    if (fields.includes('status')) {
+      await audit(db, req.user, 'maintenance.status_changed', 'maintenance', request.request_id, { fields, from: current.status, to: body.status });
+    } else {
+      await audit(db, req.user, 'maintenance.updated', 'maintenance', request.request_id, { fields });
+    }
   });
   res.json({ request: await loadRequest(req.user, request.request_id) });
 }));
@@ -292,16 +301,16 @@ router.patch('/maintenance-schedules/:id', managers, ah(async (req, res) => {
   const body = validate(req.body, { ...SCHEDULE_FIELDS, active: { type: 'bool', label: 'Active' } }, { partial: true });
   if ('next_due' in body) await checkNextDue(body.next_due);
   const keys = Object.keys(body);
-  if (keys.length) {
+  const fields = changedKeys(schedule, body);
+  if (fields.length) {
     await tx(async (db) => {
-      await db.query(`UPDATE maintenance_schedules SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')} WHERE schedule_id = $1`,
-        [schedule.schedule_id, ...keys.map((k) => body[k])]);
-      // Resuming a paused job has its own row (#31). Any other save names only the fields that changed, and none if nothing did.
+      await db.query(`UPDATE maintenance_schedules SET ${fields.map((k, i) => `${k} = $${i + 2}`).join(', ')} WHERE schedule_id = $1`,
+        [schedule.schedule_id, ...fields.map((k) => body[k])]);
+      // Resuming a paused job has its own row (#31). Any other save names only the fields that changed, and writes nothing if none did.
       if (keys.length === 1 && body.active === true && !schedule.active) {
         await audit(db, req.user, 'maintenance.schedule_resumed', 'maintenance_schedule', schedule.schedule_id, { title: schedule.title });
       } else {
-        const fields = changedKeys(schedule, body);
-        if (fields.length) await audit(db, req.user, 'maintenance.schedule_updated', 'maintenance_schedule', schedule.schedule_id, { fields });
+        await audit(db, req.user, 'maintenance.schedule_updated', 'maintenance_schedule', schedule.schedule_id, { fields });
       }
     });
   }

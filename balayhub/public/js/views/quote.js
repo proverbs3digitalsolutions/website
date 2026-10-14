@@ -2,7 +2,7 @@
 
 import { get, post, ApiError } from '../api.js';
 import { h, brand, field, readForm, clearErrors, showErrors } from '../ui.js';
-import { t, tServer, tFields, guestLang, initGuestLang, langToggle, extendTranslations, fmtDateL as fmtDate } from '../i18n.js';
+import { t, tServer, tFields, guestLang, initGuestLang, langToggle, extendTranslations, fmtDateL as fmtDate, fmtDateTimeL } from '../i18n.js';
 
 extendTranslations({
   'Too many attempts': 'Napakaraming subok',
@@ -48,19 +48,24 @@ extendTranslations({
   '1 night': '1 gabi',
   'Loading…': 'Naglo-load…',
   'the host': 'ang host',
+  'Please check the highlighted fields.': 'Pakitingnan ang mga naka-highlight.',
 });
 
 // Only a 404 is a bad link; a rate limit or a server error says so instead.
 const failTitle = (err) => (err.status === 404 ? t('Quote not found') : err.status === 429 ? t('Too many attempts') : t('Something went wrong'));
 
 const peso = (v) => { const n = Number(v || 0); return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`; };
-const fmtDateTime = (iso) => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Manila' });
+// What the guest has typed in the details form. A language switch rebuilds the whole page, so this is handed to the redraw.
+const typedDetails = (el) => {
+  const f = el.querySelector('form.form');
+  return f ? readForm(f) : {};
+};
 
-export async function quoteView(el, { params }) {
+export async function quoteView(el, { params, kept = {} }) {
   initGuestLang();
   const token = encodeURIComponent(params.token);
   let q = null;
-  const redraw = () => quoteView(el, { params });
+  const redraw = () => quoteView(el, { params, kept: typedDetails(el) });
   const shell = (host, ...children) => h('div', { class: 'bk' },
     h('header', { class: 'bk__top' }, h('div', { class: 'bk__wrap bk__top-inner' },
       h('span', { class: 'bk__host' }, host || t('Your quote')),
@@ -94,17 +99,17 @@ export async function quoteView(el, { params }) {
   const submit = h('button', { class: 'btn btn--primary btn--block', type: 'submit' }, t('Pay {amount}', { amount: peso(due) }));
   const form = h('form', { class: 'form', novalidate: true }, formError,
     h('h2', null, t('Your details')),
-    field({ name: 'name', label: t('Full name'), required: true, maxlength: 120, autocomplete: 'name', value: q.guest_name || '' }),
+    field({ name: 'name', label: t('Full name'), required: true, maxlength: 120, autocomplete: 'name', value: kept.name ?? (q.guest_name || '') }),
     h('div', { class: 'form-row form-row--2' },
-      field({ name: 'email', label: t('Email'), type: 'email', required: true, autocomplete: 'email', value: q.guest_email || '', hint: t('We send your confirmation here.') }),
-      field({ name: 'phone', label: t('Mobile number'), type: 'tel', required: true, inputmode: 'tel', autocomplete: 'tel', placeholder: '0917 123 4567', value: q.guest_phone || '' })),
+      field({ name: 'email', label: t('Email'), type: 'email', required: true, autocomplete: 'email', value: kept.email ?? (q.guest_email || ''), hint: t('We send your confirmation here.') }),
+      field({ name: 'phone', label: t('Mobile number'), type: 'tel', required: true, inputmode: 'tel', autocomplete: 'tel', placeholder: '0917 123 4567', value: kept.phone ?? (q.guest_phone || '') })),
     rules && h('div', { class: 'field bk-rules', dataset: { field: 'accept_rules' } },
       h('strong', { id: 'bk-rules-h' }, t('House rules')),
       h('div', { class: 'bk-rules__text', tabindex: 0, role: 'region', 'aria-labelledby': 'bk-rules-h' }, rules),
-      h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'accept_rules' }), h('span', null, t('I agree to the house rules'))),
+      h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'accept_rules', checked: Boolean(kept.accept_rules) }), h('span', null, t('I agree to the house rules'))),
       h('div', { class: 'error', role: 'alert' })),
     h('div', { class: 'field', dataset: { field: 'consent' } },
-      h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'consent' }),
+      h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'consent', checked: Boolean(kept.consent) }),
         h('span', null, t('I agree that my details are shared with {host} to manage my booking (see the ', { host }), h('a', { href: '#/privacy', target: '_blank' }, t('privacy notice')), ').')),
       h('div', { class: 'error', role: 'alert' })),
     submit);
@@ -131,8 +136,13 @@ export async function quoteView(el, { params }) {
       location.href = r.checkout_url;
     } catch (err) {
       if (err.code === 'QUOTE_EXPIRED' || err.status === 410) { redraw(); return; }
-      formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, err instanceof ApiError ? tServer(err.message) : t('Something went wrong. Please try again.')));
-      if (err.fields) showErrors(form, tFields(err.fields));
+      // Each message shows once: one whose field is on the form sits at that field; the banner names only the rest.
+      const unplaced = err.fields ? showErrors(form, tFields(err.fields)) : [];
+      const banner = !(err instanceof ApiError) ? t('Something went wrong. Please try again.')
+        : unplaced.length ? unplaced.join(' ')
+        : Object.keys(err.fields || {}).length ? t('Please check the highlighted fields.')
+        : tServer(err.message);
+      formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, banner));
       submit.disabled = false;
       submit.textContent = t('Pay {amount}', { amount: peso(due) });
       busy = false;
@@ -158,6 +168,6 @@ export async function quoteView(el, { params }) {
         row(t('Due now'), peso(due), true),
         due < total && row(t('Balance, due before check-in'), peso(total - due))),
       q.note && h('div', { class: 'bk-policy' }, h('strong', null, t('Note from {host}', { host })), h('p', { class: 'small bk-quote__note' }, q.note)),
-      h('p', { class: 'alert alert--warn', role: 'status' }, t('This offer is valid until {date}.', { date: fmtDateTime(q.expires_at) }), ' ', t('Your dates are held only when you pay.'))),
+      h('p', { class: 'alert alert--warn', role: 'status' }, t('This offer is valid until {date}.', { date: fmtDateTimeL(q.expires_at) }), ' ', t('Your dates are held only when you pay.'))),
     h('div', { class: 'card' }, form)));
 }

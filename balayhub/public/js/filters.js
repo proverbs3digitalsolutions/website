@@ -11,6 +11,9 @@
 // An amountrange field takes `keys: [min, max]` and follows the same rule for amounts. A number field may give a
 // `pattern` (RegExp) and `patternText`: a value that fails it is flagged, not applied, and gets no chip.
 // initFilters() drops text and impossible dates in from/to, and non-UUID ids, before any page fetches.
+// A select field with an `options` list resets a value that is not one of them to its default before the bar draws,
+// so a link with ?rating=9 shows the full list and no chip. A field whose options arrive after the bar is built
+// sets `keepUnknown: true` to keep the value.
 
 import { h, fmtDate } from './ui.js';
 import { state } from './app.js';
@@ -67,7 +70,8 @@ export function initFilters(key, query, defaults) {
   const out = { ...defaults };
   for (const k of Object.keys(defaults)) {
     const v = urlHas ? query[k] : saved[k];
-    if (v !== undefined && v !== null) out[k] = String(v);
+    // Text is trimmed; a value of only spaces is the default, not an empty-quotes chip.
+    if (v !== undefined && v !== null) out[k] = String(v).trim() === '' && String(v) !== '' ? defaults[k] : String(v).trim();
   }
   return sanitise(out, defaults);
 }
@@ -232,6 +236,11 @@ function clearField(f, values, defaults) {
  */
 export function filterBar({ key, values, defaults, search, quick = [], more = [], onChange, extra }) {
   const all = [...quick, ...more];
+  for (const f of all) {
+    if (!f || (f.type && f.type !== 'select') || !Array.isArray(f.options) || f.keepUnknown) continue;
+    const v = String(values[f.name] ?? '');
+    if (v !== '' && v !== String(defaults[f.name] ?? '') && !f.options.some(([k]) => String(k) === v)) values[f.name] = defaults[f.name] ?? '';
+  }
   const chips = h('div', { class: 'flt__chips', 'aria-live': 'polite' });
   const moreBtn = more.length ? h('button', { type: 'button', class: 'btn btn--secondary flt__more', 'aria-expanded': 'false' }) : null;
   const panel = more.length ? h('div', { class: 'flt__panel card card--soft', hidden: true }) : null;

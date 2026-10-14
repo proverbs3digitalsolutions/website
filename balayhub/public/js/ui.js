@@ -345,7 +345,7 @@ export function makeForm({ fields, submitText = 'Save', onSubmit, cancel, draftK
   const form = h('form', { class: 'form', novalidate: true },
     formError, fields, extra,
     h('div', { class: 'form-actions' },
-      cancel && h('button', { class: 'btn btn--secondary', type: 'button', onclick: cancel }, 'Cancel'),
+      cancel && h('button', { class: 'btn btn--secondary', type: 'button', onclick: () => { clearDraft(); cancel(); } }, 'Cancel'),
       submitBtn));
   // A field's message clears as soon as the person changes that field; the summary goes with the last marked field.
   const clearFieldError = (e) => {
@@ -371,11 +371,13 @@ export function makeForm({ fields, submitText = 'Save', onSubmit, cancel, draftK
     // Quick required-field check so obvious gaps show instantly (and offline);
     // the server still validates everything.
     const missing = {};
+    const labelOf = (el) => form.querySelector(`label[for="${CSS.escape(el.id)}"]`)?.firstChild?.textContent?.trim() || 'This field';
     for (const el of form.elements) {
-      if (el.required && el.name && el.type !== 'checkbox' && !String(el.value).trim()) {
-        const lbl = form.querySelector(`label[for="${CSS.escape(el.id)}"]`)?.firstChild?.textContent?.trim() || 'This field';
-        missing[el.name] = `${lbl} is required.`;
-      }
+      if (el.required && el.name && el.type !== 'checkbox' && !String(el.value).trim()) missing[el.name] = `${labelOf(el)} is required.`;
+    }
+    // An amount over the server's cap is refused here, before onSubmit can ask any question about it.
+    for (const el of form.querySelectorAll('.input-money input')) {
+      if (el.name && !missing[el.name] && parseAmount(el.value) > 99999999.99) missing[el.name] = `${labelOf(el)} is too large.`;
     }
     if (Object.keys(missing).length) {
       formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert', dataset: { fieldNote: '' } }, 'Please fill in the highlighted fields.'));
@@ -383,6 +385,7 @@ export function makeForm({ fields, submitText = 'Save', onSubmit, cancel, draftK
       busy = false;
       return;
     }
+    const focusedBefore = document.activeElement;
     submitBtn.disabled = true;
     const original = submitBtn.textContent;
     submitBtn.textContent = 'Saving…';
@@ -413,6 +416,11 @@ export function makeForm({ fields, submitText = 'Save', onSubmit, cancel, draftK
       busy = false;
       submitBtn.disabled = false;
       submitBtn.textContent = original;
+      // The disabled button lost focus: put it on the first invalid field, else where it was, else the button.
+      if (form.isConnected && !form.contains(document.activeElement)) {
+        const bad = form.querySelector('.field--invalid input, .field--invalid select, .field--invalid textarea');
+        (bad || (form.contains(focusedBefore) ? focusedBefore : submitBtn)).focus();
+      }
     }
   });
   return form;

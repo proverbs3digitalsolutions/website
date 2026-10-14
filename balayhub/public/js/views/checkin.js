@@ -25,6 +25,7 @@ extendTranslations({
   'Please enter your mobile number.': 'Pakilagay ang mobile number mo.',
   'Your ID must be a JPG, PNG or WEBP photo.': 'Dapat JPG, PNG o WEBP na litrato ang ID mo.',
   'Please agree so your host can register you with the building.': 'Paki-agree para ma-register ka ng host sa building.',
+  'Remove guest {n}': 'Alisin ang guest {n}',
 });
 
 // The heading follows the cause: only a 404 is a bad link.
@@ -87,11 +88,16 @@ export async function guestCheckinView(el, { params }) {
     if (others.children.length + 1 >= s.guests_allowed) { toast(t('This unit allows up to {n} guests.', { n: s.guests_allowed }), 'error'); return; }
     const row = h('div', { class: 'gc__guest' },
       h('input', { class: 'input', name: 'guest', value, maxlength: 120, placeholder: t('Full name'), 'aria-label': t('Guest {n} full name', { n: others.children.length + 2 }) }),
-      h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': t('Remove'), onclick: () => { row.remove(); renumber(); } }, '✕'));
+      h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': t('Remove guest {n}', { n: others.children.length + 2 }), onclick: () => { row.remove(); renumber(); } }, '✕'));
     others.append(row);
   };
   // Keep "Guest 2, Guest 3…" labels in order after removing someone.
-  function renumber() { [...others.querySelectorAll('input')].forEach((inp, i) => inp.setAttribute('aria-label', t('Guest {n} full name', { n: i + 2 }))); }
+  function renumber() {
+    [...others.querySelectorAll('.gc__guest')].forEach((row, i) => {
+      row.querySelector('input').setAttribute('aria-label', t('Guest {n} full name', { n: i + 2 }));
+      row.querySelector('button').setAttribute('aria-label', t('Remove guest {n}', { n: i + 2 }));
+    });
+  }
   // House rules: shown when the listing has some; the box is required until they were accepted once.
   const rules = String(s.house_rules || '').trim();
   const rulesAt = s.rules_accepted_at;
@@ -190,9 +196,13 @@ export async function guestCheckinView(el, { params }) {
         h('p', null, h('button', { class: 'linkbtn', onclick: () => guestCheckinView(el, { params }) }, t('Review or change my answers'))))));
     } catch (err) {
       progress.textContent = '';
-      const msg = err instanceof ApiError ? tServer(err.message) : (err.message || t('Something went wrong. Please try again.'));
+      // Each message shows once: one whose field is on the form sits at that field; the banner names only the rest.
+      const unplaced = err.fields ? showErrors(form, tFields(err.fields)) : [];
+      const msg = !(err instanceof ApiError) ? (err.message || t('Something went wrong. Please try again.'))
+        : unplaced.length ? unplaced.join(' ')
+        : Object.keys(err.fields || {}).length ? t('Please check the highlighted fields.')
+        : tServer(err.message);
       formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, err.offline ? t("You're offline. Your answers are still here; try again when you're connected.") : msg));
-      if (err.fields) showErrors(form, tFields(err.fields));
       formError.scrollIntoView?.({ block: 'nearest' });
     } finally {
       busy = false;

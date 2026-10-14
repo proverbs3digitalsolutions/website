@@ -67,9 +67,9 @@ test('staff and cleaners get back only the job-detail shape from a create, with 
   const staffStay = await staff.post(`/api/reservations/${stay.booking_id}/damage`, { description: 'Staff scuffed door', estimated_cost: '70' });
   assert.equal(staffStay.status, 201, JSON.stringify(staffStay.data));
   const staffUnit = await staff.post(`/api/units/${unit.unit_id}/damage`, { description: 'Staff stain', estimated_cost: '20' });
-  assert.equal(staffUnit.status, 201, JSON.stringify(staffUnit.data));
+  assert.equal(staffUnit.status, 403, 'staff cannot report on a whole unit');
 
-  for (const res of [staffJob, cleanerJob, staffStay, staffUnit]) {
+  for (const res of [staffJob, cleanerJob, staffStay]) {
     for (const key of MANAGEMENT_ONLY) {
       assert.equal(key in res.data.report, false, `${key} must not come back to the filer (${res.data.report.description})`);
     }

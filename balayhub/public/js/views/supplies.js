@@ -15,6 +15,7 @@ export function unitWord(n, unit) {
   if (Number(n) !== 1 || unit.toLowerCase() === 'pcs') return unit;
   if (/ies$/.test(unit)) return unit.replace(/ies$/, 'y');
   if (/(s|x|z|ch|sh)es$/.test(unit)) return unit.slice(0, -2);
+  if (/ss$/i.test(unit)) return unit; // "glass" is already singular
   return unit.replace(/s$/, '');
 }
 export const qtyLabel = (n, unit) => `${n} ${unitWord(n, unit)}`;
@@ -127,11 +128,11 @@ export async function suppliesView(el, { query = {} } = {}) {
             h('span', { class: 'row__sub' }, `Keep at least ${qtyLabel(s.par_level, s.unit_label)}`)),
           h('div', { class: 'ops-supply__count', 'aria-label': `${qtyLabel(s.on_hand, s.unit_label)} on hand` }, h('strong', null, String(s.on_hand)), h('span', { class: 'muted small' }, ` ${unitWord(s.on_hand, s.unit_label)}`)),
           canManage && h('div', { class: 'ops-supply__actions' },
-            h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => move(s, 'restocked') }, 'Add stock'),
-            h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => move(s, 'count') }, 'Count'),
+            h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => move(s, 'restocked'), 'aria-label': `Add stock to ${s.name}` }, 'Add stock'),
+            h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => move(s, 'count'), 'aria-label': `Count ${s.name}` }, 'Count'),
             h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => move(s, 'used'), 'aria-label': `Record use of ${s.name}` }, 'Record use'),
             h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => showHistory(s), 'aria-label': `History of ${s.name}` }, 'History'),
-            h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => addOrEdit(s) }, 'Edit'),
+            h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => addOrEdit(s), 'aria-label': `Edit ${s.name}` }, 'Edit'),
             h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => archive(s), 'aria-label': `Archive ${s.name}` }, 'Archive'))))))));
   }
 

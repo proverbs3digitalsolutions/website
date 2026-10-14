@@ -183,11 +183,12 @@ export async function propertyDetailView(el, { params, query, rerender }) {
   const unitRow = (u) => {
     const actions = [];
     if (canManage && u.status === 'active' && !archived) {
-      if (!stayOnly && u.occupancy_status === 'vacant') actions.push(h('button', { class: 'btn btn--primary', onclick: () => assignTenantModal({ unit: { ...u, property_name: property.property_name }, onSaved: rerender }) }, 'Assign Tenant'));
-      actions.push(h('button', { class: 'btn btn--ghost btn--sm', onclick: () => unitModal(property, u, rerender) }, 'Edit'));
+      if (!stayOnly && u.occupancy_status === 'vacant') actions.push(h('button', { class: 'btn btn--primary', 'aria-label': `Assign tenant to unit ${u.unit_name}`, onclick: () => assignTenantModal({ unit: { ...u, property_name: property.property_name }, onSaved: rerender }) }, 'Assign Tenant'));
+      actions.push(h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Edit unit ${u.unit_name}`, onclick: () => unitModal(property, u, rerender) }, 'Edit'));
       if (u.occupancy_status !== 'occupied') {
         actions.push(h('button', {
           class: 'btn btn--ghost btn--sm',
+          'aria-label': `Archive unit ${u.unit_name}`,
           onclick: async () => {
             if (!await confirmDialog({ title: `Archive unit ${u.unit_name}?`, text: 'Its history is kept. You can restore it later.', confirmText: 'Archive', danger: true })) return;
             try { await post(`/units/${u.unit_id}/archive`); toast('Unit archived.'); rerender(); } catch (err) { toast(err.message, 'error'); }
@@ -196,7 +197,7 @@ export async function propertyDetailView(el, { params, query, rerender }) {
       }
     }
     if (canManage && u.status === 'archived' && !archived) {
-      actions.push(h('button', { class: 'btn btn--ghost btn--sm', onclick: async () => { try { await post(`/units/${u.unit_id}/restore`); toast('Unit restored.'); rerender(); } catch (err) { toast(err.message, 'error'); } } }, 'Restore'));
+      actions.push(h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Restore unit ${u.unit_name}`, onclick: async () => { try { await post(`/units/${u.unit_id}/restore`); toast('Unit restored.'); rerender(); } catch (err) { toast(err.message, 'error'); } } }, 'Restore'));
     }
     return h('li', null, h('div', { class: 'row' },
       h('div', { class: 'row__main' },

@@ -7,6 +7,7 @@
 const express = require('express');
 const { query, one } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
+const { own } = require('../lib/pick');
 const { validate, uuidParam, isValidDate } = require('../lib/validate');
 const { audit } = require('../lib/audit');
 const { requireRole } = require('../lib/auth');
@@ -145,7 +146,7 @@ async function emailGuest(b, d, kind, user) {
     console.warn(`Deposit email failed for booking ${b.booking_id}: ${raw}`);
     return { sent: false, error: 'The email could not be sent. Ask an owner or manager to send it again.' };
   }
-  return { sent: true, to: user?.role === 'staff' ? 'the guest' : b.guest_email };
+  return { sent: true, to: ['owner', 'manager'].includes(user?.role) ? b.guest_email : 'the guest' };
 }
 
 // Deposits still held after check-out (for Home).
@@ -189,8 +190,9 @@ router.get('/deposits', managers, ah(async (req, res) => {
             COALESCE(g.full_name, b.guest_label) AS guest_name
        FROM stay_deposits d JOIN bookings b USING (booking_id) JOIN units u ON u.unit_id = b.unit_id JOIN properties p ON p.property_id = u.property_id
        LEFT JOIN guests g ON g.guest_id = b.guest_id
-      WHERE ${where.join(' AND ')} ORDER BY ${DEPOSIT_SORTS[q.sort] || DEPOSIT_SORTS.received} LIMIT 500`, params);
+      WHERE ${where.join(' AND ')} ORDER BY ${own(DEPOSIT_SORTS, q.sort) || DEPOSIT_SORTS.received} LIMIT 500`, params);
   res.json({ deposits: rows });
 }));
 
 module.exports = router;
+module.exports.emailGuest = emailGuest;

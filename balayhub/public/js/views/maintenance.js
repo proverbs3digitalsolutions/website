@@ -33,6 +33,7 @@ export function nextDueWindow(today = todayManila()) {
 // "From cleaning task" badge, linking to the job. Inside a list row (already a link) it navigates by click.
 const taskBadge = (m, inRow) => h('a', {
   class: 'badge badge--ops', href: `#/housekeeping/${m.cleaning_task_id}`,
+  'aria-label': `From cleaning task, ${m.unit_name ? unitLabel(m.unit_name) : m.property_name}`,
   ...(inRow ? { onclick: (e) => { e.preventDefault(); e.stopPropagation(); navigate(`#/housekeeping/${m.cleaning_task_id}`); } } : {}),
 }, 'From cleaning task');
 
@@ -135,7 +136,7 @@ export async function maintenanceView(el, { query }) {
       ].filter(Boolean),
       more: [
         { name: 'unit_id', label: 'Unit', all: 'All units', options: [['none', 'Common area / whole property'], ...units.filter((u) => !filters.property_id || u.property_id === filters.property_id).map((u) => [u.unit_id, `${unitLabel(u.unit_name)}${properties.length > 1 && !filters.property_id ? ` · ${u.property_name}` : ''}`])] },
-        { name: 'assigned', label: 'Assigned to', all: 'Anyone', options: [['none', 'Not assigned yet'], ...assignees.map((a) => [a, a])] },
+        { name: 'assigned', label: 'Assigned to', all: 'Anyone', options: [['none', 'Not assigned yet'], ...assignees.map((a) => [a, a])], keepUnknown: true },
         { name: 'from', label: 'Reported between', type: 'daterange', keys: ['from', 'to'] },
         { name: 'cost', label: 'Cost', all: 'Any', options: [['recorded', 'Has recorded cost'], ['none', 'No cost recorded'], ['estimate_only', 'Estimate only']] },
         { name: 'sort', label: 'Sort by', all: 'Open first, most urgent', options: [['newest', 'Newest reported'], ['oldest', 'Oldest reported'], ['priority', 'Priority'], ['cost', 'Highest cost'], ['property', 'Property and unit']] },
@@ -199,8 +200,8 @@ export async function maintenanceView(el, { query }) {
           h('span', { class: 'row__sub' }, x.active ? `Next due ${fmtDate(String(x.next_due).slice(0, 10))}` : 'Not creating requests')),
         h('div', { class: 'ops-sched__actions' },
           badge(x.priority),
-          h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => form(x) }, 'Edit'),
-          h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => pause(x) }, x.active ? 'Pause' : 'Resume')))))
+          h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'aria-label': `Edit ${x.title}`, onclick: () => form(x) }, 'Edit'),
+          h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'aria-label': `${x.active ? 'Pause' : 'Resume'} ${x.title}`, onclick: () => pause(x) }, x.active ? 'Pause' : 'Resume')))))
         : h('p', { class: 'muted' }, 'No recurring jobs yet.')));
   }
   renderBar();

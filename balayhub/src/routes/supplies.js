@@ -21,6 +21,8 @@ const MAX_QTY = 100000;
 const MAX_NOTE = 200;
 const validationError = (fields) => new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields });
 const nameTaken = () => validationError({ name: 'This property already has an item with that name.' });
+// The wording for a use above what is on hand: the log note and the refusal both say it.
+const askedFor = (asked, onHand) => `Asked for ${asked}, only ${onHand} on hand.`;
 
 const SUPPLY_FIELDS = {
   name: { type: 'string', required: true, max: 80, label: 'Item name' },
@@ -32,11 +34,13 @@ const MOVEMENT_FIELDS = {
   quantity: { type: 'int', required: true, min: 0, max: MAX_QTY, label: 'Quantity' },
   note: { type: 'string', max: MAX_NOTE, label: 'Note' },
 };
-// What a cleaner (or anyone working a task) may record: use or restock, at least one.
+// What a cleaner (or anyone working a task) may record: use or restock, at least one. record_on_hand is
+// the owner or manager's "Record what is on hand" choice for a use above what is on hand.
 const TASK_ITEM_FIELDS = {
   supply_id: { type: 'uuid', required: true, label: 'Supply' },
   kind: { type: 'enum', values: ['used', 'restocked'], required: true, label: 'Movement' },
   quantity: { type: 'int', required: true, min: 1, max: MAX_QTY, label: 'Quantity' },
+  record_on_hand: { type: 'bool', label: 'Record what is on hand' },
 };
 
 const SUPPLY_SELECT = `
@@ -86,7 +90,7 @@ async function applyMovement(db, user, supply, { kind, quantity, note = null, ta
     onHand = 0;
     logged = supply.on_hand;
     // The log note holds MAX_NOTE characters, so a long note gives way to the message.
-    const short = `Asked for ${quantity}, only ${supply.on_hand} on hand.`;
+    const short = askedFor(quantity, supply.on_hand);
     logNote = [note?.slice(0, MAX_NOTE - short.length - 1), short].filter(Boolean).join(' ');
   } else onHand = supply.on_hand - quantity;
   await db.query(
@@ -211,11 +215,15 @@ router.get('/supplies/:id/movements', managers, ah(async (req, res) => {
 // Cleaners record what they used or restocked on a task. Supplies must belong to the task's
 // property. Rows are locked in id order so two tasks can't deadlock each other. A used item with
 // nothing on hand is skipped and named back, so the rest of the job's supplies still save.
+// Owners and managers are asked first (D-77): a use with nothing on hand is refused, and a use above
+// what is on hand is refused unless the item sets record_on_hand. Refusals are keyed `qty-<supply id>`,
+// the job screen's row for that item (housekeeping.js), so the message lands on the row.
 router.post('/cleaning-tasks/:id/supplies', ah(async (req, res) => {
   const task = await loadWorkableTask(req.user, uuidParam(req.params.id));
   const raw = req.body?.items;
   if (!Array.isArray(raw) || !raw.length || raw.length > 50) throw validationError({ items: 'Add between 1 and 50 supplies.' });
   const items = raw.map((x) => validate(x, TASK_ITEM_FIELDS)).sort((a, b) => (a.supply_id < b.supply_id ? -1 : 1));
+  const asksFirst = ['owner', 'manager'].includes(req.user.role);
   const skipped = [];
   await tx(async (db) => {
     for (const item of items) {
@@ -224,8 +232,12 @@ router.post('/cleaning-tasks/:id/supplies', ah(async (req, res) => {
         throw validationError({ items: "One of these supplies isn't in this property." });
       }
       if (item.kind === 'used' && supply.on_hand === 0) {
+        if (asksFirst) throw validationError({ [`qty-${item.supply_id}`]: 'Nothing on hand. Restock it first.' });
         skipped.push(supply.name);
         continue;
+      }
+      if (asksFirst && item.kind === 'used' && item.quantity > supply.on_hand && !item.record_on_hand) {
+        throw validationError({ [`qty-${item.supply_id}`]: askedFor(item.quantity, supply.on_hand) });
       }
       await applyMovement(db, req.user, supply, { ...item, taskId: task.task_id });
     }

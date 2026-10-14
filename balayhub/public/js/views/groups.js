@@ -4,14 +4,14 @@ import { get, post, patch, qs, ApiError } from '../api.js';
 import { h, icon, peso, fmtDate, field, formModal, openModal, makeForm, confirmDialog, emptyState, toast, todayManila } from '../ui.js';
 import { state, navigate } from '../app.js';
 import { initFilters, filterBar, changed } from '../filters.js';
-import { addDays, boxValue } from './reservations.js';
+import { addDays, boxValue, guestsProblem } from './reservations.js';
 
 const canManageNow = () => !['staff', 'cleaner'].includes(state.user.role);
 const nightsOf = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
 const isCancelled = (g) => g.status === 'cancelled';
 
 // ---------------------------------------------------------------- one room row (used by "new group" and "add a room")
-function roomRow({ listings, roomTypes, defaults, onRemove }) {
+function roomRow({ listings, roomTypes, defaults, onRemove, number = 1 }) {
   const uid = Math.random().toString(36).slice(2, 7);
   const propName = new Map(listings.map((l) => [l.property_id, l.property_name]));
   const mk = (name, lbl, input) => h('div', { class: 'field' }, h('label', { for: `gr-${name}-${uid}` }, lbl), input);
@@ -27,7 +27,10 @@ function roomRow({ listings, roomTypes, defaults, onRemove }) {
   const count = h('input', { class: 'input', id: `gr-count-${uid}`, type: 'number', min: 1, max: 20, value: 1, inputmode: 'numeric' });
   const ci = h('input', { class: 'input', id: `gr-ci-${uid}`, type: 'date', value: defaults.check_in });
   const co = h('input', { class: 'input', id: `gr-co-${uid}`, type: 'date', value: defaults.check_out });
-  const guests = h('input', { class: 'input', id: `gr-guests-${uid}`, type: 'number', min: 1, max: 50, value: defaults.num_guests || 2, inputmode: 'numeric' });
+  const guests = h('input', { class: 'input', id: `gr-guests-${uid}`, type: 'number', min: 1, max: 50, value: defaults.num_guests || 2, inputmode: 'numeric', 'aria-describedby': `gr-guests-${uid}-err` });
+  // The key names this row, so a refused count is marked at its own guests box (showErrors finds the first box with the key).
+  const guestsKey = `num_guests-${uid}`;
+  const guestsBox = h('div', { class: 'field', dataset: { field: guestsKey } }, h('label', { for: `gr-guests-${uid}` }, 'Guests in this room'), guests, h('div', { class: 'error', id: `gr-guests-${uid}-err`, role: 'alert' }));
   const price = h('input', { class: 'input', id: `gr-price-${uid}`, type: 'text', inputmode: 'decimal', placeholder: 'Per room' });
   const cleaning = h('input', { class: 'input', id: `gr-clean-${uid}`, type: 'text', inputmode: 'decimal', placeholder: '0' });
   const note = h('p', { class: 'hint', 'aria-live': 'polite' });
@@ -45,11 +48,11 @@ function roomRow({ listings, roomTypes, defaults, onRemove }) {
   };
   let seq = 0;
   async function suggest() {
-    // A price hint needs a listing: the chosen one, or the first listing of the chosen type when listings say their type.
-    let uId = mode.value === 'unit' ? unit.value : '';
+    // A price hint needs a listing or a room type. For a room type the server prices the listing BalayHub would pick now, and names it.
+    let pick = mode.value === 'unit' && unit.value ? { unit_id: unit.value } : null;
     if (mode.value === 'type' && type.value) {
-      const [pid, ...rt] = type.value.split('|');
-      uId = listings.find((l) => l.property_id === pid && l.room_type === rt.join('|'))?.unit_id || '';
+      const [property_id, ...rt] = type.value.split('|');
+      pick = { property_id, room_type: rt.join('|') };
     }
     // Without a quote, a box the host did not type in must not keep an old suggestion.
     const fill = (q) => {
@@ -57,15 +60,15 @@ function roomRow({ listings, roomTypes, defaults, onRemove }) {
       price.value = boxValue({ typed: priceEdited, mode: m, suggestion: q && !q.missing_rates ? q.accommodation_total : null, current: price.value });
       cleaning.value = boxValue({ typed: cleaningEdited, mode: m, suggestion: q ? q.cleaning_fee : null, current: cleaning.value });
     };
-    if (!uId || !ci.value || !co.value || co.value <= ci.value) { fill(null); note.textContent = ''; return; }
+    if (!pick || !ci.value || !co.value || co.value <= ci.value) { fill(null); note.textContent = ''; return; }
     const mine = ++seq;
     try {
-      const q = await get(`/reservations/quote${qs({ unit_id: uId, check_in: ci.value, check_out: co.value })}`);
+      const q = await get(`/reservations/quote${qs({ ...pick, check_in: ci.value, check_out: co.value })}`);
       if (mine !== seq) return;
       fill(q);
       const nights = `${q.nights.length} night${q.nights.length === 1 ? '' : 's'}`;
       note.textContent = q.missing_rates ? 'No nightly rate for some nights. Enter the price yourself.'
-        : mode.value === 'type' ? `From about ${peso(q.accommodation_total)}${Number(q.cleaning_fee) ? ` + ${peso(q.cleaning_fee)} cleaning` : ''} for ${nights} (first listing of this type). Each room is priced from the listing BalayHub picks; leave the boxes empty to use that price.`
+        : mode.value === 'type' ? `From about ${peso(q.accommodation_total)}${Number(q.cleaning_fee) ? ` + ${peso(q.cleaning_fee)} cleaning` : ''} for ${nights} (${q.unit_name}, the free listing BalayHub would pick now). Each room is priced from the listing BalayHub picks; leave the boxes empty to use that price.`
           : `Suggested ${peso(q.accommodation_total)} for ${nights}. You can change it.`;
     } catch (err) { if (mine === seq) { fill(null); note.textContent = err.message; } }
   }
@@ -73,22 +76,29 @@ function roomRow({ listings, roomTypes, defaults, onRemove }) {
   for (const el of [unit, type, ci, co]) el.addEventListener('change', suggest);
   sync();
 
+  // The remove button names its row by position ("Remove this room, room 2") so the buttons of a group are told apart.
+  const removeBtn = onRemove && h('button', { type: 'button', class: 'btn btn--ghost btn--sm', 'aria-label': `Remove this room, room ${number}`, onclick: () => onRemove(el) }, 'Remove this room');
   const el = h('fieldset', { class: 'grp-room' },
     h('legend', null, 'Room'),
     h('div', { class: 'grp-room__grid' },
       roomTypes.length > 0 && mk('mode', 'Pick', mode), unitBox, typeBox, countBox,
-      mk('ci', 'Check-in', ci), mk('co', 'Check-out', co), mk('guests', 'Guests in this room', guests),
+      mk('ci', 'Check-in', ci), mk('co', 'Check-out', co), guestsBox,
       mk('price', 'Accommodation total', h('div', { class: 'input-money' }, price)), mk('clean', 'Cleaning fee', h('div', { class: 'input-money' }, cleaning))),
     note,
-    onRemove && h('button', { type: 'button', class: 'btn btn--ghost btn--sm', onclick: () => onRemove(el) }, 'Remove this room'));
+    removeBtn);
 
   return {
     el,
+    // Renumbers the row after a room above it is removed.
+    setNumber(n) { removeBtn?.setAttribute('aria-label', `Remove this room, room ${n}`); },
     // Returns the rooms to send (a room type with a count becomes that many rows), or throws a message.
     rooms() {
       if (!ci.value || !co.value) throw new Error('Enter the check-in and check-out dates.');
       if (co.value <= ci.value) throw new Error('Check-out must be after check-in.');
-      const base = { check_in: ci.value, check_out: co.value, num_guests: Number(guests.value) || 1 };
+      // A blank, zero, negative or decimal count is refused at this room's guests box, the same rule the reservation form uses.
+      const problem = guestsProblem(guests.value);
+      if (problem) throw new ApiError(problem, { status: 400, fields: { [guestsKey]: problem } });
+      const base = { check_in: ci.value, check_out: co.value, num_guests: Number(guests.value) };
       // A typed 0 would make the night free. A blank total still means "use the listing's price".
       if (price.value.trim() && Number(price.value) === 0) throw new Error("Accommodation total must be greater than zero. Leave it blank to use the listing's price.");
       if (price.value.trim()) base.accommodation_total = price.value.trim();
@@ -170,8 +180,12 @@ export async function newGroupModal({ onSaved } = {}) {
   const rows = [];
   const addRow = () => {
     const r = roomRow({
-      ...choices, defaults,
-      onRemove: (el) => { if (rows.length <= 1) { toast('A group needs at least one room row.', 'error'); return; } rows.splice(rows.findIndex((x) => x.el === el), 1); el.remove(); },
+      ...choices, defaults, number: rows.length + 1,
+      onRemove: (el) => {
+        if (rows.length <= 1) { toast('A group needs at least one room row.', 'error'); return; }
+        rows.splice(rows.findIndex((x) => x.el === el), 1); el.remove();
+        rows.forEach((x, i) => x.setNumber(i + 1));
+      },
     });
     rows.push(r); rowsBox.append(r.el);
   };
@@ -204,7 +218,7 @@ export async function newGroupModal({ onSaved } = {}) {
         guest = { full_name: d.guest_name.trim(), ...(d.guest_phone && { phone: d.guest_phone }), ...(d.guest_email && { email: d.guest_email }) };
       }
       let list;
-      try { list = rows.flatMap((r) => r.rooms()); } catch (e) { fail(e.message); }
+      try { list = rows.flatMap((r) => r.rooms()); } catch (e) { if (e instanceof ApiError) throw e; fail(e.message); }
       if (list.length < 2 || list.length > 20) fail('A group needs between 2 and 20 rooms.');
       try {
         const res = await post('/booking-groups', { name: d.name.trim(), guest, rooms: list, ...(d.notes && { notes: d.notes }) });
@@ -238,7 +252,7 @@ async function addRoomModal(g, onDone) {
     onSubmit: async () => {
       conflicts.replaceChildren();
       let list;
-      try { list = row.rooms(); } catch (e) { throw new ApiError(e.message, { status: 400 }); }
+      try { list = row.rooms(); } catch (e) { throw e instanceof ApiError ? e : new ApiError(e.message, { status: 400 }); }
       try {
         // One request: the server adds every room or none.
         await post(`/booking-groups/${g.group_id}/rooms`, { rooms: list });

@@ -52,7 +52,7 @@ const BASE = process.env.BASE_URL || 'http://localhost:3000';
     await page.locator('.msg--out').first().waitFor();
   });
   await step('internal note', async () => {
-    await page.getByRole('tab', { name: 'Internal note' }).click();
+    await page.getByRole('button', { name: 'Internal note' }).click();
     await page.locator('.composer textarea').fill('Guest asked about parking — check with admin.');
     await page.getByRole('button', { name: 'Save note' }).click();
     await page.getByText('Note saved.').waitFor();

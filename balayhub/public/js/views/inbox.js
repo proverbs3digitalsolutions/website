@@ -242,13 +242,13 @@ async function renderThread(pane, id, { status, back, rerender }) {
     let meta;
     if (m.status === 'scheduled') {
       meta = h('div', { class: 'msg__meta' }, `Scheduled for ${fmtDateTime(m.scheduled_at)} · `,
-        h('button', { class: 'linkbtn', onclick: async () => {
+        h('button', { class: 'linkbtn', 'aria-label': `Cancel the message scheduled for ${fmtDateTime(m.scheduled_at)}`, onclick: async () => {
           if (!await confirmDialog({ title: 'Cancel this scheduled message?', text: 'It will not be sent.', confirmText: 'Cancel message', danger: true })) return;
           act(() => post(`/inbox/messages/${m.message_id}/cancel`), 'Scheduled message cancelled.');
         } }, 'Cancel'));
     } else if (m.status === 'failed') {
       meta = h('div', { class: 'msg__meta msg__meta--err' }, `Not sent: ${m.error || 'unknown error'} · `,
-        h('button', { class: 'linkbtn', onclick: () => act(async () => {
+        h('button', { class: 'linkbtn', 'aria-label': `Retry sending the message from ${fmtDateTime(m.created_at)}`, onclick: () => act(async () => {
           const r = await post(`/inbox/messages/${m.message_id}/retry`);
           if (!r.ok) throw new Error(r.error || 'Still could not send it.');
         }, 'Sent.') }, 'Retry'));
@@ -287,6 +287,7 @@ function messageBody(m) {
   const paint = () => {
     box.replaceChildren(...[show(open ? full : `${full.slice(0, PREVIEW_LENGTH)}…`)].flat());
     toggle.textContent = open ? 'Show less' : 'Show more';
+    toggle.setAttribute('aria-label', `${toggle.textContent} of the message from ${fmtDateTime(m.sent_at || m.created_at)}`);
     toggle.setAttribute('aria-expanded', String(open));
   };
   toggle.addEventListener('click', () => { open = !open; paint(); });
@@ -441,15 +442,15 @@ function composer(c, templates, status, rerender, assignees = []) {
   }, '✨ Draft reply with AI');
 
   const picker = mentionPicker(body, assignees);
-  const modeTabs = h('div', { class: 'tabs tabs--compact', role: 'tablist' },
+  const modeTabs = h('div', { class: 'tabs tabs--compact' },
     [['message', 'Message guest'], ['note', 'Internal note']].map(([k, t]) => h('button', {
-      type: 'button', role: 'tab', 'aria-selected': String(k === mode),
+      type: 'button', 'aria-pressed': String(k === mode),
       onclick: () => setMode(k),
     }, t)));
   const setMode = (k) => {
     mode = k;
     composerModes.set(c.conversation_id, k);
-    [...modeTabs.children].forEach((b, i) => b.setAttribute('aria-selected', String(i === (k === 'note' ? 1 : 0))));
+    [...modeTabs.children].forEach((b, i) => b.setAttribute('aria-pressed', String(i === (k === 'note' ? 1 : 0))));
     form.classList.toggle('composer--note', mode === 'note');
     sendBtn.textContent = mode === 'note' ? 'Save note' : 'Send';
     if (mode !== 'note') picker.close();

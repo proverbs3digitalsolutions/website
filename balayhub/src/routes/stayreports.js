@@ -14,6 +14,7 @@ const { HttpError, ah } = require('../lib/http');
 const { isValidDate, uuidParam } = require('../lib/validate');
 const { requireRole } = require('../lib/auth');
 const { propertyScope } = require('../lib/access');
+const { own } = require('../lib/pick');
 
 const router = express.Router();
 const managers = requireRole('owner', 'manager');
@@ -26,6 +27,11 @@ const CHANNEL_LABEL = { direct: 'Direct', airbnb: 'Airbnb', booking: 'Booking.co
 
 function period(q) {
   const t = manilaToday();
+  // A from or to that is given but isn't a real date is refused at its field, never replaced by this month.
+  const fields = {};
+  if (q.from && !isValidDate(q.from)) fields.from = 'Enter a real date.';
+  if (q.to && !isValidDate(q.to)) fields.to = 'Enter a real date.';
+  if (Object.keys(fields).length) throw validationError(fields);
   if (/^\d{4}$/.test(q.year || '')) {
     if (Number(q.year) < 2000 || Number(q.year) > 2100) throw validationError({ year: 'Choose a valid year.' });
     return { from: `${q.year}-01-01`, to: `${Number(q.year) + 1}-01-01`, label: q.year };
@@ -48,7 +54,7 @@ function reportFilters(q) {
   return {
     property_id: q.property_id ? uuidParam(q.property_id) : null,
     unit_id: q.unit_id ? uuidParam(q.unit_id) : null,
-    channel: CHANNEL_LABEL[q.channel] ? q.channel : null,
+    channel: own(CHANNEL_LABEL, q.channel) ? q.channel : null,
   };
 }
 

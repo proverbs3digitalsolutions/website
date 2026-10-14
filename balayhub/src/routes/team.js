@@ -6,6 +6,7 @@ const { query, one, tx } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
 const { validate, uuidParam } = require('../lib/validate');
 const { audit } = require('../lib/audit');
+const { changedKeys } = require('../lib/auditdiff');
 const { sendMail } = require('../lib/mailer');
 const { requireRole, newToken, hashToken } = require('../lib/auth');
 
@@ -111,14 +112,22 @@ router.patch('/team/members/:id', ownerOnly, ah(async (req, res) => {
     if (!kept) throw noProperty(role);
   }
   await tx(async (db) => {
-    if (body.role) await db.query('UPDATE users SET role = $1 WHERE user_id = $2', [body.role, member.user_id]);
-    if (ids) {
+    // Compare with what is stored now (read and locked here), so a save that changes nothing writes nothing.
+    const { rows: [now] } = await db.query('SELECT role FROM users WHERE user_id = $1 FOR UPDATE', [member.user_id]);
+    const { rows: assigned } = await db.query('SELECT property_id FROM property_assignments WHERE user_id = $1', [member.user_id]);
+    const sent = {};
+    if (body.role) sent.role = body.role;
+    if (ids) sent.property_ids = [...ids].sort();
+    // Names the fields that really changed, never their values.
+    const fields = changedKeys({ role: now.role, property_ids: assigned.map((a) => a.property_id).sort() }, sent);
+    if (fields.includes('role')) await db.query('UPDATE users SET role = $1 WHERE user_id = $2', [body.role, member.user_id]);
+    if (fields.includes('property_ids')) {
       await db.query('DELETE FROM property_assignments WHERE user_id = $1', [member.user_id]);
       if (ids.length) {
         await db.query('INSERT INTO property_assignments (user_id, property_id) SELECT $1, unnest($2::uuid[])', [member.user_id, ids]);
       }
     }
-    await audit(db, req.user, 'member.updated', 'user', member.user_id, body);
+    if (fields.length) await audit(db, req.user, 'member.updated', 'user', member.user_id, { fields });
   });
   res.json({ ok: true });
 }));

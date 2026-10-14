@@ -61,8 +61,8 @@ const because = (reason) => {
 };
 
 // "Changed the reservation: check in, notes". Only the field names are shown, never the values.
-function changed(lead, after) {
-  const keys = Object.keys(after || {}).map((k) => k.replace(/_/g, ' '));
+function changed(lead, d) {
+  const keys = (d.fields || Object.keys(d.after || {})).map((k) => k.replace(/_/g, ' '));
   return keys.length ? `${lead}: ${keys.join(', ')}` : lead;
 }
 
@@ -101,7 +101,7 @@ const PLAIN = {
 // Sentences that read details: action → details → [kind, text].
 const DETAILED = {
   'reservation.created': (d) => ['booking', `Created reservation${d.code ? ` ${d.code}` : ''}${span(d.check_in, d.check_out)}`],
-  'reservation.updated': (d) => ['booking', changed('Changed the reservation', d.after)],
+  'reservation.updated': (d) => ['booking', changed('Changed the reservation', d)],
   'reservation.cancelled': (d) => ['booking', `Cancelled the reservation${because(d.reason)}`],
   'reservation.booked_online': (d) => ['booking', peso(d.amount) ? `Booked online and paid ${peso(d.amount)} now` : 'Booked online'],
   'reservation.payment_recorded': (d) => ['payment', d.proof_id
@@ -127,7 +127,7 @@ const DETAILED = {
   'damage.charged': (d) => ['charge', `Charged ${peso(d.amount) ?? 'for damage'} to the guest`],
   'damage.waived': (d) => ['other', `Waived a damage report${because(d.note)}`],
   'lost_found.updated': (d) => ['other', d.from && d.to ? `Changed a lost-and-found item from ${d.from} to ${d.to}` : 'Changed a lost-and-found item'],
-  'cleaning.task_updated': (d) => ['cleaning', changed('Changed the cleaning task', d.after)],
+  'cleaning.task_updated': (d) => ['cleaning', changed('Changed the cleaning task', d)],
   'cleaning.inspected': (d) => ['cleaning', `Inspected the cleaning: ${d.passed ? 'passed' : 'failed'}${d.score != null ? ` (score ${d.score})` : ''}`],
   'cleaner_pay.paid': (d) => ['cleaning', peso(d.amount) ? `Paid the cleaner ${peso(d.amount)}` : 'Paid the cleaner'],
   'quote.created': (d) => ['booking', peso(d.total_amount) ? `Created a quote for ${peso(d.total_amount)}` : 'Created a quote'],

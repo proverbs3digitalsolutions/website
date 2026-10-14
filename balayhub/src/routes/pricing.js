@@ -9,6 +9,7 @@ const { query, one } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
 const { validate, uuidParam } = require('../lib/validate');
 const { audit } = require('../lib/audit');
+const { changedKeys } = require('../lib/auditdiff');
 const { requireRole } = require('../lib/auth');
 const { propertyScope, loadUnit } = require('../lib/access');
 const { nightlyPrices } = require('../lib/pricing');
@@ -160,13 +161,18 @@ router.patch('/pricing/rules/:id', managers, ah(async (req, res) => {
   for (const key of ['days', 'adjust_pct']) if (body[key] === null) throw validationError({ [key]: 'Enter a number.' });
   const days = body.days ?? current.days;
   const adjustPct = body.adjust_pct ?? current.adjust_pct;
+  const active = body.active ?? current.active;
   checkRule(current.kind, days, adjustPct);
+  const fields = changedKeys(current, { days, adjust_pct: adjustPct, active });
+  // Nothing changed: no write and no activity row, and the rule as it stands is answered.
+  if (!fields.length) {
+    return res.json({ rule: { rule_id: current.rule_id, unit_id: current.unit_id, kind: current.kind, days, adjust_pct: adjustPct, active } });
+  }
   const updated = await one(
     `UPDATE pricing_rules SET days = $2, adjust_pct = $3, active = COALESCE($4::boolean, active), updated_at = now()
       WHERE rule_id = $1 RETURNING rule_id, unit_id, kind, days, adjust_pct, active`,
     [current.rule_id, days, adjustPct, body.active ?? null]);
-  await audit(null, req.user, 'pricing_rule.updated', 'pricing_rule', current.rule_id,
-    { kind: current.kind, before: { days: current.days, adjust_pct: current.adjust_pct, active: current.active }, after: updated });
+  await audit(null, req.user, 'pricing_rule.updated', 'pricing_rule', current.rule_id, { kind: current.kind, fields });
   res.json({ rule: updated });
 }));
 

@@ -11,6 +11,7 @@ const { query, one, tx } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
 const { validate, uuidParam } = require('../lib/validate');
 const { audit } = require('../lib/audit');
+const { changedKeys } = require('../lib/auditdiff');
 const { requireRole, rateLimit } = require('../lib/auth');
 const { propertyScope } = require('../lib/access');
 const { notify, propertyOfBooking } = require('../lib/push');
@@ -195,11 +196,12 @@ router.patch('/workspace/manual-payments', owners, ah(async (req, res) => {
     if (next.enabled && !next.instructions) {
       throw validationError({ instructions: 'Add the GCash number, bank name or account name guests should pay to.' });
     }
-    // Nothing changed: no write and no audit row.
-    if (next.enabled === cur.manual_payments_enabled && next.instructions === cur.manual_payment_instructions) return next;
+    // Nothing changed: no write and no audit row. The row names only the settings that changed.
+    const fields = changedKeys({ enabled: cur.manual_payments_enabled, instructions: cur.manual_payment_instructions }, next);
+    if (!fields.length) return next;
     await db.query('UPDATE organizations SET manual_payments_enabled = $2, manual_payment_instructions = $3 WHERE organization_id = $1',
       [req.user.organization_id, next.enabled, next.instructions]);
-    await audit(db, req.user, 'workspace.manual_payments_updated', 'organization', req.user.organization_id, { enabled: next.enabled });
+    await audit(db, req.user, 'workspace.manual_payments_updated', 'organization', req.user.organization_id, { fields });
     return next;
   });
   res.json(saved);

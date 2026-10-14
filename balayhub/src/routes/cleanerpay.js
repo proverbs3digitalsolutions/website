@@ -126,7 +126,7 @@ router.put('/cleaner-rates', owners, ah(async (req, res) => {
     if (!member) throw validationError({ user_id: 'Choose a member of this workspace.' });
   } else {
     const same = await teamMemberByName({ query }, org, body.assignee_name);
-    if (same) throw validationError({ assignee_name: `Pick ${same.full_name} from the team list instead.` });
+    if (same) throw validationError({ assignee_name: 'That name belongs to someone on your team. Pick them from the team list instead.' });
   }
   const rate = body.user_id
     ? await one(`INSERT INTO cleaner_rates (organization_id, user_id, rate_type, amount) VALUES ($1, $2, $3, $4)

@@ -74,12 +74,12 @@ test('receipt file inputs have an accessible name (longterm#5)', () => {
   assert.match(src, /h\('label', \{ for: 'receipt-input' \}/);
 });
 
-// Cancelling the "Record more than is owed?" prompt must keep the form open with one clear message.
-// makeForm shows "Something went wrong" for any error that is not an ApiError, so the cancel throws an ApiError.
-test('cancelling the over-balance prompt says "Payment not saved." in the form (rent cancel)', () => {
+// Cancelling the "Record more than is owed?" prompt closes it quietly (D-84): onSubmit returns false, so makeForm keeps the form open with no message.
+test('cancelling the over-balance prompt returns false with no error (rent cancel, D-84)', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'public/js/views/rent.js'), 'utf8');
   const submit = src.slice(src.indexOf('export async function recordPaymentModal'), src.indexOf('// ---------------------------------------------------------------- add expense'));
   assert.doesNotMatch(submit, /throw new Error\(/);
-  assert.match(submit, /throw new ApiError\('Payment not saved\.', \{ status: 400 \}\)/);
-  assert.match(src, /import \{ get, post, patch, qs, uploadFile, ApiError \} from '\.\.\/api\.js';/);
+  assert.doesNotMatch(submit, /throw new ApiError\(/);
+  assert.match(submit, /title: 'Record more than is owed\?'[^\n]*\)\) return false;/);
+  assert.match(src, /import \{ get, post, patch, qs, uploadFile \} from '\.\.\/api\.js';/);
 });

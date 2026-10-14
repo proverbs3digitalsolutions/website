@@ -36,6 +36,10 @@ export const cleanerStatus = (c) => {
   return parts.join(' · ') || 'All paid';
 };
 
+// The ticks that still count after a filter change: a ticked clean the filter hides is dropped, so the count,
+// the total and Mark paid only ever cover rows on screen.
+export const visibleSelection = (selected, rows) => new Set(rows.filter((x) => selected.has(x.task_id)).map((x) => x.task_id));
+
 function stat(lbl, value, sub, cls = '') {
   return h('div', { class: `stat stat--flat ${cls}` }, h('div', { class: 'stat__value' }, value), h('div', { class: 'stat__label' }, lbl), sub && h('div', { class: 'muted small' }, sub));
 }
@@ -69,9 +73,11 @@ export async function cleanerPayView(el, { query = {} } = {}) {
   }
 
   const shown = () => data.tasks.filter((x) => (!filters.cleaner || x.cleaner_key === filters.cleaner) && (!filters.status || x.pay_status === filters.status));
+  // The ticked clean rows on screen. Mark paid pays only these.
+  const ticked = () => shown().filter((x) => selected.has(x.task_id));
 
   function markPaid() {
-    const rows = data.tasks.filter((x) => selected.has(x.task_id));
+    const rows = ticked();
     if (!rows.length) return;
     const total = rows.reduce((s, x) => s + cents(x.pay_amount), 0);
     formModal({
@@ -86,7 +92,7 @@ export async function cleanerPayView(el, { query = {} } = {}) {
         h('p', { class: 'hint' }, 'Adds one cleaning expense per unit, so it shows on profit and loss and owner statements.'),
       ],
       onSubmit: async (d, { idempotencyKey }) => {
-        await post('/cleaner-pay/mark-paid', { task_ids: [...selected], paid_on: d.paid_on, method: d.method, reference: d.reference || undefined, record_expense: !!d.record_expense }, { idempotencyKey });
+        await post('/cleaner-pay/mark-paid', { task_ids: rows.map((x) => x.task_id), paid_on: d.paid_on, method: d.method, reference: d.reference || undefined, record_expense: !!d.record_expense }, { idempotencyKey });
         toast('Marked as paid.');
         load();
       },
@@ -114,15 +120,19 @@ export async function cleanerPayView(el, { query = {} } = {}) {
 
   function paint() {
     const rows = shown();
+    // A filter can hide a ticked clean. Its tick goes now, so the count, the total and Mark paid cover only rows on screen.
+    const kept = visibleSelection(selected, rows);
+    selected.clear();
+    kept.forEach((id) => selected.add(id));
     const totals = data.totals || {};
     const unpaidC = cents(totals.unpaid); const paidC = cents(totals.paid);
     const missing = data.tasks.filter((x) => x.pay_amount == null).length;
     const payable = rows.filter((x) => x.pay_status === 'unpaid' && x.pay_amount != null);
-    const selTotal = data.tasks.filter((x) => selected.has(x.task_id)).reduce((s, x) => s + cents(x.pay_amount), 0);
+    const selTotal = ticked().reduce((s, x) => s + cents(x.pay_amount), 0);
     const markBtn = h('button', { class: 'btn btn--primary', type: 'button', disabled: !selected.size, onclick: markPaid }, selected.size ? `Mark ${selected.size} paid · ${peso(fromCents(selTotal))}` : 'Mark paid');
     const refresh = () => {
-      const n = selected.size;
-      const c = data.tasks.filter((x) => selected.has(x.task_id)).reduce((s, x) => s + cents(x.pay_amount), 0);
+      const n = ticked().length;
+      const c = ticked().reduce((s, x) => s + cents(x.pay_amount), 0);
       markBtn.disabled = !n;
       markBtn.textContent = n ? `Mark ${n} paid · ${peso(fromCents(c))}` : 'Mark paid';
     };
@@ -159,8 +169,8 @@ export async function cleanerPayView(el, { query = {} } = {}) {
                   ? h('span', null, h('span', { class: 'badge badge--paid' }, 'Paid'), h('span', { class: 'muted small ops-note' }, ` ${x.paid_on ? fmtDate(manilaDay(x.paid_on)) : ''}${x.paid_method ? ` · ${label(x.paid_method)}` : ''}`))
                   : h('span', { class: 'badge badge--unpaid' }, 'Unpaid')),
                 h('td', { class: 'ops-actions' },
-                  x.pay_status === 'unpaid' && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => editPay(x) }, x.pay_amount == null ? 'Set pay' : 'Edit pay'),
-                  x.pay_status === 'paid' && isOwner && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => unpay(x) }, 'Undo paid')));
+                  x.pay_status === 'unpaid' && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => editPay(x), 'aria-label': `${x.pay_amount == null ? 'Set pay' : 'Edit pay'} for ${unitOf(x)} on ${fmtDate(doneDay(x))}` }, x.pay_amount == null ? 'Set pay' : 'Edit pay'),
+                  x.pay_status === 'paid' && isOwner && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => unpay(x), 'aria-label': `Undo paid for ${unitOf(x)} on ${fmtDate(doneDay(x))}` }, 'Undo paid')));
             })))))
         : h('div', { class: 'card' }, emptyState({ iconName: 'inbox', title: data.tasks.length ? 'No cleans match these filters' : 'No finished cleans this month', text: data.tasks.length ? 'Try removing a filter.' : 'Pay shows up here once a cleaner marks a clean as done. Check the rates below if amounts are missing.' })));
   }
@@ -172,7 +182,8 @@ export async function cleanerPayView(el, { query = {} } = {}) {
       extra: h('input', { class: 'input input--sm', type: 'month', value: month(), 'aria-label': 'Month', max: thisMonth,
         onchange: (e) => { if (e.target.value) { filters.month = e.target.value; rememberFilters('cleaner-pay', filters); load(); } } }),
       quick: [
-        { name: 'cleaner', label: 'Cleaner', all: 'All cleaners', options: cleanerOpts },
+        // Kept only while no names are known yet; once they load the bar is drawn again and an unknown key is dropped.
+        { name: 'cleaner', label: 'Cleaner', all: 'All cleaners', options: cleanerOpts, keepUnknown: !cleanerOpts.length },
         { name: 'status', label: 'Status', all: 'Paid and unpaid', options: [['unpaid', 'Unpaid'], ['paid', 'Paid']] },
       ],
     }));
@@ -197,7 +208,9 @@ export async function cleanerPayView(el, { query = {} } = {}) {
       let modal;
       const form = makeForm({
         fields: [
-          !r && who, (!r || outside) && nameF,
+          !r && who, !r && nameF,
+          // An outside cleaner's name is the key their past pay is filed under, so an existing rate shows it as text, not a box.
+          r && outside && h('div', null, h('p', null, 'Name: ', h('strong', null, r.assignee_name)), h('p', { class: 'hint' }, 'To rename, remove this rate and add it again.')),
           h('div', { class: 'form-row form-row--2' },
             field({ name: 'rate_type', label: 'Paid', type: 'select', required: true, value: r?.rate_type || 'per_clean', placeholderOption: false, options: [['per_clean', 'Per clean'], ['per_hour', 'Per hour']] }),
             field({ name: 'amount', label: 'Amount', type: 'money', required: true, value: r?.amount })),
@@ -239,7 +252,7 @@ export async function cleanerPayView(el, { query = {} } = {}) {
       rates.length ? h('ul', { class: 'list' }, rates.map((r) => h('li', { class: 'ops-line' },
         h('span', { class: 'ops-line__main' }, h('strong', null, nameOf(r)), h('span', { class: 'muted small' }, ` ${rateText(r)}`)),
         h('span', { class: 'ops-line__end' },
-          h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => edit(r) }, 'Edit'),
+          h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => edit(r), 'aria-label': `Edit rate for ${nameOf(r)}` }, 'Edit'),
           h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => remove(r), 'aria-label': `Remove rate for ${nameOf(r)}` }, 'Remove')))))
         : h('p', { class: 'muted' }, 'No rates yet. Add one so cleans are priced when they are done.')));
   }

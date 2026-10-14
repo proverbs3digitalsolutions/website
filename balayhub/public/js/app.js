@@ -47,6 +47,7 @@ import { routeAllowed } from './routeaccess.js';
 import { registerServiceWorker, forgetThisDevice } from './notifications.js';
 import { themeSwitch } from './themeswitch.js';
 import { assistantButton, placeAssistantButton, resetAssistant } from './assistant.js';
+import { h1Title } from './i18n.js';
 
 export const state = { user: null, requireEmailVerification: true };
 
@@ -210,7 +211,7 @@ function planBanner() {
   if (p.is_demo) {
     return h('div', { class: 'planbar planbar--demo' },
       h('span', null, "You're exploring the demo. Changes are turned off."),
-      h('button', { class: 'btn btn--primary btn--sm', onclick: async () => { try { await post('/auth/logout'); } catch { /* ignore */ } state.user = null; navigate('#/signup', { replace: true }); } }, 'Start your free trial'));
+      h('button', { class: 'btn btn--primary btn--sm', onclick: async () => { try { await post('/auth/logout'); } catch { /* ignore */ } state.user = null; forgetSetupAnswers(); navigate('#/signup', { replace: true }); } }, 'Start your free trial'));
   }
   const owner = state.user.role === 'owner';
   if (p.reason === 'deleting') {
@@ -249,17 +250,24 @@ function parseHash() {
 
 function match(path) {
   // A blank id (#/payments/%20) or a broken escape (#/payments/%E0%A4%A) is not a record. It gets the Not found state a 404 gives,
-  // and the view never calls the API.
+  // and the view never calls the API. A guest page (open) still runs its view, with a token that can't exist, so the page shows its own
+  // not-valid card in the guest's language.
   const incomplete = async () => { throw new ApiError('This link is incomplete. Check the address, or go back and try again.', { status: 404 }); };
-  for (const [pattern, view, access] of routes) {
-    const names = [];
-    const re = new RegExp(`^${pattern.replace(/:(\w+)/g, (_, n) => { names.push(n); return '([^/]+)'; })}$`);
-    const m = re.exec(path);
-    if (m) {
-      let params;
-      try { params = Object.fromEntries(names.map((n, i) => [n, decodeURIComponent(m[i + 1])])); } catch { return { view: incomplete, access, params: {} }; }
-      if (Object.values(params).some((v) => !v.trim())) return { view: incomplete, access, params };
-      return { view, access, params };
+  // A trailing slash (#/pay/) leaves an empty last segment: no route has one, so a second pass lets the last value be empty.
+  for (const q of path.length > 1 && path.endsWith('/') ? ['+', '*'] : ['+']) {
+    for (const [pattern, view, access] of routes) {
+      const names = [];
+      const re = new RegExp(`^${pattern.replace(/:(\w+)/g, (_, n) => { names.push(n); return `([^/]${q})`; })}$`);
+      const m = re.exec(path);
+      if (m) {
+        let params;
+        try { params = Object.fromEntries(names.map((n, i) => [n, decodeURIComponent(m[i + 1])])); } catch { return { view: incomplete, access, params: {} }; }
+        if (Object.values(params).some((v) => !v.trim())) {
+          if (access !== 'open') return { view: incomplete, access, params };
+          params = Object.fromEntries(Object.entries(params).map(([k, v]) => [k, v.trim() ? v : '-']));
+        }
+        return { view, access, params };
+      }
     }
   }
   return null;
@@ -299,12 +307,16 @@ function navLink([path, text, ic], current) {
   return h('a', { href: `#${path}`, 'aria-current': isCurrent(path, current) ? 'page' : null }, icon(ic), h('span', null, text));
 }
 
+// The Get started answers belong to whoever typed them, not to the next person on this browser.
+function forgetSetupAnswers() { try { localStorage.removeItem('bh-setup'); } catch { /* ignore */ } }
+
 export async function logout() {
   await forgetThisDevice();
   resetAssistant();
   try { await post('/auth/logout'); } catch { /* ignore */ }
   state.user = null;
   try { sessionStorage.clear(); } catch { /* ignore */ }
+  forgetSetupAnswers();
   navigate('#/login', { replace: true });
 }
 
@@ -366,6 +378,7 @@ function buildShell(path) {
 
 // ---------------------------------------------------------------- render
 const PUBLIC_TITLES = { '/login': 'Log in', '/signup': 'Sign up', '/forgot': 'Forgot password' };
+const RESET_TITLE = 'BalayHub — Rental Property Management';
 let renderSeq = 0;
 export async function render() {
   const seq = ++renderSeq;
@@ -389,6 +402,7 @@ export async function render() {
   if (route.access === APP && !routeAllowed(path, state.user)) { toast("That page isn't available for your role or workspace.", 'error'); navigate(homeRoute(), { replace: true }); return; }
 
   document.querySelectorAll('dialog.modal, .morenav').forEach((d) => d.remove());
+  delete document.documentElement.dataset.h1title; // set below when a guest page's tab title is taken from its heading
   const ctx = { params: route.params, query, state, navigate, rerender: render };
 
   if (route.access === APP) {
@@ -413,11 +427,15 @@ export async function render() {
     shell = null;
     const mount = h('div');
     app.replaceChildren(mount);
-    document.title = 'BalayHub — Rental Property Management';
+    document.title = RESET_TITLE;
     try { await route.view(mount, ctx); } catch (err) { mount.replaceChildren(errorState(err, render)); }
     // Landing keeps the site title; sign-in pages have friendly h1s, so name them; others use their h1 (minus a leading brand name).
-    const title = path === '/' ? '' : PUBLIC_TITLES[path] || mount.querySelector('h1')?.textContent.replace(/^BalayHub /, '').replace(/^Terms of Service/, 'Terms of service');
-    if (seq === renderSeq && title) document.title = `${title} — BalayHub`;
+    // A title the view set itself (the booking page names its host) is kept. Pages titled from the heading are marked so a language switch re-takes it.
+    const title = path === '/' ? '' : PUBLIC_TITLES[path] || h1Title(mount);
+    if (seq === renderSeq && title && document.title === RESET_TITLE) {
+      document.title = `${title} — BalayHub`;
+      if (!PUBLIC_TITLES[path]) document.documentElement.dataset.h1title = '1';
+    }
   }
 }
 
@@ -547,6 +565,52 @@ document.addEventListener('focusin', (e) => {
   const hidden = e.target.getBoundingClientRect().bottom - bar.getBoundingClientRect().top;
   if (hidden > 0) window.scrollBy(0, hidden + 16);
 });
+
+// Index of the tab an arrow, Home or End key moves to (wraps at the ends); -1 for any other key.
+function tabKeyTarget(key, i, n) {
+  if (key === 'ArrowRight') return (i + 1) % n;
+  if (key === 'ArrowLeft') return (i - 1 + n) % n;
+  if (key === 'Home') return 0;
+  if (key === 'End') return n - 1;
+  return -1;
+}
+// One handler for every tablist (D-81): arrows, Home and End move to a tab and open it. A tablist with its own handler
+// (the landing page) calls preventDefault, so it is skipped here.
+document.addEventListener('keydown', (e) => {
+  if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || !(e.target instanceof Element)) return;
+  const tab = e.target.closest('[role="tab"]');
+  const list = tab && tab.closest('[role="tablist"]');
+  if (!list) return;
+  const tabs = [...list.querySelectorAll('[role="tab"]')].filter((x) => !x.disabled);
+  const next = tabKeyTarget(e.key, tabs.indexOf(tab), tabs.length);
+  if (next < 0 || !tabs[next]) return;
+  e.preventDefault();
+  tabs[next].focus();
+  tabs[next].click();
+});
+
+// Most views redraw their tabs when one is opened, which removes the focused button and drops focus to the page (BODY). Remember the tab
+// that was activated and, once the redraw has run (it may be async), put focus on the tab at the same index of the same tablist.
+// Returns true when it is done: focus restored, the user moved on, or the tablist is gone.
+export function restoreTabFocus(list, index, oldTab, doc = document) {
+  const a = doc.activeElement;
+  if (a && a !== oldTab && a !== doc.body && a.isConnected) return true; // the user focused something else: never steal it
+  if (!list.isConnected) return true;
+  if (a === oldTab && oldTab.isConnected) return false; // not redrawn yet
+  const tab = list.querySelectorAll('[role="tab"]')[index];
+  if (!tab) return true;
+  tab.focus();
+  return true;
+}
+// Capture phase, so the tab is still inside its tablist when we look (its own click handler may redraw it away).
+document.addEventListener('click', (e) => {
+  const oldTab = e.target instanceof Element && e.target.closest('[role="tab"]');
+  const list = oldTab && oldTab.closest('[role="tablist"]');
+  if (!list) return;
+  const index = [...list.querySelectorAll('[role="tab"]')].indexOf(oldTab);
+  let done = false;
+  for (const ms of [0, 40, 100, 200, 350, 500]) setTimeout(() => { if (!done) done = restoreTabFocus(list, index, oldTab); }, ms);
+}, true);
 
 (async function boot() {
   updateOnline();

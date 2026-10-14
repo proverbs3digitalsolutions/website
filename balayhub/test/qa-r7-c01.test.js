@@ -106,7 +106,7 @@ test('supply: changing only the par level stores that one field; the same save a
 test('Activity labels: fields read as labels, unknown keys are humanised, and the new verbs exist', () => {
   assert.equal(settings.summarize({ fields: ['review_links'] }), 'Changed: Public review links');
   assert.equal(settings.summarize({ fields: ['some_new_key'] }), 'Changed: Some new key');
-  assert.equal(settings.summarize({ fields: ['par_level', 'door_code'] }), 'Changed: Par level, Door code');
+  assert.equal(settings.summarize({ fields: ['par_level', 'door_code'] }), 'Changed: Keep at least, Door code');
   assert.equal(settings.ACTIONS['maintenance.schedule_resumed'], 'Resumed a maintenance schedule');
   assert.equal(settings.ACTIONS['cleaning.task_updated'], 'Edited a cleaning task');
 });

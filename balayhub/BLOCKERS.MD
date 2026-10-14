@@ -2,7 +2,7 @@
 
 Things only the founder can do or decide before related work can go ahead. Automated runs add items here. The founder clears them by doing the item and ticking it, or by writing the decision in DECISIONS.MD.
 
-Last updated: 2026-10-14 (QA round 7 questions added; round 6 "My pay" done with its default by D-83)
+Last updated: 2026-10-14 (QA round 8 questions added; round 7 questions unchanged)
 
 ## Security — do first
 
@@ -217,3 +217,27 @@ Each one has the default already applied. None of them stops the work. Earlier o
 - [ ] **Booking source and staff.** Staff no longer receive where a booking came from (the source), because the access table hides booking sources from staff. Should staff see it on a reservation? *Default: hidden.*
 - [ ] **"1,5" in amounts.** Not a question unless you disagree: "1,5" is refused everywhere, as decided in round 4 (D-79). One line in the app guide said otherwise; it's corrected. *Default: refused.*
 - [ ] **Taglish check.** New lines for a Taglish speaker to read: "Hindi valid ang check-in link na ito. Humingi ng bagong link sa host mo.", "Hindi valid ang review link na ito.", "Hindi available ang guidebook para sa stay na ito. Humingi ng bagong link sa host mo.", "Hindi available ang quote na ito.", two booking page sentences (the not-found cards), and on My pay "Bayad sa ibang tagalinis" (paid to another cleaner). *Default: keep the drafts.*
+
+## Questions from QA round 8 (2026-10-14)
+
+Each has the default already applied. Earlier open questions are not repeated here.
+
+- [ ] **Get started on a shared computer.** If two people signed up on the same browser, the second one used to get the first one's business name and mobile number. Now the answers are kept only for the email they were typed for, the setup page shows them for you to check before creating the workspace, and logging out deletes them. OK? *Default: as described.* On the live site, a workspace created this way could carry someone else's business name; if you have had sign-ups from shared computers, check the workspace names in Admin. *Default: no data change from us.*
+- [ ] **Recording rent from one month's row.** Record on a month's row now starts at that month's remaining amount, not the tenant's whole balance. The dialog still shows the whole balance. OK? *Default: the row's amount.*
+- [ ] **Cancel on a half-filled form.** Pressing Cancel now throws away what you typed in that form. Closing it any other way, or losing your session, still keeps it for next time. OK? *Default: Cancel discards.*
+- [ ] **Share link source.** The share link box used to start on Facebook, so a link you copied without choosing was counted as Facebook in your reports. It now starts on Other. Would you rather it make you choose first? *Default: Other.*
+- [ ] **Your details on a quote.** When a quote already has the guest's name, email and mobile, the quote page shows them filled in and lets the guest correct them. The app guide said it would hide them; the guide is corrected. OK? *Default: shown and editable.*
+- [ ] **Check-in form privacy box.** A guest editing their check-in form has to tick the privacy box again each time they save. Keep that, or remember the tick? *Default: tick each time.*
+- [ ] **Wi-Fi password on the listing form.** The door code has a Show/Hide button but the Wi-Fi password is a plain box on the owner's listing form. Hide it too? *Default: keep as is.*
+- [ ] **Payouts to an owner with no units.** An owner with no units has no statement, so a payout to them isn't checked against what they owe. Keep that, or refuse payouts to owners with no units? *Default: keep.*
+- [ ] **Damage reports on a unit.** Staff can report damage from a cleaning job or a stay, but no longer on a unit with neither (the access table says owners and managers). OK? *Default: owners and managers only.*
+- [ ] **Dates from 2000 to 2100.** Every date you type must now be between 2000 and 2100, so a slip like 1900 can't land in your books. The report and list filters still accept 1900 to 2200 for now. OK? *Default: yes.*
+- [ ] **Taglish check.** New or changed lines for a Taglish speaker to read: "Pangmatagalang upa (buwanan)" (Long-term rentals on Get started), "Pakitingnan ang mga naka-highlight." (Please check the highlighted fields; on the booking page, quote page, check-in form and Get started), "Alisin ang guest {n}" (Remove guest on the check-in form), "Mag-book nang direkta" (Book direct, the booking page tab title), "Hindi muna tumatanggap ng online booking ang lugar na ito ngayon." (This place isn't taking online bookings right now.), "Ilagay ang bilang ng guests para makita ang kabuuan." (Enter the number of guests to see the total.), and "Ngayon" on the cleaner calendar (an existing word, now used). *Default: keep the drafts.*
+- [ ] **"Workspace name" in the activity log.** A rename of the workspace reads "Changed: Workspace name". Fine, or call it "Business name" to match the sign-up form? *Default: Workspace name.*
+- [ ] **Archiving an add-on twice.** Archiving an add-on that is already archived writes a second activity row. Keep, or write nothing the second time? *Default: leave as is (rare).*
+- [ ] **"Write a reply first." on help tickets.** The empty-reply message on the help page reads "Write a reply first." Fine? *Default: keep.*
+- [ ] **Admin support reply.** A platform admin's support reply still confirms with a toast, not a line on the page. Keep? *Default: keep.*
+- [ ] **"Tell your manager." for staff.** Only cleaners are told to tell their manager when a supply was out of stock; staff are not (they are the manager's team, not a field crew). OK? *Default: cleaners only.*
+- [ ] **Quote that can't be priced.** When the price preview fails, the quote form keeps the sentence "Couldn't price these dates" and hides the rate-card button. Keep, or reword? *Default: keep.*
+- [ ] **Rent payments are used oldest month first.** A payment that covers more than one month is applied to the oldest unpaid month first. Is that how you want it? *Default: oldest first.*
+- [ ] **"Settings → Team" arrow.** A few help lines write the path with an arrow ("Settings → Team", "Settings → Plan & billing"). Keep the arrow, or write "Settings, then Team"? *Default: keep the arrow.*

@@ -1,9 +1,10 @@
 'use strict';
 
-// Damage reports. Anyone who works a cleaning task, or can see a stay or unit,
-// can log damage with an optional estimate and photos. Owners and managers then
-// charge it to the guest's bill, mark it to deduct from the security deposit, or
-// waive it. Cleaners only ever see the report they filed, never the resolution.
+// Damage reports. Anyone who works a cleaning task, or can see a stay, can log
+// damage with an optional estimate and photos; a report on a whole unit is for
+// owners and managers. Owners and managers then charge it to the guest's bill,
+// mark it to deduct from the security deposit, or waive it. Cleaners only ever
+// see the report they filed, never the resolution.
 
 const express = require('express');
 const { query, one, tx } = require('../db');
@@ -100,7 +101,7 @@ router.post('/reservations/:id/damage', notCleaner, ah(async (req, res) => {
   res.status(201).json({ report: await createReport(req.user, { unit_id: stay.unit_id, booking_id: stay.booking_id }, body) });
 }));
 
-router.post('/units/:id/damage', notCleaner, ah(async (req, res) => {
+router.post('/units/:id/damage', managers, ah(async (req, res) => {
   const unit = await loadUnit(req.user, uuidParam(req.params.id));
   const body = validate(req.body, DAMAGE_SPEC);
   res.status(201).json({ report: await createReport(req.user, { unit_id: unit.unit_id }, body) });

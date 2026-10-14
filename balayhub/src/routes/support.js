@@ -13,6 +13,7 @@ const { query, one, tx } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
 const { validate, uuidParam } = require('../lib/validate');
 const { requireAuth } = require('../lib/auth');
+const { own } = require('../lib/pick');
 const { CATEGORIES, articlesFor, searchArticles } = require('../lib/helpcenter');
 
 const router = express.Router();
@@ -213,9 +214,9 @@ adminRouter.use('/admin/support', platformAdmin);
 
 adminRouter.get('/admin/support/tickets', ah(async (req, res) => {
   const params = []; const where = ['true'];
-  if (req.query.status && STATUS_LABEL[req.query.status]) { params.push(req.query.status); where.push(`t.status = $${params.length}`); }
+  if (req.query.status && own(STATUS_LABEL, req.query.status)) { params.push(req.query.status); where.push(`t.status = $${params.length}`); }
   else if (req.query.status === 'open') where.push(`t.status IN ('new', 'in_progress', 'waiting_on_customer')`);
-  if (req.query.category && CATEGORY_LABEL[req.query.category]) { params.push(req.query.category); where.push(`t.category = $${params.length}`); }
+  if (req.query.category && own(CATEGORY_LABEL, req.query.category)) { params.push(req.query.category); where.push(`t.category = $${params.length}`); }
   if (req.query.priority === 'urgent') where.push(`t.priority = 'urgent'`);
   if (req.query.mine === '1') { params.push(req.user.user_id); where.push(`t.assigned_to = $${params.length}`); }
   if (req.query.q) { params.push(`%${String(req.query.q).slice(0, 100).replace(/[%_\\]/g, '\\$&')}%`); const n = params.length; where.push(`(t.subject ILIKE $${n} OR ('T-' || t.ticket_no) ILIKE $${n} OR o.name ILIKE $${n} OR u.email ILIKE $${n})`); }

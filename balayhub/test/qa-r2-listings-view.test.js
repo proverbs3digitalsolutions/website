@@ -61,7 +61,9 @@ test('confirmations use the in-app dialog, never the browser dialogs', () => {
 });
 
 test('the Channels dialog names each feed with its host, the same way calendar.js problemLine does', () => {
-  assert.match(src, /h\('span', \{ class: 'row__title' \}, `\$\{CHANNEL_LABEL\[f\.channel\]\}\$\{f\.host \? ` \(\$\{f\.host\}\)` : ''\}`\)/);
+  // QA round 8 (#16): the name is one helper, which the row title and the Sync now and Disconnect labels all use.
+  assert.match(src, /const channelName = \(f\) => `\$\{CHANNEL_LABEL\[f\.channel\]\}\$\{f\.host \? ` \(\$\{f\.host\}\)` : ''\}`;/);
+  assert.match(src, /h\('span', \{ class: 'row__title' \}, channelName\(f\)\)/);
 });
 
 test('each listing card sync alert names the host of the link with the problem', () => {

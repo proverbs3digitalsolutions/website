@@ -194,6 +194,9 @@ router.post('/quotes', managers, ah(async (req, res) => {
     throw validationError({ discount_amount: 'A deposit needs some accommodation left after the discount.' });
   }
   const unit = await loadUnit(req.user, body.unit_id);
+  if (unit.max_guests && body.num_guests > unit.max_guests) {
+    throw validationError({ num_guests: `This listing allows up to ${unit.max_guests} guests.` });
+  }
   if (body.pay_type === 'deposit' && unit.payment_option === 'full') throw validationError({ pay_type: 'This listing takes full payment only.' });
   if (body.pay_type === 'full' && unit.payment_option === 'deposit') throw validationError({ pay_type: 'This listing takes a deposit only.' });
 

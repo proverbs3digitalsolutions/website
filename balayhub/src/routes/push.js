@@ -1,11 +1,12 @@
 'use strict';
 
 const express = require('express');
-const { query, one } = require('../db');
+const { query, one, tx } = require('../db');
 const { HttpError, ah } = require('../lib/http');
 const { UUID_RE } = require('../lib/validate');
 const { propertyScope } = require('../lib/access');
 const { audit } = require('../lib/audit');
+const { changedKeys } = require('../lib/auditdiff');
 const push = require('../lib/push');
 
 const router = express.Router();
@@ -27,6 +28,9 @@ function isPushService(url) {
 // are left out of a long-term workspace, which has no stays to tell anyone about.
 const typesFor = (role, businessType) => Object.keys(push.TYPES).filter((key) => push.TYPES[key].roles.includes(role)
   && (businessType !== 'long_term' || push.TYPES[key].module !== 'stay'));
+
+// The on/off state each of these types has now, for changedKeys: a type with no stored choice is on.
+const onStates = (stored, keys) => Object.fromEntries(keys.map((key) => [key, stored[key] !== false]));
 
 router.get('/push/settings', ah(async (req, res) => {
   const u = await one('SELECT notify_prefs FROM users WHERE user_id = $1', [req.user.user_id]);
@@ -67,7 +71,14 @@ router.patch('/push/settings', ah(async (req, res) => {
   if (Object.keys(prefs).some((key) => !keys.includes(key))) {
     throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { types: 'Choose on or off for each notification you can receive.' } });
   }
-  await query(`UPDATE users SET notify_prefs = notify_prefs || $2::jsonb WHERE user_id = $1`, [req.user.user_id, JSON.stringify(prefs)]);
+  await tx(async (db) => {
+    const { rows: [now] } = await db.query('SELECT notify_prefs FROM users WHERE user_id = $1 FOR UPDATE', [req.user.user_id]);
+    // Names the types whose on/off really changed, never values; a save that changes nothing writes nothing.
+    const fields = changedKeys(onStates(now.notify_prefs, Object.keys(prefs)), prefs);
+    if (!fields.length) return;
+    await db.query(`UPDATE users SET notify_prefs = notify_prefs || $2::jsonb WHERE user_id = $1`, [req.user.user_id, JSON.stringify(prefs)]);
+    await audit(db, req.user, 'user.notify_prefs_updated', 'user', req.user.user_id, { fields });
+  });
   res.json({ ok: true });
 }));
 
@@ -137,12 +148,25 @@ router.patch('/account/notify-prefs', ah(async (req, res) => {
   }
   if (Object.keys(fields).length) throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields });
 
-  const { notify_prefs: current } = await one('SELECT notify_prefs FROM users WHERE user_id = $1', [user.user_id]);
-  const prefs = { ...current, ...(types || {}) };
-  if (chosen === null) delete prefs.property_ids;
-  else if (chosen) prefs.property_ids = chosen;
-  await query('UPDATE users SET notify_prefs = $2::jsonb WHERE user_id = $1', [user.user_id, JSON.stringify(prefs)]);
-  await audit(null, user, 'user.notify_prefs_updated', 'user', user.user_id, { types: types || null, property_ids: chosen });
+  await tx(async (db) => {
+    const { rows: [now] } = await db.query('SELECT notify_prefs FROM users WHERE user_id = $1 FOR UPDATE', [user.user_id]);
+    const current = now.notify_prefs;
+    // Each sent type is compared with its on/off state now; the property list with the stored one, in sorted order.
+    const sent = { ...(types || {}) };
+    const before = onStates(current, Object.keys(sent));
+    if (chosen !== undefined) {
+      sent.property_ids = chosen && [...chosen].sort();
+      before.property_ids = Array.isArray(current.property_ids) ? [...current.property_ids].sort() : null;
+    }
+    // Names the fields that really changed, never their values; a save that changes nothing writes nothing.
+    const fields = changedKeys(before, sent);
+    if (!fields.length) return;
+    const prefs = { ...current, ...(types || {}) };
+    if (chosen === null) delete prefs.property_ids;
+    else if (chosen) prefs.property_ids = chosen;
+    await db.query('UPDATE users SET notify_prefs = $2::jsonb WHERE user_id = $1', [user.user_id, JSON.stringify(prefs)]);
+    await audit(db, user, 'user.notify_prefs_updated', 'user', user.user_id, { fields });
+  });
   res.json(await prefsView(user));
 }));
 

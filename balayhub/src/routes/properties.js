@@ -3,11 +3,12 @@
 const express = require('express');
 const { query, one, tx } = require('../db');
 const { HttpError, ah, forbidden } = require('../lib/http');
+const { own } = require('../lib/pick');
 const { validate, uuidParam } = require('../lib/validate');
 const { audit } = require('../lib/audit');
 const { changedKeys } = require('../lib/auditdiff');
 const { requireRole } = require('../lib/auth');
-const { propertyScope, loadProperty, loadUnit } = require('../lib/access');
+const { isOwner, propertyScope, loadProperty, loadUnit } = require('../lib/access');
 const { POLICY_KEYS } = require('../lib/policies');
 
 const router = express.Router();
@@ -16,7 +17,7 @@ const managers = requireRole('owner', 'manager');
 const PROPERTY_TYPES = ['apartment', 'boarding_house', 'condominium', 'house', 'commercial', 'dormitory', 'other'];
 const UNIT_TYPES = ['room', 'studio', 'apartment', 'bedspace', 'house', 'commercial_space', 'other'];
 // A listing's public page address (/stay/<host>/<address>).
-const SLUG_RE = /^[a-z0-9-]{3,60}$/;
+const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,58})[a-z0-9]$/;
 
 const propertySpec = {
   property_name: { type: 'string', required: true, max: 120, label: 'Property name' },
@@ -69,7 +70,7 @@ function checkCustomPolicy(policy, text) {
   }
 }
 
-// Only lowercase letters, numbers and hyphens, 3 to 60 characters. A blank address is refused too.
+// Lowercase letters, numbers and hyphens, 3 to 60 characters, starting and ending with a letter or number. A blank address is refused too.
 function checkSlugFormat(slug) {
   if (!SLUG_RE.test(slug || '')) {
     throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { public_slug: 'Use 3 to 60 lowercase letters, numbers or hyphens.' } });
@@ -172,11 +173,11 @@ router.get('/properties', ah(async (req, res) => {
   if (req.query.city) { params.push(String(req.query.city).trim().slice(0, 80)); where.push(`lower(trim(p.city)) = lower($${params.length})`); }
   // Occupancy is checked after grouping: vacant = at least one rentable unit without a tenant.
   const vacant = `COUNT(u.unit_id) FILTER (WHERE u.status = 'active' AND l.lease_id IS NULL AND u.availability = 'available')`;
-  const having = {
+  const having = own({
     vacant: `${vacant} > 0`,
     full: `COUNT(u.unit_id) FILTER (WHERE u.status = 'active') > 0 AND ${vacant} = 0`,
     no_units: `COUNT(u.unit_id) FILTER (WHERE u.status = 'active') = 0`,
-  }[req.query.occupancy];
+  }, req.query.occupancy);
   const SORTS = {
     name: 'p.property_name',
     city: 'lower(p.city), p.property_name',
@@ -195,7 +196,7 @@ router.get('/properties', ah(async (req, res) => {
       WHERE ${where.join(' AND ')}
       GROUP BY p.property_id${having ? `
      HAVING ${having}` : ''}
-      ORDER BY ${SORTS[req.query.sort] || SORTS.name}`, params);
+      ORDER BY ${own(SORTS, req.query.sort) || SORTS.name}`, params);
   res.json({ properties: rows });
 }));
 
@@ -300,7 +301,11 @@ async function checkListingLimit(user, adding = 1) {
     `SELECT COUNT(*)::int AS n FROM units u JOIN properties p ON p.property_id = u.property_id
       WHERE p.organization_id = $1 AND u.status = 'active' AND p.status = 'active' AND u.nightly_rate IS NOT NULL`, [user.organization_id]);
   if (adding > 0 && n + adding > s.listing_limit) {
-    throw new HttpError(402, `Your ${s.name} plan includes up to ${s.listing_limit} listing${s.listing_limit === 1 ? '' : 's'}. Upgrade your plan in Settings to add more.`, { code: 'PLAN_LIMIT' });
+    // The plan's listing limit is the owner's to see; other roles are told to ask them.
+    const msg = isOwner(user)
+      ? `Your ${s.name} plan includes up to ${s.listing_limit} listing${s.listing_limit === 1 ? '' : 's'}. Upgrade your plan in Settings to add more.`
+      : "Your plan's listing limit is reached. Ask the workspace owner to upgrade.";
+    throw new HttpError(402, msg, { code: 'PLAN_LIMIT' });
   }
 }
 

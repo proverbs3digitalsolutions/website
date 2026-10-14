@@ -22,6 +22,8 @@ const nightsBetween = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864
 export const rateStay = (p) => (p.missing_rates || !(Number(p.accommodation_total) > 0) ? null : p.accommodation_total);
 // Offer the rate-card price when the Accommodation box holds something else. A box that is not an amount ("1,5") counts as different.
 export const rateOffer = (typed, stay) => Number(stay) > 0 && parseAmount(typed) !== Number(stay);
+// The most guests a listing takes, or null when the listing has no limit set.
+export const guestLimit = (listings, unitId) => listings.find((l) => l.unit_id === unitId)?.max_guests || null;
 
 // Shared by the host pages (quotes, reservations, listings, charges, check-in). If the browser blocks the clipboard,
 // the text opens selected in a read-only box, so the host can copy it by hand.
@@ -78,6 +80,8 @@ async function newQuoteModal(listings, onSaved) {
     onSubmit: async (d) => {
       const n = nightsBetween(d.check_in, d.check_out);
       if (!(n > 0)) { throw new ApiError('Check-out must be after check-in.', { status: 400, fields: { check_out: 'Check-out must be after check-in.' } }); }
+      const cap = guestLimit(listings, d.unit_id);
+      if (cap && Number(d.num_guests) > cap) { const m = `This listing allows up to ${cap} guests.`; throw new ApiError(m, { status: 400, fields: { num_guests: m } }); }
       // An empty box means the 48-hour default; anything typed must be 1 to 336 (0 is not silently replaced).
       const hours = String(d.expires_in_hours).trim() === '' ? 48 : Number(d.expires_in_hours);
       if (!(Number.isInteger(hours) && hours >= 1 && hours <= 336)) { const m = 'Hours must be between 1 and 336 (14 days).'; throw new ApiError(m, { status: 400, fields: { expires_in_hours: m } }); }
@@ -98,6 +102,8 @@ async function newQuoteModal(listings, onSaved) {
   });
   modal = openModal({ title: 'New quote', wide: true, body: form });
   const el = (n) => form.elements[n];
+  // The Guests box stops at the listing's most guests (50 when the listing has no limit).
+  const fitGuests = () => { el('num_guests').max = String(guestLimit(listings, el('unit_id').value) || 50); };
 
   const guests = () => Number(el('num_guests').value) || 1;
   const nights = () => nightsBetween(el('check_in').value, el('check_out').value);
@@ -134,6 +140,8 @@ async function newQuoteModal(listings, onSaved) {
   } });
   preview.after(useRate);
   async function loadPreview() {
+    // The offer belongs to the dates on screen; it stays hidden if the check fails or there are no dates.
+    useRate.hidden = true;
     const unit = el('unit_id').value;
     if (!unit || !el('check_in').value || !el('check_out').value || nights() < 1) { preview.textContent = ''; drawTotal(); return; }
     preview.textContent = 'Checking the price…';
@@ -157,9 +165,9 @@ async function newQuoteModal(listings, onSaved) {
     } catch (e) { preview.textContent = `Couldn't price these dates: ${e.message} Enter the amounts yourself.`; }
     drawTotal();
   }
-  for (const n of ['unit_id', 'check_in', 'check_out', 'num_guests']) el(n).addEventListener('change', () => { if (n === 'unit_id') drawAddons(); loadPreview(); });
+  for (const n of ['unit_id', 'check_in', 'check_out', 'num_guests']) el(n).addEventListener('change', () => { if (n === 'unit_id') { drawAddons(); fitGuests(); } loadPreview(); });
   for (const n of ['accommodation_total', 'cleaning_fee', 'discount_amount']) el(n).addEventListener('input', () => { if (n !== 'discount_amount') edited = true; drawTotal(); });
-  drawAddons(); drawTotal();
+  fitGuests(); drawAddons(); drawTotal();
 }
 
 export async function quotesView(el, { query, rerender }) {

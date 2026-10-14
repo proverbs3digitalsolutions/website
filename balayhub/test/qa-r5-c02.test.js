@@ -59,10 +59,13 @@ test('workspace setup: the form sends the number typed in its box, and nothing w
   assert.match(setupView, /phone: data\.phone \|\| undefined/, 'the typed number is sent, and a blank box sends nothing');
 });
 
-test('workspace setup: the refused automatic create is kept, and its field messages show on the form', () => {
-  assert.match(auth, /import \{[^}]*\bshowErrors\b[^}]*\} from '\.\.\/ui\.js'/, 'showErrors is imported from ui.js');
-  assert.match(setupView, /catch \(err\) \{ autoError = err; \/\* fall back to the form below, prefilled \*\/ \}/, 'the error is kept, not dropped');
-  assert.match(setupView, /if \(autoError\) showErrors\(form, autoError\.fields\);/, 'the server field messages are shown on the form');
+test('workspace setup: nothing is sent until the button is pressed, and the phone box starts from the saved answers (C23, privacy)', () => {
+  const posts = setupView.match(/post\('\/workspace'/g) || [];
+  assert.equal(posts.length, 1, 'setupView posts to /workspace exactly once');
+  const onSubmit = setupView.slice(setupView.indexOf('onSubmit:'));
+  assert.ok(onSubmit.includes("post('/workspace'"), 'the one post is inside onSubmit');
+  assert.ok(setupView.indexOf("post('/workspace'") > setupView.indexOf('onSubmit:'), 'no post runs before the form is submitted');
+  assert.match(setupView, /name: 'phone'[\s\S]{0,300}value: saved\?\.phone/, 'the phone field still starts from the saved answers');
 });
 
 test('the Get started and setup pages do not use window.alert, confirm or prompt', () => {

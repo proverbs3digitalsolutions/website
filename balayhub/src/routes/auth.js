@@ -6,6 +6,7 @@ const { one, query, tx } = require('../db');
 const { HttpError, ah } = require('../lib/http');
 const { validate } = require('../lib/validate');
 const { audit } = require('../lib/audit');
+const { changedKeys } = require('../lib/auditdiff');
 const mailer = require('../lib/mailer');
 const {
   hashPassword, verifyPassword, burnPasswordCheck, newToken, hashToken,
@@ -315,9 +316,14 @@ router.patch('/workspace', requireAuth, ah(async (req, res) => {
   }, { partial: true });
   const keys = Object.keys(body).filter((k) => body[k]);
   if (keys.length) {
-    await query(`UPDATE organizations SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')} WHERE organization_id = $1`,
-      [req.user.organization_id, ...keys.map((k) => body[k])]);
-    await audit(null, req.user, 'workspace.updated', 'organization', req.user.organization_id, body);
+    // Compared with the row as it is now: a save that changes nothing writes no update and no activity row.
+    const cur = await one('SELECT name, business_type, guest_language FROM organizations WHERE organization_id = $1', [req.user.organization_id]);
+    const fields = changedKeys(cur, Object.fromEntries(keys.map((k) => [k, body[k]])));
+    if (fields.length) {
+      await query(`UPDATE organizations SET ${fields.map((k, i) => `${k} = $${i + 2}`).join(', ')} WHERE organization_id = $1`,
+        [req.user.organization_id, ...fields.map((k) => body[k])]);
+      await audit(null, req.user, 'workspace.updated', 'organization', req.user.organization_id, { fields });
+    }
   }
   res.json({ ok: true });
 }));

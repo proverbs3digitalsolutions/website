@@ -89,6 +89,9 @@ const TL = {
   'Dates no longer available': 'Hindi na available ang petsa',
   'Booking not completed': 'Hindi natuloy ang booking',
   'Back to all places': 'Bumalik sa lahat ng lugar',
+  'Book direct': 'Mag-book nang direkta',
+  "This place isn't taking online bookings right now.": 'Hindi muna tumatanggap ng online booking ang lugar na ito ngayon.',
+  'Enter the number of guests to see the total.': 'Ilagay ang bilang ng guests para makita ang kabuuan.',
   // balance payment
   'TEST MODE: payments on this page are not real.': 'TEST MODE: hindi totoong bayad ang nasa page na ito.',
   'Confirming your payment… ': 'Kinukumpirma ang bayad mo… ',
@@ -261,13 +264,24 @@ export function setGuestLang(l) {
   try { localStorage.setItem(KEY, current); } catch { /* ignore */ }
 }
 
+// Tab title from a page's h1 (minus a leading brand name). app.js marks the guest pages it titled this way (data-h1title).
+export function h1Title(root = document.getElementById('app')) {
+  return root?.querySelector('h1')?.textContent.replace(/^BalayHub /, '').replace(/^Terms of Service/, 'Terms of service');
+}
+function retitle() {
+  if (!document.documentElement.dataset.h1title) return;
+  const title = h1Title();
+  if (title) document.title = `${title} — BalayHub`;
+}
+
 // "English · Tagalog" switch for guest pages.
 export function langToggle(onChange) {
   const pick = (l) => {
     current = l;
     document.documentElement.lang = l === 'tl' ? 'fil' : 'en';
     try { localStorage.setItem(KEY, l); } catch { /* ignore */ }
-    onChange();
+    // The redraw may be async; the tab title follows the new heading once it is drawn.
+    Promise.resolve(onChange()).then(retitle, () => {});
   };
   return h('div', { class: 'langtoggle', role: 'group', 'aria-label': 'Language' },
     h('button', { type: 'button', 'aria-pressed': String(current === 'en'), onclick: () => pick('en') }, 'English'),

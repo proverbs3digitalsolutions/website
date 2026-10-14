@@ -2,7 +2,7 @@
 
 Every decision made on BalayHub, with the date and the reason. Newest decisions go at the bottom. When a decision changes, add a new entry and mark the old one **Superseded by D-xx**. Never delete history.
 
-Last updated: 2026-10-14 (D-83, QA round 7 calls)
+Last updated: 2026-10-14 (D-84, QA round 8 calls)
 
 ---
 
@@ -672,7 +672,7 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 > **D-83 · 2026-10-14 · QA round 7 calls (2026-10-14 sweep, fixed the same day).** The seventh QA sweep (12 lanes, 88 entries including items carried from round 6) found problems that needed a product decision. These are the calls made, with the default we are using until the founder says otherwise. Open questions are in BLOCKERS.MD under "Questions from QA round 7". Each call was checked against the code after the fixes landed.
 >
 > *Money*
-> - **Recording a payment above the balance asks first.** "This is ₱X more than the balance of ₱Y. Record it?" Cancel keeps the form and records nothing ("Payment not saved."). The guest's receipt is emailed only after the host says yes. This is a question on the screen only: the server still accepts an overpayment, because a guest can overpay (D-32) and the refund flow handles it. *Why:* rent payments and owner payouts already ask (D-76); a receipt for a wrong amount went to a guest.
+> - **Recording a payment above the balance asks first.** "This is ₱X more than the balance of ₱Y. Record it?" Cancel keeps the form and records nothing ("Payment not saved."). The guest's receipt is emailed only after the host says yes. This is a question on the screen only: the server still accepts an overpayment, because a guest can overpay (D-32) and the refund flow handles it. *Why:* rent payments and owner payouts already ask (D-76); a receipt for a wrong amount went to a guest. *(Superseded in part by D-84, 2026-10-14: Cancel on an over-amount question is now quiet everywhere, with no "Payment not saved." message. The question itself stays.)*
 > - **A cancelled group shows the money it holds.** The Groups list shows a cancelled group as "Cancelled" with "₱X held" when its rooms had payments, and the group page adds "Held from cancelled rooms". Only owners and managers get this figure; staff never see "held" (staff see groups without money). *Why:* the list showed ₱0.00 while the page showed ₱1,000 paid.
 > - **A quote never offers ₱0 from your rates.** When a listing has no nightly rate for some nights, the quote says "This listing has no nightly rate for some nights. Enter the total yourself.", leaves the amount empty and shows no "Use ₱0" button.
 > - **Previews follow the server's rules first:** a deposit deduction above the deposit, a booking-window rule out of range, a negative base rate and a next-due date more than a year back are refused at the field before any question or preview figure. Bulk "Set a price" warns about nights below the lowest price, as the percentage change does.
@@ -707,3 +707,52 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 > *Not changed (recorded so later sweeps don't file them):* a long-term owner reaching stay APIs (D-82 modules rule); add-on descriptions in one language (D-81); a manager's all-listings season answering 400 with the message (round 6); past nights' prices and blocks can be edited (founder question 1); staff can still read the Reviews page and booking group notes (open round 6 questions). D-82's "no review card" wording for staff applies to guest profiles and reservations, not to the Reviews page. The cleaner redirect with no toast is on purpose (APP-FLOW route guard).
 >
 > *Why:* each call follows the access table and the existing money rules, asks before money moves, and stops the screens offering what the server refuses.
+
+> **D-84 · 2026-10-14 · QA round 8 calls (2026-10-14 sweep, fixed the same day).** The eighth QA sweep (12 lanes, 123 entries including items carried from round 7) found problems that needed a product decision. These are the calls made, with the default we are using until the founder says otherwise. Open questions are in BLOCKERS.MD under "Questions from QA round 8". Each call was checked against the code after the fixes landed (34 planned fix lanes C01 to C34, plus four follow-up lanes C35 to C38).
+>
+> *Privacy*
+> - **Get started answers belong to the email they were typed for.** The setup page fills its form with them only for that email (after a Google sign-up, where the email is not known yet, for 30 minutes), and waits for you to press Create; they are never posted on their own. Log out, "Use a different account" and a signed-in person who already has a workspace all delete them. *Why:* on a shared browser a second account got the first account's business name and mobile number. *Carried to round 9:* the Google path should use a one-time token instead of the 30-minute window.
+>
+> *Money*
+> - **A rent row's Record button starts at that month's remaining amount;** the dialog still shows the whole balance, and the tenant's own Record still starts at the whole balance (founder question 2).
+> - **An amount above ₱99,999,999.99 is refused at its field ("Amount received is too large." and its siblings) before any money question.**
+> - **Cancel on an over-amount question ("Record more than the balance?", "Record more than is owed?", the owner payout question) just returns to the form, with no message,** in reservations, rent and owner payouts. *Supersedes D-83's "(Payment not saved.)" detail; the question itself is unchanged.*
+> - **Every date typed into BalayHub is between 2000 and 2100** (payments, expenses, refunds, deposits, payouts, cleaner pay, stays, leases; the check is in `validate.js`). Extends D-82's payout month range to every date. *Known exception, recorded so it isn't filed:* the report and list filters that use `isValidDate` still accept 1900 to 2200; to be tightened in a later round.
+> - **Expense answers never carry the internal idempotency key,** for any role (completes the D-82 addendum).
+> - **A quote or booking can't have more guests than the listing allows** (`max_guests`), the same as reservations and the booking page: "This listing allows up to N guests."
+> - **"Any free room of a type" quotes the listing BalayHub would pick now** (free and not on a lease) and names it; with none free the answer is 409 `NO_FREE_ROOM`. D-81's empty price boxes stay.
+> - **A percentage-model unit owner needs a management fee:** a blank fee box is refused ("Management fee is required.") on add and on edit; it is not kept as the old fee or replaced by the 20% default. A flat-fee owner has no percentage.
+>
+> *Cleaning and supplies*
+> - **A job's Supplies used asks owners and managers first,** as the Supplies page does (D-77): nothing on hand is refused on that row; more than on hand asks "Record what is on hand" and only then sends `record_on_hand`. The server refuses the same cases without it. Cleaners and staff keep the skip-and-name behaviour, unchanged; only cleaners are told to tell their manager. The Supplies page's record-use keeps its cap.
+> - **Cleaner pay acts only on what you can see:** changing a filter drops ticks on rows that are no longer shown.
+> - **An outside cleaner's name can't be renamed on an existing rate** (past pay is filed under that name). Remove the rate and add it again.
+> - **The team-name refusal no longer repeats the person's name** and says how to add them to the property (closes the round 7 security note).
+> - **Owners and managers can edit a cleaning task's notes** on the job page.
+>
+> *Access*
+> - **Unit-level damage reports (`POST /units/:id/damage`) are for owners and managers;** staff are refused (403), and report damage from a job or a stay (BACKEND-SCHEMA 6.1).
+> - **A manager hitting the plan's listing limit is told to ask the owner,** without the number (follows D-83's plan rule).
+> - **The deposit receipt answer names the guest's email address only to owners and managers;** everyone else reads "the guest".
+>
+> *Activity log*
+> - **Every edit records only what really changed, by field name, never values, and a save that changes nothing writes no row.** Round 8 finished the list: workspace modules and default language, the booking page settings (including Welcome text, and the PayMongo key by name only), manual payment details, team access, your profile, notification settings on the Account page and in Settings (which now logs at all), unit owners, guests, booking groups, tenants, leases, repair requests, pricing rules, add-ons, message templates and the cleaning checklist. Unit owner edits write `unit_owner.updated` with `{ fields }`. *Exception, recorded so it isn't filed:* "Edited a reservation" (`reservation.updated`) keeps the old and new amounts of the fields that changed, because it is a money record; the screen shows the field names only.
+>
+> *Screens and links*
+> - **Filter values from a link or a saved filter that aren't real options are dropped by the shared filter bar,** on every list page, and a search of spaces is no search. A page whose options arrive late sets `keepUnknown` so a valid value is not dropped (maintenance "Assigned to"; cleaner pay "Cleaner" until its list loads). The reviews, unit owners and inbox lists ignore ids that aren't in your workspace. Other lists answer an empty list to a direct request with such an id (no data either way); the pages never send one. *Makes D-77's "unknown ids are ignored" precise.*
+> - **Sort and view words from a link are checked against the page's own list** (`own()` in `src/lib/pick.js`), so `?sort=constructor` or `__proto__` is just an unknown word and no longer a server error.
+> - **Tab lists work with the keyboard everywhere:** one shared handler gives arrow keys, Home and End on every `role="tablist"` (D-81). The inbox composer mode switches are toggle buttons (`aria-pressed`), not tabs.
+> - **Repeated buttons and links name their row everywhere** (D-81, now swept file by file), and a dialog that redraws after an action keeps focus on a sensible control.
+> - **A guest link with its code missing shows the page's own "not valid" card,** in the guest's language, never the marketing home. A signed-in page with a missing id says "This link is incomplete".
+> - **Switching language on the booking and quote pages keeps everything the guest typed or picked.** Tab titles follow the language and keep the host's name.
+> - **After a form error the keyboard focus stays in the form.** An explicit Cancel discards a saved draft; closing a dialog any other way keeps it (founder question 3).
+> - **A field shows its error instead of its hint while the error stands** (D-82 "said once").
+> - **A listing keeps its type** (Bedspace and Commercial space are offered on the listing form and filter).
+> - **A listing's public page address must start and end with a letter or number** (3 to 60 characters, lowercase letters, numbers and hyphens inside).
+> - **The share link source starts on "Other"** (founder question 4).
+>
+> *Not changed (recorded so later sweeps don't file them):* the setup page is English only (host page); add-on quantities are capped in the box (D-81); a past next-due date asks again on later edits (D-81); a long-term owner reaching stay APIs (D-82); a payout to an owner with no units skips the owes check (founder question 8); the Wi-Fi password box has no Show/Hide (founder question 7); other server lists answer an empty list, not a dropped filter, to a direct request with an unknown id; re-archiving an add-on writes a second row; `GET /api/units/:id/channels` still creates the iCal token on read; the admin support reply is still a toast.
+>
+> *Carried to round 9 (from the lane reports and the security check):* the Google sign-up path should use a one-time token instead of the 30-minute window; several compare-then-write saves are not yet locked (booking page settings `directbooking.js`, workspace edit in `auth.js`, pricing rule edit, cleaning checklist, inbox template and automation edit, stays guest and group edit, maintenance schedule) and should read inside a transaction with `FOR UPDATE`; the router's empty-parameter check covers only the last path segment; focus after a redraw in pricing, rent, refunds and cleaner pay (Mark paid, Undo, rate save); the account page has one unnamed Save; the report and list date filters still accept 1900 to 2200.
+>
+> *Why:* each call follows the access table and the money rules, asks before money or stock moves, acts only on what the person sees, and keeps one account's data away from another.

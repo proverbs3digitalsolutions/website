@@ -2,7 +2,7 @@
 // and workspace setup.
 
 import { get, post, ApiError } from '../api.js';
-import { h, brand, field, makeForm, badge, toast, showErrors } from '../ui.js';
+import { h, brand, field, makeForm, badge, toast } from '../ui.js';
 import { state, navigate, refreshUser, afterLogin } from '../app.js';
 import { tryDemo } from './landing.js';
 
@@ -88,6 +88,8 @@ export async function welcomeView(el) {
 
 // ---------------------------------------------------------------- Screen 2: Log in
 export async function loginView(el, { query }) {
+  // The "Password updated" note belongs to the first attempt only: it goes on submit, and reset=1 leaves the address.
+  let resetNote = query.reset && h('div', { class: 'alert alert--ok' }, 'Password updated. Log in with your new password.');
   const form = makeForm({
     submitText: 'Log in',
     fields: [
@@ -95,6 +97,10 @@ export async function loginView(el, { query }) {
       field({ name: 'password', label: 'Password', type: 'password', required: true, autocomplete: 'current-password' }),
     ],
     onSubmit: async (data) => {
+      if (resetNote) {
+        resetNote.remove(); resetNote = null;
+        try { history.replaceState(null, '', '#/login'); } catch { /* ignore */ }
+      }
       const res = await post('/auth/login', data);
       state.user = res.user;
       await refreshUser();
@@ -104,7 +110,7 @@ export async function loginView(el, { query }) {
   form.querySelector('.form-actions .btn').classList.add('btn--block');
   el.append(splitPage(authCard('Welcome back!', 'Please enter your details to log in.',
     query.expired && h('div', { class: 'alert alert--warn' }, 'Your session expired. Log in again to continue — unsaved form input on this device is kept.'),
-    query.reset && h('div', { class: 'alert alert--ok' }, 'Password updated. Log in with your new password.'),
+    resetNote,
     query.google_error && h('div', { class: 'alert alert--error' }, GOOGLE_ERRORS[query.google_error] || 'Google sign-in failed. Please try again.'),
     form,
     await googleButton('Log in with Google'),
@@ -142,7 +148,12 @@ export async function signupView(el, { query }) {
     ],
     onSubmit: async (data) => {
       // Checked before the request goes out, so an unticked box never uses up the sign-up limit.
-      if (!data.accept_privacy) throw new ApiError('Please check the highlighted fields.', { status: 400, fields: { accept_privacy: 'Please accept the Terms of Service and read the Privacy Notice to continue.' } });
+      // Every problem is gathered and shown together, each at its own field.
+      const errs = {};
+      if ((data.password || '').length < 8) errs.password = 'Password must be at least 8 characters.';
+      if (data.password !== data.confirm_password) errs.confirm_password = 'Passwords do not match.';
+      if (!data.accept_privacy) errs.accept_privacy = 'Please accept the Terms of Service and read the Privacy Notice to continue.';
+      if (Object.keys(errs).length) throw new ApiError('Please check the highlighted fields.', { status: 400, fields: errs });
       let res;
       try {
         res = await post('/auth/signup', { ...data, invite_token: query.invite || undefined });
@@ -253,25 +264,29 @@ export async function verifyPendingView(el) {
     msg,
     h('div', { class: 'form' }, resend,
       h('button', { class: 'btn btn--ghost btn--block', onclick: async () => { await refreshUser(); afterLogin(); } }, "I've verified — continue"),
-      h('button', { class: 'link-btn', onclick: async () => { await post('/auth/logout'); state.user = null; navigate('#/login', { replace: true }); } }, 'Use a different account')))));
+      h('button', { class: 'link-btn', onclick: async () => { try { localStorage.removeItem('bh-setup'); } catch { /* ignore */ } await post('/auth/logout'); state.user = null; navigate('#/login', { replace: true }); } }, 'Use a different account')))));
 }
 
 // ---------------------------------------------------------------- workspace setup
+const SETUP_MAX_AGE = 30 * 60 * 1000;
+
+// The Get started answers belong to whoever typed them. They fit the signed-in person only when the saved email is
+// theirs, or (Google sign-up, where the email isn't known yet) when they were saved in the last 30 minutes.
+export function savedSetupFor(saved, email, now = Date.now()) {
+  if (!saved || typeof saved !== 'object' || !saved.name) return null;
+  if (saved.email) return String(saved.email).toLowerCase() === String(email || '').toLowerCase() ? saved : null;
+  const at = Number(saved.saved_at);
+  return Number.isFinite(at) && now - at >= 0 && now - at <= SETUP_MAX_AGE ? saved : null;
+}
+
 export async function setupView(el) {
-  if (state.user.organization_id) { afterLogin(); return; }
-  // Answers from the landing page's "Get started" steps: create the workspace right away.
-  let saved = null;
-  try { saved = JSON.parse(localStorage.getItem('bh-setup') || 'null'); } catch { /* ignore */ }
-  let autoError = null;
-  if (saved?.name) {
-    try {
-      await post('/workspace', saved);
-      try { localStorage.removeItem('bh-setup'); } catch { /* ignore */ }
-      await refreshUser();
-      navigate(saved.business_type === 'long_term' ? '#/properties?new=1' : '#/launchpad', { replace: true });
-      return;
-    } catch (err) { autoError = err; /* fall back to the form below, prefilled */ }
-  }
+  // A person who already has a workspace never sees this page, so answers saved on this device go too.
+  if (state.user.organization_id) { try { localStorage.removeItem('bh-setup'); } catch { /* ignore */ } afterLogin(); return; }
+  let stored = null;
+  try { stored = JSON.parse(localStorage.getItem('bh-setup') || 'null'); } catch { /* ignore */ }
+  // Answers that aren't this person's are deleted, never used. Fitting ones only fill the form; nothing is sent until they press the button.
+  const saved = savedSetupFor(stored, state.user.email);
+  if (stored && !saved) { try { localStorage.removeItem('bh-setup'); } catch { /* ignore */ } }
   const form = makeForm({
     submitText: 'Create workspace',
     fields: [
@@ -292,7 +307,10 @@ export async function setupView(el) {
     },
   });
   el.append(publicPage(authCard(`Welcome, ${state.user.full_name.split(' ')[0]}!`,
-    "Let's set up your rental business. Next, you'll add your first listing or property.", form)));
-  // The automatic create was refused (for example, a saved mobile number the server doesn't accept): show its field messages here.
-  if (autoError) showErrors(form, autoError.fields);
+    "Let's set up your rental business. Next, you'll add your first listing or property.", form,
+    h('div', { class: 'auth-card__foot' },
+      h('button', { class: 'link-btn', type: 'button', onclick: async () => {
+        try { localStorage.removeItem('bh-setup'); } catch { /* ignore */ }
+        await post('/auth/logout'); state.user = null; navigate('#/login', { replace: true });
+      } }, 'Use a different account')))));
 }

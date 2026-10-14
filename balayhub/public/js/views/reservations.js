@@ -45,6 +45,11 @@ export function overBalance(amount, balance) {
   if (!Number.isFinite(typed)) return 0;
   return Math.max(0, Math.round((typed - (Math.max(0, Number(balance)) || 0)) * 100) / 100);
 }
+// A guest count is a whole number from 1. Checked before a save, so the message lands at the field and not in the banner.
+export function guestsProblem(value) {
+  const n = String(value ?? '').trim();
+  return /^\d+$/.test(n) && Number(n) >= 1 ? null : 'At least 1 guest.';
+}
 // Only the fields the host actually changed, so the activity log isn't noisy.
 export function changedFields(orig, d) {
   const same = (a, b) => (a === '' || a == null || b === '' || b == null) ? (a ?? '') === (b ?? '')
@@ -159,7 +164,7 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
       quoteBox,
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'accommodation_total', label: 'Accommodation total', type: 'money', hint: 'Filled in from your nightly rates. You can change it.' }),
-        field({ name: 'cleaning_fee', label: 'Cleaning fee', type: 'money' })),
+        field({ name: 'cleaning_fee', label: 'Cleaning fee', type: 'money', hint: "Leave blank to use your rate card's cleaning fee." })),
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'other_fees', label: 'Other fees', type: 'money', placeholder: '0' }),
         field({ name: 'channel_fee', label: 'Channel fee / commission', type: 'money', placeholder: '0', hint: 'What Airbnb, Booking.com, Agoda or another channel keeps.' })),
@@ -167,6 +172,8 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
       field({ name: 'send_confirmation', label: 'Email a booking confirmation to the guest (needs their email)', type: 'checkbox', value: true }),
     ],
     onSubmit: async (data) => {
+      const problem = guestsProblem(data.num_guests);
+      if (problem) throw new ApiError(problem, { status: 400, fields: { num_guests: problem } });
       if (!data.guest_email) data.send_confirmation = false;
       if (data.pick_mode === 'type') {
         const [property_id, ...rt] = String(data.room_pick || '').split('|');
@@ -184,11 +191,11 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
   });
   const form = modal.el.querySelector('form');
   const typeMode = () => form.elements.pick_mode?.value === 'type';
-  // For a room-type booking the price hint uses the first listing of that type, when listings say their type.
-  const quoteUnit = () => {
-    if (!typeMode()) return form.elements.unit_id.value;
-    const [pid, ...rt] = String(form.elements.room_pick.value).split('|');
-    return listings.find((l) => l.property_id === pid && l.room_type === rt.join('|'))?.unit_id || '';
+  // What the price is asked for: the chosen listing, or a room type (the server prices the listing BalayHub would pick now). Null until one is chosen.
+  const quoteTarget = () => {
+    if (!typeMode()) return form.elements.unit_id.value ? { unit_id: form.elements.unit_id.value } : null;
+    const [property_id, ...rt] = String(form.elements.room_pick.value).split('|');
+    return property_id ? { property_id, room_type: rt.join('|') } : null;
   };
   const syncMode = () => {
     if (!form.elements.pick_mode) return;
@@ -240,21 +247,21 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
     if (e && !['unit_id', 'check_in', 'check_out', 'pick_mode', 'room_pick'].includes(e.target.name)) return;
     quoteBox.hidden = false;
     const { check_in: ci, check_out: co } = Object.fromEntries(['check_in', 'check_out'].map((k) => [k, form.elements[k].value]));
-    const u = quoteUnit();
+    const u = quoteTarget();
     if (e?.target.name === 'check_in' && ci && (!co || co <= ci)) form.elements.check_out.value = addDays(ci, 1);
     const coNow = form.elements.check_out.value;
-    if (!u) { ++seq; applyQuote(null); quoteBox.textContent = typeMode() ? 'The price is not suggested for this room type. Enter the total yourself, or leave it empty to use each listing\'s price.' : 'Choose a listing to see the price.'; return; }
+    if (!u) { ++seq; applyQuote(null); quoteBox.textContent = typeMode() ? 'Choose a room type to see the price.' : 'Choose a listing to see the price.'; return; }
     // A quote still on its way for an old listing or old dates must not fill the boxes now, so the request counter moves on in the branches below.
     if (!ci || !coNow) { ++seq; applyQuote(null); quoteBox.textContent = 'The price shows once the dates are set.'; return; }
     // Dates set but backwards: the check-out message on save says it, so the price line is left out rather than asking for dates again.
     if (coNow <= ci) { ++seq; applyQuote(null); quoteBox.hidden = true; quoteBox.textContent = ''; return; }
     const mySeq = ++seq;
     try {
-      const q = await get(`/reservations/quote${qs({ unit_id: u, check_in: ci, check_out: coNow })}`);
+      const q = await get(`/reservations/quote${qs({ ...u, check_in: ci, check_out: coNow })}`);
       if (mySeq !== seq) return;
       quoted = q;
       const nights = q.nights.length;
-      const guide = typeMode() ? ` From about ${peso(q.accommodation_total)}${Number(q.cleaning_fee) ? ` + ${peso(q.cleaning_fee)} cleaning` : ''} (first listing of this type). Each room is priced from the listing BalayHub picks; leave the boxes empty to use that price.` : '';
+      const guide = typeMode() ? ` From about ${peso(q.accommodation_total)}${Number(q.cleaning_fee) ? ` + ${peso(q.cleaning_fee)} cleaning` : ''} (${q.unit_name}, the free listing BalayHub would pick now). Each room is priced from the listing BalayHub picks; leave the boxes empty to use that price.` : '';
       quoteBox.textContent = typeMode() && !q.missing_rates ? `${nights} night${nights > 1 ? 's' : ''}.${guide}` : q.missing_rates
         ? `${nights} night${nights > 1 ? 's' : ''}. This listing has no nightly rate for some nights — enter the total yourself.`
         : `${nights} night${nights > 1 ? 's' : ''} · ${peso(q.accommodation_total)} for the stay${q.discount_pct ? ` (after ${q.discount_label})` : ''}${Number(q.cleaning_fee) ? ` + ${peso(q.cleaning_fee)} cleaning` : ''}${q.max_guests ? ` · up to ${q.max_guests} guests` : ''}${nightsNote(q)}${q.min_nights > nights ? ` · Note: minimum stay is ${q.min_nights} nights${q.min_nights_reason ? ` during ${q.min_nights_reason}` : ''}.` : ''}`;
@@ -308,7 +315,7 @@ export async function reservationsView(el, { query }) {
           h('th', null, 'Guest'), h('th', null, 'Listing'),
           h('th', { class: 'col-sm-hide' }, 'Channel'), h('th', { class: 'col-sm-hide' }, 'Code'))),
         h('tbody', null, reservations.map((r) => h('tr', { class: 'row-link', onclick: () => navigate(`#/reservations/${r.booking_id}`) },
-          h('td', null, h('a', { href: `#/reservations/${r.booking_id}` }, fmtDate(r.check_in)), h('div', { class: 'muted small' }, `${r.nights} night${r.nights > 1 ? 's' : ''}`)),
+          h('td', null, h('a', { href: `#/reservations/${r.booking_id}`, 'aria-label': `${r.guest_name || r.guest_label || 'Guest'}, ${r.unit_name}, check-in ${fmtDate(r.check_in)}` }, fmtDate(r.check_in)), h('div', { class: 'muted small' }, `${r.nights} night${r.nights > 1 ? 's' : ''}`)),
           h('td', null, fmtDate(r.check_out)),
           h('td', { class: 'num' }, peso(r.total_amount)),
           h('td', { class: `num${Number(r.balance) > 0 && r.status === 'confirmed' ? ' amount--neg' : ''}` }, r.status === 'confirmed' ? peso(r.balance) : '—'),
@@ -391,9 +398,9 @@ async function damageCard(r, rerender) {
           h('span', { class: 'row__sub' }, `${x.estimated_cost ? `Estimated ${peso(x.estimated_cost)} · ` : ''}${fmtDate(manilaDay(x.created_at))}${x.resolution_note ? ` · ${x.resolution_note}` : ''}`)),
         h('div', { class: 'row__end' }, badge(cls, text))),
       x.status === 'open' && h('div', { class: 'chips', style: { margin: '4px 0 10px' } },
-        h('button', { class: 'btn btn--primary btn--sm', type: 'button', onclick: () => charge(x) }, 'Charge the guest'),
-        h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => deduct(x) }, 'Deduct from deposit'),
-        h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => waive(x) }, 'Waive')));
+        h('button', { class: 'btn btn--primary btn--sm', type: 'button', 'aria-label': `Charge the guest for ${x.description}`, onclick: () => charge(x) }, 'Charge the guest'),
+        h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'aria-label': `Deduct from deposit for ${x.description}`, onclick: () => deduct(x) }, 'Deduct from deposit'),
+        h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Waive ${x.description}`, onclick: () => waive(x) }, 'Waive')));
     })));
 }
 
@@ -489,10 +496,10 @@ export async function reservationDetailView(el, { params, rerender }) {
       (r.guest_email || r.guest_has_email) && field({ name: 'send_receipt', label: r.guest_email ? `Email a receipt to ${r.guest_email}` : 'Email a receipt to the guest', type: 'checkbox', value: r.channel === 'direct' }),
     ],
     onSubmit: async (d, { idempotencyKey }) => {
-      // More than is owed is allowed (a refund is recorded later), but the host says so first. Cancel posts nothing and keeps the form open, as the rent payment does.
+      // More than is owed is allowed (a refund is recorded later), but the host says so first. Cancel returns false: nothing is posted and the form stays open with no message.
       const over = overBalance(d.amount, r.balance);
       const owed = Math.max(0, Number(r.balance));
-      if (over > 0 && !await confirmDialog({ title: 'Record more than the balance?', text: `This is ${peso(over)} more than the balance of ${peso(owed)}. Record it?`, confirmText: 'Record it' })) throw new ApiError('Payment not saved.', { status: 400 });
+      if (over > 0 && !await confirmDialog({ title: 'Record more than the balance?', text: `This is ${peso(over)} more than the balance of ${peso(owed)}. Record it?`, confirmText: 'Record it' })) return false;
       if (d.payment_method === 'channel_payout') d.send_receipt = false;
       const res = await post(`/reservations/${r.booking_id}/payments`, d, { idempotencyKey });
       if (res.receipt && !res.receipt.sent) toast(`Payment saved, but the receipt was not emailed: ${res.receipt.error}`, 'error');
@@ -524,6 +531,11 @@ export async function reservationDetailView(el, { params, rerender }) {
       onSubmit: async (d) => {
         d.channel_fee = channelFeeToSave(d.channel, r.channel_fee, d.channel_fee);
         const changes = changedFields(r, d);
+        // A changed guest count must be a whole number from 1; checked here so the message lands at the field.
+        if ('num_guests' in changes) {
+          const problem = guestsProblem(changes.num_guests);
+          if (problem) throw new ApiError(problem, { status: 400, fields: { num_guests: problem } });
+        }
         // The server says whether it wrote anything (a blank fee is stored as 0, which can be no change at all).
         const saved = Object.keys(changes).length ? await patch(`/reservations/${r.booking_id}`, changes) : { changed: false };
         toast(saved.changed ? 'Reservation updated.' : 'No changes to save.'); rerender();
@@ -670,9 +682,9 @@ export async function reservationDetailView(el, { params, rerender }) {
               h('span', { class: 'row__sub' }, `${fmtDate(p.payment_date)}${p.reference_number ? ` · Ref ${p.reference_number}` : ''} · by ${p.recorded_by_name}${p.receipt_number ? ` · ${p.receipt_number}` : ''}${p.receipt_sent_at ? ' · receipt emailed' : ''}`),
               p.voided_at && h('span', { class: 'row__sub' }, `Voided: ${p.void_reason}`)),
             h('div', { class: 'row__end' }, p.voided_at ? badge('voided', 'Voided') : h('div', { class: 'chips' },
-              h('a', { class: 'btn btn--ghost btn--sm', href: `#/receipts/${p.payment_id}` }, 'Receipt'),
-              canManage && r.guest_email && h('button', { class: 'btn btn--ghost btn--sm', onclick: () => emailReceipt(p) }, p.receipt_sent_at ? 'Email again' : 'Email'),
-              canManage && h('button', { class: 'btn btn--ghost btn--sm', onclick: () => voidPayment(p) }, 'Void')))))))
+              h('a', { class: 'btn btn--ghost btn--sm', href: `#/receipts/${p.payment_id}`, 'aria-label': `Receipt for ${peso(p.amount)} on ${fmtDate(p.payment_date)}` }, 'Receipt'),
+              canManage && r.guest_email && h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `${p.receipt_sent_at ? 'Email again' : 'Email'} for ${peso(p.amount)} on ${fmtDate(p.payment_date)}`, onclick: () => emailReceipt(p) }, p.receipt_sent_at ? 'Email again' : 'Email'),
+              canManage && h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Void payment of ${peso(p.amount)} on ${fmtDate(p.payment_date)}`, onclick: () => voidPayment(p) }, 'Void')))))))
             : h('p', { class: 'muted small' }, 'No payments recorded yet.')),
         charges, proofs, refunds && h('div', { id: 'refunds-card' }, refunds))));
 }

@@ -10,6 +10,7 @@
 const express = require('express');
 const { query, one, tx } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
+const { own } = require('../lib/pick');
 const { validate, uuidParam, isValidDate } = require('../lib/validate');
 const { audit } = require('../lib/audit');
 const { requireRole } = require('../lib/auth');
@@ -88,7 +89,7 @@ const SORTS = {
 // no_next) and sort. A cleaner's search does not match guest surnames.
 router.get('/cleaning-tasks', ah(async (req, res) => {
   const qp = req.query;
-  const view = VIEWS[qp.view] ? qp.view : 'open';
+  const view = own(VIEWS, qp.view) ? qp.view : 'open';
   const params = [];
   const where = [taskScope(req.user, params), VIEWS[view]];
   if (qp.mine === '1') { params.push(req.user.user_id); where.push(`t.assigned_to = $${params.length}`); }
@@ -110,7 +111,7 @@ router.get('/cleaning-tasks', ah(async (req, res) => {
   if (qp.turnover === 'same_day') where.push('t.next_check_in = t.due_date');
   if (qp.turnover === 'next_booked') where.push('t.next_check_in IS NOT NULL');
   if (qp.turnover === 'no_next') where.push('t.next_check_in IS NULL');
-  const order = SORTS[qp.sort] || (view === 'done' ? SORTS.completed : SORTS.due);
+  const order = own(SORTS, qp.sort) || (view === 'done' ? SORTS.completed : SORTS.due);
   const { rows } = await query(`${TASK_SELECT} WHERE ${where.join(' AND ')} ORDER BY ${order} LIMIT 300`, params);
   const cp = [];
   const counts = await one(
@@ -195,7 +196,7 @@ async function checkAssignee(user, body, propertyId, propertyName) {
 // A typed outside name must not be a team member's name: it would pay their clean at the outside rate (#29).
 async function checkOutsideName(user, name) {
   const same = name && await teamMemberByName({ query }, user.organization_id, name);
-  if (same) throw validationError({ assignee_name: `Pick ${same.full_name} from the team list instead.` });
+  if (same) throw validationError({ assignee_name: 'That name belongs to someone on your team. Pick them from the team list, or add them to this property in Settings → Team first.' });
 }
 
 // Add a cleaning task by hand (e.g. a mid-stay clean or deep clean).
@@ -251,11 +252,11 @@ router.patch('/cleaning-tasks/:id', managers, ah(async (req, res) => {
         || ('assignee_name' in body && body.assignee_name !== cur.assignee_name);
       if (moves) throw new HttpError(409, "This clean is already paid, so its pay and cleaner can't change.", { code: 'PAID' });
     }
-    if (keys.length) {
+    const fields = changedKeys(cur, body);
+    if (fields.length) {
       await db.query(`UPDATE cleaning_tasks SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')} WHERE task_id = $1`,
         [task.task_id, ...keys.map((k) => body[k])]);
-      const fields = changedKeys(cur, body);
-      if (fields.length) await audit(db, req.user, 'cleaning.task_updated', 'cleaning_task', task.task_id, { fields });
+      await audit(db, req.user, 'cleaning.task_updated', 'cleaning_task', task.task_id, { fields });
     }
   });
   if (body.assigned_to && body.assigned_to !== task.assigned_to) {
@@ -584,8 +585,12 @@ router.put('/cleaning-checklist', owners, ah(async (req, res) => {
     if (seen.has(key)) throw validationError({ items: `This checklist has “${seen.get(key)}” twice.` });
     seen.set(key, x);
   }
-  await query('UPDATE organizations SET cleaning_checklist = $2 WHERE organization_id = $1', [req.user.organization_id, JSON.stringify(items)]);
-  await audit(null, req.user, 'cleaning.checklist_updated', 'organization', req.user.organization_id, { count: items.length });
+  const { cleaning_checklist: stored } = await one('SELECT cleaning_checklist FROM organizations WHERE organization_id = $1', [req.user.organization_id]);
+  // The same items in the same order change nothing, so nothing is written or logged.
+  if (JSON.stringify(stored) !== JSON.stringify(items)) {
+    await query('UPDATE organizations SET cleaning_checklist = $2 WHERE organization_id = $1', [req.user.organization_id, JSON.stringify(items)]);
+    await audit(null, req.user, 'cleaning.checklist_updated', 'organization', req.user.organization_id, { count: items.length });
+  }
   res.json({ items });
 }));
 

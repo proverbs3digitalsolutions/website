@@ -1,6 +1,6 @@
 // Screen 6 — Rent & Expenses.
 
-import { get, post, patch, qs, uploadFile, ApiError } from '../api.js';
+import { get, post, patch, qs, uploadFile } from '../api.js';
 import {
   h, icon, peso, fmtDate, fmtDateTime, fmtMonth, badge, label, options, field, formModal, confirmDialog, emptyState,
   pageHead, toast, todayManila, filesList, openModal, unitLabel, parseAmount } from '../ui.js';
@@ -26,7 +26,7 @@ async function attachReceipt(form, type, id) {
 }
 
 // ---------------------------------------------------------------- record payment
-export async function recordPaymentModal({ leaseId, onSaved } = {}) {
+export async function recordPaymentModal({ leaseId, amount, onSaved } = {}) {
   let leases;
   try { ({ leases } = await get('/rent/leases')); } catch (err) { toast(err.message, 'error'); return; }
   if (!leases.length) {
@@ -54,7 +54,9 @@ export async function recordPaymentModal({ leaseId, onSaved } = {}) {
   if (leaseId) {
     showBalance(leaseId);
     const l = leases.find((x) => x.lease_id === leaseId);
-    if (l && Number(l.outstanding) > 0) amountField.querySelector('input').value = l.outstanding;
+    // A rent row passes its own remaining amount; the balance line above still shows the whole balance.
+    const suggested = amount ?? l?.outstanding;
+    if (l && Number(suggested) > 0) amountField.querySelector('input').value = suggested;
   }
 
   formModal({
@@ -77,8 +79,8 @@ export async function recordPaymentModal({ leaseId, onSaved } = {}) {
       let res;
       try { res = await post('/payments', data, { idempotencyKey }); } catch (err) {
         if (err.code !== 'PAYMENT_OVER_BALANCE') throw err;
-        // More than is owed becomes advance credit, but only if the host confirms it.
-        if (!await confirmDialog({ title: 'Record more than is owed?', text: `Record ${peso(parseAmount(data.amount_paid))}? ${peso(err.data.credit_after)} becomes advance credit.`, confirmText: 'Record anyway' })) throw new ApiError('Payment not saved.', { status: 400 });
+        // More than is owed becomes advance credit, but only if the host confirms it. Cancel returns false: nothing is posted and the form stays open with no message.
+        if (!await confirmDialog({ title: 'Record more than is owed?', text: `Record ${peso(parseAmount(data.amount_paid))}? ${peso(err.data.credit_after)} becomes advance credit.`, confirmText: 'Record anyway' })) return false;
         res = await post('/payments', { ...data, confirm_over: true }, { idempotencyKey });
       }
       await attachReceipt(form, 'payment', res.payment.payment_id);
@@ -230,7 +232,7 @@ export async function rentView(el, { query }) {
           h('div', { class: 'row__end' },
             h('span', { class: `amount${c.status === 'overdue' ? ' amount--neg' : ''}` }, peso(c.status === 'paid' ? c.amount_due : c.balance)),
             h('div', { class: 'chips' }, badge(c.status),
-              c.status !== 'paid' && h('button', { class: 'btn btn--secondary btn--sm', onclick: () => recordPaymentModal({ leaseId: c.lease_id, onSaved: reload }) }, 'Record')))))))]
+              c.status !== 'paid' && h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `Record payment for ${c.tenant_name}, ${unitLabel(c.unit_name)}, ${fmtMonth(c.period)}`, onclick: () => recordPaymentModal({ leaseId: c.lease_id, amount: c.balance, onSaved: reload }) }, 'Record')))))))]
       : ((filtered || statusCountsAsFilter(f.status)) ? noResults() : emptyState({
         title: f.status === 'outstanding' || f.status === 'overdue' ? 'No unpaid rent' : 'No rent charges',
         text: 'Rent charges are created monthly from active leases. Assign tenants to units to start tracking.',

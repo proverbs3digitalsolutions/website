@@ -9,7 +9,8 @@ import { initFilters, filterBar, rememberFilters, changed } from '../filters.js'
 import { CHANNEL_LABEL, SOURCE_LABEL, addDays } from './reservations.js';
 import { copyText } from './quotes.js';
 
-const UNIT_TYPES = ['studio', 'apartment', 'room', 'house', 'other'];
+// The same seven types, in the same order, as properties.js (its unit list).
+const UNIT_TYPES = ['room', 'studio', 'apartment', 'bedspace', 'house', 'commercial_space', 'other'];
 const PROPERTY_TYPES = ['condominium', 'apartment', 'house', 'boarding_house', 'other'];
 
 // Tags: type and press Enter or comma. Lowercase, up to 10, up to 30 characters each.
@@ -69,9 +70,10 @@ function checkDiscountOrder(d) {
 }
 
 // A base rate must be an amount above zero. The server refuses the same values, so the field says so before any question.
-function baseRateError(text) {
+export function baseRateError(text) {
   const n = parseAmount(text);
-  return Number.isFinite(n) && n > 0 ? null : 'Nightly rate must be greater than zero.';
+  if (!Number.isFinite(n)) return 'Nightly rate must be a valid amount (e.g. 8500 or 8500.50).';
+  return n > 0 ? null : 'Nightly rate must be greater than zero.';
 }
 function checkBaseRate(d) {
   const error = baseRateError(d.nightly_rate);
@@ -241,33 +243,35 @@ async function shrink(file) {
 async function photosModal(listing) {
   const box = h('div', { class: 'stack' });
   const m = openModal({ title: `Photos · ${listing.unit_name}`, body: box, wide: true });
-  async function draw() {
+  // Each change redraws the dialog, so focus goes back to a control in it: the one the person used, or its replacement.
+  async function draw(focus) {
     const { photos } = await get(`/units/${listing.unit_id}/photos`);
     const input = h('input', { type: 'file', accept: 'image/*', multiple: true, class: 'input', 'aria-label': 'Listing photos' });
     const status = h('span', { class: 'muted small', 'aria-live': 'polite' });
+    const upload = h('button', { class: 'btn btn--primary btn--sm', type: 'button', onclick: async (e) => {
+      const files = [...input.files];
+      if (!files.length) { toast('Choose photos first.', 'error'); return; }
+      e.target.disabled = true;
+      try {
+        for (const [i, f] of files.entries()) {
+          status.textContent = `Uploading ${i + 1} of ${files.length}…`;
+          const blob = await shrink(f);
+          await api('POST', `/units/${listing.unit_id}/photos`, undefined, { rawBody: blob, headers: { 'Content-Type': blob.type || 'image/jpeg' } });
+        }
+        toast('Photos uploaded.');
+      } catch (err) { toast(err.message, 'error'); }
+      draw((root, btn) => btn.focus());
+    } }, 'Upload');
     box.replaceChildren(
       h('p', { class: 'muted small' }, 'Shown on your booking page. The first photo is the cover. Up to 12 photos; large photos are resized automatically.'),
-      photos.length ? h('div', { class: 'ph-grid' }, photos.map((p, i) => h('figure', { class: 'ph-item' },
+      photos.length ? h('div', { class: 'ph-grid' }, photos.map((p, i) => h('figure', { class: 'ph-item', tabindex: '-1' },
         h('img', { src: `/api/files/${p.file_id}`, alt: `${listing.unit_name}, photo ${i + 1} of ${photos.length}`, loading: 'lazy' }),
         h('figcaption', null,
-          i === 0 ? h('span', { class: 'badge badge--paid' }, 'Cover') : h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Make cover, photo ${i + 1}`, onclick: async () => { await post(`/listing-photos/${p.file_id}/cover`); draw(); } }, 'Make cover'),
-          h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Delete, photo ${i + 1}`, onclick: async () => { if (!await confirmDialog({ title: 'Delete this photo?', text: 'It is removed from your booking page.', confirmText: 'Delete photo', danger: true })) return; await post(`/listing-photos/${p.file_id}/remove`); draw(); } }, 'Delete')))))
+          i === 0 ? h('span', { class: 'badge badge--paid' }, 'Cover') : h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Make cover, photo ${i + 1}`, onclick: async () => { await post(`/listing-photos/${p.file_id}/cover`); draw((root) => root.querySelector('.ph-item')?.focus()); } }, 'Make cover'),
+          h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Delete, photo ${i + 1}`, onclick: async () => { if (!await confirmDialog({ title: 'Delete this photo?', text: 'It is removed from your booking page.', confirmText: 'Delete photo', danger: true })) return; await post(`/listing-photos/${p.file_id}/remove`); draw((root, btn) => (root.querySelectorAll('.ph-item')[i]?.querySelector('button[aria-label^="Delete,"]') ?? btn).focus()); } }, 'Delete')))))
         : h('p', { class: 'muted' }, 'No photos yet.'),
-      h('div', { class: 'form' }, input,
-        h('div', { class: 'chips' }, h('button', { class: 'btn btn--primary btn--sm', type: 'button', onclick: async (e) => {
-          const files = [...input.files];
-          if (!files.length) { toast('Choose photos first.', 'error'); return; }
-          e.target.disabled = true;
-          try {
-            for (const [i, f] of files.entries()) {
-              status.textContent = `Uploading ${i + 1} of ${files.length}…`;
-              const blob = await shrink(f);
-              await api('POST', `/units/${listing.unit_id}/photos`, undefined, { rawBody: blob, headers: { 'Content-Type': blob.type || 'image/jpeg' } });
-            }
-            toast('Photos uploaded.');
-          } catch (err) { toast(err.message, 'error'); }
-          draw();
-        } }, 'Upload'), status)));
+      h('div', { class: 'form' }, input, h('div', { class: 'chips' }, upload, status)));
+    focus?.(box, upload);
   }
   try { await draw(); } catch (err) { m.close(); toast(err.message, 'error'); }
 }
@@ -284,19 +288,21 @@ async function channelsModal(listing, onChange) {
   let data;
   try { data = await get(`/units/${listing.unit_id}/channels`); } catch (err) { toast(err.message, 'error'); return; }
   const exportInput = h('input', { class: 'input', readonly: true, value: data.export_url, 'aria-label': 'BalayHub calendar link' });
+  // A channel as its row names it, "Airbnb" or "Airbnb (host)", so each of its buttons can say which channel it acts on.
+  const channelName = (f) => `${CHANNEL_LABEL[f.channel]}${f.host ? ` (${f.host})` : ''}`;
   const feedRow = (f) => h('li', null, h('div', { class: 'row' },
     h('div', { class: 'row__main' },
-      h('span', { class: 'row__title' }, `${CHANNEL_LABEL[f.channel]}${f.host ? ` (${f.host})` : ''}`),
+      h('span', { class: 'row__title' }, channelName(f)),
       h('span', { class: 'row__sub', style: { wordBreak: 'break-all' } }, f.url),
       h('span', { class: `row__sub ${f.last_status === 'error' ? 'amount--neg' : ''}` }, f.last_synced_at ? `${fmtDateTime(f.last_synced_at)} — ${f.problem_message || f.last_message || ''}` : 'Not synced yet'),
       // Support still needs the raw text, so it stays under a muted label when a plain message replaced it.
       f.problem_message && f.last_message && h('span', { class: 'row__sub muted small' }, `Technical details: ${f.last_message}`)),
     h('div', { class: 'row__end' }, h('div', { class: 'chips' },
-      h('button', { class: 'btn btn--secondary btn--sm', onclick: async (e) => {
+      h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `Sync now, ${channelName(f)}`, onclick: async (e) => {
         e.target.disabled = true;
         try { const r = await post(`/ical-feeds/${f.feed_id}/sync`); toast(await syncToastText(listing.unit_id, f.feed_id, r.sync), r.sync.ok ? 'info' : 'error'); m.close(); channelsModal(listing, onChange); onChange(); } catch (err) { toast(err.message, 'error'); e.target.disabled = false; }
       } }, 'Sync now'),
-      h('button', { class: 'btn btn--ghost btn--sm', onclick: async () => {
+      h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Disconnect ${channelName(f)}`, onclick: async () => {
         if (!await confirmDialog({ title: `Disconnect ${CHANNEL_LABEL[f.channel]}?`, text: 'Future stays from this channel are cancelled, and its calendar blocks are removed. Past stays and any stays with payments are kept.', confirmText: 'Disconnect', danger: true })) return;
         try { await post(`/ical-feeds/${f.feed_id}/remove`); toast('Calendar disconnected.'); m.close(); channelsModal(listing, onChange); onChange(); } catch (err) { toast(err.message, 'error'); }
       } }, 'Disconnect')))));
@@ -394,6 +400,7 @@ async function guestPagesModal(listing) {
   });
   const linksBox = h('div', { class: 'stack' });
   const src = h('select', { class: 'input', id: 'share-src' }, Object.entries(SOURCE_LABEL).filter(([k]) => k !== 'quote').map(([k, t]) => h('option', { value: k }, t)));
+  src.value = 'other'; // an unchosen link is not counted as Facebook
   const shareUrl = () => `${booking.url.replace(/#.*$/, '')}#/book/${booking.slug}/${listing.unit_id}?src=${src.value}`;
   const out = h('input', { class: 'input', readonly: true, 'aria-label': 'Share link' });
   function drawLinks() {
@@ -471,6 +478,8 @@ export async function listingsView(el, { query }) {
   if (!isOwner || !['', 'archived'].includes(filters.status)) filters.status = '';
   const [{ properties }, tagList] = await Promise.all([get('/properties'), get('/tags').then((r) => r.tags).catch(() => [])]);
   const box = h('div');
+  // One tablist for the page's life: each render swaps its buttons, so the focus restore in app.js finds the same list.
+  const tabs = h('div', { class: 'tabs', role: 'tablist' });
   // Archived units are not in GET /listings, so they are read from each building's own page.
   async function loadArchived() {
     bar.hidden = false;
@@ -505,7 +514,7 @@ export async function listingsView(el, { query }) {
     if (LISTING_SORTS[filters.sort]) shown = [...shown].sort(LISTING_SORTS[filters.sort]);
     const dirtyCount = base.filter((l) => l.cleaning_status === 'dirty').length;
     const setCleaning = (v) => { filters.cleaning = v; rememberFilters('listings', filters); load(); };
-    const tabs = h('div', { class: 'tabs', role: 'tablist' },
+    tabs.replaceChildren(
       h('button', { role: 'tab', 'aria-selected': String(!filters.cleaning), onclick: () => setCleaning('') }, `All (${base.length})`),
       h('button', { role: 'tab', 'aria-selected': String(filters.cleaning === 'dirty'), onclick: () => setCleaning('dirty') }, `Needs cleaning (${dirtyCount})`),
       h('button', { role: 'tab', 'aria-selected': String(filters.cleaning === 'clean'), onclick: () => setCleaning('clean') }, `Clean (${base.length - dirtyCount})`));
@@ -528,7 +537,7 @@ export async function listingsView(el, { query }) {
         h('strong', null, 'Calendar sync problem'),
         h('ul', { class: 'sync-alert__list' }, problems.get(l.unit_id).map((p) => h('li', null,
           `${CHANNEL_LABEL[p.channel]}${p.host ? ` (${p.host})` : ''}: ${p.message}${p.kind === 'overlap' ? ` (${fmtDate(p.check_in)} to ${fmtDate(p.check_out)})` : ''}`))),
-        canManage && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => channelsModal(l, load) }, 'Open channels')),
+        canManage && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'aria-label': `Open channels for ${l.unit_name}`, onclick: () => channelsModal(l, load) }, 'Open channels')),
       h('dl', { class: 'dl' },
         h('dt', null, 'Nightly rate'), h('dd', null, l.nightly_rate ? peso(l.nightly_rate) : (unpricedNote || '—')),
         h('dt', null, 'Cleaning fee'), h('dd', null, peso(l.cleaning_fee)),
@@ -560,7 +569,7 @@ export async function listingsView(el, { query }) {
             } }) });
         } }, 'Edit'),
         isOwner && h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Archive ${l.unit_name}`, onclick: () => changeArchive(l, 'archive', load) }, 'Archive'),
-        h('a', { class: 'btn btn--ghost btn--sm', href: `#/reservations?q=${encodeURIComponent(l.unit_name)}&view=all` }, 'Bookings')))))
+        h('a', { class: 'btn btn--ghost btn--sm', href: `#/reservations?q=${encodeURIComponent(l.unit_name)}&view=all`, 'aria-label': `Bookings for ${l.unit_name}` }, 'Bookings')))))
       : h('div', { class: 'card' }, empty));
   }
   const bar = filterBar({
@@ -573,7 +582,7 @@ export async function listingsView(el, { query }) {
       isOwner && { name: 'status', label: 'Show', all: 'Active listings', options: [['archived', 'Archived listings']] },
     ].filter(Boolean),
     more: [
-      { name: 'unit_type', label: 'Type', all: 'Any type', options: UNIT_TYPES.map((t) => [t, t[0].toUpperCase() + t.slice(1)]) },
+      { name: 'unit_type', label: 'Type', all: 'Any type', options: options(UNIT_TYPES) },
       { name: 'channels', label: 'Channels', all: 'Any', options: [['connected', 'Calendar connected'], ['none', 'No channel connected']] },
       canManage && { name: 'direct', label: 'Booking page', all: 'Any', options: [['on', 'Shown on my booking page'], ['off', 'Not on my booking page']] },
       { name: 'min_guests', label: 'Fits guests (at least)', type: 'number', min: 1 },

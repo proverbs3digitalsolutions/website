@@ -60,7 +60,7 @@ test.before(async () => {
   for (const f of ['api.js', 'ui.js', 'filters.js']) fs.copyFileSync(path.join(SRC, f), path.join(dir, f));
   fs.writeFileSync(path.join(dir, 'app.js'), "export const state = { user: { role: 'owner' } };\nexport const navigate = () => {};\n");
   fs.mkdirSync(path.join(dir, 'views'));
-  fs.writeFileSync(path.join(dir, 'views', 'reservations.js'), 'export function addDays(d, n) { const x = new Date(`${d}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); }\nexport function boxValue({ typed, mode, suggestion, current }) { if (typed) return current; return mode === "type" || suggestion == null ? "" : String(suggestion); }\n');
+  fs.writeFileSync(path.join(dir, 'views', 'reservations.js'), 'export function guestsProblem(value) { const n = String(value ?? "").trim(); return /^\\d+$/.test(n) && Number(n) >= 1 ? null : "At least 1 guest."; }\nexport function addDays(d, n) { const x = new Date(`${d}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); }\nexport function boxValue({ typed, mode, suggestion, current }) { if (typed) return current; return mode === "type" || suggestion == null ? "" : String(suggestion); }\n');
   fs.writeFileSync(path.join(dir, 'views', 'groups.js'), `${groupsSrc}\nexport { roomRow };\n`);
   groups = await import(pathToFileURL(path.join(dir, 'views', 'groups.js')));
 });

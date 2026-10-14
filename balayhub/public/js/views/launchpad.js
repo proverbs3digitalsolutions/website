@@ -40,9 +40,9 @@ function stepCard(st, isNext, rerender) {
       h('ol', { class: 'lpad-how' }, st.how.map((x) => h('li', null, x))),
       h('div', { class: 'chips' },
         !st.done && h('a', { class: `btn btn--sm ${isNext ? 'btn--primary' : 'btn--secondary'}`, href: st.href }, st.action),
-        st.done && h('a', { class: 'btn btn--ghost btn--sm', href: st.href }, 'Open'),
-        st.optional && !st.done && !st.skipped && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => skip(false) }, 'Skip for now'),
-        st.skipped && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => skip(true) }, 'Show again'))));
+        st.done && h('a', { class: 'btn btn--ghost btn--sm', href: st.href, 'aria-label': `Open ${st.title}` }, 'Open'),
+        st.optional && !st.done && !st.skipped && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => skip(false), 'aria-label': `Skip for now, ${st.title}` }, 'Skip for now'),
+        st.skipped && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => skip(true), 'aria-label': `Show again, ${st.title}` }, 'Show again'))));
 }
 
 export async function launchpadView(el, { rerender }) {

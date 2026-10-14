@@ -15,7 +15,8 @@ test('keyboard: a clickable row opens on Enter and on Space, and Space does not 
   // Reservations (QA r5 #47): rows are no longer tab stops; the Check-in cell holds a real link, which works on Enter.
   const resRows = read('reservations.js');
   assert.doesNotMatch(resRows, /class: 'row-link', tabindex: 0/);
-  assert.match(resRows, /h\('a', \{ href: `#\/reservations\/\$\{r\.booking_id\}` \}, fmtDate\(r\.check_in\)\)/);
+  // QA round 8 #42: the link also carries an aria-label (guest, listing and date), so the props may hold more than href.
+  assert.match(resRows, /h\('a', \{ href: `#\/reservations\/\$\{r\.booking_id\}`, 'aria-label': `[^`]*` \}, fmtDate\(r\.check_in\)\)/);
   for (const f of ['help.js', 'groups.js']) {
     const rows = read(f).split('\n').filter((line) => line.includes("class: 'row-link', tabindex: 0"));
     assert.ok(rows.length > 0, `${f} has no keyboard row to check`);

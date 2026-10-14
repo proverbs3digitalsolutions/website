@@ -64,6 +64,10 @@ function buildPanel() {
   const longTerm = state.user?.business_type === 'long_term';
   const input = h('textarea', { class: 'input', rows: 2, maxlength: 2000, placeholder: longTerm ? 'Ask anything about BalayHub, e.g. how do I record a rent payment? (English or Tagalog)' : 'Ask anything about BalayHub… (English or Tagalog)', 'aria-label': 'Your question' });
   const sendBtn = h('button', { class: 'btn btn--primary', type: 'submit', 'aria-label': 'Send' }, 'Send');
+  // Sits above the box, so an empty Send says what to do where the person is looking.
+  const askError = h('div', { class: 'error', role: 'alert' });
+  const askNote = h('div', { class: 'field', style: { padding: '0 12px' } }, askError);
+  input.addEventListener('input', () => { askError.textContent = ''; });
 
   const bubble = (m) => h('div', { class: `assist__msg assist__msg--${m.role}` },
     h('div', { class: 'assist__text' }, m.content),
@@ -92,7 +96,9 @@ function buildPanel() {
   const form = h('form', { class: 'assist__form', onsubmit: async (e) => {
     e.preventDefault();
     const q = input.value.trim();
-    if (!q || busy) return;
+    if (busy) return;
+    if (!q) { askError.textContent = 'Type a question first.'; input.focus(); return; }
+    askError.textContent = '';
     const asked = { role: 'user', content: q };
     msgs.push(asked);
     input.value = '';
@@ -117,6 +123,7 @@ function buildPanel() {
         h('button', { type: 'button', class: 'assist__icon', title: 'New chat', 'aria-label': 'New chat', onclick: () => { msgs = []; save(msgs); draw(); input.focus(); } }, icon('plus')),
         h('button', { type: 'button', class: 'assist__icon', title: 'Close', 'aria-label': 'Close', onclick: closeAssistant }, '×'))),
     list,
+    askNote,
     form,
     h('p', { class: 'assist__foot' }, longTerm ? 'It can’t see your tenants, leases or rent records and may make mistakes. ' : 'It can’t see your bookings or guests and may make mistakes. ',
       h('a', { href: '#/help/new', onclick: (e) => { e.preventDefault(); if (msgs.length) toTicket(msgs); else { closeAssistant(); navigate('#/help/new'); } } }, 'Talk to a person')));

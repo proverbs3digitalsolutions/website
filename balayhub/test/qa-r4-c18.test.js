@@ -27,7 +27,8 @@ test('sign-up page: an unticked "I agree" box is refused in the browser before t
 test('sign-up page: the unticked box stops at its own field with the server wording, and the banner is the generic line', () => {
   const check = signupView.indexOf('!data.accept_privacy');
   const refusal = signupView.slice(check, signupView.indexOf("post('/auth/signup'"));
-  assert.ok(refusal.includes(`fields: { accept_privacy: '${CONSENT}' }`), 'the consent message is set on the box itself');
+  // Round 8 (#54): the box's message joins the other client checks and all are thrown together.
+  assert.ok(refusal.includes(`errs.accept_privacy = '${CONSENT}'`), 'the consent message is set on the box itself');
   assert.ok(refusal.includes("new ApiError('Please check the highlighted fields.'"), 'the banner names the fields and does not repeat the message');
   assert.equal(auth.split(CONSENT).length - 1, 1, 'the consent message is written once in auth.js');
 });

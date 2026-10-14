@@ -228,10 +228,16 @@ export async function helpTicketView(el, { params, rerender }) {
 
   const reply = h('textarea', { class: 'input', maxlength: 8000, rows: 4, 'aria-label': 'Your reply',
     placeholder: t.status === 'waiting_on_customer' ? 'Answer the question from support…' : t.status === 'resolved' ? 'Still not fixed? Reply here and we’ll reopen it.' : 'Add more details…' });
+  const replyError = h('div', { class: 'error', role: 'alert' });
+  const replyField = h('div', { class: 'field' }, reply, replyError);
   const attach = h('input', { type: 'file', class: 'input', accept: 'image/jpeg,image/png,image/webp,application/pdf', 'aria-label': 'Attach a file' });
+  // Clears the message once the person types or attaches a file.
+  const clearReplyError = () => { replyError.textContent = ''; replyField.classList.remove('field--invalid'); reply.removeAttribute('aria-invalid'); };
+  reply.addEventListener('input', clearReplyError);
+  attach.addEventListener('change', clearReplyError);
   const send = async (e) => {
     const btn = e.currentTarget;
-    if (!reply.value.trim() && !attach.files[0]) { toast('Write a message or attach a file first.', 'error'); return; }
+    if (!reply.value.trim() && !attach.files[0]) { replyError.textContent = 'Write a reply first.'; replyField.classList.add('field--invalid'); reply.setAttribute('aria-invalid', 'true'); reply.focus(); return; }
     btn.disabled = true;
     try {
       if (attach.files[0]) await uploadFile('support', t.ticket_id, attach.files[0]);
@@ -242,14 +248,15 @@ export async function helpTicketView(el, { params, rerender }) {
   };
 
   let rating = 0;
+  const ratingError = h('div', { class: 'error', role: 'alert' });
   const ratingComment = h('input', { class: 'input', maxlength: 1000, placeholder: 'Anything we could do better? (optional)', 'aria-label': 'Comment' });
   const rateCard = !open && h('div', { class: 'card' },
     h('div', { class: 'card__head' }, h('h2', null, t.rating ? 'Your rating' : 'How did we do?')),
     t.rating
       ? h('p', null, `${'★'.repeat(t.rating)}${'☆'.repeat(5 - t.rating)}`, t.rating_comment && h('span', { class: 'muted' }, ` · ${t.rating_comment}`))
-      : h('div', { class: 'form' }, stars((n) => { rating = n; }), ratingComment,
+      : h('div', { class: 'form' }, h('div', { class: 'field' }, stars((n) => { rating = n; ratingError.textContent = ''; }), ratingError), ratingComment,
         h('div', null, h('button', { class: 'btn btn--secondary btn--sm', onclick: async (e) => {
-          if (!rating) { toast('Choose 1 to 5 stars.', 'error'); return; }
+          if (!rating) { ratingError.textContent = 'Pick a star rating first.'; return; }
           e.currentTarget.disabled = true;
           try { await post(`/support/tickets/${t.ticket_id}/rate`, { rating, comment: ratingComment.value.trim() || null }); toast('Thanks for the feedback!'); rerender(); } catch (err) { toast(err.message, 'error'); e.currentTarget.disabled = false; }
         } }, 'Send rating'))));
@@ -278,7 +285,7 @@ export async function helpTicketView(el, { params, rerender }) {
         h('div', { class: 'card' },
           h('div', { class: 'card__head' }, h('h2', null, 'Conversation')),
           timeline(messages, events),
-          canReply ? h('div', { class: 'form', style: { marginTop: '14px' } }, reply, attach,
+          canReply ? h('div', { class: 'form', style: { marginTop: '14px' } }, replyField, attach,
             h('div', null, h('button', { class: 'btn btn--primary', onclick: send }, t.status === 'resolved' ? 'Reply and reopen' : 'Send reply')))
             : h('div', { style: { marginTop: '14px' } }, h('a', { class: 'btn btn--secondary', href: `#/help/new${qs({ subject: `Follow-up on ${t.number}: ${t.subject}`.slice(0, 150) })}` }, 'Open a follow-up ticket')))),
       h('div', { class: 'stack' },

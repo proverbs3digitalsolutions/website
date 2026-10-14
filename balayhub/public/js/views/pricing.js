@@ -174,7 +174,7 @@ export async function pricingView(el, { rerender }) {
   const canEditRule = (r) => canManage && (r.unit_id || isOwner);
 
   const ruleRows = listings.map((l) => h('tr', null,
-    h('td', null, h('a', { href: `#/listings?focus=${l.unit_id}` }, l.unit_name), h('div', { class: 'muted small' }, l.property_name)),
+    h('td', null, h('a', { href: `#/listings?focus=${l.unit_id}`, 'aria-label': `${l.unit_name}, ${l.property_name}` }, l.unit_name), h('div', { class: 'muted small' }, l.property_name)),
     h('td', null, peso(l.nightly_rate)),
     h('td', null, l.weekend_rate ? peso(l.weekend_rate) : '—'),
     h('td', null, l.holiday_rate ? peso(l.holiday_rate) : '—'),
@@ -207,8 +207,8 @@ export async function pricingView(el, { rerender }) {
           h('span', { class: 'row__title' }, ruleSummary(r)),
           h('span', { class: 'row__sub' }, `${RULE_KINDS[r.kind]?.label || r.kind} · ${r.unit_name || 'All listings'}${!r.active ? ' · off' : ''}`)),
         canEditRule(r) && h('div', { class: 'row__end' }, h('div', { class: 'chips' },
-          h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => editRule(r) }, 'Edit'),
-          h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => removeRule(r) }, 'Remove')))))))
+          h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Edit rule: ${ruleSummary(r)}, ${r.unit_name || 'All listings'}`, onclick: () => editRule(r) }, 'Edit'),
+          h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Remove rule: ${ruleSummary(r)}, ${r.unit_name || 'All listings'}`, onclick: () => removeRule(r) }, 'Remove')))))))
         : h('p', { class: 'muted' }, 'No rules yet. For example: 15% off stays starting within 3 days, or 10% off bookings more than 200 days away.')),
     h('div', { class: 'card card--flush' },
       h('div', { class: 'card__head', style: { padding: '16px 16px 0' } }, h('h2', null, 'Listing rates')),
@@ -227,7 +227,7 @@ export async function pricingView(el, { rerender }) {
           h('td', null, s.unit_name || 'All listings'),
           h('td', null, s.nightly_rate ? peso(s.nightly_rate) : (s.adjust_pct === null ? '—' : `${s.adjust_pct > 0 ? '+' : ''}${s.adjust_pct}%`)),
           h('td', null, s.min_nights ? String(s.min_nights) : '—'),
-          h('td', null, canManage && (s.unit_id || isOwner) && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => remove(s) }, 'Remove')))))))
+          h('td', null, canManage && (s.unit_id || isOwner) && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Remove season: ${s.name}, ${s.unit_name || 'All listings'}`, onclick: () => remove(s) }, 'Remove')))))))
         : h('p', { class: 'muted' }, 'No seasons yet. Add one for peak months (e.g. March to May), local fiestas, or a minimum stay over Holy Week and Christmas.')),
     previewCard(listings, seasons),
     h('div', { class: 'card' },

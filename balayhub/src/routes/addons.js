@@ -9,6 +9,7 @@ const { query, tx } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
 const { validate, uuidParam } = require('../lib/validate');
 const { audit } = require('../lib/audit');
+const { changedKeys } = require('../lib/auditdiff');
 const { requireRole } = require('../lib/auth');
 const { PRICING } = require('../lib/addons');
 
@@ -88,6 +89,7 @@ router.post('/addons', owners, ah(async (req, res) => {
 }));
 
 // Only the fields sent change. Sending a blank name, price, pricing or maximum is refused.
+// A save that changes nothing writes nothing; the activity row names the changed fields, never their values.
 router.patch('/addons/:id', owners, ah(async (req, res) => {
   const id = uuidParam(req.params.id);
   const body = validate(req.body, UPDATE_SPEC, { partial: true });
@@ -96,6 +98,10 @@ router.patch('/addons/:id', owners, ah(async (req, res) => {
     const { rows: [cur] } = await db.query(
       `SELECT ${COLUMNS} FROM listing_addons WHERE addon_id = $1 AND organization_id = $2 FOR UPDATE`, [id, req.user.organization_id]);
     if (!cur) throw notFound();
+    // The listings are a set: the same ids in another order are no change.
+    const sortIds = (o) => (o.unit_ids ? { ...o, unit_ids: [...o.unit_ids].sort() } : o);
+    const fields = changedKeys(sortIds(cur), sortIds(body));
+    if (!fields.length) return cur;
     const next = { ...cur, ...body };
     // A rename, or switching an archived add-on back on, must not leave two active add-ons with one name.
     // Saving other fields on an older duplicate still goes through.
@@ -107,7 +113,7 @@ router.patch('/addons/:id', owners, ah(async (req, res) => {
         WHERE addon_id = $1 RETURNING ${COLUMNS}`,
       [id, next.name, next.name_tl, next.description, next.price, next.pricing, next.max_quantity, next.unit_ids,
         next.on_booking_page, next.before_arrival, next.active]);
-    await audit(db, req.user, 'addon.updated', 'listing_addon', id, body);
+    await audit(db, req.user, 'addon.updated', 'listing_addon', id, { fields, name: next.name });
     return updated;
   });
   res.json({ addon: a });

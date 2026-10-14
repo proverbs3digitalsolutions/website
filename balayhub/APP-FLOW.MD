@@ -550,7 +550,7 @@ Spec: `docs/specs/PHASE-4-GUESTS.md`. Decisions D-57 to D-64. Both the English a
 ### 13.2 Quote page `#/quote/<token>`
 
 - Shows the quote: dates, guests, price lines (accommodation, cleaning, add-ons, discount), the total, the amount due now, the expiry time, the host's note, and the house rules.
-- A details form asks only for the fields the quote does not already have (name, email, mobile). Then "I agree to the house rules" (if there are rules), then the privacy consent box (required, the same notice as the booking page), then the pay button. The page says "Your dates are held only when you pay."
+- A details form asks only for the fields the quote does not already have (name, email, mobile). Then "I agree to the house rules" (if there are rules), then the privacy consent box (required, the same notice as the booking page), then the pay button. The page says "Your dates are held only when you pay." *Corrected 2026-10-14 (D-84): details the quote already has are shown filled in and can be edited; they are not hidden.*
 - States: **expired** ("This offer has expired"), **paid** ("This quote is already paid", with the booking code), **cancelled** ("This quote was cancelled"). A cancelled quote is not an error page. An expired one is the only state that uses the 410 error.
 - If a payment for the quote is still in progress, the page checks it first. A guest who has just paid comes back to a confirmed booking.
 
@@ -559,7 +559,7 @@ Spec: `docs/specs/PHASE-4-GUESTS.md`. Decisions D-57 to D-64. Both the English a
 - Phone-first sections with icons: arrival, parking, building and gate notes, local tips, emergency contacts, plus the listing's check-in instructions and house rules (English only).
 - A switch between English and Taglish. Sections without a Taglish version show English.
 - Wi-Fi and door code appear as cards with a Copy button, only inside the window. Outside it, a note says "For your safety, the Wi-Fi password and door code appear the day before check-in."
-- After check-out day, the page says the stay has ended and hides both codes.
+- After check-out day, the page says the stay has ended and hides both codes. *Corrected 2026-10-14: an ended or cancelled stay's link says "Guidebook not available", as D-78 decided.*
 - A link that doesn't work (wrong or cancelled) shows "Guidebook not available" with a note to ask the host for a new link. Before the window opens, the page says "Your guidebook opens on <date>. Come back then; this same link will work." (D-78). After the window it says the stay has ended.
 
 ### 13.4 Pay page: add-ons before arrival (changes to 6.4)
@@ -725,7 +725,7 @@ Spec: `docs/specs/PHASE-5-PRICING-TEAM.md`. Decisions D-66 to D-74. Staff and cl
 
 - **New and edit reservation:** the channel fee box shows only when Booked through is not Direct. Switching to Direct clears it. A direct booking that already carries a fee shows a warning on its page ("Direct bookings don't have one, so the guest is asked for the full amount"); the Edit dialog says that saving removes the stored fee. On a channel booking, blanking the fee does nothing; type 0. *(Superseded in round 4: a blank fee now means 0 on every booking, see section 17.)*
 - **Cancelled booking alert:** with no cancellation policy it reads "No cancellation policy is set, so no refund is suggested. See the Refunds card." A Custom policy says it has no automatic suggestion.
-- **Groups, add rooms:** a room count outside 1 to 20 shows "Count must be between 1 and 20." and nothing is sent. A blank date says "Enter the check-in and check-out dates." A backwards pair says "Check-out must be after check-in." A price of 0 is refused. A clash reads "Only N <type> rooms are free on these dates (you asked for M). Nothing was saved."
+- **Groups, add rooms:** a room count that is not a whole number from 1 to 20 shows "Count must be a whole number from 1 to 20." and nothing is sent. *Corrected 2026-10-14 (round 8): matches line 769 and the code (D-78).* A blank date says "Enter the check-in and check-out dates." A backwards pair says "Check-out must be after check-in." A price of 0 is refused. A clash reads "Only N <type> rooms are free on these dates (you asked for M). Nothing was saved."
 - **Guest pay page:** if the screenshot is refused, the guest can choose a different file and send again (the saved details are withdrawn first). The host is told only after the screenshot is saved.
 - **Owner statements:** the banner counts only drafts for months that have ended. "Send to owner" is disabled with "Add an email for this owner first." when there is no email.
 - **Stay reports:** an invalid month shows "That month isn't valid. Showing <Month YYYY>." and the month box shows the month used. An empty source reads "Not tagged".
@@ -829,7 +829,7 @@ Spec: `docs/specs/PHASE-5-PRICING-TEAM.md`. Decisions D-66 to D-74. Staff and cl
 
 ## 20. QA round 7 flow changes (2026-10-14)
 
-- **Record payment above the balance:** asks "This is ₱X more than the balance of ₱Y. Record it?" Cancel keeps the form, says "Payment not saved." and records and sends nothing. The receipt email goes only after "Record it". A payment at the exact balance asks nothing. The question is on the screen only; the server still accepts an overpayment (D-32).
+- **Record payment above the balance:** asks "This is ₱X more than the balance of ₱Y. Record it?" Cancel keeps the form, says "Payment not saved." and records and sends nothing. The receipt email goes only after "Record it". A payment at the exact balance asks nothing. The question is on the screen only; the server still accepts an overpayment (D-32). *(Superseded in part 2026-10-14, round 8 / D-84: Cancel is now quiet, with no message; see section 21.)*
 - **Groups list and group page:** a cancelled group shows "Cancelled" and "₱X held" when its rooms had payments; the group page adds "Held from cancelled rooms". Owners and managers only; staff never see the held figure.
 - **New reservation:** "Use ₱X" appears after a typed amount too, and again when the money changes. Backwards dates (check-out before check-in) leave the price line empty and Save shows the one check-out message.
 - **Reservations filters:** Nights (at least) and Guests (at least) refuse anything that is not a whole number, with a message at the field and no filter chip.
@@ -851,3 +851,37 @@ Spec: `docs/specs/PHASE-5-PRICING-TEAM.md`. Decisions D-66 to D-74. Staff and cl
 - **Get started:** an error moves focus to the first field with a message.
 - **More menu (phones):** a visible Close button, first in the list so it takes focus; Shift+Tab wraps inside the menu.
 - **Team invite with an existing email:** one message at the field, "This email already has a BalayHub account. Use a different email for each workspace.", plus a generic banner.
+
+## 21. QA round 8 flow changes (2026-10-14)
+
+*Decision D-84. Each line was checked against the code after the fixes landed.*
+
+- **Get started answers:** the business name, type, number of units and mobile typed on sign-up are kept in the browser tied to that email (after a Google sign-up, for 30 minutes). The setup page fills its form with them only for that email and waits for the person to press Create; nothing is posted on its own. Logging out, "Use a different account", or already having a workspace deletes them. Errors on the setup sheet set `aria-invalid` and tie the message to its field. "Long-term rentals" reads "Pangmatagalang upa (buwanan)" in Taglish.
+- **Guest links with the code missing** (`#/pay/`, `#/checkin/`, `#/review/`, `#/guide/`, `#/quote/`, `#/book/<slug>/done/`): each page shows its own "not valid" card in the guest's language, not the marketing home. A signed-in page with a missing id (for example `#/help/tickets/`) says "This link is incomplete".
+- **Booking and quote pages:** switching language keeps everything the guest typed or picked (dates, guests, name, email, phone, message, code, add-ons) and recalculates the total. Guests below 1 shows "Enter the number of guests to see the total." and no old total. The tab title follows the language and keeps the host's name ("Rio 2210 — Reyes Staycations"). A listing that can't take bookings shows the reason.
+- **Sign-in and reset:** a wrong password keeps focus in the form (also on forgot-password and setup server errors). The green "password reset" banner goes away on the next submit. Sign-up shows every problem at once (no tick, short password, mismatch).
+- **Cancel discards a draft:** pressing Cancel on a form (for example Add unit) throws away what was typed; closing with Escape or by clicking away keeps it for next time. After a form error the focus stays in the form.
+- **Rent:** a month's row Record button starts at that month's remaining amount; the dialog's balance line still shows the whole balance; the tenant's own Record starts at the whole balance. A rent row's Record button is named with the tenant, unit and month.
+- **Over-amount questions:** Cancel on "Record more than the balance?" (reservations), "Record more than is owed?" (rent) and the owner payout question returns to the form with no message and posts nothing. An amount above ₱99,999,999.99 is refused at its field ("... is too large.") before any question. Guests below 1 on a reservation show "At least 1 guest." at the field.
+- **Dates:** every typed date must be between 2000 and 2100 and says so at the field; report and list filters still accept 1900 to 2200 for now.
+- **New reservation, any free room of a type:** the guide quotes the listing BalayHub would pick now (free and not on a lease) and names it; the saved booking matches. The same holds for a group's type rooms. With none free the answer is "No free <type> at this property on these dates."
+- **Job page, Supplies used (owners and managers):** nothing on hand is refused on that row ("Nothing on hand. Restock it first."); more than on hand asks, and "Record what is on hand" records the stock as it stands. Cleaners and staff still skip an out-of-stock item and are told which; only cleaners also read "Tell your manager."
+- **Cleaner pay:** changing a filter drops ticks on rows that are no longer shown, and the button counts only what is visible. An outside cleaner's rate shows the name as text on Edit (remove the rate and add it again to change the name).
+- **Job notes:** owners and managers can edit a cleaning task's notes on the job page.
+- **Team-name refusal** when adding a cleaning task for a team member's name: the new wording no longer echoes the person's name and says how to add them to the property.
+- **Damage on a unit:** only owners and managers can report damage from a unit page; staff report from a job or a stay.
+- **Unit owners:** a blank management fee is refused on a percentage model (add and edit). The unit filter and sort from a link that isn't real are dropped; the quick filter reads "Any number of units".
+- **Filter links:** a value in a link or saved filter that isn't a real option is dropped by the shared filter bar on every list page, with no chip and no "Showing" line; a search of spaces is no search. Owners, Reviews (rating, sort, unit, property) and Inbox ("assigned") ignore ids that aren't in the workspace and show the full list. Maintenance "Assigned to" and cleaner pay "Cleaner" keep a valid value that arrives after the bar is drawn.
+- **Repeated controls named:** buttons and links that repeat on every row or card (Void refund, Record, Channels, Bookings, Open channels, pricing, rent charges, supplies, cleaner rates, Launchpad, maintenance "From cleaning task", Settings Saves) carry the row's name.
+- **Photos dialog:** Make cover and Delete keep focus inside the dialog after the photo list redraws.
+- **Listings:** a Bedspace or Commercial space listing keeps its type when other fields are edited, and both types are offered on the form and the Type filter. A base rate of text ("abc") says "valid amount". The share link source starts on "Other".
+- **Quotes:** a quote can't have more guests than the listing allows ("This listing allows up to N guests."). If the price preview fails (offline) the rate-card button is hidden. Typing a phone like "abc" shows one message at the field.
+- **Listing page address:** must start and end with a letter or number; `---` and `-abc` are refused (the field message still reads "Use 3 to 60 lowercase letters, numbers or hyphens.").
+- **Plan limit:** a manager who reaches the listing limit reads "Your plan's listing limit is reached. Ask the workspace owner to upgrade." with no number.
+- **Settings:** the four Save buttons are named by their card ("Save booking page", and so on). Notification settings in Settings and on the Account page log what changed.
+- **Inbox composer:** Reply, Internal note and similar mode switches are toggle buttons with `aria-pressed` and one Tab stop each, not tabs.
+- **Help:** Send rating with no star, an empty reply ("Write a reply first.") and an empty assistant question each say so at the field and send nothing.
+- **Tabs everywhere:** every tab list answers to arrow keys, Home and End.
+- **Check-in form:** mobile "abc" and email "a@" each show one message at their field; the remove-guest button reads "Alisin ang guest {n}" in Taglish.
+- **Cleaner calendar (Taglish):** "Ngayon" and Taglish weekday names.
+- **Activity log:** every edit names only the fields that changed ("Changed: <label>"), and a save that changes nothing adds no row (see BACKEND-SCHEMA section 14).

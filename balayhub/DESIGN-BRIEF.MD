@@ -515,5 +515,15 @@ Printable views are built from `.receipt` (with a 2px `--navy` rule under the he
 - **Repeated per-photo and per-card buttons name what they act on:** "Make cover, photo 2", "Delete, photo 2", "Archive, <listing>". Photos carry alt text with their number.
 - **Date boxes in filter ranges are wide enough for a full date with the year** (From and To in the inbox, reports and statements).
 - **Long names in statement and page headers wrap** instead of pushing the page sideways at 390 px.
-- **A money question uses the same confirm dialog pattern as payouts.** Plain sentence, the amount and the balance in the text ("This is ₱500.00 more than the balance of ₱5,500.00. Record it?"), a clear yes button, and cancel leaves the form as it was with "Payment not saved."
+- **A money question uses the same confirm dialog pattern as payouts.** Plain sentence, the amount and the balance in the text ("This is ₱500.00 more than the balance of ₱5,500.00. Record it?"), a clear yes button, and cancel leaves the form as it was with "Payment not saved." *(Superseded in part 2026-10-14, round 8 / D-84: Cancel is quiet, with no message. See section 17.)*
 - **A field error moves focus to the first field with a message** (Get started). Known gap: sheet inputs do not yet set `aria-invalid` or `aria-describedby` (round 8).
+
+## 17. Patterns added in QA round 8 (2026-10-14)
+
+- **Repeated per-row controls always carry the row's name.** A button or link that appears on every row or card ("Void", "Record", "Open channels", "Bookings", a Save on each settings card) gets an accessible name that says what it acts on ("Record payment for Liza Reyes, Unit 2, September", "Void refund of ₱500.00 on Oct 3", "Save booking page"). Round 8 swept this file by file; a new screen is not done until no two controls on it share a name.
+- **A dialog that redraws keeps focus on a sensible control.** After Make cover or Delete on a photo, or any action that rebuilds the list, focus goes to the acted-on item, or its neighbour when it is gone, never to the page body. Known gap carried to round 9: pricing rules, rent, refunds and cleaner pay still drop focus after a save or Undo.
+- **A field shows its error in place of its hint while the error stands,** and brings the hint back after the next change ("said once", D-82). Errors also set `aria-invalid` and tie the message to the field with `aria-describedby` (Get started, check-in).
+- **Owner cards in a grid share a top edge** (no staggered cards when one has a longer note).
+- **Composer mode switches are toggle buttons, not tabs.** Reply, Internal note and similar switches are buttons with `aria-pressed`, one Tab stop each. A true `role="tablist"` answers to arrow keys, Home and End (one shared handler in `app.js`).
+- **Cancel means discard; closing means keep.** An explicit Cancel on a form throws away a saved draft. Escape, clicking away or losing the session keeps it. An over-amount money question's Cancel returns to the form with no message (supersedes the round 7 "Payment not saved." line).
+- **Language switches never clear input.** On guest pages (booking, quote) switching language redraws the words and keeps what the guest typed or picked.

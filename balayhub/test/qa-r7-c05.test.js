@@ -13,7 +13,8 @@ const { startServer, sql, ownerAccount } = require('./helpers');
 const { hashPassword } = require('../src/lib/auth');
 
 const VIEW = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'views', 'cleanerpay.js'), 'utf8');
-const SENTENCE = 'Pick Nena Cruz from the team list instead.';
+const RATE_SENTENCE = 'That name belongs to someone on your team. Pick them from the team list instead.';
+const TASK_SENTENCE = 'That name belongs to someone on your team. Pick them from the team list, or add them to this property in Settings → Team first.';
 let srv; let owner; let orgId; let unit; let nenaId; let rateCount;
 
 test.before(async () => {
@@ -35,7 +36,7 @@ test('#29 a rate for an outside name equal to a team member is refused and write
   const before = await rateCount();
   const r = await owner.raw('PUT', '/api/cleaner-rates', { assignee_name: ' nena  cruz ', rate_type: 'per_clean', amount: '300' });
   assert.equal(r.status, 400, JSON.stringify(r.data));
-  assert.equal(r.data.fields.assignee_name, SENTENCE);
+  assert.equal(r.data.fields.assignee_name, RATE_SENTENCE);
   assert.equal(await rateCount(), before);
   const ok = await owner.raw('PUT', '/api/cleaner-rates', { assignee_name: 'Ate Lin', rate_type: 'per_clean', amount: '300' });
   assert.equal(ok.status, 200, JSON.stringify(ok.data));
@@ -45,13 +46,13 @@ test('#29 task create and task edit refuse the same name; another outside name s
   const base = { unit_id: unit, due_date: '2026-10-20' };
   const c = await owner.post('/api/cleaning-tasks', { ...base, assignee_name: 'NENA CRUZ' });
   assert.equal(c.status, 400, JSON.stringify(c.data));
-  assert.equal(c.data.fields.assignee_name, SENTENCE);
+  assert.equal(c.data.fields.assignee_name, TASK_SENTENCE);
   const made = await owner.post('/api/cleaning-tasks', { ...base, assignee_name: 'Ate Lin' });
   assert.equal(made.status, 201, JSON.stringify(made.data));
   const id = made.data.task.task_id;
   const p = await owner.patch(`/api/cleaning-tasks/${id}`, { assignee_name: 'nena cruz' });
   assert.equal(p.status, 400, JSON.stringify(p.data));
-  assert.equal(p.data.fields.assignee_name, SENTENCE);
+  assert.equal(p.data.fields.assignee_name, TASK_SENTENCE);
   const [row] = await sql('SELECT assignee_name FROM cleaning_tasks WHERE task_id = $1', [id]);
   assert.equal(row.assignee_name, 'Ate Lin');
   const ok = await owner.patch(`/api/cleaning-tasks/${id}`, { assignee_name: 'Ate Mia' });

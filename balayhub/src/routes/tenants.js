@@ -3,8 +3,10 @@
 const express = require('express');
 const { query, one, tx } = require('../db');
 const { HttpError, ah } = require('../lib/http');
+const { own } = require('../lib/pick');
 const { validate, uuidParam } = require('../lib/validate');
 const { audit } = require('../lib/audit');
+const { changedKeys } = require('../lib/auditdiff');
 const { requireRole } = require('../lib/auth');
 const { tenantScope, propertyScope, loadTenant, loadUnit, loadLease, redactTenant } = require('../lib/access');
 const { syncCharges, LEASE_BALANCE_CTE, CHARGE_STATUS_CTE, TODAY } = require('../lib/ledger');
@@ -50,22 +52,22 @@ router.get('/tenants', ah(async (req, res) => {
                                WHERE ux.unit_id = pl.unit_id AND pa.user_id = $${params.length})`;
   }
   // Lease filter: current lease, ending soon (or already past its end date), month-to-month, moved out, unassigned.
-  const lease = {
+  const lease = own({
     active: 'l.lease_id IS NOT NULL',
     ending30: `l.end_date IS NOT NULL AND l.end_date <= ${TODAY} + 30`,
     ending60: `l.end_date IS NOT NULL AND l.end_date <= ${TODAY} + 60`,
     no_end: 'l.lease_id IS NOT NULL AND l.end_date IS NULL',
     moved_out: `l.lease_id IS NULL AND EXISTS (SELECT 1 FROM leases pl WHERE pl.tenant_id = t.tenant_id AND pl.lease_status IN ('ended', 'terminated')${pastScope})`,
     none: 'l.lease_id IS NULL',
-  }[req.query.lease];
+  }, req.query.lease);
   if (lease) where.push(lease);
   if (req.query.property_id) { params.push(uuidParam(req.query.property_id)); where.push(`p.property_id = $${params.length}`); }
   if (req.query.unit_id) { params.push(uuidParam(req.query.unit_id)); where.push(`u.unit_id = $${params.length}`); }
-  const balance = {
+  const balance = own({
     overdue: 'COALESCE(lb.overdue, 0) > 0',
     owing: 'COALESCE(lb.outstanding, 0) > 0',
     clear: 'l.lease_id IS NOT NULL AND COALESCE(lb.outstanding, 0) = 0',
-  }[req.query.balance];
+  }, req.query.balance);
   if (balance) where.push(balance);
   if (/^\d{1,10}(\.\d{1,2})?$/.test(String(req.query.min_balance || ''))) { params.push(req.query.min_balance); where.push(`COALESCE(lb.outstanding, 0) >= $${params.length}::numeric`); }
   const SORTS = {
@@ -90,7 +92,7 @@ router.get('/tenants', ah(async (req, res) => {
        LEFT JOIN properties p ON p.property_id = u.property_id
        LEFT JOIN lease_balance lb ON lb.lease_id = l.lease_id
       WHERE ${where.join(' AND ')}
-      ORDER BY ${SORTS[req.query.sort] || SORTS.name}`, params);
+      ORDER BY ${own(SORTS, req.query.sort) || SORTS.name}`, params);
   res.json({ tenants: rows.map((t) => redactTenant(req.user, t)) });
 }));
 
@@ -157,14 +159,16 @@ router.get('/tenants/:id', ah(async (req, res) => {
 router.patch('/tenants/:id', managers, ah(async (req, res) => {
   const tenant = await loadTenant(req.user, uuidParam(req.params.id));
   const body = validate(req.body, tenantSpec, { partial: true });
-  const keys = Object.keys(body);
-  if (!keys.length) return res.json({ tenant });
   const updated = await tx(async (db) => {
+    // Locked and compared here, so saving the stored values writes no update and no row.
+    const { rows: [cur] } = await db.query('SELECT * FROM tenants WHERE tenant_id = $1 FOR UPDATE', [tenant.tenant_id]);
+    const keys = changedKeys(cur, body);
+    if (!keys.length) return cur;
     const { rows: [t] } = await db.query(
       `UPDATE tenants SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')} WHERE tenant_id = $1 RETURNING *`,
       [tenant.tenant_id, ...keys.map((k) => body[k])]);
-    await audit(db, req.user, 'tenant.updated', 'tenant', t.tenant_id, {
-      fields: keys, before: Object.fromEntries(keys.map((k) => [k, tenant[k]])) });
+    // The names of the fields that changed, never their values (contact details are private).
+    await audit(db, req.user, 'tenant.updated', 'tenant', t.tenant_id, { fields: keys });
     return t;
   });
   res.json({ tenant: updated });
@@ -263,12 +267,14 @@ router.patch('/leases/:id', managers, ah(async (req, res) => {
     due_day: { type: 'int', min: 1, max: 31, label: 'Rent due day' },
     deposit_amount: { type: 'money', label: 'Security deposit' },
   }, { partial: true });
-  const keys = Object.keys(body).filter((k) => body[k] !== null || k === 'end_date');
   if (body.end_date && body.end_date < lease.start_date) {
     throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { end_date: 'Lease end must be on or after the start date.' } });
   }
-  if (!keys.length) return res.json({ lease });
   const updated = await tx(async (db) => {
+    // Locked and compared here. A null rent, due day or deposit is ignored; a null end date clears it.
+    const { rows: [cur] } = await db.query('SELECT * FROM leases WHERE lease_id = $1 FOR UPDATE', [lease.lease_id]);
+    const keys = changedKeys(cur, body).filter((k) => body[k] !== null || k === 'end_date');
+    if (!keys.length) return null;
     const { rows: [l] } = await db.query(
       `UPDATE leases SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')} WHERE lease_id = $1 RETURNING *`,
       [lease.lease_id, ...keys.map((k) => body[k])]);
@@ -277,11 +283,12 @@ router.patch('/leases/:id', managers, ah(async (req, res) => {
       await db.query(`DELETE FROM rent_charges WHERE lease_id = $1 
          AND period > date_trunc('month', (SELECT start_date FROM leases WHERE lease_id = $1)) AND (period > date_trunc('month', $2::date) OR due_date > $2::date)`, [l.lease_id, l.end_date]);
     }
-    await audit(db, req.user, 'lease.updated', 'lease', l.lease_id, {
-      before: Object.fromEntries(keys.map((k) => [k, lease[k]])), after: body });
+    // The names of the fields that changed, never their values.
+    await audit(db, req.user, 'lease.updated', 'lease', l.lease_id, { fields: keys });
     return l;
   });
-  res.json({ lease: updated });
+  // Nothing changed: answer with the stored lease, with no write.
+  res.json({ lease: updated || lease });
 }));
 
 router.post('/leases/:id/end', managers, ah(async (req, res) => {

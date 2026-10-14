@@ -1015,3 +1015,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - QA round 7: add-on descriptions are still English only (unchanged).
 - QA round 7: the booking source is hidden from staff, following the access table (founder question 7 in BLOCKERS, default hidden).
 - QA round 7: in a Both workspace every new unit needs a nightly rate even if it is rented monthly only (founder question 5, default required).
+- QA round 8: the Wi-Fi password on the owner's listing form is a plain box with no Show/Hide, unlike the door code (founder question 7 in BLOCKERS, default keep).
+- QA round 8: a payout to an owner with no units has no statement, so it is not checked against what the owner is owed (founder question 8 in BLOCKERS, default keep).
+- QA round 8: the report and list date filters still accept years 1900 to 2200, while every date typed into a form is limited to 2000 to 2100 (D-84). To be tightened later.
+- QA round 8 scope notes (D-84): a quote can't have more guests than the listing allows (same as reservations and the booking page); owners and managers can edit a cleaning task's notes on the job page; Get started answers are kept only for the email they were typed for, shown for checking and never posted on their own; unit-level damage reports are for owners and managers only; a percentage-model unit owner must have a management fee.

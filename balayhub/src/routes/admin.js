@@ -7,6 +7,7 @@ const express = require('express');
 const config = require('../config');
 const { query, one } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
+const { own } = require('../lib/pick');
 const { validate, uuidParam, isValidDate } = require('../lib/validate');
 const { audit } = require('../lib/audit');
 const { requireAuth } = require('../lib/auth');
@@ -80,11 +81,11 @@ router.get('/admin/workspaces', ah(async (req, res) => {
   const needle = q.q ? String(q.q).slice(0, 100).toLowerCase() : '';
   let list = all.filter((w) => !needle || `${w.name} ${w.owner_email || ''} ${w.owner_name || ''}`.toLowerCase().includes(needle));
   if (ADMIN_STATUS.includes(q.status)) list = list.filter((w) => w.admin_status === q.status);
-  if (PLANS[q.plan]) list = list.filter((w) => w.plan === q.plan);
+  if (own(PLANS, q.plan)) list = list.filter((w) => w.plan === q.plan);
   if (BUSINESS_TYPES.includes(q.business_type)) list = list.filter((w) => w.business_type === q.business_type);
   if (isValidDate(q.created_from)) list = list.filter((w) => w.created_day >= q.created_from);
   if (isValidDate(q.created_to)) list = list.filter((w) => w.created_day <= q.created_to);
-  if (ADMIN_SORTS[q.sort]) list = [...list].sort(ADMIN_SORTS[q.sort]);
+  if (own(ADMIN_SORTS, q.sort)) list = [...list].sort(own(ADMIN_SORTS, q.sort));
   res.json({
     workspaces: list.map(({ deletion_scheduled_at: _d, created_day: _c, ...w }) => w),
     total: all.length, summary,

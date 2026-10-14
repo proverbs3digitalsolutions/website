@@ -76,7 +76,7 @@ export async function settingsView(el, { rerender, query = {} }) {
       field({ name: 'business_type', label: 'Modules for this workspace', type: 'select', value: u.business_type, placeholderOption: false, options: [
         ['short_term', 'Short-term stays'], ['long_term', 'Long-term rentals'], ['both', 'Both'],
       ], hint: 'Short-term means per-night stays (Airbnb, staycations). Long-term means monthly tenants and leases.' }),
-      h('div', null, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: async (e) => {
+      h('div', null, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'aria-label': 'Save modules for this workspace', onclick: async (e) => {
         const v = e.target.closest('.form').querySelector('select').value;
         await patch('/workspace', { business_type: v });
         await refreshUser();
@@ -175,7 +175,7 @@ export async function settingsView(el, { rerender, query = {} }) {
           h('td', null, fmtDateTime(a.created_at)),
           h('td', null, a.actor_name || '—'),
           h('td', null, actionText(a.action)),
-          h('td', { class: 'small muted' }, summarize(a.details)))))))
+          h('td', { class: 'small muted' }, summarize(a.details, a.action)))))))
         : emptyState({ title: 'No activity yet', text: 'Important changes to records and access are logged here.' })));
   }
 
@@ -270,9 +270,31 @@ const DETAIL_LABELS = {
   pricing: 'Pricing', adjust_pct: 'Price change',
   vip: 'VIP', gatepass_enabled: 'Send automatically', gatepass_days_before: 'Days before check-in', gatepass_attach_ids: 'Attach IDs',
   gatepass_authorized_by: 'Authorized by', gatepass_notes: 'Notes for the admin',
-  admin_email: 'Admin email', review_links: 'Public review links', door_code: 'Door code', unit_label: 'Unit', par_level: 'Par level',
+  admin_email: 'Admin email', review_links: 'Public review links', door_code: 'Door code', unit_label: 'Unit', par_level: 'Keep at least',
   checkin_time: 'Check-in time', checkout_time: 'Check-out time', min_nights: 'Minimum nights', wifi_name: 'Wi-Fi name', wifi_password: 'Wi-Fi password',
   security_deposit_amount: 'Security deposit', deposit_pct: 'Deposit percent', bookable_online: 'Bookable online', checkin_instructions: 'Check-in instructions',
+  business_type: 'Modules for this workspace', guest_language: 'Default language', intro: 'Welcome text', paymongo_key: 'PayMongo key',
+  instructions: 'Payment details for guests', full_name: 'Full name', phone: 'Mobile number', management_fee_pct: 'Management fee',
+  fee_model: 'Fee type', flat_monthly_fee: 'Flat monthly fee', reserve_target: 'Repairs reserve target', reserve_monthly: 'Repairs reserve top-up',
+  cleaning_to_manager: 'Cleaning fees kept for cleaning', unit_ids: 'Units', property_ids: 'Properties', offset_days: 'Number of days',
+  due_day: 'Rent due day', deposit_amount: 'Security deposit', days: 'Days', max_quantity: 'Maximum quantity', subject: 'Subject',
+  body: 'Message', notes: 'Notes', description: 'Details', priority: 'Priority', assigned_to: 'Assigned to',
+  on_booking_page: 'Offer on the booking page', before_arrival: 'Offer before arrival', active: 'Active',
+};
+// The same key can mean a different thing in a different record: "enabled" is the booking page or manual payments,
+// "property_ids" is the people list or the notifications list, and the notification types have card labels.
+// Only changed-field lists use these, so an old row with a plain value still reads as before.
+const ACTION_LABELS = {
+  'direct_booking.settings_changed': { enabled: 'Booking page on' },
+  'workspace.manual_payments_updated': { enabled: 'Manual payments on' },
+  'workspace.updated': { name: 'Workspace name' },
+  'member.updated': { property_ids: 'Properties they can access' },
+  'pricing_rule.updated': { active: 'Rule on' },
+  'addon.updated': { name_tl: 'Taglish name', description: 'Description', unit_ids: 'Listings' },
+  'user.notify_prefs_updated': {
+    new_booking: 'New bookings', guest_message: 'Guest messages', checkin_form: 'Guest check-in forms', payment: 'Online payments',
+    cleaning: 'Cleaning tasks', mention: 'Mentions in notes', assignment: 'Conversations assigned to you', sync_problem: 'Calendar sync problems',
+  },
 };
 const MONEY_KEYS = new Set(['amount', 'amount_paid', 'total_amount', 'price', 'unit_price', 'monthly_rent', 'estimated_cost', 'payout', 'refund', 'deduction', 'reserve_topup']);
 // Stored codes for add-on pricing and pricing rules, in plain words.
@@ -302,14 +324,16 @@ function detailValue(k, v) {
 const repeatText = (n, unit) => `every ${n} ${Number(n) === 1 ? String(unit).replace(/s$/, '') : unit}`;
 
 // A field's plain-words name: its detail label, or the key in sentence case. A Taglish guide field says so.
-const fieldLabel = (k) => {
+// The action (optional) names the record, so a key that means different things there reads with that record's label.
+const fieldLabel = (k, action) => {
+  if (ACTION_LABELS[action]?.[k]) return ACTION_LABELS[action][k];
   if (DETAIL_LABELS[k]) return DETAIL_LABELS[k];
-  if (k.endsWith('_tl')) return `${fieldLabel(k.slice(0, -3))} (Taglish)`;
+  if (k.endsWith('_tl')) return `${fieldLabel(k.slice(0, -3), action)} (Taglish)`;
   return k.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
 };
 // "Changed: Arrival, Parking". Ids are left out, and labels are all it names, never the values.
-const changedText = (keys) => {
-  const names = keys.filter((k) => !k.endsWith('_id')).map(fieldLabel);
+const changedText = (keys, action) => {
+  const names = keys.filter((k) => !k.endsWith('_id')).map((k) => fieldLabel(k, action));
   return names.length ? `Changed: ${names.join(', ')}` : '';
 };
 // Two saved values read the same when their text is equal, or when both are numbers of the same size ('2500.00' and 2500).
@@ -321,14 +345,15 @@ const changedFields = (before, after) => [...new Set([...Object.keys(before), ..
 
 // Audit details on one line. Ids (any *_id field, or any UUID value), empty values and nested data are left out.
 // A list of changed fields and a before/after pair name the fields that changed, as labels, never their values.
-export function summarize(details) {
+// The audit action (optional) is the record the details belong to; see ACTION_LABELS.
+export function summarize(details, action) {
   if (!details) return '';
   const parts = [];
   for (const [k, v] of Object.entries(details)) {
     // Turning the discount off saves null. That is shown as Off, so the row still says what changed.
     if (k === 'returning_guest_pct' && v === null) { parts.push(`${DETAIL_LABELS[k]}: Off`); continue; }
-    if (k === 'fields' && Array.isArray(v)) { const text = changedText(v); if (text) parts.push(text); continue; }
-    if (k === 'before' && v && typeof v === 'object') { const text = changedText(changedFields(v, details.after || {})); if (text) parts.push(text); continue; }
+    if (k === 'fields' && Array.isArray(v)) { const text = changedText(v, action); if (text) parts.push(text); continue; }
+    if (k === 'before' && v && typeof v === 'object') { const text = changedText(changedFields(v, details.after || {}), action); if (text) parts.push(text); continue; }
     if (v === null || v === undefined || typeof v === 'object' || k.endsWith('_id') || UUID.test(String(v))) continue;
     // A repeat schedule is two fields, the count and the unit. They read as one phrase where the count is.
     if (k === 'every_unit') continue;
@@ -451,7 +476,7 @@ function guestLanguageCard(u, rerender) {
     h('div', { class: 'form' },
       h('div', { class: 'field' }, h('label', { for: 'guest-lang' }, 'Default language'), lang),
       h('label', { class: 'check' }, alsoMessages, h('span', null, 'Also switch my booking confirmation, check-in, thank-you and payment reminder messages')),
-      h('div', null, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: save }, 'Save'))));
+      h('div', null, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'aria-label': 'Save default language', onclick: save }, 'Save'))));
 }
 
 export function changePassword() {
@@ -528,7 +553,7 @@ async function manualPaymentsCard(rerender) {
       h('div', { class: 'field', dataset: { field: 'instructions' } }, h('label', null, 'Payment details guests should use'), details,
         h('div', { class: 'hint' }, 'Shown on the payment page, up to 1,000 characters. Add the GCash number, bank name and account name.'),
         h('div', { class: 'error', id: 'mp-details-err', role: 'alert' })),
-      h('div', null, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: save }, 'Save'))));
+      h('div', null, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'aria-label': 'Save manual payments', onclick: save }, 'Save'))));
 }
 
 async function bookingCard(rerender) {
@@ -626,5 +651,5 @@ async function guestExperienceCard() {
         h('div', { class: 'hint', id: 'gx-pct-hint' }, 'From 1 to 50. Each guest who has checked out gets one personal code. Leave blank to turn off.')),
       h('label', { class: 'check' }, followup, h('span', null, 'Send one follow-up email when someone starts a direct booking but does not pay')),
       err,
-      h('div', null, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: save }, 'Save'))));
+      h('div', null, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'aria-label': 'Save guest experience', onclick: save }, 'Save'))));
 }

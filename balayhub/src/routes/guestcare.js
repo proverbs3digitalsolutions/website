@@ -23,6 +23,11 @@ const manilaToday = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().s
 const daysBetween = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
 // A filter id that isn't a UUID is ignored (D-77), so an old or edited link still loads the list.
 const uuidOrNull = (v) => (typeof v === 'string' && UUID_RE.test(v) ? v : null);
+// A unit or property filter counts only when this workspace has that row; any other id is ignored like a bad one (D-82).
+async function inWorkspace(user, sql, id) {
+  if (!id) return null;
+  return (await one(sql, [id, user.organization_id])) ? id : null;
+}
 
 // Public review links (D-62): a name of 1–40 characters and an https address of at most 300.
 const REVIEW_LINKS_MAX = 4;
@@ -119,8 +124,10 @@ router.get('/reviews', ah(async (req, res) => {
   if (/^[1-5]$/.test(String(q.rating || ''))) { params.push(Number(q.rating)); where.push(`r.rating = $${params.length}`); }
   if (q.rating === 'low') where.push('r.rating <= 3');
   if (q.rating === 'high') where.push('r.rating >= 4');
-  if (uuidOrNull(q.unit_id)) { params.push(q.unit_id); where.push(`b.unit_id = $${params.length}`); }
-  if (uuidOrNull(q.property_id)) { params.push(q.property_id); where.push(`p.property_id = $${params.length}`); }
+  const unitId = await inWorkspace(req.user, 'SELECT 1 FROM units u JOIN properties p ON p.property_id = u.property_id WHERE u.unit_id = $1 AND p.organization_id = $2', uuidOrNull(q.unit_id));
+  if (unitId) { params.push(unitId); where.push(`b.unit_id = $${params.length}`); }
+  const propertyId = await inWorkspace(req.user, 'SELECT 1 FROM properties WHERE property_id = $1 AND organization_id = $2', uuidOrNull(q.property_id));
+  if (propertyId) { params.push(propertyId); where.push(`p.property_id = $${params.length}`); }
   if (isValidDate(q.from)) { params.push(q.from); where.push(`(r.created_at AT TIME ZONE 'Asia/Manila')::date >= $${params.length}`); }
   if (isValidDate(q.to)) { params.push(q.to); where.push(`(r.created_at AT TIME ZONE 'Asia/Manila')::date <= $${params.length}`); }
   if (q.has_comment === '1') where.push(`COALESCE(btrim(r.comment), '') <> ''`);
@@ -134,7 +141,7 @@ router.get('/reviews', ah(async (req, res) => {
   const { rows } = await query(
     `SELECT r.review_id, r.booking_id, r.rating, r.cleanliness, r.comment, r.created_at, b.check_in, b.check_out, u.unit_name, p.property_name,
             COALESCE(g.full_name, b.guest_label) AS guest_name
-       ${from} WHERE ${whereSql} ORDER BY ${REVIEW_SORTS[q.sort] || REVIEW_SORTS.newest} LIMIT 200`, params);
+       ${from} WHERE ${whereSql} ORDER BY ${Object.hasOwn(REVIEW_SORTS, q.sort) ? REVIEW_SORTS[q.sort] : REVIEW_SORTS.newest} LIMIT 200`, params);
   // The headline average is always over every review you can see, filtered or not.
   const allParams = [];
   const all = await one(`SELECT COUNT(*)::int AS n, ROUND(AVG(r.rating), 1)::float AS avg ${from} WHERE ${propertyScope(req.user, allParams)}`, allParams);
@@ -170,7 +177,7 @@ router.get('/discount-codes', managers, ah(async (req, res) => {
     used_up: usedUp,
     off: 'NOT d.active',
   };
-  if (STATUS[q.status]) where.push(`(${STATUS[q.status]})`);
+  if (Object.hasOwn(STATUS, q.status)) where.push(`(${STATUS[q.status]})`);
   if (q.type === 'percent') where.push('d.percent_off IS NOT NULL');
   if (q.type === 'amount') where.push('d.amount_off IS NOT NULL');
   if (q.returning === '1') where.push('d.returning_only');
@@ -183,7 +190,7 @@ router.get('/discount-codes', managers, ah(async (req, res) => {
     `SELECT d.*, (d.issued_to_booking_id IS NOT NULL) AS issued, ${USES} AS uses,
             (SELECT COALESCE(SUM(c.discount_amount), 0) FROM direct_checkouts c WHERE c.discount_code_id = d.code_id AND c.status = 'confirmed') AS total_discounted,
             (d.valid_until IS NOT NULL AND d.valid_until < $2) AS expired, (d.valid_from IS NOT NULL AND d.valid_from > $2) AS scheduled, ${usedUp} AS used_up
-       FROM discount_codes d WHERE ${where.join(' AND ')} ORDER BY ${SORTS[q.sort] || 'd.active DESC, d.created_at DESC'}`, params);
+       FROM discount_codes d WHERE ${where.join(' AND ')} ORDER BY ${Object.hasOwn(SORTS, q.sort) ? SORTS[q.sort] : 'd.active DESC, d.created_at DESC'}`, params);
   const total = q.status || q.type || q.returning || q.issued || q.q
     ? (await one('SELECT COUNT(*)::int AS n FROM discount_codes WHERE organization_id = $1', [req.user.organization_id])).n : rows.length;
   res.json({ codes: rows, total });

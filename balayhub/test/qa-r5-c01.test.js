@@ -83,7 +83,7 @@ test('#47 the Check-in cell is a real link and the row is not a tab stop', () =>
   const body = resSrc.slice(resSrc.indexOf("h('tbody', null, reservations.map"), resSrc.indexOf('viewSelect.addEventListener'));
   assert.doesNotMatch(body, /tabindex: 0/);
   assert.doesNotMatch(body, /onkeydown/);
-  assert.match(body, /h\('a', \{ href: `#\/reservations\/\$\{r\.booking_id\}` \}, fmtDate\(r\.check_in\)\)/);
+  assert.match(body, /h\('a', \{ href: `#\/reservations\/\$\{r\.booking_id\}`(?:, 'aria-label': `[^`]*`)? \}, fmtDate\(r\.check_in\)\)/);
   assert.match(body, /onclick: \(\) => navigate\(/);
 });
 

@@ -60,7 +60,7 @@ export async function refundsCard(reservation, rerender) {
         h('span', { class: `row__title${r.voided_at ? ' strike' : ''}` }, `${peso(r.amount)} · ${METHOD_LABEL[r.method] || r.method}`),
         h('span', { class: 'row__sub' }, `${fmtDate(r.refund_date)}${r.reference_number ? ` · Ref ${r.reference_number}` : ''} · ${r.reason}${r.recorded_by_name ? ` · by ${r.recorded_by_name}` : ''}`),
         r.voided_at && h('span', { class: 'row__sub' }, `Voided: ${r.void_reason}`)),
-      h('div', { class: 'row__end' }, r.voided_at ? badge('voided', 'Voided') : canManage && h('button', { class: 'btn btn--ghost btn--sm', onclick: () => voidRefund(r) }, 'Void'))))))
+      h('div', { class: 'row__end' }, r.voided_at ? badge('voided', 'Voided') : canManage && h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Void refund of ${peso(r.amount)} on ${fmtDate(r.refund_date)}`, onclick: () => voidRefund(r) }, 'Void'))))))
     : h('p', { class: 'muted small' }, 'No refunds recorded yet.');
 
   return h('section', { class: 'card' },

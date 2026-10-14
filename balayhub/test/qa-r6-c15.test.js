@@ -50,9 +50,10 @@ test('#27 matched and matched_average cover every matching review, not only the 
   assert.equal(r.count, 205);
   assert.equal(r.average, 4.9);
 
-  const none = (await host.get('/api/reviews?unit_id=5f2d6c1e-0000-4000-8000-000000000000')).data;
-  assert.equal(none.matched, 0);
-  assert.equal(none.matched_average, null);
+  // A unit this workspace doesn't have is ignored (#38, D-82), so the answer is the whole list.
+  const unknown = (await host.get('/api/reviews?unit_id=5f2d6c1e-0000-4000-8000-000000000000')).data;
+  assert.equal(unknown.matched, 205);
+  assert.equal(unknown.matched_average, 4.9);
 });
 
 test('#41 a ticket keeps its first rating: a second rating is refused and the first stays', async () => {

@@ -794,13 +794,15 @@ The cleaner role is denied by default in code (`cleanerGuard`, D-48). Any row no
 
 *2026-10-14 (D-83): for cleaners, the lost-and-found and damage lists (the pages) answer 403; a cleaner sees only the items and reports they filed, on the job page, with no amounts or status notes. The cleaning board shows one open job per unit: the first by due date that the viewer may see.*
 
+*2026-10-14 (D-84): unit-level damage reports (`POST /units/:id/damage`) are owners and managers only; staff get 403 and report damage from a job or a stay.*
+
 | Data area | Owner | Manager | Staff | Cleaner |
 |---|---|---|---|---|
 | Cleaning jobs (list, detail, tick, start, done, reopen) | Full | Assigned; can cancel | Assigned | Own jobs and unassigned jobs in assigned properties. No cancel, no edit, no reassign. Guest first name only. What the job detail returns for each role is in section 6.1a |
 | Cleaning board and calendar | Full | Assigned | Assigned | Own and unassigned jobs only |
 | Inspect a finished job | Yes | Yes (assigned) | No | No |
 | Inspection results and cleaner scores | View | View (assigned) | No (none on the job detail either) | Result on own jobs only; no scores |
-| Damage reports: report | Yes | Yes | Yes (jobs and stays they can see) | Yes, on own jobs only |
+| Damage reports: report | Yes | Yes | Yes (jobs and stays they can see; not on a unit with neither, see the note below) | Yes, on own jobs only |
 | Damage reports: list and resolve (charge, deduct, waive) | Yes, with amounts | Yes (assigned) | No (list and resolve). On a job they see only the reports they filed, with no amounts | No. Sees only reports it filed, with no amounts |
 | Suggested deposit deduction | Yes | Yes | No | No |
 | Lost and found: log | Yes | Yes | Yes (stays and jobs they can see) | Yes, on own jobs |
@@ -889,12 +891,14 @@ The cleaner role is denied by `cleanerGuard` (D-48) unless a route is on its all
 
 Cleaners are denied by `cleanerGuard` on every Phase 5 route. "Assigned" means the properties the manager is assigned to, as in section 6.1. Workspace-wide pricing rules and seasons are owner-only to change.
 
+*2026-10-14 (round 8, D-84): the manager cell below is corrected to match D-83 and `pricing.js`: creating a rule or season for every listing answers 400 with a message; changing or removing one answers 403.*
+
 *2026-10-14 (D-83): a manager's season create for every listing answers 400 on `unit_id` with a clear message (nothing is written); removing or changing an all-listings rule answers 403. Staff group rows and totals carry no `held` figure.*
 
 | Data area | Owner | Manager | Staff | Cleaner | Public |
 |---|---|---|---|---|---|
 | Pricing rules: read | All | Workspace-wide rules, and rules for assigned listings | View (assigned) | No | No |
-| Pricing rules and seasons for every listing: create, change, remove | Yes | No (403) | No | No | No |
+| Pricing rules and seasons for every listing: create, change, remove | Yes | No (create: 400 on `unit_id` with a message; change or remove: 403) | No | No | No |
 | Pricing rules and seasons for one listing: create, change, remove | Yes | Yes (assigned) | No | No | No |
 | Price preview (`GET /pricing/preview`) | Yes | Yes (assigned) | View (assigned; archived listings are 404) | No | No |
 | Bulk prices and blocks (preview and apply) | Yes | Yes (assigned listings only; a tag covers only those) | No | No | No |
@@ -1039,3 +1043,30 @@ Cleaners are denied by `cleanerGuard` on every Phase 5 route. "Assigned" means t
 - **`GET /api/auth/me` and `GET /api/account/profile`:** the plan object for managers, staff and cleaners has no `price` or `listing_limit`.
 - **`GET /api/leases/:id`:** `document_file_id` is null for staff and cleaners.
 - **`POST /api/team/invitations`:** an existing email answers 409 `EMAIL_TAKEN` with `fields.email` = "This email already has a BalayHub account. Use a different email for each workspace."
+
+---
+
+## 14. API notes from QA round 8 (2026-10-14)
+
+Decision D-84. Checked against the code after the fixes landed.
+
+- **Activity log, `{ fields }` shape (`changedKeys` in `src/lib/auditdiff.js`).** Every edit below writes `{ fields: [names], ...identity }` (names only, never values) and writes **no row** when nothing changed: workspace (`workspace.updated`: name, business type, default language), booking page settings (`direct_booking.settings_changed`: enabled, slug, intro, and `paymongo_key` by name only), manual payment details, team access (`member.updated`: role, property ids), profile (`user.profile_updated`: full name, phone), notification settings (`user.notify_prefs_updated`, from both `PATCH /push/settings`, which now audits, and the account notification route), unit owners (`unit_owner.updated`: `{ fields }`, with `unit_ids` named when the set of units changed, in any order), guests, booking groups, tenants, leases, repair requests, pricing rules (`pricing_rule.updated`: `{ kind, fields }`; a no-change save answers the rule and writes nothing), add-ons, message templates and the cleaning checklist. Old rows with `before` and `after` still render.
+- **Exception:** `reservation.updated` still stores `{ before, after }` for the fields that changed (a money record). The timeline and `activity.js` read `d.fields` first, then the keys of `d.after`, so the screen shows field names only. `cleaning.task_updated` reads the same way.
+- **`PATCH /api/unit-owners/:id`, `POST /api/unit-owners`:** on a percentage fee model (anything but flat), a blank `management_fee_pct` sent is refused (400, `management_fee_pct`: "Management fee is required."). An add that leaves the field out entirely takes the 20% default. A flat-fee owner has no percentage.
+- **`GET /api/unit-owners`:** a `unit_id` that is not in the workspace is ignored (the list is not filtered). The `sort` word must be one of the route's own keys.
+- **`GET /api/reservations/quote`** (the price quote): the room-type form takes `property_id` and `room_type` instead of `unit_id` and quotes the listing a reservation would take now (free and not on a lease); the answer adds `unit_id` and `unit_name`. With none free: 409 `NO_FREE_ROOM`.
+- **Quotes (`POST /api/quotes`):** `num_guests` above the listing's `max_guests` is refused (400, `num_guests`: "This listing allows up to N guests.").
+- **Ignored ids:** `/reviews` (unit, property), `/unit-owners` (unit) and `/inbox` (`assigned`, unit, property) ignore ids outside the workspace and return the unfiltered list. Money, tenants, maintenance, stays and damage lists answer an empty list to a direct request with such an id; the pages never send one.
+- **Sort and view words (`src/lib/pick.js`, `own(obj, key)`):** `sort`, `view`, `occupancy`, `segment` and `channel` words are looked up on the allow-list's own keys only, so `constructor` and `__proto__` are unknown words (default order), not a 500. Applied across owners, housekeeping, maintenance, money (three lists), inbox, admin, tenants, properties, stays (two), deposits, guestcare, support and stay reports.
+- **`GET /api/stay-reports`:** a `from` or `to` that is given but is not a real date answers 400 on that field, instead of falling back to this month. (The year-only fallback is unchanged.)
+- **Expenses:** no response (`POST`, `GET`, `PATCH`) carries `idempotency_key`, for any role.
+- **Dates (`src/lib/validate.js`):** a `date` field must be between 2000-01-01 and 2100-12-31 ("... must be between 2000 and 2100."). `isValidDate`, used by report and list filters, still accepts years 1900 to 2200 (known, to tighten in a later round).
+- **A listing's public page address (`public_slug`, `checkSlugFormat` in `properties.js`):** must match `^[a-z0-9][a-z0-9-]{1,58}[a-z0-9]$` (3 to 60 characters, starting and ending with a letter or number). The field message still reads "Use 3 to 60 lowercase letters, numbers or hyphens."
+- **Plan limit (`checkListingLimit` in `properties.js`, run when a listing with a nightly rate is added or given one):** answers 402 `PLAN_LIMIT` with the number for the owner; any other role reads "Your plan's listing limit is reached. Ask the workspace owner to upgrade."
+- **`POST /api/cleaning-tasks/:id/supplies`:** owners and managers are asked first. A `used` item with nothing on hand is refused on the row key `qty-<supply id>` ("Nothing on hand. Restock it first."); a use above what is on hand is refused unless the item sets `record_on_hand: true` (bool; label "Record what is on hand"). Staff and cleaners are unchanged: an out-of-stock item is skipped and named in `skipped`. The Supplies page's own movement route (`POST /api/supplies/:id/movements`) keeps its cap.
+- **`POST /api/units/:id/damage`:** owners and managers only (staff 403).
+- **Deposit receipt answer** (the `to` field after returning a deposit): the guest's email address for owners and managers; everyone else gets "the guest".
+- **`PUT /api/cleaner-rates` and cleaning-task create or edit:** the refusal for a typed name equal to a team member no longer repeats the name and says how to add the person to the property.
+- **Cleaning tasks:** owners and managers can change `notes` with `PATCH /api/cleaning-tasks/:id`; the activity row names the field.
+- **Sign-up, Get started:** nothing server-side changed for the saved answers; they live in the browser (`bh-setup`, with the email and a save time) and the server never receives them until the person presses Create. Signing out, "Use a different account" and opening setup as someone who already has a workspace clear them (client behaviour in `auth.js`).
+- **Not exercised locally (live stage):** PayMongo checkout and return, expired quote, booking-done success, owner portal with a real link, 4-star public review links, door-code card, iCal overlap on daily close, assistant answers, the recurring maintenance scheduler run.

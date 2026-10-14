@@ -4,10 +4,11 @@ import { get, post, patch, api, uploadFile, qs, ApiError } from '../api.js';
 import {
   h, icon, manilaDay, fmtDate, fmtDateTime, badge, field, formModal, confirmDialog, emptyState, errorState, toast, todayManila, filesList, openModal, peso,
 } from '../ui.js';
-import { t, initGuestLang, extendTranslations } from '../i18n.js';
+import { t, initGuestLang, extendTranslations, locale } from '../i18n.js';
 import { state } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 import { addDays } from './reservations.js';
+import { qtyLabel } from './supplies.js';
 
 // Cleaners see these screens in the workspace's guest language (English or Taglish).
 extendTranslations({
@@ -365,6 +366,9 @@ async function tasksTab(box, query) {
 
 // ---------------------------------------------------------------- board
 // GET /cleaning-board?property_id= -> { units: [{ unit_id, unit_name, property_name, cleaning_status, current_stay, next_check_in, open_task, last_inspection }] }
+// The open task's status and assignee, in the words the board shows.
+const openTaskText = (o) => `${T(STATUS[o.status]?.[1] || 'To do')}${o.assignee ? ` · ${o.assignee}` : ''}`;
+
 async function boardTab(box) {
   const cleaner = isCleaner();
   const { properties } = cleaner ? { properties: [] } : await get('/properties');
@@ -389,7 +393,7 @@ async function boardTab(box) {
             h('dt', null, T('Next check-in')), h('dd', null, u.next_check_in ? fmtDate(u.next_check_in) : '—'),
             h('dt', null, T('Open task')),
             h('dd', null, u.open_task
-              ? h('a', { href: `#/housekeeping/${u.open_task.task_id}` }, `${T(STATUS[u.open_task.status]?.[1] || 'To do')}${u.open_task.assignee ? ` · ${u.open_task.assignee}` : ''}`)
+              ? h('a', { href: `#/housekeeping/${u.open_task.task_id}`, 'aria-label': `${openTaskText(u.open_task)}, ${u.unit_name}` }, openTaskText(u.open_task))
               : h('span', { class: 'muted' }, T('No open cleaning task'))),
             // A cleaner is sent no score, so her line is "Passed · date"; the score is printed only when it is there.
             u.last_inspection && [h('dt', null, T('Last inspection')),
@@ -421,8 +425,8 @@ async function calendarTab(box) {
       const isToday = date === todayManila();
       return h('section', { class: `card hk-day${isToday ? ' hk-day--today' : ''}`, 'aria-label': fmtDate(date) },
         h('h3', { class: 'hk-day__label' },
-          new Date(`${date}T00:00:00Z`).toLocaleDateString('en-PH', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }),
-          isToday && h('span', { class: 'hk-day__today' }, 'Today')),
+          new Date(`${date}T00:00:00Z`).toLocaleDateString(isCleaner() ? locale() : 'en-PH', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }),
+          isToday && h('span', { class: 'hk-day__today' }, T('Today'))),
         day.length ? h('div', { class: 'hk-jobs' }, day.map((x) => h('div', { class: 'hk-job' },
           h('div', { class: 'hk-card__top' },
             h('a', { class: 'hk-job__unit', href: `#/housekeeping/${x.task_id}`, title: x.unit_name }, x.unit_name),
@@ -529,7 +533,7 @@ function lostFoundModal(task, onSaved) {
 async function suppliesModal(task, onSaved) {
   const { supplies } = await get(`/supplies${qs({ property_id: task.property_id })}`);
   const rows = (supplies || []).map((sp) => ({
-    sp, key: `qty-${sp.supply_id}`, qty: h('input', { type: 'number', inputmode: 'numeric', min: 0, max: 9999, class: 'input hk-qty', 'aria-label': `${T('Qty')}: ${sp.name}` }),
+    sp, key: `qty-${sp.supply_id}`, askFirst: canManage(), qty: h('input', { type: 'number', inputmode: 'numeric', min: 0, max: 9999, class: 'input hk-qty', 'aria-label': `${T('Qty')}: ${sp.name}` }),
     kind: h('select', { class: 'input', 'aria-label': `${T('Used or restocked')}: ${sp.name}` }, h('option', { value: 'used' }, T('Used')), h('option', { value: 'restocked' }, T('Restocked'))),
   }));
   formModal({
@@ -554,10 +558,24 @@ async function suppliesModal(task, onSaved) {
       const filled = rows.filter((r) => Number(r.qty.value) > 0);
       const decimal = filled.filter((r) => !Number.isInteger(Number(r.qty.value)));
       if (decimal.length) refuse(T('Quantity must be a whole number.'), decimal);
-      const items = filled.map((r) => ({ supply_id: r.sp.supply_id, kind: r.kind.value, quantity: Number(r.qty.value) }));
+      // Owners and managers are asked before stock moves (D-77): a use with nothing on hand is refused on its row,
+      // and more than is on hand asks first, as the Supplies page does. Staff and cleaners keep the skip-and-name rule.
+      const uses = filled.filter((r) => r.askFirst && r.kind.value === 'used');
+      const none = uses.filter((r) => Number(r.sp.on_hand) <= 0);
+      if (none.length) refuse('Nothing on hand. Restock it first.', none);
+      // A use above what is on hand goes out with record_on_hand only once the owner has confirmed it; the server refuses it otherwise.
+      const short = uses.filter((x) => Number(x.qty.value) > Number(x.sp.on_hand));
+      const items = filled.map((r) => ({ supply_id: r.sp.supply_id, kind: r.kind.value, quantity: Number(r.qty.value), ...(short.includes(r) ? { record_on_hand: true } : {}) }));
       if (!items.length) throw new ApiError(T('Enter a quantity for at least one item.'), { status: 400 });
+      for (const r of short) {
+        const asked = qtyLabel(Number(r.qty.value), r.sp.unit_label);
+        const onHand = qtyLabel(Number(r.sp.on_hand), r.sp.unit_label);
+        // Cancel returns false: the form stays open and nothing is recorded.
+        if (!await confirmDialog({ title: 'Not enough on hand', text: `You asked to record ${asked} used. On hand is ${onHand}, so only that much is logged as used, and on hand goes to 0.`, confirmText: 'Record what is on hand' })) return false;
+      }
       const { skipped } = await post(`/cleaning-tasks/${task.task_id}/supplies`, { items });
-      toast(skipped.length ? [...skipped.map((name) => T('{name} was out of stock, so it wasn\'t recorded.', { name })), T('Tell your manager.')].join(' ') : T('Supplies saved.'), skipped.length ? 'error' : 'info');
+      // Only cleaners are told to tell their manager.
+      toast(skipped.length ? [...skipped.map((name) => T('{name} was out of stock, so it wasn\'t recorded.', { name })), ...(isCleaner() ? [T('Tell your manager.')] : [])].join(' ') : T('Supplies saved.'), skipped.length ? 'error' : 'info');
       onSaved();
     },
   });
@@ -599,6 +617,15 @@ function inspectModal(task, onSaved) {
         : `Sent back for re-cleaning${r.pay_cleared ? '. The pay you set was cleared; it is set again when the clean is finished.' : ''}`);
       onSaved();
     },
+  });
+}
+
+// Owners and managers edit a job's notes; the server keeps up to 1000 characters.
+function notesModal(task, onSaved) {
+  formModal({
+    title: 'Edit notes', submitText: 'Save notes',
+    fields: [field({ name: 'notes', label: 'Notes', type: 'textarea', maxlength: 1000, value: task.notes ?? '' })],
+    onSubmit: async (d) => { await patch(`/cleaning-tasks/${task.task_id}`, { notes: d.notes }); toast('Notes saved.'); onSaved(); },
   });
 }
 
@@ -733,7 +760,8 @@ export async function housekeepingDetailView(el, { params, rerender }) {
             h('dt', null, T('Due')), h('dd', null, fmtDate(t.due_date)),
             h('dt', null, T('Next guest')), h('dd', null, nextGuestText(t)),
             t.departing_guest && [h('dt', null, T('After stay of')), h('dd', null, t.departing_guest)],
-            t.notes && [h('dt', null, T('Notes')), h('dd', { style: { whiteSpace: 'pre-wrap' } }, t.notes)],
+            (t.notes || isManager) && [h('dt', null, T('Notes')), h('dd', { style: { whiteSpace: 'pre-wrap' } }, t.notes || '—',
+              isManager && h('div', null, h('button', { class: 'linkbtn', onclick: () => notesModal(t, rerender) }, 'Edit notes')))],
             t.completed_at && [h('dt', null, T('Finished')), h('dd', null, `${fmtDateTime(t.completed_at)}${t.completed_by_name ? ` · ${t.completed_by_name}` : ''}`)]),
           t.booking_id && isManager && h('p', { class: 'small', style: { marginTop: '10px' } }, h('a', { href: `#/reservations/${t.booking_id}` }, 'Open the reservation'))),
         payCard,

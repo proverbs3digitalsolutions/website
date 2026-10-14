@@ -143,14 +143,15 @@ test('a cleaner logs damage on a task they can see, and nowhere else', async () 
   assert.ok(negative.data.fields.estimated_cost);
 });
 
-test('staff and managers log damage on a stay or a unit; out-of-scope units are refused', async () => {
+test('staff log damage on a stay; managers log it on a unit; out-of-scope units are refused', async () => {
   const d1 = await staff.post(`/api/reservations/${stay.booking_id}/damage`, { description: 'Smashed mirror' });
   assert.equal(d1.status, 201, JSON.stringify(d1.data));
   rep.D = d1.data.report;
   assert.equal(rep.D.description, 'Smashed mirror');
   assert.equal(rep.D.reported_by_name, 'staff@example.com');
 
-  const e = await staff.post(`/api/units/${unitA.unit_id}/damage`, { description: 'Ceiling stain', estimated_cost: '1200.5' });
+  assert.equal((await staff.post(`/api/units/${unitA.unit_id}/damage`, { description: 'Ceiling stain' })).status, 403, 'staff cannot report on a whole unit');
+  const e = await manager.post(`/api/units/${unitA.unit_id}/damage`, { description: 'Ceiling stain', estimated_cost: '1200.5' });
   assert.equal(e.status, 201, JSON.stringify(e.data));
   rep.E = e.data.report;
   assert.equal(rep.E.description, 'Ceiling stain');
@@ -159,7 +160,7 @@ test('staff and managers log damage on a stay or a unit; out-of-scope units are 
   rep.G = (await staff.post(`/api/reservations/${stay.booking_id}/damage`, { description: 'Old stain', estimated_cost: '999' })).data.report;
   assert.equal(rep.G.description, 'Old stain');
 
-  assert.equal((await staff.post(`/api/units/${unitB.unit_id}/damage`, { description: 'x' })).status, 404, 'a unit in another property');
+  assert.equal((await manager.post(`/api/units/${unitB.unit_id}/damage`, { description: 'x' })).status, 404, 'a unit in another property');
   assert.equal((await staff.post(`/api/reservations/${stay.booking_id}/damage`, {})).status, 400);
 });
 

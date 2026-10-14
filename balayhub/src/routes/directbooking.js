@@ -11,6 +11,7 @@ const { query, one, tx } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
 const { validate, uuidParam, isValidDate, UUID_RE } = require('../lib/validate');
 const { audit } = require('../lib/audit');
+const { changedKeys } = require('../lib/auditdiff');
 const { requireRole, rateLimit } = require('../lib/auth');
 const { loadUnit } = require('../lib/access');
 const { planStatus } = require('../lib/plans');
@@ -115,17 +116,20 @@ router.patch('/direct-booking', owners, ah(async (req, res) => {
     intro: { type: 'text', max: 1500, label: 'Welcome text' },
     paymongo_secret_key: { type: 'string', max: 200, label: 'PayMongo secret key' },
   }, { partial: true });
+  // The row as it is now, so the activity log names only what really changes.
+  const cur = await one('SELECT booking_enabled, booking_slug, booking_intro, paymongo_key_hint FROM organizations WHERE organization_id = $1', [req.user.organization_id]);
   const sets = []; const params = [req.user.organization_id];
-  const set = (col, v) => { params.push(v); sets.push(`${col} = $${params.length}`); };
+  const next = {}; // the value each named setting is saved as, keyed by its activity-log name
+  const set = (col, v, name) => { params.push(v); sets.push(`${col} = $${params.length}`); if (name) next[name] = v; };
   if ('slug' in body) {
     const slug = slugify(body.slug);
     if (slug.length < 3) throw validationError({ slug: 'Use at least 3 letters or numbers.' });
     if (['admin', 'api', 'demo', 'login', 'signup', 'settings'].includes(slug)) throw validationError({ slug: 'That address is reserved. Try another.' });
     const taken = await one('SELECT 1 FROM organizations WHERE lower(booking_slug) = $1 AND organization_id <> $2', [slug, req.user.organization_id]);
     if (taken) throw validationError({ slug: 'That address is already taken. Try another.' });
-    set('booking_slug', slug);
+    set('booking_slug', slug, 'slug');
   }
-  if ('intro' in body) set('booking_intro', body.intro);
+  if ('intro' in body) set('booking_intro', body.intro, 'intro');
   if (body.paymongo_secret_key) {
     const key = body.paymongo_secret_key.trim();
     if (!/^sk_(test|live)_[A-Za-z0-9]{10,}$/.test(key)) throw validationError({ paymongo_secret_key: 'Paste the Secret key from PayMongo (it starts with sk_live_ or sk_test_).' });
@@ -135,27 +139,29 @@ router.patch('/direct-booking', owners, ah(async (req, res) => {
   if (req.body?.disconnect_paymongo === true) { set('paymongo_key_enc', null); set('paymongo_key_hint', null); }
   if ('enabled' in body) {
     if (body.enabled) {
-      const o = await one('SELECT booking_slug, paymongo_key_hint FROM organizations WHERE organization_id = $1', [req.user.organization_id]);
-      const willHaveKey = Boolean(o.paymongo_key_hint || body.paymongo_secret_key) && req.body?.disconnect_paymongo !== true;
+      const willHaveKey = Boolean(cur.paymongo_key_hint || body.paymongo_secret_key) && req.body?.disconnect_paymongo !== true;
       if (!willHaveKey) throw new HttpError(409, 'Connect your PayMongo account first, so guests can pay you.', { code: 'NO_PAYMONGO' });
-      if (!o.booking_slug && !('slug' in body)) {
+      if (!cur.booking_slug && !('slug' in body)) {
         let slug = slugify(req.user.organization_name) || 'stays';
         if (slug.length < 3) slug = `${slug}-stays`;
         const taken = await one('SELECT 1 FROM organizations WHERE lower(booking_slug) = $1', [slug]);
-        set('booking_slug', taken ? `${slug}-${crypto.randomBytes(2).toString('hex')}` : slug);
+        set('booking_slug', taken ? `${slug}-${crypto.randomBytes(2).toString('hex')}` : slug, 'slug');
       }
     }
-    set('booking_enabled', body.enabled);
+    set('booking_enabled', body.enabled, 'enabled');
   }
-  if (sets.length) {
+  // The key is named, never shown: a key sent, or a disconnect of a connected account.
+  const keyChanged = Boolean(body.paymongo_secret_key) || (req.body?.disconnect_paymongo === true && Boolean(cur.paymongo_key_hint));
+  const fields = changedKeys({ enabled: cur.booking_enabled, slug: cur.booking_slug, intro: cur.booking_intro }, next);
+  if (keyChanged) fields.push('paymongo_key');
+  if (fields.length) {
     try {
       await query(`UPDATE organizations SET ${sets.join(', ')} WHERE organization_id = $1`, params);
     } catch (err) {
       if (err.code === '23505') throw validationError({ slug: 'That address is already taken. Try another.' });
       throw err;
     }
-    await audit(null, req.user, 'direct_booking.settings_changed', 'organization', req.user.organization_id,
-      { enabled: body.enabled, slug: body.slug, paymongo_key_changed: Boolean(body.paymongo_secret_key) || req.body?.disconnect_paymongo === true });
+    await audit(null, req.user, 'direct_booking.settings_changed', 'organization', req.user.organization_id, { fields });
   }
   const o = await one('SELECT booking_slug FROM organizations WHERE organization_id = $1', [req.user.organization_id]);
   res.json({ ok: true, url: o.booking_slug ? bookingUrl(o.booking_slug) : null });

@@ -5,6 +5,7 @@
 const express = require('express');
 const { query, one, tx } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
+const { own } = require('../lib/pick');
 const { validate, uuidParam, isValidDate } = require('../lib/validate');
 const { audit } = require('../lib/audit');
 const { requireRole } = require('../lib/auth');
@@ -91,7 +92,7 @@ router.get('/rent', ah(async (req, res) => {
        JOIN units u ON u.unit_id = l.unit_id
        JOIN properties p ON p.property_id = u.property_id
       WHERE ${where.join(' AND ')}
-      ORDER BY ${SORTS[req.query.sort] || SORTS.due}
+      ORDER BY ${own(SORTS, req.query.sort) || SORTS.due}
       LIMIT 500`, params);
   // Totals cover everything unpaid (all months), narrowed to the chosen property.
   const totalParams = [org];
@@ -170,7 +171,7 @@ router.get('/payments', ah(async (req, res) => {
        JOIN properties p ON p.property_id = u.property_id
        JOIN users ru ON ru.user_id = pm.recorded_by
       WHERE ${where.join(' AND ')}
-      ORDER BY ${SORTS[req.query.sort] || SORTS.date} LIMIT 500`, params);
+      ORDER BY ${own(SORTS, req.query.sort) || SORTS.date} LIMIT 500`, params);
   res.json({ payments: rows });
 }));
 
@@ -283,6 +284,9 @@ const expenseSpec = {
   vendor_name: { type: 'string', max: 120, label: 'Vendor / paid to' },
 };
 
+// An expense's idempotency key is an internal retry token: no response carries it.
+const withoutIdemKey = ({ idempotency_key: idem, ...expense }) => expense;
+
 async function loadExpense(user, id) {
   const params = [id];
   const row = await one(
@@ -293,7 +297,7 @@ async function loadExpense(user, id) {
        JOIN users ru ON ru.user_id = e.recorded_by
       WHERE e.expense_id = $1 AND ${propertyScope(user, params)}`, params);
   if (!row) throw notFound();
-  return row;
+  return withoutIdemKey(row);
 }
 
 async function checkExpenseTargets(user, body) {
@@ -376,8 +380,8 @@ router.get('/expenses', ah(async (req, res) => {
        LEFT JOIN units u ON u.unit_id = e.unit_id
        JOIN users ru ON ru.user_id = e.recorded_by
       WHERE ${where.join(' AND ')}
-      ORDER BY ${SORTS[req.query.sort] || SORTS.date} LIMIT 500`, params);
-  res.json({ expenses: rows });
+      ORDER BY ${own(SORTS, req.query.sort) || SORTS.date} LIMIT 500`, params);
+  res.json({ expenses: rows.map(withoutIdemKey) });
 }));
 
 router.get('/expenses/:id', ah(async (req, res) => {

@@ -39,11 +39,11 @@ test('#38 recording a payment over the balance asks first; the post and the rece
   assert.match(rp, /const owed = Math\.max\(0, Number\(r\.balance\)\);/);
   assert.match(rp, /confirmDialog\(\{ title: 'Record more than the balance\?', text: `This is \$\{peso\(over\)\} more than the balance of \$\{peso\(owed\)\}\. Record it\?`, confirmText: 'Record it' \}\)/);
   const ask = rp.indexOf('confirmDialog(');
-  const stop = rp.indexOf("throw new ApiError('Payment not saved.', { status: 400 })");
+  const stop = rp.indexOf('return false;');
   const send = rp.indexOf('await post(`/reservations/${r.booking_id}/payments`');
   assert.ok(ask > 0 && ask < stop && stop < send, 'a Cancel stops before the payment is posted');
   assert.match(rp, /if \(over > 0 && !await confirmDialog/);
-  // Same as the rent payment's cancel (rent.js): the form stays open and says the payment was not saved.
+  // QA round 8 #47: Cancel returns false, so makeForm keeps the form open with no "Payment not saved." message.
 });
 
 test('#3 a quote still in flight cannot fill the boxes after the dates go empty or backwards', () => {
