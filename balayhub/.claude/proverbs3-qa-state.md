@@ -63,3 +63,5 @@
 - R4 candidates: property LIST page in short-term still shows 'N occupied · N vacant' badge and 'Has vacant units/Fully occupied' filter (C17 note).
 - 2026-10-14: Round 3 fixes done. Full suite 1107/1107, security PASS, 4 re-verify lanes held (3 follow-ups fixed). Committing.
 - 2026-10-14: Round 4 started (local sweep, DB restored from snapshot).
+- 2026-10-14: Round 4 sweep done (12 lanes). Dev server stopped. Strategist dispatched (r4/STRATEGY.md).
+- 2026-10-14: Round 4 strategy done (HARD: scroll cue 3rd round, money parser class). 31 real bugs (10 SEV2, 21 SEV3), 0 SEV1. 17 fix lanes C01-C17 dispatched (C01, C04 on sonnet). D01 docs after merge gate.
