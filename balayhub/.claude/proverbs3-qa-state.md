@@ -75,3 +75,8 @@
 - R5 note: owner portal nav unverifiable by lanes (link only in in-memory outbox, token stored hashed). Orchestrator can mint a local-only token (insert hash of a known token into owner_login_tokens on the dev DB) for the re-verify.
 - 2026-10-14: Round 5 sweep done (12 lanes): 3-4 SEV1 candidates (room-type prefill price, New reservation overwrites typed totals, sign-up stranding on bad phone, staff see cleaner pay via API), several SEV2. Server stopped. Strategist dispatched (r5/STRATEGY.md).
 - 2026-10-14: Round 5 strategy: HARD, 60 real bugs (3 SEV1: room-type prefill price, signup stranding, staff see cleaner pay; 17 SEV2; 40 SEV3). 18 fix lanes C01-C18 dispatched (C01, C04, C05 on sonnet). D01 after merge gate. Orchestrator to-dos before re-verify: archive 4 duplicate add-on rows in the local DB after restore, re-dump snapshot; mint local owner sign-in token for R8.
+- R6 carry: reopening an older clean when a newer clean on the same unit is done still sets unit dirty (same as failed inspection); consider a guard.
+- R6 carry: check whether future-date guards in refunds/deposits/lostfound/cleanerpay/ownerledger also run on correction/edit paths.
+- R6 carry: status-chip empty-state/Clear filters pattern in maintenance.js, tenants.js, properties.js.
+- 2026-10-14: Round 5 security review PASS (Low: pending proofs list sent reference_number, being dropped by C05; Info: BACKEND-SCHEMA 6.1 My pay row must say cleaners only, for D01).
+- 2026-10-14: Founder: start round 6 as soon as round 5 is committed (round 5 re-verify R1-R8 + D01 running).
