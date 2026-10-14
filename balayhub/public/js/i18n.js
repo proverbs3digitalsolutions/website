@@ -287,3 +287,32 @@ export function langToggle(onChange) {
     h('button', { type: 'button', 'aria-pressed': String(current === 'en'), onclick: () => pick('en') }, 'English'),
     h('button', { type: 'button', 'aria-pressed': String(current === 'tl'), onclick: () => pick('tl') }, 'Tagalog'));
 }
+
+// A guest page that redraws itself on the language switch would wipe what was typed. The page takes
+// `keepFormValues(root)` before the redraw and `restoreFormValues(root, snap)` once the new form is in
+// place. Controls are matched by name and, for a repeated name, by order. File and password boxes are
+// never kept (a browser cannot); a hidden input is kept only with data-keep.
+const keepable = (c) => c.name && c.type !== 'file' && c.type !== 'password' && !/^(button|submit|reset|image)$/.test(c.type)
+  && (c.type !== 'hidden' || c.dataset?.keep !== undefined);
+const isTick = (c) => c.type === 'checkbox' || c.type === 'radio';
+const controls = (root) => [...root.querySelectorAll('input, textarea, select')].filter(keepable);
+
+export function keepFormValues(root) {
+  const snap = {};
+  for (const c of controls(root)) (snap[c.name] ||= []).push(isTick(c) ? c.checked : c.value);
+  return snap;
+}
+
+export function restoreFormValues(root, snap) {
+  if (!snap) return;
+  const seen = {};
+  for (const c of controls(root)) {
+    const i = seen[c.name] = (seen[c.name] ?? -1) + 1;
+    const v = snap[c.name]?.[i];
+    if (v === undefined) continue;
+    const tick = isTick(c);
+    if (tick ? c.checked === v : c.value === v) continue;
+    if (tick) c.checked = v; else c.value = v;
+    c.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+}

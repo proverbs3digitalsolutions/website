@@ -79,8 +79,10 @@ test('N32 the timeline names the fields of a cleaning-task edit stored as { fiel
 test('#1 room-type quote names the listing a reservation would take (skips a leased one)', async () => {
   const t = await owner.post('/api/tenants', { full_name: 'Juan Dela Cruz', phone: '0919 111 2222' });
   assert.equal(t.status, 201, JSON.stringify(t.data));
+  // The lease ends on day 20, before the Unit 101 stay the N27 test books on day 30, so it does not run over that stay.
+  // It still covers the quote nights (days 5 to 7), so Unit 101 stays leased for the quote.
   const l = await owner.post('/api/leases', {
-    tenant_id: t.data.tenant.tenant_id, unit_id: units['Unit 101'].unit_id, start_date: d(-30), monthly_rent: '8000', due_day: 5,
+    tenant_id: t.data.tenant.tenant_id, unit_id: units['Unit 101'].unit_id, start_date: d(-30), end_date: d(20), monthly_rent: '8000', due_day: 5,
   });
   assert.equal(l.status, 201, JSON.stringify(l.data));
   const q = `/api/reservations/quote?property_id=${prop.property_id}&room_type=studio&check_in=${d(5)}&check_out=${d(7)}`;

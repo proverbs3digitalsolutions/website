@@ -52,7 +52,7 @@ function statusAlerts(status) {
   if (!status.sending) {
     out.push(h('div', { class: 'alert alert--warn' }, 'Email sending is not set up on the server yet, so messages can\'t be sent. Follow EMAIL-SETUP.md (step 7 of the server guide).'));
   } else if (!status.replies.configured) {
-    out.push(h('div', { class: 'alert alert--info' }, 'Guest replies currently arrive in your email inbox only. Showing them here needs a one-time setup on the server; ask whoever set up BalayHub for you.'));
+    out.push(h('div', { class: 'alert alert--info' }, 'Guest replies go to your email inbox for now. Reply from there, or send a new message here.'));
   } else if (status.replies.last_error) {
     out.push(h('div', { class: 'alert alert--warn' }, `Couldn't check for guest replies: ${status.replies.last_error}`));
   }
@@ -299,6 +299,12 @@ function messageBody(m) {
 // (otherwise the next internal note would go to the guest).
 const composerModes = new Map();
 
+// A draft saved before the mode was kept opens as an Internal note, so sending to the guest is always a deliberate switch.
+export function restoredMode(savedMode, draftText) {
+  if (savedMode === 'note' || savedMode === 'message') return savedMode;
+  return draftText ? 'note' : 'message';
+}
+
 // "@[Full Name](user_id)" shows as a highlighted "@Full Name"; the stored text stays as typed.
 // Same pattern as MENTION_RE in src/routes/inbox.js, so only mentions the server saved are highlighted.
 const MENTION = /@\[([^\]\n]{1,120})\]\(([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\)/gi;
@@ -378,7 +384,12 @@ export function insertBelow(typed, templateBody) {
 }
 
 function composer(c, templates, status, rerender, assignees = []) {
-  let mode = composerModes.get(c.conversation_id) || 'message';
+  const draftKey = `bh-draft:msg:${c.conversation_id}`;
+  const modeKey = `bh-draft:mode:${c.conversation_id}`;
+  let savedDraft = '';
+  let savedMode = null;
+  try { savedDraft = sessionStorage.getItem(draftKey) || ''; savedMode = sessionStorage.getItem(modeKey); } catch { /* ignore */ }
+  let mode = composerModes.get(c.conversation_id) || restoredMode(savedMode, savedDraft);
   const subject = h('input', { class: 'input input--sm', name: 'subject', maxlength: 200, placeholder: `Subject (default: ${c.subject})`, 'aria-label': 'Subject' });
   const body = h('textarea', { class: 'input', name: 'body', maxlength: 10000, placeholder: `Write to ${c.guest_name}…`, 'aria-label': 'Message' });
   const counter = h('div', { class: 'small muted', hidden: true });
@@ -396,10 +407,9 @@ function composer(c, templates, status, rerender, assignees = []) {
   ['input', 'change'].forEach((ev) => sendAt.addEventListener(ev, () => { sendAt.removeAttribute('aria-invalid'); err.textContent = ''; }));
   const modeHint = h('div', { class: 'small muted', role: 'status' });
   const sendBtn = h('button', { class: 'btn btn--primary', type: 'submit' }, 'Send');
-  const draftKey = `bh-draft:msg:${c.conversation_id}`;
-  try { body.value = sessionStorage.getItem(draftKey) || ''; } catch { /* ignore */ }
+  body.value = savedDraft;
   updateCounter();
-  body.addEventListener('input', () => { try { sessionStorage.setItem(draftKey, body.value); } catch { /* ignore */ } });
+  body.addEventListener('input', () => { try { sessionStorage.setItem(draftKey, body.value); sessionStorage.setItem(modeKey, mode); } catch { /* ignore */ } });
   // The subject is kept the same way, so switching conversations doesn't lose it.
   const subjKey = `bh-draft:subj:${c.conversation_id}`;
   try { subject.value = sessionStorage.getItem(subjKey) || ''; } catch { /* ignore */ }
@@ -450,6 +460,7 @@ function composer(c, templates, status, rerender, assignees = []) {
   const setMode = (k) => {
     mode = k;
     composerModes.set(c.conversation_id, k);
+    try { sessionStorage.setItem(modeKey, k); } catch { /* ignore */ }
     [...modeTabs.children].forEach((b, i) => b.setAttribute('aria-pressed', String(i === (k === 'note' ? 1 : 0))));
     form.classList.toggle('composer--note', mode === 'note');
     // Guest templates don't belong in a staff note, so the template picker is only offered for a guest message.
@@ -492,7 +503,7 @@ function composer(c, templates, status, rerender, assignees = []) {
           if (scheduleFor) payload.send_at = scheduleFor.toISOString();
         }
         const r = await post(`/inbox/${c.conversation_id}/messages`, payload);
-        try { sessionStorage.removeItem(draftKey); sessionStorage.removeItem(subjKey); } catch { /* ignore */ }
+        try { sessionStorage.removeItem(draftKey); sessionStorage.removeItem(modeKey); sessionStorage.removeItem(subjKey); } catch { /* ignore */ }
         if (r.message.status === 'failed') toast(`Saved, but the email was not sent: ${r.message.error}`, 'error');
         else if (r.mentions.length) toast(`Note saved. ${r.mentions.map((x) => x.full_name).join(', ')} mentioned.`);
         else toast({ note: 'Note saved.', scheduled: `Scheduled for ${fmtDateTime(r.message.scheduled_at)}.`, sent: 'Sent.' }[r.message.status] || 'Saved.');

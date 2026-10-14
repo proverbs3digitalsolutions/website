@@ -392,26 +392,29 @@ export async function paymentDetailView(el, { params, rerender }) {
   const { payment: p, files } = await get(`/payments/${params.id}`);
   const canVoid = state.user.role !== 'staff' && !p.voided_at;
   const upload = h('input', { type: 'file', class: 'input', 'aria-label': 'Choose a receipt or proof file', accept: 'application/pdf,image/jpeg,image/png,image/webp' });
+  // The header (back link, title) is screen-only; the print-only block below is the receipt.
+  const head = pageHead({
+    title: `Payment · ${peso(p.amount_paid)}`, sub: `${p.tenant_name} · ${p.property_name}, ${unitLabel(p.unit_name)}`,
+    back: { href: '#/rent?tab=payments', label: 'Payments' },
+    actions: [
+      h('a', { class: 'btn btn--secondary', href: `#/tenants/${p.tenant_id}` }, 'View tenant'),
+      h('button', { class: 'btn btn--secondary', onclick: () => window.print() }, 'Print receipt'),
+      canVoid && h('button', {
+        class: 'btn btn--danger',
+        onclick: async () => {
+          const reason = await confirmDialog({ title: 'Void this payment?', text: 'Voiding keeps the record but removes it from balances and reports. Use this to correct a mistake, then record the correct payment.', confirmText: 'Void payment', danger: true, reason: true });
+          if (!reason) return;
+          try { await post(`/payments/${p.payment_id}/void`, { reason }); toast('Payment voided.'); rerender(); } catch (err) { toast(err.message, 'error'); }
+        },
+      }, 'Void'),
+    ],
+  });
+  head.classList.add('no-print');
   el.replaceChildren(
-    pageHead({
-      title: `Payment · ${peso(p.amount_paid)}`, sub: `${p.tenant_name} · ${p.property_name}, ${unitLabel(p.unit_name)}`,
-      back: { href: '#/rent?tab=payments', label: 'Payments' },
-      actions: [
-        h('a', { class: 'btn btn--secondary', href: `#/tenants/${p.tenant_id}` }, 'View tenant'),
-        h('button', { class: 'btn btn--secondary', onclick: () => window.print() }, 'Print receipt'),
-        canVoid && h('button', {
-          class: 'btn btn--danger',
-          onclick: async () => {
-            const reason = await confirmDialog({ title: 'Void this payment?', text: 'Voiding keeps the record but removes it from balances and reports. Use this to correct a mistake, then record the correct payment.', confirmText: 'Void payment', danger: true, reason: true });
-            if (!reason) return;
-            try { await post(`/payments/${p.payment_id}/void`, { reason }); toast('Payment voided.'); rerender(); } catch (err) { toast(err.message, 'error'); }
-          },
-        }, 'Void'),
-      ],
-    }),
+    head,
     p.voided_at && h('div', { class: 'alert alert--error', style: { marginBottom: '16px' } }, `Voided ${fmtDateTime(p.voided_at)} by ${p.voided_by_name}: ${p.void_reason}`),
     h('div', { class: 'grid grid--2' },
-      h('div', { class: 'card' },
+      h('div', { class: 'card no-print' },
         h('h2', { style: { marginBottom: '12px' } }, 'Payment details'),
         h('dl', { class: 'dl' },
           h('dt', null, 'Amount'), h('dd', null, peso(p.amount_paid)),
@@ -432,7 +435,19 @@ export async function paymentDetailView(el, { params, rerender }) {
               e.target.disabled = true;
               try { await uploadFile('payment', p.payment_id, upload.files[0]); toast('Uploaded.'); rerender(); } catch (err) { toast(err.message, 'error'); e.target.disabled = false; }
             },
-          }, 'Upload attachment')))));
+          }, 'Upload attachment')))),
+    h('div', { class: 'card print-only' },
+      h('h2', null, state.user.organization_name),
+      h('p', { class: 'muted' }, 'Acknowledgement receipt (not a BIR official receipt)'),
+      h('dl', { class: 'dl' },
+        h('dt', null, 'Tenant'), h('dd', null, p.tenant_name),
+        h('dt', null, 'Property'), h('dd', null, p.property_name),
+        h('dt', null, 'Unit'), h('dd', null, unitLabel(p.unit_name)),
+        h('dt', null, 'Amount'), h('dd', null, peso(p.amount_paid)),
+        h('dt', null, 'Date received'), h('dd', null, fmtDate(p.payment_date)),
+        h('dt', null, 'Method'), h('dd', null, label(p.payment_method)),
+        h('dt', null, 'Reference no.'), h('dd', null, p.reference_number || '—'),
+        h('dt', null, 'Recorded by'), h('dd', null, p.recorded_by_name))));
 }
 
 export async function expenseDetailView(el, { params, rerender }) {

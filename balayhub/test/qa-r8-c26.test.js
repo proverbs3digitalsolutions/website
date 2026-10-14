@@ -44,7 +44,7 @@ test('#48 New reservation and Edit check the guest count before anything is post
   const newRes = resSrc.slice(resSrc.indexOf('onSubmit: async (data) => {'), resSrc.indexOf("const res = await post('/reservations', data);"));
   assert.ok(newRes.includes('const problem = guestsProblem(data.num_guests);'));
   assert.ok(newRes.includes('if (problem) throw new ApiError(problem, { status: 400, fields: { num_guests: problem } });'));
-  const edit = resSrc.slice(resSrc.indexOf('const changes = changedFields(r, d);'), resSrc.indexOf('toast(saved.changed'));
+  const edit = resSrc.slice(resSrc.indexOf('let changes = changedFields(r, d);'), resSrc.indexOf('toast(saved.changed'));
   assert.ok(edit.includes("if ('num_guests' in changes) {"), 'only a changed guest count is checked, so a stored blank is not refused on an unrelated save');
   assert.ok(edit.includes('const problem = guestsProblem(changes.num_guests);'));
   const check = edit.indexOf('guestsProblem(changes.num_guests)');

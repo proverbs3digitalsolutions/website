@@ -1,7 +1,7 @@
 // Lost and found: things guests leave behind, from found to returned or thrown away.
 
-import { get, patch, qs } from '../api.js';
-import { h, fmtDate, field, formModal, emptyState, pageHead, toast, badge, errorState, skeleton, unitLabel } from '../ui.js';
+import { get, patch, post, qs } from '../api.js';
+import { h, fmtDate, field, formModal, emptyState, pageHead, toast, badge, errorState, skeleton, unitLabel, todayManila } from '../ui.js';
 import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 
 const TABS = [['held', 'Held'], ['returned', 'Returned'], ['disposed', 'Disposed'], ['all', 'All']];
@@ -21,6 +21,20 @@ export async function lostFoundView(el, { query = {} } = {}) {
     onSubmit: async (d) => { await patch(`/lost-found/${it.item_id}`, { status, status_note: d.status_note || undefined }); toast(status === 'returned' ? 'Marked returned.' : 'Marked disposed.'); load(); },
   });
   const reopen = async (it) => { try { await patch(`/lost-found/${it.item_id}`, { status: 'held' }); toast('Back to held.'); load(); } catch (err) { toast(err.message, 'error'); } };
+  // Logged straight on a listing, for an item found with no stay or cleaning job to attach it to.
+  const addItem = async () => {
+    const { listings } = await get('/listings');
+    formModal({
+      title: 'Add lost item', submitText: 'Save item',
+      fields: [
+        field({ name: 'unit_id', label: 'Listing', type: 'select', required: true, options: listings.map((l) => [l.unit_id, `${unitLabel(l.unit_name)} · ${l.property_name}`]) }),
+        field({ name: 'description', label: 'What is it', required: true, maxlength: 300, placeholder: 'e.g. Blue umbrella' }),
+        field({ name: 'found_where', label: 'Where found', maxlength: 200, placeholder: 'e.g. Lobby, under the sofa' }),
+        field({ name: 'found_on', label: 'Date found', type: 'date', value: todayManila() }),
+      ],
+      onSubmit: async (d) => { await post('/lost-found', d); toast('Lost item recorded.'); load(); },
+    });
+  };
 
   async function load() {
     history.replaceState(null, '', `#/lost-found${qs(changed(filters, defaults))}`);
@@ -46,7 +60,7 @@ export async function lostFoundView(el, { query = {} } = {}) {
           : h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'aria-label': `Back to held: ${it.description}`, onclick: () => reopen(it) }, 'Back to held')))))));
   }
 
-  el.replaceChildren(pageHead({ title: 'Lost and found', sub: 'Items guests left behind' }), tabs,
+  el.replaceChildren(pageHead({ title: 'Lost and found', sub: 'Items guests left behind', actions: h('button', { class: 'btn btn--primary', type: 'button', onclick: addItem }, '+ Add item') }), tabs,
     filterBar({ key: 'lost-found', values: filters, defaults, onChange: load, search: { placeholder: 'Search item, place or guest' } }), box);
   await load();
 }

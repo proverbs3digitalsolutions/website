@@ -60,10 +60,10 @@ test('without a label the new tablist at the same place in the page takes over',
   assert.equal(doc.activeElement, fresh.tabs[2]);
 });
 
-test('no replacement tablist, or the user moved on, leaves focus alone', () => {
+test('no replacement tablist yet keeps polling; the user moving on leaves focus alone', () => {
   const doc = world();
   const old = tabs(doc, 'Status'); old.isConnected = false;
-  assert.equal(restore(old, 0, old.tabs[0], doc, 0), true);
+  assert.equal(restore(old, 0, old.tabs[0], doc, 0), false);
   assert.equal(doc.activeElement, doc.body);
   const elsewhere = { isConnected: true };
   doc.activeElement = elsewhere;

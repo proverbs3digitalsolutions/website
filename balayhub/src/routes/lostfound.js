@@ -11,7 +11,7 @@ const { HttpError, ah, forbidden, notFound } = require('../lib/http');
 const { validate, uuidParam } = require('../lib/validate');
 const { audit } = require('../lib/audit');
 const { requireRole } = require('../lib/auth');
-const { propertyScope } = require('../lib/access');
+const { propertyScope, loadUnit } = require('../lib/access');
 const { isCleaner } = require('../lib/cleaner');
 
 const router = express.Router();
@@ -22,6 +22,8 @@ const ITEM_SPEC = {
   found_where: { type: 'string', max: 200, label: 'Where it was found' },
   found_on: { type: 'date', label: 'Date found' },
 };
+// An item logged straight on a listing also names the unit it was found in.
+const LISTING_ITEM_SPEC = { unit_id: { type: 'uuid', required: true, label: 'Listing' }, ...ITEM_SPEC };
 
 const notCleaner = (req, res, next) => (isCleaner(req.user) ? next(forbidden('Cleaners log items from their cleaning job.')) : next());
 const manilaToday = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
@@ -73,8 +75,8 @@ async function loadTask(user, id) {
 }
 
 // Validates an item and rejects a date found in the future (Manila time).
-function parseItem(body) {
-  const v = validate(body, ITEM_SPEC);
+function parseItem(body, spec = ITEM_SPEC) {
+  const v = validate(body, spec);
   if (v.found_on && v.found_on > manilaToday()) {
     throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { found_on: 'The date cannot be in the future.' } });
   }
@@ -108,6 +110,13 @@ router.post('/reservations/:id/lost-found', notCleaner, ah(async (req, res) => {
   const stay = await loadStay(req.user, uuidParam(req.params.id));
   const body = parseItem(req.body);
   res.status(201).json({ item: await createItem(req.user, { unit_id: stay.unit_id, booking_id: stay.booking_id }, body) });
+}));
+
+// Owners and managers log an item found on a listing, with no stay or task to link it to (e.g. on a walk-through).
+router.post('/lost-found', managers, ah(async (req, res) => {
+  const { unit_id, ...body } = parseItem(req.body, LISTING_ITEM_SPEC);
+  const unit = await loadUnit(req.user, unit_id);
+  res.status(201).json({ item: await createItem(req.user, { unit_id: unit.unit_id }, body) });
 }));
 
 router.get('/lost-found', managers, ah(async (req, res) => {

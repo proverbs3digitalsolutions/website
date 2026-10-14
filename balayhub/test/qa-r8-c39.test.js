@@ -39,7 +39,7 @@ test('focus returns to the new button at the same index after a redraw', () => {
   assert.notEqual(doc.activeElement, old);
 });
 
-test('never steals focus the user moved elsewhere, and ignores a removed tablist', () => {
+test('never steals focus the user moved elsewhere, and leaves focus alone while the tablist is gone', () => {
   const restore = new Function(`${m[0]}; return restoreTabFocus;`)();
   const { doc, list, draw } = makeDoc();
   const old = list.tabs[0];
@@ -50,6 +50,6 @@ test('never steals focus the user moved elsewhere, and ignores a removed tablist
   assert.equal(doc.activeElement, other);
   doc.activeElement = doc.body;
   list.isConnected = false;
-  assert.equal(restore(list, 0, old, doc), true);
+  assert.equal(restore(list, 0, old, doc), false, 'no new tablist yet: keep polling');
   assert.equal(doc.activeElement, doc.body);
 });

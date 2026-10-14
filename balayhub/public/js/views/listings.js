@@ -2,7 +2,7 @@
 
 import { get, post, patch, qs, api, ApiError } from '../api.js';
 import {
-  h, icon, peso, pesoShort, parseAmount, fmtDate, fmtDateTime, badge, field, formModal, makeForm, openModal, confirmDialog, emptyState, toast, options, todayManila, manilaDay,
+  h, icon, peso, pesoShort, parseAmount, fmtDate, fmtDateTime, badge, field, formModal, makeForm, openModal, confirmDialog, emptyState, toast, options, todayManila, manilaDay, clearErrors, showErrors,
 } from '../ui.js';
 import { state } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
@@ -100,37 +100,40 @@ const BUILDING_SAVED = 'The building was saved; fix the listing details and save
 // The starting value of each optional field on a new listing. On Edit a closed group opens when one of its fields holds
 // something other than its starting value, so a listing that never used a group keeps it closed.
 const START = {
+  room_type: '', tags: [], deposit_pct: 50,
   security_deposit_amount: 0, weekend_rate: '', holiday_rate: '', weekly_discount: 0, fortnight_discount: 0, monthly_discount: 0, min_price: '',
   checkin_time: '14:00', checkout_time: '12:00', wifi_name: '', wifi_password: '', checkin_instructions: '', house_rules: '',
   bookable_online: false, description: '', payment_option: 'either', balance_due_days: 3, min_nights: 1, cancellation_policy: '', cancellation_policy_text: '',
 };
 function holds(u, keys) {
-  // The database sends a time with seconds (14:00:00), so the seconds are dropped before the comparison.
+  // A time is the same default with or without its seconds: the database sends 14:00:00, the form 14:00.
   return keys.some((k) => u[k] !== undefined && u[k] !== null && u[k] !== '' && (typeof START[k] === 'number'
-    ? Number(u[k]) !== START[k] : String(u[k]).replace(/:00$/, '') !== String(START[k])));
+    ? Number(u[k]) !== START[k] : String(u[k]).replace(/^(\d\d:\d\d):00$/, '$1') !== String(START[k])));
 }
 
-function listingFields(u = {}, roomTypes = []) {
+// The basics are what a new listing needs. Building details (Add only, passed in as `building`), room type and tags sit in
+// More details, closed; the deposit is under Booking page and payments.
+function listingFields(u = {}, roomTypes = [], building = null) {
   return [
     h('div', { class: 'form-row form-row--2' },
       field({ name: 'unit_name', label: 'Listing name', required: true, value: u.unit_name, placeholder: 'e.g. Tower 1 - 1201 or Studio A', maxlength: 60 }),
       field({ name: 'unit_type', label: 'Type', type: 'select', required: true, value: u.unit_type || 'studio', placeholderOption: false, options: options(UNIT_TYPES) })),
     h('div', { class: 'form-row form-row--2' },
-      (() => {
-        const f = field({ name: 'room_type', label: 'Room type', value: u.room_type, maxlength: 40, placeholder: 'e.g. Studio, 1-bedroom', hint: 'Lets you pick "any free room of this type" on a booking.' });
-        const inp = f.querySelector('input');
-        const dl = h('datalist', { id: `rt-${Math.random().toString(36).slice(2, 7)}` }, roomTypes.map((t) => h('option', { value: t })));
-        inp.setAttribute('list', dl.id); f.append(dl);
-        return f;
-      })(),
-      tagsField(u.tags)),
-    h('div', { class: 'form-row form-row--2' },
       field({ name: 'nightly_rate', label: 'Base nightly rate', type: 'money', required: true, value: u.nightly_rate, placeholder: '2,500' }),
       field({ name: 'cleaning_fee', label: 'Cleaning fee per stay', type: 'money', value: u.cleaning_fee, placeholder: '500' })),
-    h('div', { class: 'form-row form-row--2' },
-      field({ name: 'max_guests', label: 'Maximum guests', type: 'number', min: 1, max: 50, value: u.max_guests || 2, inputmode: 'numeric' }),
-      field({ name: 'deposit_pct', label: 'Deposit (% of the total)', type: 'number', required: true, min: 10, max: 90, value: u.deposit_pct ?? 50, inputmode: 'numeric',
-        hint: 'What a guest pays now when they choose a deposit. From 10 to 90.' })),
+    field({ name: 'max_guests', label: 'Maximum guests', type: 'number', min: 1, max: 50, value: u.max_guests || 2, inputmode: 'numeric' }),
+    h('details', { class: 'form-section', open: holds(u, ['room_type', 'tags']) },
+      h('summary', null, 'More details'),
+      building,
+      h('div', { class: 'form-row form-row--2' },
+        (() => {
+          const f = field({ name: 'room_type', label: 'Room type', value: u.room_type, maxlength: 40, placeholder: 'e.g. Studio, 1-bedroom', hint: 'Lets you pick "any free room of this type" on a booking.' });
+          const inp = f.querySelector('input');
+          const dl = h('datalist', { id: `rt-${Math.random().toString(36).slice(2, 7)}` }, roomTypes.map((t) => h('option', { value: t })));
+          inp.setAttribute('list', dl.id); f.append(dl);
+          return f;
+        })(),
+        tagsField(u.tags))),
     h('details', { class: 'form-section', open: holds(u, ['weekend_rate', 'holiday_rate', 'weekly_discount', 'fortnight_discount', 'monthly_discount', 'min_price', 'security_deposit_amount']) },
       h('summary', null, 'Price extras'),
       h('p', { class: 'muted small' }, 'Applied automatically to new quotes and your booking page. For date ranges like summer or Holy Week, add a season in Calendar → Pricing rules.'),
@@ -159,7 +162,7 @@ function listingFields(u = {}, roomTypes = []) {
       field({ name: 'checkin_instructions', label: 'Check-in instructions', type: 'textarea', value: u.checkin_instructions, maxlength: 3000,
         placeholder: 'e.g. Show your ID at the lobby, get the key from the guard, unit is on the 12th floor…' }),
       field({ name: 'house_rules', label: 'House rules', type: 'textarea', value: u.house_rules, maxlength: 3000, placeholder: 'e.g. No smoking. No parties. Quiet hours 10 PM – 7 AM.' })),
-    h('details', { class: 'form-section', open: holds(u, ['bookable_online', 'description', 'payment_option', 'balance_due_days']) },
+    h('details', { class: 'form-section', open: holds(u, ['bookable_online', 'description', 'payment_option', 'deposit_pct', 'balance_due_days']) },
       h('summary', null, 'Booking page and payments'),
       field({ name: 'bookable_online', label: 'Show this listing on my booking page', type: 'checkbox', value: Boolean(u.bookable_online) }),
       field({ name: 'description', label: 'Description for guests', type: 'textarea', value: u.description, maxlength: 3000,
@@ -168,8 +171,10 @@ function listingFields(u = {}, roomTypes = []) {
         field({ name: 'payment_option', label: 'Online payment', type: 'select', value: u.payment_option || 'either', placeholderOption: false, options: [
           ['either', 'Guest chooses: full or deposit'], ['full', 'Full payment only'], ['deposit', 'Deposit only, rest before check-in'],
         ] }),
-        field({ name: 'balance_due_days', label: 'Balance due (days before check-in)', type: 'number', min: 0, max: 60, value: u.balance_due_days ?? 3, inputmode: 'numeric',
-          hint: 'For deposits. Use your payment reminder message to ask for the rest.' }))),
+        field({ name: 'deposit_pct', label: 'Deposit (% of the total)', type: 'number', min: 10, max: 90, value: u.deposit_pct ?? 50, inputmode: 'numeric',
+          hint: 'What a guest pays now when they choose a deposit. From 10 to 90.' })),
+      field({ name: 'balance_due_days', label: 'Balance due (days before check-in)', type: 'number', min: 0, max: 60, value: u.balance_due_days ?? 3, inputmode: 'numeric',
+        hint: 'For deposits. Use your payment reminder message to ask for the rest.' })),
     h('details', { class: 'form-section', open: holds(u, ['min_nights', 'cancellation_policy', 'cancellation_policy_text']) },
       h('summary', null, 'Booking rules'),
       field({ name: 'min_nights', label: 'Minimum nights', type: 'number', min: 1, max: 60, value: u.min_nights || 1, inputmode: 'numeric' }),
@@ -186,22 +191,25 @@ async function addListingModal(onSaved) {
   const isOwner = state.user.role === 'owner';
   let savedPropertyId = null; // the building this form saved, reused if the listing save fails and is retried
   const newProp = h('div', { class: 'form', hidden: properties.length > 0 },
-    field({ name: 'property_name', label: 'Building / property name', placeholder: 'e.g. Azure Urban Residences', maxlength: 120 }),
+    field({ name: 'property_name', label: 'Building / property name', placeholder: 'e.g. Azure Urban Residences', maxlength: 120 }));
+  // A new building's other details sit in More details with the listing's own extras, and show only with a new building.
+  const newPropMore = h('div', { class: 'form', hidden: properties.length > 0 },
     field({ name: 'property_type', label: 'Property type', type: 'select', value: 'condominium', placeholderOption: false, options: options(PROPERTY_TYPES) }),
     field({ name: 'address', label: 'Street address', maxlength: 250 }),
     h('div', { class: 'form-row form-row--2' },
       field({ name: 'city', label: 'City / municipality', maxlength: 80 }),
       field({ name: 'province', label: 'Province', maxlength: 80, placeholder: 'e.g. Metro Manila' })));
+  const showNewBuilding = (show) => { newProp.hidden = !show; newPropMore.hidden = !show; };
   const propSelect = properties.length ? field({
     name: 'property_id', label: 'Building / property', type: 'select', required: true, value: properties.length === 1 ? properties[0].property_id : '',
     options: [...properties.map((p) => [p.property_id, p.property_name]), ...(isOwner ? [['__new', '+ Add a new building / property']] : [])],
   }) : null;
-  propSelect?.querySelector('select').addEventListener('change', (e) => { newProp.hidden = e.target.value !== '__new'; });
+  propSelect?.querySelector('select').addEventListener('change', (e) => showNewBuilding(e.target.value === '__new'));
   if (!properties.length && !isOwner) { toast('Ask the workspace owner to add a property first.', 'error'); return; }
   // Not formModal: a cancelled question must leave the form open with what was typed.
   const modal = openModal({ title: 'Add listing', body: makeForm({
     submitText: 'Save listing', draftKey: 'listing-new', cancel: () => modal.close(),
-    fields: [propSelect, newProp, h('hr', { class: 'divider' }), ...listingFields({}, roomTypes)],
+    fields: [propSelect, newProp, h('hr', { class: 'divider' }), ...listingFields({}, roomTypes, newPropMore)],
     onSubmit: async (raw, { form }) => {
       const d = prepUnit(raw);
       checkBaseRate(d);
@@ -221,7 +229,7 @@ async function addListingModal(onSaved) {
             sel.value = savedPropertyId;
             sel.dispatchEvent(new Event('input', { bubbles: true })); // keeps the saved draft in step
           }
-          newProp.hidden = true;
+          showNewBuilding(false);
         }
         propertyId = savedPropertyId;
       }
@@ -322,6 +330,7 @@ async function channelsModal(listing, onChange) {
         try { await post(`/ical-feeds/${f.feed_id}/remove`); toast('Calendar disconnected.'); m.close(); channelsModal(listing, onChange); onChange(); } catch (err) { toast(err.message, 'error'); }
       } }, 'Disconnect')))));
   const status = h('div');
+  status.setAttribute('role', 'alert');
   const addForm = h('form', { class: 'form', novalidate: true },
     status,
     h('div', { class: 'form-row form-row--2' },
@@ -330,6 +339,7 @@ async function channelsModal(listing, onChange) {
     h('div', { class: 'form-actions' }, h('button', { class: 'btn btn--primary', type: 'submit' }, 'Connect calendar')));
   addForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+    clearErrors(addForm); status.replaceChildren();
     const btn = addForm.querySelector('button[type=submit]');
     btn.disabled = true; btn.textContent = 'Connecting…';
     try {
@@ -338,7 +348,9 @@ async function channelsModal(listing, onChange) {
       toast(r.sync.ok ? `Connected. ${text}` : `Connected, but the first sync failed: ${text}`, r.sync.ok ? 'info' : 'error');
       m.close(); channelsModal(listing, onChange); onChange();
     } catch (err) {
-      status.replaceChildren(h('div', { class: 'alert alert--error' }, err.fields?.url || err.message));
+      // A link problem is written under the link field, which is marked and takes focus; any other problem goes in the alert above.
+      if (err.fields?.url) showErrors(addForm, { url: err.fields.url });
+      else status.replaceChildren(h('div', { class: 'alert alert--error' }, err.message));
       btn.disabled = false; btn.textContent = 'Connect calendar';
     }
   });

@@ -303,7 +303,8 @@ test('next due must be within a year back or five years ahead, on create and on 
   for (const next_due of [ical.addDays(earliest, -1), ical.addDays(latest, 1)]) {
     const r = await owner.post('/api/maintenance-schedules', { ...base, next_due });
     assert.equal(r.status, 400, next_due);
-    assert.match(r.data.fields.next_due, /^Next due must be between /);
+    assert.match(r.data.fields.next_due, /^Pick a date between /);
+    assert.doesNotMatch(r.data.fields.next_due, /\d{4}-\d{2}-\d{2}/, 'no raw ISO dates in the message');
   }
   // Both edges are allowed. The old edge is paused at once, so the job never opens a request for it.
   const edgeOld = ok(await owner.post('/api/maintenance-schedules', { ...base, next_due: earliest }), 201).schedule;

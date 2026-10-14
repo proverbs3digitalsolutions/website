@@ -46,7 +46,9 @@ function addonAmount(a, qty, nights, guests) {
   return Number(a.price) * mult * qty;
 }
 
+// Advertised prices (per night, from, calendar tiles) show whole pesos when exact; money owed or charged always shows two decimals (D-86).
 const peso = (v) => { const n = Number(v || 0); return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`; };
+const money = (v) => { const n = Number(v || 0); return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; };
 const photoUrl = (id) => `/api/public/listing-photos/${id}`;
 const addDays = (s, n) => { const x = new Date(`${s}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
 const fmtTime = (t) => { if (!t) return ''; const [hh, mm] = t.split(':').map(Number); return `${((hh + 11) % 12) + 1}:${String(mm).padStart(2, '0')} ${hh < 12 ? 'AM' : 'PM'}`; };
@@ -236,7 +238,7 @@ export async function bookListingView(el, { params, query }) {
       // The box shows the number that will be charged: an entry over the maximum is clamped and written back.
       qtyInput.value = String(q);
       if (box.checked) picked.set(a.id || a.addon_id, q); else picked.delete(a.id || a.addon_id);
-      amountEl.textContent = box.checked && current ? peso(addonAmount(a, q, current.nights || 1, guestsNow())) : '';
+      amountEl.textContent = box.checked && current ? money(addonAmount(a, q, current.nights || 1, guestsNow())) : '';
     };
     box.addEventListener('change', () => { sync(); updateQuote(); });
     qtyInput.addEventListener('change', () => { sync(); updateQuote(); });
@@ -287,7 +289,7 @@ export async function bookListingView(el, { params, query }) {
       const promo = promoCode ? `&code=${encodeURIComponent(promoCode)}` : '';
       const ad = picked.size ? `&addons=${encodeURIComponent(JSON.stringify(selections()))}` : '';
       const q = await get(`/public/book/${encodeURIComponent(slug)}/units/${l.unit_id}/quote?check_in=${checkIn}&check_out=${checkOut}&guests=${guestsNow()}${promo}${ad}`);
-      codeMsg.textContent = tServer(q.code_error) || (q.promo_code ? `${t('Code {code} applied: −{amount}.', { code: q.promo_code, amount: peso(q.promo_discount) })}${q.promo_note ? ` ${tServer(q.promo_note)}` : ''}` : '');
+      codeMsg.textContent = tServer(q.code_error) || (q.promo_code ? `${t('Code {code} applied: −{amount}.', { code: q.promo_code, amount: money(q.promo_discount) })}${q.promo_note ? ` ${tServer(q.promo_note)}` : ''}` : '');
       codeMsg.className = q.code_error ? 'error' : 'muted small';
       current = q;
       // This stay's price before any discount (the summary's first line), per night.
@@ -304,16 +306,16 @@ export async function bookListingView(el, { params, query }) {
       }
       summary.replaceChildren(h('dl', { class: 'dl' },
         h('dt', null, t('Dates')), h('dd', null, `${fmtDate(checkIn)} – ${fmtDate(checkOut)}`),
-        h('dt', null, q.nights > 1 ? t('{n} nights', { n: q.nights }) : t('1 night')), h('dd', null, peso(q.discount_label || q.promo_code ? q.subtotal : q.accommodation_total)),
-        q.discount_label && [h('dt', null, tServer(q.discount_label).replace(/^./, (c) => c.toUpperCase())), h('dd', null, `− ${peso(q.discount_amount)}`)],
-        q.promo_code && [h('dt', null, t('Code {code}', { code: q.promo_code })), h('dd', null, `− ${peso(q.promo_discount)}`)],
-        Number(q.cleaning_fee) > 0 && [h('dt', null, t('Cleaning fee')), h('dd', null, peso(q.cleaning_fee))],
-        Number(q.addons_total) > 0 && [h('dt', null, t('Add-ons')), h('dd', null, peso(q.addons_total))],
-        h('dt', null, t('Total')), h('dd', null, h('strong', null, peso(q.total))),
+        h('dt', null, q.nights > 1 ? t('{n} nights', { n: q.nights }) : t('1 night')), h('dd', null, money(q.discount_label || q.promo_code ? q.subtotal : q.accommodation_total)),
+        q.discount_label && [h('dt', null, tServer(q.discount_label).replace(/^./, (c) => c.toUpperCase())), h('dd', null, `− ${money(q.discount_amount)}`)],
+        q.promo_code && [h('dt', null, t('Code {code}', { code: q.promo_code })), h('dd', null, `− ${money(q.promo_discount)}`)],
+        Number(q.cleaning_fee) > 0 && [h('dt', null, t('Cleaning fee')), h('dd', null, money(q.cleaning_fee))],
+        Number(q.addons_total) > 0 && [h('dt', null, t('Add-ons')), h('dd', null, money(q.addons_total))],
+        h('dt', null, t('Total')), h('dd', null, h('strong', null, money(q.total))),
         q.deposit_allowed && (() => {
           // Deposit covers the stay only; add-ons are paid in full now.
           const now = Number(q.deposit) + Number(q.addons_total || 0);
-          return [h('dt', null, t('{pct}% deposit', { pct: l.deposit_pct })), h('dd', null, t('{now} now, {rest} due by {date}', { now: peso(now), rest: peso(Number(q.total) - now), date: fmtDate(q.balance_due_date) }))];
+          return [h('dt', null, t('{pct}% deposit', { pct: l.deposit_pct })), h('dd', null, t('{now} now, {rest} due by {date}', { now: money(now), rest: money(Number(q.total) - now), date: fmtDate(q.balance_due_date) }))];
         })()),
       !q.available && h('div', { class: 'alert alert--error' }, t('Sorry, these dates are no longer available.')));
       submit.disabled = !q.available || !host.accepting;
@@ -509,8 +511,8 @@ export async function bookDoneView(el, { params }) {
           h('dt', null, t('Place')), h('dd', null, `${st.listing}, ${st.property}`),
           h('dt', null, t('Dates')), h('dd', null, `${fmtDate(st.check_in)} – ${fmtDate(st.check_out)}`),
           h('dt', null, t('Guests')), h('dd', null, String(st.guests)),
-          h('dt', null, t('Paid')), h('dd', null, peso(st.paid)),
-          Number(st.balance) > 0 && [h('dt', null, t('Balance')), h('dd', null, t('{amount}, due by {date}', { amount: peso(st.balance), date: fmtDate(addDays(st.check_in, -st.balance_due_days)) }))]),
+          h('dt', null, t('Paid')), h('dd', null, money(st.paid)),
+          Number(st.balance) > 0 && [h('dt', null, t('Balance')), h('dd', null, t('{amount}, due by {date}', { amount: money(st.balance), date: fmtDate(addDays(st.check_in, -st.balance_due_days)) }))]),
         st.checkin_link && h('a', { class: 'btn btn--primary', href: st.checkin_link.slice(st.checkin_link.indexOf('#')) }, t('Register your guests now')),
         h('p', { class: 'muted small' }, t("The building needs everyone's names and a valid ID before arrival. You can also do this later from the link in your email."))));
       return;

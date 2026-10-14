@@ -3,7 +3,7 @@
 
 import { get, post, api, ApiError } from '../api.js';
 import { h, brand, field, fmtDateTime, toast, clearErrors, showErrors, readForm, confirmDialog } from '../ui.js';
-import { t, tServer, tFields, extendTranslations, initGuestLang, langToggle, fmtDateL, fmtDateTimeL } from '../i18n.js';
+import { t, tServer, tFields, extendTranslations, initGuestLang, langToggle, keepFormValues, restoreFormValues, fmtDateL, fmtDateTimeL } from '../i18n.js';
 import { copyText } from './quotes.js';
 
 const fmtTime = (t) => {
@@ -27,6 +27,7 @@ extendTranslations({
   'Your ID must be a JPG, PNG or WEBP photo.': 'Dapat JPG, PNG o WEBP na litrato ang ID mo.',
   'Please agree so your host can register you with the building.': 'Paki-agree para ma-register ka ng host sa building.',
   'Remove guest {n}': 'Alisin ang guest {n}',
+  'Choose the photos again after changing the language.': 'Piliin ulit ang mga litrato pagkatapos magpalit ng wika.',
 });
 
 // The heading follows the cause: only a 404 is a bad link.
@@ -52,11 +53,12 @@ async function shrinkImage(file) {
 }
 
 // ---------------------------------------------------------------- guest page
-export async function guestCheckinView(el, { params }) {
+// `kept` comes from a language switch: the typed values and whether ID photos were already chosen.
+export async function guestCheckinView(el, { params }, kept) {
   initGuestLang();
   const token = params.token;
   const page = (...children) => h('div', { class: 'gc' },
-    h('header', { class: 'gc__top gc__top--lang' }, brand(null), langToggle(() => guestCheckinView(el, { params }))),
+    h('header', { class: 'gc__top gc__top--lang' }, brand(null), langToggle(() => guestCheckinView(el, { params }, { snap: keepFormValues(el), photosChosen: Boolean(el.querySelector('input[type=file]')?.files?.length) }))),
     h('main', { class: 'gc__main', id: 'main' }, children));
 
   let data;
@@ -104,6 +106,8 @@ export async function guestCheckinView(el, { params }) {
   const rulesAt = s.rules_accepted_at;
   const initial = r?.guests?.length ? r.guests : Array.from({ length: Math.max(0, (s.num_guests || 1) - 1) }, () => '');
   initial.forEach((g) => addGuest(g));
+  // After a language switch the guest may have added rows: make as many as were there before the values go back.
+  for (let n = kept?.snap?.guest?.length || 0; others.children.length < n && others.children.length + 1 < s.guests_allowed;) addGuest();
 
   // No `capture`: guests must be able to pick existing photos from their gallery.
   const photos = h('input', { type: 'file', accept: 'image/*', multiple: true, class: 'input', 'aria-label': t('ID photos') });
@@ -133,7 +137,7 @@ export async function guestCheckinView(el, { params }) {
     field({ name: 'notes', label: t('Anything we should know?'), type: 'textarea', value: r?.notes || '', maxlength: 1000, placeholder: t('Special requests, late arrival, celebrating something…') }),
     h('h2', null, t('Valid ID')),
     h('div', { class: 'field', dataset: { field: 'id_photos' } },
-      h('p', { class: 'hint' }, `${t("A photo of a valid government ID for each adult (driver's license, passport, UMID, PhilID…). ")}${r?.id_count ? t('Photos you already sent are kept; add more only if needed.') : ''}`),
+      h('p', { class: 'hint' }, `${t("A photo of a valid government ID for each adult (driver's license, passport, UMID, PhilID…). ")}${r?.id_count ? t('Photos you already sent are kept; add more only if needed.') : ''}${kept?.photosChosen ? ` ${t('Choose the photos again after changing the language.')}` : ''}`),
       photos, progress, h('div', { class: 'error', role: 'alert' })),
     rules && h('h2', null, t('House rules')),
     rules && h('div', { class: 'gp-rules', tabindex: 0, role: 'region', 'aria-label': t('House rules') }, rules),
@@ -217,6 +221,7 @@ export async function guestCheckinView(el, { params }) {
   });
 
   el.replaceChildren(page(header, form, h('p', { class: 'gc__foot muted small' }, t('Powered by BalayHub · '), h('a', { href: '#/privacy' }, t('Privacy notice')))));
+  restoreFormValues(el, kept?.snap);
 }
 
 // ---------------------------------------------------------------- host: card on the reservation page

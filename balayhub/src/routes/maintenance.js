@@ -248,13 +248,15 @@ const SCHEDULE_FIELDS = {
   priority: { type: 'enum', values: PRIORITIES, required: true, label: 'Priority' },
 };
 
+const dayText = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' });
+
 // Next due must be within a year back or five years ahead of today (Manila).
 async function checkNextDue(nextDue) {
   const { rows: [w] } = await query(
     `SELECT ((now() AT TIME ZONE 'Asia/Manila')::date - interval '1 year')::date AS earliest,
             ((now() AT TIME ZONE 'Asia/Manila')::date + interval '5 years')::date AS latest`);
   if (nextDue < w.earliest || nextDue > w.latest) {
-    throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { next_due: `Next due must be between ${w.earliest} and ${w.latest}.` } });
+    throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { next_due: `Pick a date between ${dayText(w.earliest)} and ${dayText(w.latest)}.` } });
   }
 }
 

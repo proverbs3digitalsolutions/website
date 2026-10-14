@@ -41,7 +41,7 @@ extendTranslations({
   'Item': 'Gamit', 'What did you find?': 'Ano ang nakita mo?', 'Where was it found?': 'Saan ito nakita?', 'Date found': 'Petsa ng pagkakita',
   'Save item': 'I-save ang gamit', 'Lost item recorded. Thank you.': 'Naitala na ang nakitang gamit. Salamat.',
   'Qty': 'Dami', 'Used': 'Nagamit', 'Restocked': 'Nadagdag', 'Used or restocked': 'Nagamit o nadagdag', 'Save': 'I-save', 'Cancel': 'Kanselahin',
-  'No supplies are set up for this property yet.': 'Wala pang supplies na naka-set up para sa property na ito.',
+  'No supplies are set up for this property yet.': 'Wala pang supplies na naka-set up para sa property na ito.', 'Set up supplies': 'I-set up ang supplies',
   'Enter a quantity for at least one item.': 'Maglagay ng dami sa kahit isang gamit.', 'Supplies saved.': 'Na-save ang supplies.',
   'Quantity must be a whole number.': 'Dapat buong bilang ang dami.', 'Quantity can\'t be negative.': 'Hindi puwedeng negatibo ang dami.',
   '{name} was out of stock, so it wasn\'t recorded.': 'Ubos na ang {name}, kaya hindi ito na-record.', 'Tell your manager.': 'Sabihan ang manager mo.',
@@ -532,6 +532,16 @@ function lostFoundModal(task, onSaved) {
 
 async function suppliesModal(task, onSaved) {
   const { supplies } = await get(`/supplies${qs({ property_id: task.property_id })}`);
+  // Nothing set up means nothing to save, so this dialog has no Save button. Owners and managers are sent to Supplies.
+  if (!supplies?.length) {
+    const m = openModal({
+      title: T('Supplies used'),
+      body: h('div', { class: 'form' },
+        h('p', null, T('No supplies are set up for this property yet.'), !canManage() && ` ${T('Tell your manager.')}`),
+        canManage() && h('div', { class: 'form-actions' }, h('a', { class: 'btn btn--primary', href: '#/supplies', onclick: () => m.close() }, T('Set up supplies')))),
+    });
+    return;
+  }
   const rows = (supplies || []).map((sp) => ({
     sp, key: `qty-${sp.supply_id}`, askFirst: canManage(), qty: h('input', { type: 'number', inputmode: 'numeric', min: 0, max: 9999, class: 'input hk-qty', 'aria-label': `${T('Qty')}: ${sp.name}` }),
     kind: h('select', { class: 'input', 'aria-label': `${T('Used or restocked')}: ${sp.name}` }, h('option', { value: 'used' }, T('Used')), h('option', { value: 'restocked' }, T('Restocked'))),
@@ -539,13 +549,11 @@ async function suppliesModal(task, onSaved) {
   formModal({
     title: T('Supplies used'), submitText: T('Save'),
     // Each row has its own error line (the .error inside .field), so a refused quantity shows on its row.
-    fields: rows.length
-      ? h('div', { class: 'hk-supply-list' }, rows.map((r) => h('div', { class: 'field', style: { gap: '0' }, 'data-field': r.key },
-        h('div', { class: 'hk-supply' },
-          h('div', null, h('strong', null, r.sp.name), h('div', { class: 'small muted' }, r.sp.unit_label || '')),
-          r.qty, r.kind),
-        h('div', { class: 'error' }))))
-      : h('p', { class: 'muted' }, T('No supplies are set up for this property yet.')),
+    fields: h('div', { class: 'hk-supply-list' }, rows.map((r) => h('div', { class: 'field', style: { gap: '0' }, 'data-field': r.key },
+      h('div', { class: 'hk-supply' },
+        h('div', null, h('strong', null, r.sp.name), h('div', { class: 'small muted' }, r.sp.unit_label || '')),
+        r.qty, r.kind),
+      h('div', { class: 'error' })))),
     onSubmit: async () => {
       // A negative or decimal quantity is refused on its own row, never rounded or dropped: nothing is sent until every quantity is a whole, non-negative number.
       const refuse = (msg, list) => {

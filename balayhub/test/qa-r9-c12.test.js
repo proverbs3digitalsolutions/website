@@ -49,7 +49,7 @@ test('dateOutOfRange refuses years outside 2000 to 2100', () => {
 test('source: dialogs restore focus, confirm swaps the saving label, summaries, toasts, thumbnails', () => {
   const modal = src.slice(src.indexOf('export function openModal'), src.indexOf('export function confirmDialog'));
   assert.match(modal, /const opener = document\.activeElement/);
-  assert.match(modal, /settleFocus\(opener\)/);
+  assert.match(modal, /keepFocus\(opener/);
   const confirm = src.slice(src.indexOf('export function confirmDialog'), src.indexOf('// ---------------------------------------------------------------- forms'));
   assert.match(confirm, /b\.textContent = b\.dataset\.ownLabel/);
   assert.match(confirm, /= 'Saving…'/);

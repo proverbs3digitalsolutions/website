@@ -185,11 +185,21 @@ export async function helpNewView(el, { query }) {
 }
 
 // ---------------------------------------------------------------- shared timeline
-function progress(status) {
+// Steps for the tracker. "Waiting for you" only counts as done when the ticket really waited on the customer.
+export function trackerSteps(status, waited) {
   const idx = status === 'closed' ? 3 : STEPS.findIndex(([k]) => k === status);
-  return h('ol', { class: 'tracker', 'aria-label': 'Ticket progress' }, STEPS.map(([k, text], i) =>
-    h('li', { class: `tracker__step${i < idx ? ' is-done' : ''}${i === idx ? ' is-current' : ''}`, 'aria-current': i === idx ? 'step' : null },
-      h('span', { class: 'tracker__dot' }, i < idx ? '✓' : String(i + 1)), h('span', { class: 'tracker__label' }, text))));
+  const over = status === 'resolved' || status === 'closed';
+  return STEPS.map(([key, text], i) => {
+    const skipped = key === 'waiting_on_customer' && i < idx && !waited;
+    return { text: skipped ? `${text} (not needed)` : text, current: i === idx, skipped, done: !skipped && (i < idx || (over && i === idx)) };
+  });
+}
+
+function progress(status, events = []) {
+  const steps = trackerSteps(status, status === 'waiting_on_customer' || events.some((e) => e.to_status === 'waiting_on_customer'));
+  return h('ol', { class: 'tracker', 'aria-label': 'Ticket progress' }, steps.map((s, i) =>
+    h('li', { class: `tracker__step${s.done ? ' is-done' : ''}${s.current ? ' is-current' : ''}`, 'aria-current': s.current ? 'step' : null },
+      h('span', { class: 'tracker__dot' }, s.done ? '✓' : s.skipped ? '–' : String(i + 1)), h('span', { class: 'tracker__label' }, s.text))));
 }
 
 function eventText(e) {
@@ -273,7 +283,7 @@ export async function helpTicketView(el, { params, rerender }) {
     }),
     h('div', { class: 'card' },
       h('div', { class: 'card__head' }, h('h2', null, 'Progress'), h('div', { class: 'chips' }, t.priority === 'urgent' && badge('urgent'), statusBadge(t))),
-      progress(t.status),
+      progress(t.status, events),
       h('p', { class: 'muted small', style: { marginTop: '10px' } },
         { new: 'We received your ticket and will reply soon — usually within 1 business day.',
           in_progress: 'Our team is working on it. We’ll update you here and by email.',
@@ -359,7 +369,7 @@ export async function adminSupportTicketView(el, { params, rerender }) {
         !t.assigned_to && h('button', { class: 'btn btn--secondary', onclick: (e) => act(e, () => post(`/admin/support/tickets/${t.ticket_id}/assign`), 'Assigned to you.') }, 'Assign to me'),
         OPEN.includes(t.status) && h('button', { class: 'btn btn--primary', onclick: (e) => act(e, () => post(`/admin/support/tickets/${t.ticket_id}/status`, { status: 'resolved' }), 'Marked resolved.') }, 'Mark resolved'),
       ] }),
-    h('div', { class: 'card' }, h('div', { class: 'card__head' }, h('h2', null, 'Progress'), h('div', { class: 'chips' }, t.priority === 'urgent' && badge('urgent'), statusBadge(t, true))), progress(t.status)),
+    h('div', { class: 'card' }, h('div', { class: 'card__head' }, h('h2', null, 'Progress'), h('div', { class: 'chips' }, t.priority === 'urgent' && badge('urgent'), statusBadge(t, true))), progress(t.status, events)),
     h('div', { class: 'grid grid--help' },
       h('div', { class: 'card' },
         h('div', { class: 'card__head' }, h('h2', null, 'Conversation')),

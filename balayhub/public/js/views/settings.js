@@ -391,7 +391,8 @@ async function planCard(u) {
     status,
     h('dl', { class: 'dl', style: { marginTop: '12px' } },
       h('dt', null, 'Current plan'), h('dd', null, p.price ? `${p.name} — ₱${p.price.toLocaleString('en-PH')} / month` : p.name),
-      h('dt', null, 'Listings'), h('dd', null, `${shortTermCount(listings)} of ${p.listing_limit >= 1000 ? 'unlimited' : p.listing_limit}`),
+      h('dt', null, 'Short-term listings'), h('dd', null, `${shortTermCount(listings)} of ${p.listing_limit >= 1000 ? 'unlimited' : p.listing_limit}`,
+        u.business_type !== 'short_term' && h('div', { class: 'muted small' }, 'Monthly units are not counted.')),
       p.paid_until && [h('dt', null, 'Paid until'), h('dd', null, p.paid_until)]),
     bill.online ? payOnline(p, bill) : [
       pub.plans.length > 0 && h('div', { class: 'plan-mini' }, pub.plans.map((x) => h('div', { class: `plan-mini__item${x.key === p.plan ? ' is-current' : ''}` },
@@ -561,6 +562,7 @@ async function bookingCard(rerender) {
   let b;
   try { b = await get('/direct-booking'); } catch { return null; }
   const listed = b.listings.filter((l) => l.bookable_online);
+  const noListing = !listed.length;
   const save = async (payload, msg) => {
     try { await patch('/direct-booking', payload); toast(msg); rerender(); } catch (err) { toast(err.message, 'error'); }
   };
@@ -612,11 +614,12 @@ async function bookingCard(rerender) {
       b.paymongo_connected
         ? (b.enabled
           ? h('button', { class: 'btn btn--secondary btn--sm', onclick: () => save({ enabled: false }, 'Booking page turned off.') }, 'Turn off')
-          : h('button', { class: 'btn btn--primary btn--sm', onclick: () => save({ enabled: true }, 'Your booking page is live!') }, 'Turn on'))
+          : h('button', { class: 'btn btn--primary btn--sm', disabled: noListing, 'aria-describedby': noListing ? 'bp-on-hint' : undefined, onclick: () => save({ enabled: true }, 'Your booking page is live!') }, 'Turn on'))
         : h('button', { class: 'btn btn--primary btn--sm', onclick: connect }, 'Connect PayMongo'),
       b.enabled && b.url && h('button', { class: 'btn btn--secondary btn--sm', onclick: copy }, 'Copy link'),
       h('button', { class: 'btn btn--ghost btn--sm', onclick: edit }, 'Page settings'),
-      b.paymongo_connected && h('button', { class: 'btn btn--ghost btn--sm', onclick: connect }, 'Change key')));
+      b.paymongo_connected && h('button', { class: 'btn btn--ghost btn--sm', onclick: connect }, 'Change key')),
+    !b.enabled && b.paymongo_connected && noListing && h('p', { class: 'muted small', id: 'bp-on-hint' }, 'Tick at least one listing for your page first (Listings → Edit → Booking page and payments).'));
 }
 
 // Guest experience: public review links, returning-guest discount, abandoned-booking follow-up.

@@ -34,14 +34,15 @@ export const rateText = (r) => `${peso(r.amount)} ${r.rate_type === 'per_hour' ?
 export const sameRate = (prior, rateType, amount) => !!prior && prior.rate_type === rateType && Number(prior.amount) === amount;
 
 // What the Pay column says when a clean has no amount yet: the owner's own clean, a name with no rate, or a clean still to price.
-const noPayText = (x) => (x.pay_status === 'self' ? 'Done by you, no pay' : x.no_rate ? 'No rate for this name. Add a rate or pick the team member.' : 'Pay not set. Use Set pay.');
+const SELF_PAY = 'Done by you, no pay';
+const noPayText = (x) => (x.pay_status === 'self' ? SELF_PAY : x.no_rate ? 'No rate for this name. Add a rate or pick the team member.' : 'Pay not set. Use Set pay.');
 
-// One cleaner's status in the By cleaner card. A clean with no pay set is never "All paid".
+// One cleaner's status in the By cleaner card. A clean with no pay set is never "All paid"; a group of only the owner's own cleans owes nothing and says so.
 export const cleanerStatus = (c) => {
   const parts = [];
   if (cents(c.unpaid)) parts.push(`${peso(c.unpaid)} to pay`);
   if (c.unpriced) parts.push(`${c.unpriced} with pay not set`);
-  return parts.join(' · ') || 'All paid';
+  return parts.join(' · ') || (c.self && c.self === c.count ? SELF_PAY : 'All paid');
 };
 
 // The ticks that still count after a filter change: a ticked clean the filter hides is dropped, so the count,
@@ -63,7 +64,8 @@ export async function cleanerPayView(el, { query = {} } = {}) {
   const barBox = h('div');
   const selected = new Set();
   let data = { tasks: [] };
-  let cleanerOpts = [];
+  // null until the first load: the bar keeps an unknown cleaner value until the names are known, even when there are none.
+  let cleanerOpts = null;
 
   const month = () => (monthOk(filters.month) ? filters.month : thisMonth);
 
@@ -192,7 +194,7 @@ export async function cleanerPayView(el, { query = {} } = {}) {
         onchange: (e) => { if (e.target.value) { filters.month = e.target.value; rememberFilters('cleaner-pay', filters); load(); } } }),
       quick: [
         // Kept only while no names are known yet; once they load the bar is drawn again and an unknown key is dropped.
-        { name: 'cleaner', label: 'Cleaner', all: 'All cleaners', options: cleanerOpts, keepUnknown: !cleanerOpts.length },
+        { name: 'cleaner', label: 'Cleaner', all: 'All cleaners', options: cleanerOpts, keepUnknown: !cleanerOpts },
         { name: 'status', label: 'Status', all: 'Paid and unpaid', options: [['unpaid', 'Unpaid'], ['paid', 'Paid']] },
       ],
     }));
@@ -209,8 +211,10 @@ export async function cleanerPayView(el, { query = {} } = {}) {
     const edit = (r) => {
       const outside = r ? !r.user_id : !cleaners.length;
       const who = field({ name: 'user_id', label: 'Cleaner', type: 'select', value: r?.user_id || '', placeholderOption: 'Someone outside the team', options: cleaners.map((m) => [m.user_id, m.full_name]) });
-      const nameF = field({ name: 'assignee_name', label: 'Name', value: r?.assignee_name || '', maxlength: 120, hint: 'Match the name you type when assigning a clean.' });
-      const sync = () => { nameF.hidden = !!who.querySelector('select').value; };
+      // The Name box is needed only while "Someone outside the team" is chosen; a team member is picked from the list instead.
+      const nameF = field({ name: 'assignee_name', label: 'Name', required: true, value: r?.assignee_name || '', maxlength: 120, hint: 'Match the name you type when assigning a clean.' });
+      const nameBox = nameF.querySelector('input');
+      const sync = () => { const outside = !who.querySelector('select').value; nameF.hidden = !outside; nameBox.required = outside; };
       who.querySelector('select').addEventListener('change', sync);
       // makeForm, not formModal: a Cancel on the question below must leave this dialog open.
       let modal;

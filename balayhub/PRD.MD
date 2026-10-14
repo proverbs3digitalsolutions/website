@@ -393,7 +393,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - **Properties and units:** add (owner), edit, archive and restore. Occupancy comes from leases.
 - **Tenants and leases:** profiles with duplicate warning, assign a unit (creates a lease), change terms, end or cancel a lease, lease documents, payment history, owner-only data export.
 - **Rent:** monthly charges generated from each lease. Statuses paid, partial, unpaid, overdue. Payments go to the oldest charge first (the Record form names that month; the row's Record box is filled with that month's own amount).
-- **Payments:** full or partial, cash, bank, GCash, Maya, check, reference, receipt file. Never edited or deleted, only voided with a reason.
+- **Payments:** full or partial, cash, bank, GCash, Maya, check, reference, receipt file. Never edited or deleted, only voided with a reason. Print gives an acknowledgement receipt (not a BIR official receipt); no receipt number yet (BLOCKERS).
 - **Expenses:** categories (repairs, utilities, taxes, insurance, association dues, supplies, salaries, cleaning, other), unit, vendor, receipt. Corrections are logged; voids keep history. Short-term workspaces see this page as "Expenses".
 - **Maintenance:** requests by property and unit, priority, status workflow (open, in progress, resolved, cancelled), repair costs saved as Repairs expenses, photos.
 - **Reports:** any date range, by property, month and expense category, outstanding balances, CSV export, print to PDF.
@@ -733,7 +733,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 **For:** Anyone who works a job (log). Owners and managers (manage).
 
 **What it does:**
-- Log an item: description, where found, date, photo. From a job, or on a stay.
+- Log an item: description, where found, date, photo. From a job, or on a stay. Owners and managers can also add an item from the Lost and found page (pick the listing).
 - Status: Held, Returned or Disposed, with a note on change.
 
 **Done looks like:**
@@ -1025,3 +1025,4 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - QA round 9: there is no Walk-in booking source; walk-ins are saved as Other (founder question in BLOCKERS, default Other).
 - QA round 9: the Starter plan allows 2 listings while the alpha targets 1 to 3 units (BLOCKERS, default no pricing change).
 - QA round 9: the automatic-message preview with sample guest details is not built yet (round 10).
+- QA round 10: rent payments have no receipt numbers (founder question in BLOCKERS, default none). Automatic message names have no database index, only an app check (accepted gap, same reason as add-on names). The booking page can be turned on with no listing on screen-gated only; the server doesn't refuse yet (round 11).

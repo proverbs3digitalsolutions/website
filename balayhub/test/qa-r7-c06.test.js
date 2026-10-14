@@ -87,7 +87,7 @@ test('the next-due window matches the server: a year back, five years ahead, day
 
 test('a next-due date is checked against the window at the field, before the past-date question (#30)', () => {
   const window = VIEW_SRC.indexOf('nextDueWindow()');
-  const message = VIEW_SRC.indexOf('Next due must be between ${earliest} and ${latest}.');
+  const message = VIEW_SRC.indexOf('Pick a date between ${fmtDate(earliest)} and ${fmtDate(latest)}.');
   const ask = VIEW_SRC.indexOf("title: 'Next due date is in the past'");
   assert.ok(window > 0 && message > window && ask > message, 'the window is read, then the field message, then the question');
   assert.match(VIEW_SRC, /showErrors\(ctx\.form, \{ next_due:/, 'the message shows at the next-due field');

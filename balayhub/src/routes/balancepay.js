@@ -99,13 +99,16 @@ async function loadByToken(token) {
 // The itemised bill the guest sees: the stay, fees, extra charges, payments so far.
 // Sums are done in SQL so the centavos are exact.
 async function billFor(b) {
-  const [charges, payments, paid] = await Promise.all([
+  const [charges, payments, refunds, paid] = await Promise.all([
     // name_tl: the add-on's Taglish name through addon_id (null for other charges, or no Taglish name set).
     query(`SELECT c.description, c.quantity, c.unit_price, c.amount, a.name_tl FROM booking_charges c
              LEFT JOIN listing_addons a ON a.addon_id = c.addon_id
             WHERE c.booking_id = $1 AND c.voided_at IS NULL ORDER BY c.created_at`, [b.booking_id]),
     query(`SELECT amount, payment_date, payment_method FROM booking_payments
             WHERE booking_id = $1 AND voided_at IS NULL ORDER BY payment_date, created_at`, [b.booking_id]),
+    // Only the amount and date: the reason and who recorded it stay with the host.
+    query(`SELECT amount, refund_date FROM booking_refunds
+            WHERE booking_id = $1 AND voided_at IS NULL ORDER BY refund_date, created_at`, [b.booking_id]),
     one(`SELECT COALESCE(SUM(amount), 0)::numeric(12,2) AS paid,
                 (SELECT COALESCE(SUM(amount), 0) FROM booking_refunds WHERE booking_id = $1 AND voided_at IS NULL)::numeric(12,2) AS refunded
            FROM booking_payments WHERE booking_id = $1 AND voided_at IS NULL`, [b.booking_id]),
@@ -114,7 +117,7 @@ async function billFor(b) {
     nights: b.nights, accommodation_total: b.accommodation_total, cleaning_fee: b.cleaning_fee, other_fees: b.other_fees,
     owed: b.status === 'confirmed', // a cancelled stay keeps its lines but owes nothing
     charges: charges.rows, extras_total: b.extras_total, total: b.total_amount,
-    payments: payments.rows, paid: paid.paid,
+    payments: payments.rows, paid: paid.paid, refunds: refunds.rows, refunded: paid.refunded,
     // Anything else already settled for this stay (e.g. through a booking platform), as one neutral line
     // so the bill adds up without showing the platform's commission.
     adjustments: Math.max(0, Number(b.total_amount) - Number(paid.paid) + Number(paid.refunded) - Number(b.balance)).toFixed(2),
@@ -215,12 +218,14 @@ publicRouter.post('/public/pay/:token/addons', addonsLimiter, ah(async (req, res
 const checkoutLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 10, key: (req) => `paycheckout|${req.params.token}` });
 
 const isReusable = (c, amount) => Number(c.amount) === amount && c.checkout_url && Date.now() - new Date(c.created_at) < REUSE_MS;
+// The guest's sentence when a payment can't start (the same as the quote and booking pages, D-85). The real reason goes to the server log.
+const PAYMENT_UNAVAILABLE = "Online payment isn't available right now. Please try again in a few minutes, or contact the host.";
 
 publicRouter.post('/public/pay/:token/checkout', checkoutLimiter, ah(async (req, res) => {
   let b = await loadByToken(req.params.token);
   if (!b.accepting) throw new HttpError(409, 'Online payment is not available for this booking. Please contact your host.', { code: 'NOT_ACCEPTING' });
   const key = secretbox.decrypt(b.paymongo_key_enc);
-  if (!key) throw new HttpError(502, 'Online payment is not available right now. Please contact your host.', { code: 'PAYMENT_FAILED' });
+  if (!key) throw new HttpError(502, PAYMENT_UNAVAILABLE, { code: 'PAYMENT_FAILED' });
   // Close older checkouts first (outside any transaction: this calls PayMongo and
   // may record a payment that came in), then work from the balance after that.
   const { rows: stale } = await query(`SELECT * FROM balance_checkouts WHERE booking_id = $1 AND status = 'pending'`, [b.booking_id]);
@@ -276,7 +281,8 @@ async function startSession(key, b, c, token, db) {
     return url;
   } catch (err) {
     // The transaction rolls back, removing the unstarted checkout row.
-    throw new HttpError(502, err.status === 502 ? err.message : 'Online payment is not available right now. Please contact your host.', { code: 'PAYMENT_FAILED' });
+    console.error(`[balance] checkout ${c.checkout_ref} could not start online payment: ${err.message}`);
+    throw new HttpError(502, PAYMENT_UNAVAILABLE, { code: 'PAYMENT_FAILED' });
   }
 }
 

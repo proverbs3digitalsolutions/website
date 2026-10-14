@@ -9,6 +9,7 @@ const { audit } = require('../lib/audit');
 const { changedKeys } = require('../lib/auditdiff');
 const { requireRole } = require('../lib/auth');
 const { tenantScope, propertyScope, loadTenant, loadUnit, loadLease, redactTenant } = require('../lib/access');
+const { stayClashes, leaseOverStays } = require('../lib/leases');
 const { syncCharges, LEASE_BALANCE_CTE, CHARGE_STATUS_CTE, TODAY } = require('../lib/ledger');
 
 const router = express.Router();
@@ -224,6 +225,8 @@ router.post('/leases', managers, ah(async (req, res) => {
   if (unit.availability === 'unavailable') throw new HttpError(409, 'This unit is marked unavailable. Change its availability first.', { code: 'UNIT_UNAVAILABLE' });
   try {
     const lease = await tx(async (db) => {
+      const stays = await stayClashes(unit.unit_id, body.start_date, body.end_date || null, db);
+      if (stays.length) throw leaseOverStays(stays);
       const { rows: [l] } = await db.query(
         `INSERT INTO leases (organization_id, unit_id, tenant_id, start_date, end_date, monthly_rent, due_day, deposit_amount, created_by)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
@@ -275,6 +278,12 @@ router.patch('/leases/:id', managers, ah(async (req, res) => {
     const { rows: [cur] } = await db.query('SELECT * FROM leases WHERE lease_id = $1 FOR UPDATE', [lease.lease_id]);
     const keys = changedKeys(cur, body).filter((k) => body[k] !== null || k === 'end_date');
     if (!keys.length) return null;
+    // An end date moved later, or cleared, must not run the lease over booked stays.
+    const curEnd = cur.end_date && String(cur.end_date).slice(0, 10);
+    if (keys.includes('end_date') && curEnd && (!body.end_date || body.end_date > curEnd)) {
+      const stays = await stayClashes(cur.unit_id, String(cur.start_date).slice(0, 10), body.end_date || null, db);
+      if (stays.length) throw leaseOverStays(stays);
+    }
     const { rows: [l] } = await db.query(
       `UPDATE leases SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')} WHERE lease_id = $1 RETURNING *`,
       [lease.lease_id, ...keys.map((k) => body[k])]);

@@ -9,6 +9,11 @@ import { addDays, boxValue, guestsProblem } from './reservations.js';
 const canManageNow = () => !['staff', 'cleaner'].includes(state.user.role);
 const nightsOf = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
 const isCancelled = (g) => g.status === 'cancelled';
+// The detail header's room count. A cancelled group counts every room it had and says so; an active group counts the rooms still booked.
+export const roomsLine = (rooms, cancelled) => {
+  const n = cancelled ? rooms.length : rooms.filter((r) => r.status !== 'cancelled').length;
+  return `${n} room${n === 1 ? '' : 's'}${cancelled ? ', cancelled' : ''}`;
+};
 
 // ---------------------------------------------------------------- one room row (used by "new group" and "add a room")
 function roomRow({ listings, roomTypes, defaults, onRemove, number = 1 }) {
@@ -26,11 +31,14 @@ function roomRow({ listings, roomTypes, defaults, onRemove, number = 1 }) {
     roomTypes.map((t) => h('option', { value: `${t.property_id}|${t.room_type}` }, `${t.room_type} · ${propName.get(t.property_id) || 'Property'} (${t.count})`)));
   const count = h('input', { class: 'input', id: `gr-count-${uid}`, type: 'number', min: 1, max: 20, value: 1, inputmode: 'numeric' });
   const ci = h('input', { class: 'input', id: `gr-ci-${uid}`, type: 'date', value: defaults.check_in });
-  const co = h('input', { class: 'input', id: `gr-co-${uid}`, type: 'date', value: defaults.check_out });
+  const co = h('input', { class: 'input', id: `gr-co-${uid}`, type: 'date', value: defaults.check_out, 'aria-describedby': `gr-co-${uid}-err` });
   const guests = h('input', { class: 'input', id: `gr-guests-${uid}`, type: 'number', min: 1, max: 50, value: defaults.num_guests || 2, inputmode: 'numeric', 'aria-describedby': `gr-guests-${uid}-err` });
   // The key names this row, so a refused count is marked at its own guests box (showErrors finds the first box with the key).
   const guestsKey = `num_guests-${uid}`;
   const guestsBox = h('div', { class: 'field', dataset: { field: guestsKey } }, h('label', { for: `gr-guests-${uid}` }, 'Guests in this room'), guests, h('div', { class: 'error', id: `gr-guests-${uid}-err`, role: 'alert' }));
+  // The check-out box is a field the form can mark, so a stay that runs no night shows at its own row (see dateProblem).
+  const coKey = `check_out-${uid}`;
+  const coBox = h('div', { class: 'field', dataset: { field: coKey } }, h('label', { for: `gr-co-${uid}` }, 'Check-out'), co, h('div', { class: 'error', id: `gr-co-${uid}-err`, role: 'alert' }));
   const price = h('input', { class: 'input', id: `gr-price-${uid}`, type: 'text', inputmode: 'decimal', placeholder: 'Per room' });
   const cleaning = h('input', { class: 'input', id: `gr-clean-${uid}`, type: 'text', inputmode: 'decimal', placeholder: '0' });
   const note = h('p', { class: 'hint', 'aria-live': 'polite' });
@@ -82,7 +90,7 @@ function roomRow({ listings, roomTypes, defaults, onRemove, number = 1 }) {
     h('legend', null, 'Room'),
     h('div', { class: 'grp-room__grid' },
       roomTypes.length > 0 && mk('mode', 'Pick', mode), unitBox, typeBox, countBox,
-      mk('ci', 'Check-in', ci), mk('co', 'Check-out', co), guestsBox,
+      mk('ci', 'Check-in', ci), coBox, guestsBox,
       mk('price', 'Accommodation total', h('div', { class: 'input-money' }, price)), mk('clean', 'Cleaning fee', h('div', { class: 'input-money' }, cleaning))),
     note,
     removeBtn);
@@ -91,6 +99,8 @@ function roomRow({ listings, roomTypes, defaults, onRemove, number = 1 }) {
     el,
     // Renumbers the row after a room above it is removed.
     setNumber(n) { removeBtn?.setAttribute('aria-label', `Remove this room, room ${n}`); },
+    // The check-out message for a stay that runs no night, keyed to this row's check-out box. A blank date is rooms()'s job.
+    dateProblem() { return ci.value && co.value && co.value <= ci.value ? { [coKey]: 'Check-out must be after check-in.' } : null; },
     // Returns the rooms to send (a room type with a count becomes that many rows), or throws a message.
     rooms() {
       if (!ci.value || !co.value) throw new Error('Enter the check-in and check-out dates.');
@@ -196,6 +206,8 @@ export async function newGroupModal({ onSaved } = {}) {
   const form = makeForm({
     submitText: 'Create group booking',
     cancel: () => modal.close(),
+    // Every room's dates are checked in the first pass, so a blank group name can't hide a date error.
+    check: () => { const bad = Object.assign({}, ...rows.map((r) => r.dateProblem())); return Object.keys(bad).length ? bad : null; },
     fields: [
       field({ name: 'name', label: 'Group name', required: true, maxlength: 120, placeholder: 'Santos family reunion' }),
       h('div', { class: 'field' }, h('label', null, 'Lead guest'), guestMode),
@@ -355,7 +367,7 @@ export async function groupDetailView(el, { params, rerender }) {
     h('div', { class: 'page-head' },
       h('div', { class: 'page-head__title' },
         h('h1', null, g.name),
-        h('p', null, `${guest ? `Lead guest ${guest.full_name} · ` : ''}${active.length} room${active.length === 1 ? '' : 's'}`)),
+        h('p', null, `${guest ? `Lead guest ${guest.full_name} · ` : ''}${roomsLine(rooms, cancelled)}`)),
       canManage && !cancelled && h('div', { class: 'page-head__actions' },
         h('button', { class: 'btn btn--secondary', onclick: () => addRoomModal({ ...g, rooms }, rerender) }, icon('plus'), 'Add room'),
         h('button', { class: 'btn btn--secondary', onclick: edit }, 'Edit'),

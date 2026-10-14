@@ -103,6 +103,7 @@ function groupCleaners(tasks) {
     .map((g) => ({
       key: g.key, name: g.name, user_id: g.user_id,
       count: g.rows.length, unpriced: g.rows.filter((t) => t.pay_amount == null && t.pay_status !== 'self').length,
+      self: g.rows.filter((t) => t.pay_status === 'self').length,
       ...tally(g.rows),
     }))
     .sort((a, b) => String(a.name).localeCompare(String(b.name)));
@@ -129,7 +130,7 @@ router.put('/cleaner-rates', owners, ah(async (req, res) => {
     amount: { type: 'money', required: true, positive: true, label: 'Amount' },
   });
   if (Boolean(body.user_id) === Boolean(body.assignee_name)) {
-    throw validationError({ assignee_name: 'Choose a team member, or type the name of an outside cleaner. Not both.' });
+    throw validationError({ assignee_name: body.user_id ? 'Pick a team member or type a name, not both.' : 'Choose a team member or type a name for an outside cleaner.' });
   }
   const org = req.user.organization_id;
   if (body.user_id) {
@@ -173,10 +174,11 @@ router.get('/cleaner-pay', managers, ah(async (req, res) => {
   const month = req.query.month ? monthParam(req.query.month) : await currentMonth();
   const params = [];
   const where = [`t.status = 'done'`, propertyScope(req.user, params), inMonth(params, month)];
-  if (q.status) { params.push(q.status); where.push(`t.pay_status = $${params.length}`); }
   const { rows } = await query(`${PAY_SELECT} WHERE ${where.join(' AND ')} ORDER BY t.completed_at, p.property_name, u.unit_name`, params);
   const tasks = rows
     .filter((r) => !q.cleaner || r.cleaner_key === q.cleaner.toLowerCase())
+    // The status is read after payStatus, so an owner's "Done by you" clean is never listed as unpaid.
+    .filter((r) => !q.status || payStatus(r) === q.status)
     .map((r) => ({ ...taskOut(r), pay_expense_id: r.pay_expense_id, no_rate: r.no_rate }));
   res.json({ month, tasks, cleaners: groupCleaners(tasks), totals: tally(tasks) });
 }));

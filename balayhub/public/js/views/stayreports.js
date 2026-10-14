@@ -5,7 +5,7 @@
 import { get, qs } from '../api.js';
 import { h, peso, pageHead, todayManila, emptyState, toast, label } from '../ui.js';
 import { navigate } from '../app.js';
-import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
+import { initFilters, filterBar, rememberFilters, changed, outOfWindow, OUT_OF_WINDOW } from '../filters.js';
 import { depositsPanel } from './deposits.js';
 import { CHANNEL_LABEL, SOURCE_LABEL } from './reservations.js';
 
@@ -76,7 +76,7 @@ export async function stayReportsView(el, { query = {} }) {
         filters.channel ? h('p', { class: 'muted small' }, 'Expenses aren\'t split by channel, so they are left out while a channel is chosen.') : '',
         h('div', { class: 'card' },
           h('div', { class: 'grid grid--4 stats' },
-            stat('Revenue earned', peso(t.totals.revenue)),
+            stat('Revenue earned', peso(t.totals.revenue), 'Nights counted in their month; cleaning and extras at check-in.'),
             stat('Net received', peso(t.totals.net_received), `${peso(t.totals.received)} paid in − ${peso(t.totals.refunds)} refunded`),
             stat('Expenses', peso(t.totals.expenses)), stat('Net income', peso(t.totals.net), 'earned − channel fees − expenses'))),
         h('div', { class: 'card card--flush' }, h('div', { class: 'table-wrap' }, h('table', { class: 'table table--compact' },
@@ -108,12 +108,14 @@ export async function stayReportsView(el, { query = {} }) {
   const filters = initFilters('stay-reports', query, defaults);
   if (!filters.period && filters.year && !query.month) filters.period = 'year'; // old links: ?year=2026
   // initFilters() holds back a range that runs backwards. A shared link keeps its real dates on screen; load() says why.
-  if (filters.period === 'range' && isDay(query.from) && isDay(query.to) && query.to < query.from) { filters.from = query.from; filters.to = query.to; }
+  // A link date outside 2000 to 2100 is never put back on screen: the status line names that problem instead.
+  if (filters.period === 'range' && isDay(query.from) && isDay(query.to) && query.to < query.from && !outOfWindow(query.from) && !outOfWindow(query.to)) { filters.from = query.from; filters.to = query.to; }
+  let windowLink = filters.period === 'range' && [query.from, query.to].some((v) => isDay(v) && outOfWindow(v));
   // The period controls sit flat in the filter bar's row (.flt__period in app.css), not in a wrapping chip box.
   const periodBox = h('div', { class: 'flt__period' });
-  const status = h('span', { class: 'muted small' });
+  const status = h('span', { class: 'muted small', id: 'stay-report-status' });
   const notice = h('div');
-  const setPeriod = (patch) => { Object.assign(filters, patch); rememberFilters('stay-reports', filters); load(); };
+  const setPeriod = (patch) => { windowLink = false; Object.assign(filters, patch); rememberFilters('stay-reports', filters); load(); };
 
   function drawPeriod() {
     // Drawing the controls again drops focus, so the control that had it gets it back (found by its name).
@@ -127,10 +129,13 @@ export async function stayReportsView(el, { query = {} }) {
         [thisYear, thisYear - 1, thisYear - 2].map((y) => h('option', { value: y, selected: String(y) === (filters.year || String(thisYear)) }, String(y))));
     } else if (filters.period === 'range') {
       // The two dates stay together as one unit (the same .flt__range markup as the daterange fields in filters.js).
-      inputs = h('div', { class: 'flt__range' },
-        h('input', { class: 'input', type: 'date', value: filters.from, 'aria-label': 'From', onchange: (e) => setPeriod({ from: e.target.value }) }),
-        h('span', { 'aria-hidden': 'true' }, '–'),
-        h('input', { class: 'input', type: 'date', value: filters.to, 'aria-label': 'To', onchange: (e) => setPeriod({ to: e.target.value }) }));
+      // A year outside 2000 to 2100 is flagged at its own box, the status line under the bar says why, and nothing is sent.
+      const dateBox = (name, key) => h('input', { class: 'input', type: 'date', value: filters[key], 'aria-label': name, 'aria-describedby': 'stay-report-status',
+        onchange: (e) => {
+          if (outOfWindow(e.target.value)) { e.target.setAttribute('aria-invalid', 'true'); status.textContent = OUT_OF_WINDOW; return; }
+          setPeriod({ [key]: e.target.value });
+        } });
+      inputs = h('div', { class: 'flt__range' }, dateBox('From', 'from'), h('span', { 'aria-hidden': 'true' }, '–'), dateBox('To', 'to'));
     } else {
       inputs = h('input', { class: 'input', type: 'month', value: filters.month || todayManila().slice(0, 7), 'aria-label': 'Month', onchange: (e) => e.target.value && setPeriod({ month: e.target.value }) });
     }
@@ -148,7 +153,8 @@ export async function stayReportsView(el, { query = {} }) {
     if (filters.period === 'year') periodQ = { year: filters.year || thisYear };
     else if (filters.period === 'range' && filters.from && filters.to && !backwards) periodQ = { from: filters.from, to: filters.to };
     else periodQ = { month: filters.month || todayManila().slice(0, 7) };
-    status.textContent = backwards ? 'The end date must be after the start date. Showing this month for now.'
+    status.textContent = windowLink ? `${OUT_OF_WINDOW} Showing this month for now.`
+      : backwards ? 'The end date must be after the start date. Showing this month for now.'
       : filters.period === 'range' && !(filters.from && filters.to) ? 'Choose both dates. Showing this month for now.' : '';
     const apiQ = qs({ ...periodQ, ...scopeOf(filters) });
     exportLink.href = `/api/stay-reports/export${apiQ}`;
@@ -168,7 +174,7 @@ export async function stayReportsView(el, { query = {} }) {
     box.replaceChildren(
       h('div', { class: 'card' },
         h('div', { class: 'grid grid--4 stats' },
-          stat('Revenue', peso(t.revenue), [`${t.stays} stay${t.stays === 1 ? '' : 's'} · ${t.nights} nights`, h('br'), `Rooms ${peso(t.accommodation)} · cleaning and extras ${peso(t.fees)}`]),
+          stat('Revenue', peso(t.revenue), [`${t.stays} stay${t.stays === 1 ? '' : 's'} · ${t.nights} nights`, h('br'), `Rooms ${peso(t.accommodation)} · cleaning and extras ${peso(t.fees)}`, h('br'), 'Rooms counted by night; cleaning and extras by check-in.']),
           stat('Occupancy', pct(t.occupancy), 'booked nights ÷ open nights'),
           stat('Avg nightly rate', peso(t.adr), `RevPAR ${peso(t.revpar)}`),
           stat('Net (before refunds)', peso(t.net), r.expenses_excluded ? `${peso(t.channel_fees)} channel fees · expenses not split by channel` : `${peso(t.channel_fees)} channel fees · ${peso(t.expenses)} expenses`)),

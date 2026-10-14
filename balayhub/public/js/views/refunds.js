@@ -1,7 +1,7 @@
 // Refunds on a reservation: the listing's cancellation policy, the refund it suggests,
 // the refund log, and (owners and managers) recording and voiding refunds.
 
-import { get, post } from '../api.js';
+import { get, post, ApiError } from '../api.js';
 import { h, badge, peso, fmtDate, field, formModal, confirmDialog, toast, todayManila, parseAmount } from '../ui.js';
 import { state } from '../app.js';
 
@@ -17,11 +17,21 @@ export function suggestionText(s, cancelled) {
   return `${lead}: ${peso(s.amount)} (${s.percent}%). ${s.rule}.${done}`;
 }
 
-// What the guest would owe again after this refund. The balance already counts refunds, so a refund past the overpayment on a live stay leaves money owed. A cancelled booking owes nothing (D-77).
+// What the guest would owe again after this refund. The balance already counts refunds, so only a refund past the overpayment on a live stay leaves money owed; a booking that already owes is not asked. A cancelled booking owes nothing (D-77).
 export function refundOwedAfter(reservation, amount) {
   if (reservation.status === 'cancelled') return 0;
-  const typed = Number(amount);
-  return Number.isFinite(typed) ? Math.max(0, Math.round((Number(reservation.balance) + typed) * 100) / 100) : 0;
+  const before = Number(reservation.balance); const typed = Number(amount);
+  if (!Number.isFinite(typed) || !(before < 0)) return 0;
+  const after = Math.round((before + typed) * 100) / 100;
+  return after > 0 ? after : 0;
+}
+
+// The server's own sentence (src/routes/refunds.js) for a refund above what is left, so the host sees it before any question.
+export function refundCapProblem(amount, { refundable, paid, refunded }) {
+  const m = (n) => `₱${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (!(Number(amount) > Number(refundable))) return null;
+  const tail = `(${m(paid)} paid, ${m(refunded)} already refunded).`;
+  return Number(refundable) > 0 ? `Only ${m(refundable)} is left to refund ${tail}` : `Nothing is left to refund ${tail}`;
 }
 
 export async function refundsCard(reservation, rerender) {
@@ -42,9 +52,12 @@ export async function refundsCard(reservation, rerender) {
         hint: 'Kept in the refund log. For example: cancelled by guest, 6 days before check-in.' }),
     ],
     onSubmit: async (d, { idempotencyKey }) => {
-      // Cancel returns false: nothing is posted and the form stays open with no message.
-      const owed = refundOwedAfter(reservation, parseAmount(d.amount));
-      if (owed > 0 && !await confirmDialog({ title: 'Refund more than the overpayment?', text: `After this refund the guest will owe ${peso(owed)} again. Record it?`, confirmText: 'Record refund' })) return false;
+      // Check the cap first, so no question is asked about a save that cannot succeed. Cancel returns false: nothing is posted and the form stays open with no message.
+      const amount = parseAmount(d.amount);
+      const tooMuch = refundCapProblem(amount, data);
+      if (tooMuch) throw new ApiError(tooMuch, { status: 400, fields: { amount: tooMuch } });
+      const owed = refundOwedAfter(reservation, amount);
+      if (owed > 0 && !await confirmDialog({ title: 'Refund more than the overpayment?', text: `The guest overpaid by ${peso(-Number(reservation.balance))}. After this ${peso(amount)} refund they will owe ${peso(owed)}. Record it?`, confirmText: 'Record refund' })) return false;
       await post(`/reservations/${reservation.booking_id}/refunds`, d, { idempotencyKey }); toast('Refund recorded.'); rerender();
     },
   });

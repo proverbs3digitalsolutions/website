@@ -131,12 +131,13 @@ async function checklist(user, date) {
         JOIN properties p ON p.property_id = u.property_id
        WHERE pp.status = 'pending' AND ${where}
        ORDER BY pp.submitted_at`),
-    scopedRows(user, [], (where) => `
+    // A past day shows what was open on it: opened on or before that day, and still open now. Today and tomorrow are unchanged.
+    scopedRows(user, [date], (where) => `
       SELECT r.description, r.estimated_cost::text AS estimated_cost, r.booking_id, r.task_id, u.unit_name
         FROM damage_reports r
         JOIN units u ON u.unit_id = r.unit_id
         JOIN properties p ON p.property_id = u.property_id
-       WHERE r.status = 'open' AND ${where}
+       WHERE r.status = 'open' AND (r.created_at AT TIME ZONE 'Asia/Manila')::date <= $1::date AND ${where}
        ORDER BY r.created_at`),
     // Archived listings and properties are left out, as in GET /sync-health (src/routes/synchealth.js).
     scopedRows(user, [], (where) => `
@@ -157,6 +158,7 @@ async function checklist(user, date) {
   ]);
 
   const paymentsCount = payByMethod.reduce((n, r) => n + r.count, 0);
+  const damageTitle = date < manilaToday() ? 'Damage reports still open' : 'Open damage reports';
   return [
     section('arrivals_pending', 'Arrivals not checked in', arrivals.map((r) =>
       item(`${firstName(r.guest_name)} · ${r.unit_name}`, `#/reservations/${r.booking_id}`))),
@@ -173,7 +175,7 @@ async function checklist(user, date) {
         r.staying ? 'Staying now' : `Check-in ${dayText(r.check_in)}`, r.balance))),
     section('proofs_pending', 'Payment proofs to review', proofs.map((r) =>
       item(`${r.payer_name || 'Guest'} · ${r.unit_name}`, `#/reservations/${r.booking_id}`, PROOF_METHOD[r.method], r.amount))),
-    section('damage_open', 'Open damage reports', damage.map((r) =>
+    section('damage_open', damageTitle, damage.map((r) =>
       item(r.unit_name, r.task_id ? `#/housekeeping/${r.task_id}` : r.booking_id ? `#/reservations/${r.booking_id}` : '#/home',
         r.description, r.estimated_cost))),
     section('sync_problems', 'Calendar sync problems', [

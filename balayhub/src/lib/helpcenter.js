@@ -11,7 +11,7 @@ const CATEGORIES = [
   ['bookings', 'Calendar & reservations'],
   ['money', 'Payments & pricing'],
   ['guests', 'Guests & messages'],
-  ['operations', 'Cleaning, condo & deposits'],
+  ['operations', 'Cleaning, upkeep & deposits'],
   ['business', 'Reports, owners & team'],
   ['longterm', 'Long-term rentals (monthly tenants)'],
   ['account', 'Account, plan & privacy'],
@@ -389,11 +389,22 @@ const ARTICLES = [
     ],
   },
   {
-    slug: 'reports', category: 'business', roles: MANAGERS, title: 'Reports and income summary for taxes',
+    slug: 'reports', category: 'business', roles: MANAGERS, module: 'stay', title: 'Reports and income summary for taxes',
     keywords: 'report revenue occupancy adr revpar income summary bir tax quarter csv export',
     body: [
       'Reports → Performance: revenue, occupancy, average nightly rate, RevPAR, by channel and by listing, expenses and net, for a month or year.',
       'Reports → Income summary: per month and quarter, revenue earned vs payments received, fees, expenses, net. Download CSV for your bookkeeper.',
+      'BalayHub doesn\'t issue BIR official receipts or give tax advice.',
+    ],
+  },
+  {
+    slug: 'rent-reports', category: 'business', roles: MANAGERS, module: 'rent', title: 'Rental reports: rent collected, expenses and who owes',
+    keywords: 'report rent collected billed expenses net outstanding overdue income property export csv excel monthly',
+    body: [
+      'Reports: rent collected, expenses and the net operating result (collected minus expenses) for a month, the year, the last 12 months or a custom range. Outstanding rent shows what is owed as of today, with the overdue part. Pick the period and a property at the top of the page.',
+      'By property: units, occupied units, rent billed, collected, expenses, net, outstanding and overdue for each property. By month shows collected and expenses month by month, and Expenses by category shows where the money went.',
+      'Outstanding balances (as of today): each tenant who still owes rent, with their unit, the amount owed, the overdue part and the oldest overdue due date.',
+      'Export (Excel / CSV) downloads the same figures as a CSV file, which Excel opens, for your bookkeeper.',
       'BalayHub doesn\'t issue BIR official receipts or give tax advice.',
     ],
   },

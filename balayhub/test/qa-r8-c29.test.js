@@ -179,7 +179,7 @@ test('the helper keeps only the rows on screen that are ticked, and never adds a
 });
 
 test('the Cleaner filter flag is read each time the bar is drawn, and the bar is drawn again once the names load', () => {
-  assert.match(src, /options: cleanerOpts, keepUnknown: !cleanerOpts\.length \}/, 'kept only while no names are known');
+  assert.match(src, /options: cleanerOpts, keepUnknown: !cleanerOpts \}/, 'kept only while no names are known');
   assert.match(src, /cleanerOpts = opts; renderBar\(\);/, 'the bar is drawn again after the names load, so the flag is read again');
 });
 

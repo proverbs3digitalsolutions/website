@@ -26,7 +26,9 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // Dates the whole app accepts (the same 2000 to 2100 window as every other date box). A half-typed year such as 0202 is outside it.
 const DATE_MIN = '2000-01-01';
 const DATE_MAX = '2100-12-31';
-const outOfWindow = (v) => v !== '' && (v < DATE_MIN || v > DATE_MAX);
+// The one wording for a year outside that window, shared with the stay reports' custom dates.
+export const OUT_OF_WINDOW = 'Enter a year from 2000 to 2100.';
+export const outOfWindow = (v) => v !== '' && (v < DATE_MIN || v > DATE_MAX);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // True for a real calendar day. 2026-02-30 and 2026-13-01 are not.
@@ -112,6 +114,22 @@ const isRange = (f) => f.type === 'daterange' || f.type === 'amountrange';
 
 const BACKWARDS = 'The end date is before the start date. This date filter is off until you fix it.';
 
+// What a date range can apply. A year outside 2000 to 2100 is flagged and dropped on its own, and the other end still
+// applies. A backwards pair (both ends in the window) applies neither end. `outside` is true while a box is out of the window.
+export function rangeCheck(from, to) {
+  // Only a real-looking date is judged by the window; text is left for the bar's own checks and shown as typed.
+  const lo = DATE_RE.test(from) && outOfWindow(from);
+  const hi = DATE_RE.test(to) && outOfWindow(to);
+  const backwards = !lo && !hi && Boolean(from && to && to < from);
+  return {
+    message: lo || hi ? OUT_OF_WINDOW : backwards ? BACKWARDS : '',
+    outside: lo || hi,
+    keepFrom: !(lo || backwards),
+    keepTo: !(hi || backwards),
+    flags: { from: lo || backwards, to: hi || backwards },
+  };
+}
+
 // Amounts as the server reads them (AMOUNT_RE in src/routes/money.js): digits, up to 10, with at most two decimals.
 const AMOUNT_RE = /^\d{1,10}(\.\d{1,2})?$/;
 const NOT_AN_AMOUNT = 'Enter an amount of 0 or more (up to 10 digits).';
@@ -144,28 +162,33 @@ function control(f, values, emit, defaults = {}) {
     const from = h('input', { class: 'input', type: 'date', id, value: shownA || '', 'aria-label': `${f.label}, from`, 'aria-describedby': errId });
     const to = h('input', { class: 'input', type: 'date', value: shownB || '', 'aria-label': `${f.label}, to`, 'aria-describedby': errId });
     const err = h('div', { id: errId, role: 'alert', style: { color: 'var(--red)', fontSize: '.84rem', fontWeight: '650' } });
-    // Dates are YYYY-MM-DD, so string order is calendar order. A backwards range is flagged and applies nothing: the
-    // side that was already applied drops back to its default too, so the list reloads without this range.
-    // The message text is set only while the range is backwards, so the alert is empty otherwise.
+    // Dates are YYYY-MM-DD, so string order is calendar order. A year outside 2000 to 2100 is flagged at its box and only
+    // that end is dropped. A backwards range is flagged and applies nothing: the side that was already applied drops back
+    // to its default too, so the list reloads without this range. The message text is set only while a problem shows.
     const check = () => {
-      const bad = Boolean(from.value && to.value && to.value < from.value);
-      err.hidden = !bad;
-      err.replaceChildren(bad ? BACKWARDS : '');
-      for (const input of [from, to]) { if (bad) input.setAttribute('aria-invalid', 'true'); else input.removeAttribute('aria-invalid'); }
-      return bad;
+      const r = rangeCheck(from.value, to.value);
+      err.hidden = !r.message;
+      err.replaceChildren(r.message);
+      for (const [input, bad] of [[from, r.flags.from], [to, r.flags.to]]) { if (bad) input.setAttribute('aria-invalid', 'true'); else input.removeAttribute('aria-invalid'); }
+      return r;
     };
     const apply = () => {
-      // A half-typed year (the box reads 0202 on the way to 2026) is not a filter yet: wait for the rest.
-      if (outOfWindow(from.value) || outOfWindow(to.value)) return;
-      if (check()) { values[a] = defaults[a] ?? ''; values[b] = defaults[b] ?? ''; }
-      else { values[a] = from.value; values[b] = to.value; }
-      emit();
+      const r = check();
+      const nextA = r.keepFrom ? from.value : (defaults[a] ?? '');
+      const nextB = r.keepTo ? to.value : (defaults[b] ?? '');
+      // A half-typed year (the box reads 0202 on the way to 2026) changes nothing, so the list is not reloaded for it.
+      const same = nextA === values[a] && nextB === values[b];
+      values[a] = nextA;
+      values[b] = nextB;
+      if (!r.outside || !same) emit();
     };
     from.addEventListener('change', apply);
     to.addEventListener('change', apply);
-    // From a shared link or an old saved filter: keep the dates on screen with the message, but do not apply them.
-    const invalid = check();
-    if (invalid) { values[a] = defaults[a] ?? ''; values[b] = defaults[b] ?? ''; }
+    // From a shared link or an old saved filter: keep the dates on screen with the message, but do not apply what is wrong.
+    const first = check();
+    if (!first.keepFrom) values[a] = defaults[a] ?? '';
+    if (!first.keepTo) values[b] = defaults[b] ?? '';
+    const invalid = Boolean(first.message);
     return { el: h('div', { class: 'flt__field flt__field--range' }, h('label', { for: id }, f.label), h('div', { class: 'flt__range' }, from, h('span', { 'aria-hidden': 'true' }, '–'), to), err), sync: () => { from.value = values[a] || ''; to.value = values[b] || ''; check(); }, invalid };
   }
   if (f.type === 'amountrange') {
@@ -295,7 +318,7 @@ export function filterBar({ key, values, defaults, search, quick = [], more = []
   let searchEl = null;
   if (search) {
     let t;
-    searchInput = h('input', { class: 'input', type: 'search', value: values[search.name || 'q'] || '', placeholder: search.placeholder || 'Search…', 'aria-label': search.placeholder || 'Search' });
+    searchInput = h('input', { class: 'input', type: 'search', value: values[search.name || 'q'] || '', placeholder: search.placeholder || 'Search…', 'aria-label': search.label || search.placeholder || 'Search' });
     searchInput.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { values[search.name || 'q'] = searchInput.value.trim(); emit(); }, 300); });
     searchEl = h('div', { class: 'search' }, searchInput);
   }

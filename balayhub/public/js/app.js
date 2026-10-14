@@ -207,8 +207,8 @@ export const navFor = (user = state.user) => user?.role === 'cleaner' ? CLEANER_
 // Nothing is removed. A path no group lists lands in More tools, so a new menu entry can never go missing. The long-term and cleaner menus stay flat.
 const NAV_GROUPS = [
   { id: 'day', title: 'Every day', paths: ['/launchpad', '/home', '/inbox', '/calendar', '/reservations', '/housekeeping', '/guests'] },
-  { id: 'money', title: 'Money', paths: ['/stay-reports', '/reports', '/pnl', '/rent?tab=expenses', '/rent', '/cleaner-pay', '/owners'] },
-  { id: 'more', title: 'More tools', paths: ['/groups', '/daily-close', '/quotes', '/addons', '/supplies', '/lost-found', '/maintenance', '/dashboard', '/tenants'] },
+  { id: 'money', title: 'Money', paths: ['/stay-reports', '/reports', '/pnl', '/rent?tab=expenses', '/rent'] },
+  { id: 'more', title: 'More tools', paths: ['/groups', '/cleaner-pay', '/owners', '/daily-close', '/quotes', '/addons', '/supplies', '/lost-found', '/maintenance', '/dashboard', '/tenants'] },
   { id: 'setup', title: 'Setup', paths: ['/listings', '/settings', '/help', '/admin'] },
 ];
 export function navGroups(user = state.user, items = navFor(user)) {
@@ -626,7 +626,7 @@ document.addEventListener('keydown', (e) => {
 // that was activated and, once the redraw has run (it may be async), put focus on the tab at the same index of the same tablist.
 // A view that builds a whole new tablist (stay reports, listings status) leaves the old one disconnected: the new one with the same
 // aria-label, else the one at the same place in the page (listIndex), takes over.
-// Returns true when it is done: focus restored, the user moved on, or the tablist is gone.
+// Returns true when it is done (focus restored or the user moved on); false to keep polling while the new tablist or tab is not there yet.
 export function restoreTabFocus(list, index, oldTab, doc = document, listIndex = -1) {
   const a = doc.activeElement;
   if (a && a !== oldTab && a !== doc.body && a.isConnected) return true; // the user focused something else: never steal it
@@ -636,10 +636,10 @@ export function restoreTabFocus(list, index, oldTab, doc = document, listIndex =
     const lists = [...(doc.querySelectorAll?.('[role="tablist"]') || [])];
     const label = list.getAttribute?.('aria-label');
     target = (label && lists.find((l) => l.getAttribute?.('aria-label') === label)) || lists[listIndex];
-    if (!target) return true;
+    if (!target) return false; // the view has not drawn its new tablist yet
   }
   const tab = target.querySelectorAll('[role="tab"]')[index];
-  if (!tab) return true;
+  if (!tab) return false; // the tab is not drawn yet
   tab.focus();
   return true;
 }
@@ -651,7 +651,7 @@ document.addEventListener('click', (e) => {
   const index = [...list.querySelectorAll('[role="tab"]')].indexOf(oldTab);
   const listIndex = [...document.querySelectorAll('[role="tablist"]')].indexOf(list);
   let done = false;
-  for (const ms of [0, 40, 100, 200, 350, 500]) setTimeout(() => { if (!done) done = restoreTabFocus(list, index, oldTab, document, listIndex); }, ms);
+  for (const ms of [0, 40, 100, 200, 350, 500, 800, 1200, 1600, 2000]) setTimeout(() => { if (!done) done = restoreTabFocus(list, index, oldTab, document, listIndex); }, ms);
 }, true);
 
 (async function boot() {

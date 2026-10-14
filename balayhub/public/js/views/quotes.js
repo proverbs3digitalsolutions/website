@@ -18,6 +18,8 @@ const money = (v) => {
   return n < 0 ? NaN : n;
 };
 const nightsBetween = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
+// The stay must run at least one night. A blank date is the required check's job, so it gives no message here.
+export const datesProblem = (ci, co) => (ci && co && !(nightsBetween(ci, co) > 0) ? 'Check-out must be after check-in.' : null);
 // The rate-card price for a quote: null when a night has no nightly rate, or the price is not above 0. Never filled in or offered as PHP 0.
 export const rateStay = (p) => (p.missing_rates || !(Number(p.accommodation_total) > 0) ? null : p.accommodation_total);
 // Offer the rate-card price when the Accommodation box holds something else. A box that is not an amount ("1,5") counts as different.
@@ -77,9 +79,9 @@ async function newQuoteModal(listings, onSaved) {
   let modal;
   const form = makeForm({
     fields, submitText: 'Create quote', cancel: () => modal.close(),
+    // The date check runs with the required check, so a blank Accommodation box can't hide it.
+    check: (d) => { const msg = datesProblem(d.check_in, d.check_out); return msg ? { check_out: msg } : null; },
     onSubmit: async (d) => {
-      const n = nightsBetween(d.check_in, d.check_out);
-      if (!(n > 0)) { throw new ApiError('Check-out must be after check-in.', { status: 400, fields: { check_out: 'Check-out must be after check-in.' } }); }
       const cap = guestLimit(listings, d.unit_id);
       if (cap && Number(d.num_guests) > cap) { const m = `This listing allows up to ${cap} guests.`; throw new ApiError(m, { status: 400, fields: { num_guests: m } }); }
       // An empty box means the 48-hour default; anything typed must be 1 to 336 (0 is not silently replaced).

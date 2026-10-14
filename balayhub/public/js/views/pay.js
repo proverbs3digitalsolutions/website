@@ -4,10 +4,10 @@
 
 import { get, post, api, ApiError, newIdempotencyKey } from '../api.js';
 import { h, brand, toast, field, readForm, showErrors, clearErrors, parseAmount } from '../ui.js';
-import { t, tServer, guestLang, tFields, initGuestLang, langToggle, fmtDateL as fmtDate, extendTranslations } from '../i18n.js';
+import { t, tServer, guestLang, tFields, initGuestLang, langToggle, keepFormValues, restoreFormValues, fmtDateL as fmtDate, extendTranslations } from '../i18n.js';
 
-// Same peso format as the booking pages: no centavos when it's a whole amount.
-const peso = (v) => { const n = Number(v || 0); return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`; };
+// Money owed is always shown with centavos (₱600.00), like the emails and receipts.
+const peso = (v) => `₱${Number(v || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 // The amount box starts at what is still owed: a whole amount has no centavos (17600), a fraction keeps two (17600.50).
 // Rounding to centavos first drops float residue left by subtracting proofs from the balance.
 export const prefillAmount = (v) => { const n = Math.round(Number(v) * 100) / 100; return Number.isInteger(n) ? String(n) : n.toFixed(2); };
@@ -32,6 +32,7 @@ extendTranslations({
   'Payment received': 'Bayad na natanggap',
   'Balance due': 'Babayaran pa',
   'Adjustments': 'Mga adjustment',
+  'Refunded to you': 'Ibinalik sa iyo',
   'Pay by GCash, Maya or bank transfer': 'Magbayad gamit ang GCash, Maya o bank transfer',
   'Pay the amount, then send the proof below. {host} checks each payment and confirms it.': 'Bayaran ang halaga, tapos ipadala ang patunay sa ibaba. Titingnan ni {host} ang bayad at kukumpirmahin ito.',
   'Amount paid': 'Halagang binayad',
@@ -83,11 +84,12 @@ const failTitle = (err) => (err.status === 404 ? t('Link not found') : err.statu
 
 const PRICING_TEXT = { per_stay: 'per stay', per_night: 'per night', per_guest: 'per guest', per_guest_night: 'per guest per night' };
 
-export async function payBalanceView(el, { params, query }) {
+// `snap` comes from a language switch (keepFormValues): what the guest typed or ticked goes back after the redraw.
+export async function payBalanceView(el, { params, query }, snap) {
   initGuestLang();
   const token = params.token;
   const page = (...children) => h('div', { class: 'gc' },
-    h('header', { class: 'gc__top gc__top--lang' }, brand(null), langToggle(() => payBalanceView(el, { params, query: {} }))),
+    h('header', { class: 'gc__top gc__top--lang' }, brand(null), langToggle(() => payBalanceView(el, { params, query: {} }, keepFormValues(el)))),
     h('main', { class: 'gc__main', id: 'main' }, children),
     h('p', { class: 'gc__foot muted small' }, t('Payments are processed securely by PayMongo. '), h('a', { href: '#/privacy' }, t('Privacy notice'))));
   let d;
@@ -138,13 +140,14 @@ export async function payBalanceView(el, { params, query }) {
           : d.accepting ? [btn, h('p', { class: 'muted small' }, t('GCash, Maya, cards and GrabPay. You get an email receipt.'))]
             : d.manual_payments?.accepting ? null
               : h('div', { class: 'alert alert--info' }, t('Online payment is not available for this booking. Please contact your host.'))),
-    !d.cancelled && addonsCard(token, () => payBalanceView(el, { params, query: {} })),
+    !d.cancelled && addonsCard(token, () => payBalanceView(el, { params, query: {} }), snap),
     !d.cancelled && d.manual_payments?.accepting && manualCard(d, token, () => payBalanceView(el, { params, query: {} }))));
+  restoreFormValues(el, snap);
 }
 
 // Pre-arrival extras the host offers (airport pickup, early check-in…). Hidden when there are none or the
 // server says it is too late; choosing some adds charges to the bill, then the page reloads with the new balance.
-function addonsCard(token, reload) {
+function addonsCard(token, reload, snap) {
   const card = h('div', { class: 'card', hidden: true });
   get(`/public/pay/${encodeURIComponent(token)}/addons`).then((r) => {
     const list = r?.addons || [];
@@ -156,7 +159,7 @@ function addonsCard(token, reload) {
       // `left` is what the stay can still add (the limit counts per stay); older servers don't send it.
       const left = a.left == null ? null : Math.max(0, Number(a.left) || 0);
       const max = left == null ? Math.max(1, Number(a.max_quantity) || 1) : left;
-      const input = h('input', { class: 'input', type: 'number', min: 0, max, value: 0, inputmode: 'numeric', id: `addon-${a.addon_id}`, 'aria-label': t('Quantity for {name}', { name }) });
+      const input = h('input', { class: 'input', type: 'number', min: 0, max, value: 0, inputmode: 'numeric', id: `addon-${a.addon_id}`, name: `addon-qty-${a.addon_id}`, 'aria-label': t('Quantity for {name}', { name }) });
       // The box shows the number that will be bought: an entry over the maximum or below zero is clamped and written back.
       input.addEventListener('input', () => {
         const n = Math.max(0, Math.min(max, Math.floor(Number(input.value) || 0)));
@@ -169,7 +172,7 @@ function addonsCard(token, reload) {
         h('div', { class: 'gp-addon__price' }, `${peso(a.price)} `, h('span', { class: 'muted small' }, t(PRICING_TEXT[a.pricing] || ''))),
         left === 0 ? h('div', { class: 'gp-addon__qty muted small' }, t('Already on your bill'))
           : max > 1 ? h('div', { class: 'gp-addon__qty' }, h('label', { for: input.id, class: 'small' }, t('Quantity for {name}', { name })), input)
-          : h('label', { class: 'check gp-addon__qty' }, h('input', { type: 'checkbox', 'aria-label': t('Select {name}', { name }), onchange: (e) => { qty[a.addon_id] = e.target.checked ? 1 : 0; } }), h('span', null, t('Select'))));
+          : h('label', { class: 'check gp-addon__qty' }, h('input', { type: 'checkbox', name: `addon-pick-${a.addon_id}`, 'aria-label': t('Select {name}', { name }), oninput: (e) => { qty[a.addon_id] = e.target.checked ? 1 : 0; } }), h('span', null, t('Select'))));
     });
     const btn = h('button', { class: 'btn btn--primary btn--block', type: 'button' }, t('Add selected to my bill'));
     btn.addEventListener('click', async () => {
@@ -190,6 +193,7 @@ function addonsCard(token, reload) {
     });
     card.replaceChildren(h('h2', null, t('Add to your stay')), h('p', { class: 'muted small' }, t('Pick extras before you arrive. They are added to your bill.')), h('div', { class: 'gp-addons' }, rows), err, btn);
     card.hidden = false;
+    restoreFormValues(card, snap); // the extras load after the page, so their choices go back here
   }).catch(() => {}); // not offered, or too late: simply don't show the card
   return card;
 }
@@ -209,6 +213,7 @@ function billSection(d) {
     }),
     line(t('Total'), h('strong', null, peso(b.total))),
     b.payments.map((p) => line(`${t('Payment received')} · ${fmtDate(p.payment_date)} · ${METHOD_TEXT[p.payment_method] || p.payment_method}`, `−${peso(p.amount)}`)),
+    (b.refunds || []).map((r) => line(`${t('Refunded to you')} · ${fmtDate(r.refund_date)}`, `+${peso(r.amount)}`)),
     Number(b.adjustments) > 0 && line(t('Adjustments'), `−${peso(b.adjustments)}`),
     // A cancelled booking owes nothing (APP-FLOW 6.4), so there is no balance line.
     !d.cancelled && line(t('Balance due'), h('strong', null, peso(d.balance))));

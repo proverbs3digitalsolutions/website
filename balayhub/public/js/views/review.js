@@ -2,7 +2,7 @@
 
 import { get, post } from '../api.js';
 import { h, brand, toast } from '../ui.js';
-import { t, tServer, initGuestLang, langToggle, fmtDateL as fmtDate, extendTranslations } from '../i18n.js';
+import { t, tServer, initGuestLang, langToggle, keepFormValues, restoreFormValues, fmtDateL as fmtDate, extendTranslations } from '../i18n.js';
 
 extendTranslations({
   'Too many attempts': 'Napakaraming subok',
@@ -20,26 +20,30 @@ const LABELS = ['', 'Poor', 'Fair', 'Good', 'Very good', 'Excellent'];
 
 function starPicker(name, label, required) {
   let value = 0;
+  // Kept in a hidden box so the language switch can carry the stars over (see keepFormValues).
+  const store = h('input', { type: 'hidden', name, value: '', dataset: { keep: '' } });
   const buttons = [1, 2, 3, 4, 5].map((n) => h('button', {
     type: 'button', 'aria-label': n === 1 ? t('1 star – {label}', { label: t(LABELS[n]) }) : t('{n} stars – {label}', { n, label: t(LABELS[n]) }), 'aria-pressed': 'false',
-    onclick: () => { value = n; paint(); },
+    onclick: () => set(n),
   }, '★'));
   const caption = h('span', { class: 'muted small' }, required ? t('Tap a star') : t('Optional'));
+  function set(n) { value = n; paint(); }
   function paint() {
+    store.value = value ? String(value) : '';
     buttons.forEach((b, i) => { b.classList.toggle('is-on', i < value); b.setAttribute('aria-pressed', String(i + 1 === value)); });
     caption.textContent = value ? t(LABELS[value]) : (required ? t('Tap a star') : t('Optional'));
   }
   const el = h('div', { class: 'field', dataset: { field: name } },
-    h('label', null, label), h('div', { class: `stars${required ? '' : ' stars--sm'}`, role: 'group', 'aria-label': label }, buttons), caption,
+    store, h('label', null, label), h('div', { class: `stars${required ? '' : ' stars--sm'}`, role: 'group', 'aria-label': label }, buttons), caption,
     h('div', { class: 'error', role: 'alert' }));
-  return { el, get: () => value || undefined };
+  return { el, set, store, get: () => value || undefined };
 }
 
-export async function guestReviewView(el, { params }) {
+export async function guestReviewView(el, { params }, snap) {
   initGuestLang();
   const token = params.token;
   const page = (...children) => h('div', { class: 'gc' },
-    h('header', { class: 'gc__top gc__top--lang' }, brand(null), langToggle(() => guestReviewView(el, { params }))),
+    h('header', { class: 'gc__top gc__top--lang' }, brand(null), langToggle(() => guestReviewView(el, { params }, keepFormValues(el)))),
     h('main', { class: 'gc__main', id: 'main' }, children),
     h('p', { class: 'gc__foot muted small' }, t('Your feedback goes only to your host. '), h('a', { href: '#/privacy' }, t('Privacy notice'))));
   let d;
@@ -85,4 +89,8 @@ export async function guestReviewView(el, { params }) {
     h('h1', null, `${d.guest_first_name ? t('Hi {name}! ', { name: d.guest_first_name }) : ''}${t('How was your stay?')}`),
     h('p', { class: 'muted' }, t('{listing} · {dates}. This is private: only your host sees it.', { listing: d.listing, dates: `${fmtDate(d.check_in)} – ${fmtDate(d.check_out)}` })),
     form)));
+  // Back from a language switch: put the typed comment and the stars back.
+  restoreFormValues(el, snap);
+  overall.set(Number(overall.store.value) || 0);
+  clean.set(Number(clean.store.value) || 0);
 }

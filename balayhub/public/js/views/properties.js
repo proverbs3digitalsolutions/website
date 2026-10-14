@@ -264,7 +264,7 @@ export async function propertyDetailView(el, { params, query, rerender }) {
       h('div', { class: 'stat' }, h('div', { class: 'stat__label' }, 'Units'), h('div', { class: 'stat__value' }, active.length)),
       !stayOnly && h('div', { class: 'stat' }, h('div', { class: 'stat__label' }, 'Occupied'), h('div', { class: 'stat__value' }, occupied)),
       !stayOnly && h('div', { class: 'stat' }, h('div', { class: 'stat__label' }, 'Vacant'), h('div', { class: 'stat__value' }, active.filter((u) => u.occupancy_status === 'vacant').length)),
-      !stayOnly && h('a', { class: 'stat', href: `#/rent?property_id=${property.property_id}&status=outstanding` }, h('div', { class: 'stat__label' }, 'Rent roll'), h('div', { class: 'stat__value' }, peso(active.filter((u) => u.occupancy_status === 'occupied').reduce((s, u) => s + Number(u.monthly_rent), 0))), h('div', { class: 'stat__sub' }, 'list rent of occupied units'))),
+      !stayOnly && h('a', { class: 'stat', href: `#/rent?property_id=${property.property_id}&status=outstanding` }, h('div', { class: 'stat__label' }, 'Rent roll'), h('div', { class: 'stat__value' }, peso(active.filter((u) => u.occupancy_status === 'occupied').reduce((s, u) => s + Number(u.monthly_rent), 0))), h('div', { class: 'stat__sub' }, 'Monthly rent from occupied units'))),
     h('div', { class: 'card' },
       h('div', { class: 'card__head' }, h('h2', null, 'Units')),
       unitBar,

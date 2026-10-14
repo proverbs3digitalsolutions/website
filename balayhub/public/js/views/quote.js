@@ -42,8 +42,6 @@ extendTranslations({
   'Please read and agree to the house rules.': 'Basahin at sang-ayunan ang house rules.',
   'Something went wrong. Please try again.': 'May mali. Subukan ulit.',
   'Please tick this box to continue.': 'I-tick ang box na ito para makapagpatuloy.',
-  'Guests': 'Guests',
-  'Dates': 'Dates',
   '{n} nights': '{n} na gabi',
   '1 night': '1 gabi',
   'Loading…': 'Naglo-load…',
@@ -54,7 +52,8 @@ extendTranslations({
 // Only a 404 is a bad link; a rate limit or a server error says so instead.
 const failTitle = (err) => (err.status === 404 ? t('Quote not found') : err.status === 429 ? t('Too many attempts') : t('Something went wrong'));
 
-const peso = (v) => { const n = Number(v || 0); return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`; };
+// Every amount on this page is owed, charged or totalled, so it always shows two decimals (D-86).
+const peso = (v) => { const n = Number(v || 0); return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; };
 // What the guest has typed in the details form. A language switch rebuilds the whole page, so this is handed to the redraw.
 const typedDetails = (el) => {
   const f = el.querySelector('form.form');

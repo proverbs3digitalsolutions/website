@@ -101,7 +101,7 @@ test('#1 the group summary and the receipt count refunds', async () => {
   assert.ok(a && b);
   const payId = (await sql('SELECT payment_id FROM booking_payments WHERE booking_id = $1', [rooms[0].booking_id]))[0].payment_id;
   const rc = (await owner.get(`/api/booking-payments/${payId}/receipt`)).data.receipt;
-  assert.equal(rc.balance_after, '600.00');
+  assert.equal(rc.balance_after, '-400.00'); // the balance at that payment: the refund came later (r10 K1)
 });
 
 test('no other file writes the balance formula', () => {

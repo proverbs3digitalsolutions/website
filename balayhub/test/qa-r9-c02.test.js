@@ -41,9 +41,10 @@ test('#1 Record refund asks first when the refund would leave money owed; Cancel
   assert.equal(refundOwedAfter({ status: 'confirmed', balance: -400 }, 1000), 600);
   assert.equal(refundOwedAfter({ status: 'confirmed', balance: '-400.00' }, 400), 0);
   assert.equal(refundOwedAfter({ status: 'confirmed', balance: -400 }, 100), 0);
+  assert.equal(refundOwedAfter({ status: 'confirmed', balance: 5200 }, 100), 0); // round 10 #1: a booking that already owes is not asked
   assert.equal(refundOwedAfter({ status: 'cancelled', balance: -400 }, 1000), 0);
   assert.match(refSrc, /title: 'Refund more than the overpayment\?'/);
-  assert.match(refSrc, /After this refund the guest will owe \$\{peso\(owed\)\} again\. Record it\?/);
+  assert.match(refSrc, /they will owe \$\{peso\(owed\)\}\. Record it\?/); // round 10 #1: new wording names both numbers
   assert.match(refSrc, /confirmText: 'Record refund'/);
   const ask = refSrc.indexOf("title: 'Refund more than the overpayment?'");
   const send = refSrc.indexOf('await post(`/reservations/${reservation.booking_id}/refunds`');

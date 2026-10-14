@@ -207,39 +207,77 @@ export function sameControl(old, doc = document) {
   return [...doc.querySelectorAll(old.tagName.toLowerCase())].find((el) => el.isConnected !== false && accName(el) === name) || null;
 }
 
-// Polls 0 to 500 ms like the tab fix, because views redraw after their await. Never takes focus the person (or the
-// view) has already put on something else; on the last try falls back to the page heading.
-function settleFocus(old, { refocusOld = true, stop = () => false } = {}) {
+// What to look for after a redraw: the control's tag and name, and for each ancestor up to #app the ancestor itself, the control's
+// index among that ancestor's same-tag elements and their count (so a toggle that renamed itself is still found by place).
+export function snapshotControl(old) {
+  const tag = old.tagName.toLowerCase();
+  const chain = [];
+  for (let p = old.parentElement; p; p = p.parentElement) {
+    const same = [...p.querySelectorAll(tag)];
+    chain.push({ el: p, index: same.indexOf(old), count: same.length });
+    if (p.id === 'app' || p === document.body) break;
+  }
+  return { tag, name: accName(old), chain };
+}
+
+// The control that took the old one's place: (1) same tag and name; else (2) the nearest recorded ancestor still on the page whose
+// count of same-tag elements is unchanged gives the element at the recorded index; else null.
+export function findReplacement(snap, doc = document) {
+  if (!snap) return null;
+  if (snap.name) {
+    const same = [...doc.querySelectorAll(snap.tag)].find((el) => el.isConnected !== false && accName(el) === snap.name);
+    if (same) return same;
+  }
+  for (const { el, index, count } of snap.chain) {
+    if (el.isConnected === false || index < 0) continue;
+    const now = [...el.querySelectorAll(snap.tag)];
+    if (now.length === count && now[index]) return now[index];
+  }
+  return null;
+}
+
+// Watches 0 to 2000 ms (views redraw after their await) and puts focus where the person was working. While focus is still on the
+// old control it keeps waiting (the redraw has not happened). Never takes focus the person (or the view) has put on something else;
+// from 800 ms with no replacement it falls back to the page heading, and a replacement that shows up later still takes over.
+export function keepFocus(old, { refocusOld = true, stop = () => false, snap } = {}) {
+  const taken = old?.tagName ? (snap || snapshotControl(old)) : null;
   let done = false;
-  [0, 40, 100, 200, 350, 500].forEach((ms, i, all) => setTimeout(() => {
+  let heading = null;
+  [0, 40, 100, 200, 350, 500, 800, 1200, 1600, 2000].forEach((ms) => setTimeout(() => {
     if (done) return;
+    if (stop()) { done = true; return; }
     const a = document.activeElement;
-    const free = !a || a === document.body || !a.isConnected;
-    if ((!free && a !== old) || stop()) { done = true; return; }
-    if (old?.isConnected) { done = true; if (refocusOld && free) old.focus(); return; }
-    const next = sameControl(old);
-    if (next) { done = true; next.focus(); return; }
-    if (i === all.length - 1) {
-      const head = document.querySelector('h1');
-      if (head && free) { head.setAttribute('tabindex', '-1'); head.focus(); }
+    const free = !a || a === document.body || !a.isConnected || a === heading;
+    if (!free && a !== old) { done = true; return; }
+    if (old?.isConnected) {
+      if (free && refocusOld && !old.disabled) { done = true; old.focus(); }
+      return;
+    }
+    const next = findReplacement(taken);
+    if (next && !next.disabled) { done = true; next.focus(); return; }
+    if (ms >= 800 && a !== heading) {
+      heading = document.querySelector('h1');
+      if (heading) { heading.setAttribute('tabindex', '-1'); heading.focus(); }
     }
   }, ms));
 }
 
-// Any button or link whose click drops focus to the page (its control was redrawn away) gets focus back.
-// Tabs have their own rule in app.js; dialogs restore focus to their opener.
+// Any button or link whose click drops focus to the page (its control was redrawn away) gets focus back, in dialogs too.
+// Tabs have their own rule in app.js; a dialog's own close rule restores focus to its opener.
 if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
   document.addEventListener('click', (e) => {
     const btn = e.target instanceof Element && e.target.closest('button, a[href]');
-    if (!btn || btn.closest('[role="tablist"], dialog')) return;
+    if (!btn || btn.closest('[role="tablist"]')) return;
     const hash = location.hash;
-    settleFocus(btn, { refocusOld: false, stop: () => location.hash !== hash });
+    const dlg = btn.closest('dialog');
+    keepFocus(btn, { refocusOld: false, stop: () => location.hash !== hash || Boolean(dlg && !dlg.isConnected) });
   }, true);
 }
 
 // ---------------------------------------------------------------- modal
 export function openModal({ title, body, onClose, wide }) {
   const opener = document.activeElement;
+  const openerSnap = opener?.tagName && opener !== document.body ? snapshotControl(opener) : null;
   const dlg = h('dialog', { class: 'modal', 'aria-label': title });
   if (wide) dlg.classList.add('modal--wide');
   const close = () => dlg.close();
@@ -247,7 +285,7 @@ export function openModal({ title, body, onClose, wide }) {
     h('div', { class: 'modal__head' }, h('h2', null, title), h('button', { class: 'modal__close', type: 'button', 'aria-label': 'Close', onclick: close }, '×')),
     h('div', { class: 'modal__body' }, body),
   );
-  dlg.addEventListener('close', () => { dlg.remove(); onClose?.(); settleFocus(opener); });
+  dlg.addEventListener('close', () => { dlg.remove(); onClose?.(); if (openerSnap) keepFocus(opener, { snap: openerSnap }); });
   dlg.addEventListener('click', (e) => { if (e.target === dlg) close(); });
   document.body.append(dlg);
   dlg.showModal();
@@ -399,7 +437,13 @@ export function dateOutOfRange(v) {
  * Build a <form> that validates on the server, shows field errors, prevents
  * double submission, and keeps input when offline.
  */
-export function makeForm({ fields, submitText = 'Save', onSubmit, cancel, draftKey, idempotent = false, extra }) {
+// A view's own field messages (the `check` hook) join the required-field ones; they never replace one.
+export function mergeChecks(missing, extra) {
+  for (const [k, v] of Object.entries(extra || {})) if (v && !missing[k]) missing[k] = v;
+  return missing;
+}
+
+export function makeForm({ fields, submitText = 'Save', onSubmit, cancel, draftKey, idempotent = false, extra, check }) {
   const submitBtn = h('button', { class: 'btn btn--primary', type: 'submit' }, submitText);
   const formError = h('div', { class: 'form-error' });
   const form = h('form', { class: 'form', novalidate: true },
@@ -444,6 +488,9 @@ export function makeForm({ fields, submitText = 'Save', onSubmit, cancel, draftK
     for (const el of form.querySelectorAll('input[type=date]')) {
       if (el.name && !missing[el.name] && dateOutOfRange(el.value)) { missing[el.name] = `${labelOf(el)} must be between 2000 and 2100.`; requiredOnly = false; }
     }
+    // The view's own checks (check(data, form) returns null or { field: message }) run in the same pass, so every message shows at once.
+    const more = check?.(readForm(form), form);
+    if (more && Object.keys(more).length) { mergeChecks(missing, more); requiredOnly = false; }
     if (Object.keys(missing).length) {
       clearSuccessToasts();
       formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert', dataset: { fieldNote: '' } }, requiredOnly ? 'Please fill in the highlighted fields.' : 'Please check the highlighted fields.'));

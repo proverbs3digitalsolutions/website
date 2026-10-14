@@ -175,7 +175,7 @@ export async function maintenanceView(el, { query }) {
         onSubmit: async (d, ctx) => {
           // The server refuses a next-due date outside its window, so say so at the field before any question (#30).
           const { earliest, latest } = nextDueWindow();
-          if (d.next_due < earliest || d.next_due > latest) { showErrors(ctx.form, { next_due: `Next due must be between ${earliest} and ${latest}.` }); return false; }
+          if (d.next_due < earliest || d.next_due > latest) { showErrors(ctx.form, { next_due: `Pick a date between ${fmtDate(earliest)} and ${fmtDate(latest)}.` }); return false; }
           // The hourly check opens a request as soon as a job is due, so a date already past opens one at once. Ask first (Q9).
           if (d.next_due < todayManila() && !await confirmDialog({ title: 'Next due date is in the past', text: 'A request opens at the next hourly check. Save anyway?', confirmText: 'Save anyway' })) return false;
           const body = { title: d.title, description: d.description, every_n: Number(d.every_n), every_unit: d.every_unit, next_due: d.next_due, priority: d.priority };

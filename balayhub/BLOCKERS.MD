@@ -2,7 +2,7 @@
 
 Things only the founder can do or decide before related work can go ahead. Automated runs add items here. The founder clears them by doing the item and ticking it, or by writing the decision in DECISIONS.MD.
 
-Last updated: 2026-10-14 (QA round 9 questions added; earlier rounds unchanged)
+Last updated: 2026-10-15 (QA round 10 questions added; earlier rounds unchanged)
 
 ## Security — do first
 
@@ -265,3 +265,13 @@ Each has the default already applied. Earlier open questions are not repeated he
 - [ ] **Spaces in discount codes.** A code typed with spaces is refused with a suggestion using dashes, so guests type exactly what you share. OK? *Default: refuse and suggest.*
 - [ ] **Grouped menu.** The menu is now in groups (Every day, Money, More tools, Setup), with More tools closed until you open it. OK? *Default: yes.*
 - [ ] **Taglish check (needs a native speaker).** New Taglish lines to read: the check-in empty guest row message, "Piliin" (Select), "Idagdag ang napili sa bill ko" (Add selected to my bill), the "1–3 unit" card on Get started, "Unang pangalan" (First name), and the new booking-page price line. *Default: keep the drafts.* The exact strings are in `public/js/views/checkin.js`, `pay.js`, `book.js`, `launchpad.js` and `landing.js`.
+
+## Questions from QA round 10 (2026-10-15)
+
+- [ ] **Production admin list (deploy check, founder action).** On the live server, open `deploy/.env` and check that `PLATFORM_ADMIN_EMAILS` lists only BalayHub staff. Anyone listed sees every workspace and every support ticket. *Default: blocked until checked.*
+- [ ] **Lease over booked stays.** A lease is now refused while short stays are booked inside it, and the message names the stays. Should it instead offer to cancel those stays? *Default: refuse and name the stays.*
+- [ ] **Cleaner pay and Unit owners in the menu.** They now sit under More tools for every host. Show them in Money once a host has a cleaner or a unit owner? *Default: More tools.*
+- [ ] **Rent receipts.** Printing a rent payment now gives an acknowledgement (not a BIR official receipt) with no receipt number. Should rent receipts get AR numbers like stay payments? *Default: no number.*
+- [ ] **Price format on guest pages.** Amounts owed show two decimals; advertised prices show whole pesos when exact, and calendar tiles show ₱2.8k with the exact price in the tile's name. OK? *Default: yes.*
+- [ ] **Taglish "Guests".** The Taglish pages keep the word "Guests" and use "Petsa" for Dates. OK, or use "Bisita"? *Default: Guests.*
+- [ ] **Inbound email before the alpha (founder action).** Guest replies reach the app only after the one-time inbound email setup on the server. Set it up before inviting alpha hosts so messaging is a full loop. *Default: the inbox banner tells hosts replies go to their email.*

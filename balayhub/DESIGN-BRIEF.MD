@@ -387,6 +387,7 @@ Icons are inline SVG on a 24×24 grid with no fill, a `currentColor` stroke at 1
 - Prints cards without a shadow, with a `1px solid #ccc` border and `break-inside: avoid`.
 - Resets the colour tokens to light values on `:root` (`--bg/--surface #fff`, `--text/--navy #1f2937`, `--muted #5d6762`, `--line #e4e8e1`, `--accent #0f5132`) and sets the `body` background to white.
 - Keeps gate-pass ID images from splitting across pages.
+- `.print-only` blocks are hidden on screen and shown (`display: block !important`) when printing. Use one beside a `.no-print` screen card for a printed acknowledgement (the rent payment page).
 
 Printable views are built from `.receipt` (with a 2px `--navy` rule under the header), `.statement` (owner statements) and `.gp` (gate pass). Use `.no-print` for anything interactive on those pages.
 
@@ -537,3 +538,13 @@ Printable views are built from `.receipt` (with a 2px `--navy` rule under the he
 - **Focus returns to the opener or its replacement** after a save or redraw: dialogs, buttons whose redraw rebuilds them, and tab rows (completes D-81).
 - **The content area leaves room for the floating Ask button** on desktop, and the top bar's account area can shrink (no sideways scroll at 390 px).
 - **Money text has two decimals** wherever a peso amount appears, in the app and on public pages (₱1,500.50).
+
+## 19. Patterns added in QA round 10 (2026-10-15)
+
+- **Focus is kept through slow redraws.** After a click, the shared watcher (`keepFocus` in `ui.js`) looks for 2 seconds and puts focus back on the same control, then on a replacement with the same name, then on the control at the same place (a toggle that renamed itself), then on the page heading. It never takes focus from something the person moved to. Dialog buttons are covered; tab rows wait for the new row. Views add no focus code for redraws and must not rename a control only to change its look; moving focus to the field with an error is still fine.
+- **Tap targets.** Link-style buttons (`.link-btn`, `.linkbtn`) are at least 24px tall (the minimum for inline text links); real buttons keep the 44px house size; the chart "Show as table" toggle is 32px tall on screens up to 480px wide.
+- **Print-only acknowledgement blocks:** `.print-only` (hidden on screen, shown in print) paired with `.no-print` on the screen card.
+- **Guest money format:** an amount owed, charged, paid, refunded or totalled always has two decimals. An advertised price (per night, "from") may show whole pesos when exact, and a calendar tile may be compact (₱2.8k) when its accessible name has the exact price.
+- **A form's own field checks** run in the same first pass as the required check (`makeForm({ check })` returns `{ field: message }`), so every problem shows at once and a required message is never replaced.
+- **Language switch keeps typed input:** a guest page that redraws itself calls `keepFormValues(root)` before and `restoreFormValues(root, snapshot)` after (`i18n.js`). File inputs can't be kept, and the page says so when a file was chosen.
+- **Report tiles say their basis** in the tile's sub-line.

@@ -300,6 +300,13 @@ async function returningGuestCode(bookingId, ...texts) {
   return (await returning.codeFor(bookingId)) || '';
 }
 
+// Address, city, province; the city or province is left out when the address already names it as a whole word.
+function addressLine(ctx) {
+  const [address, ...rest] = [ctx.address, ctx.city, ctx.province];
+  const has = (part) => new RegExp(`(^|[^\\p{L}])${part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^\\p{L}])`, 'iu').test(address || '');
+  return [address, ...rest.filter((p) => p && !has(p))].filter(Boolean).join(', ');
+}
+
 function variables(ctx, sender) {
   const guest = ctx.guest_name || ctx.guest_label || 'Guest';
   // The Wi-Fi password and door code show only from the day before check-in through check-out day.
@@ -310,7 +317,7 @@ function variables(ctx, sender) {
     guest_first_name: guest.split(' ')[0],
     listing_name: ctx.unit_name,
     property_name: ctx.property_name,
-    property_address: [ctx.address, ctx.city, ctx.province].filter(Boolean).join(', '),
+    property_address: addressLine(ctx),
     check_in: fmtDate(ctx.check_in),
     check_out: fmtDate(ctx.check_out),
     checkin_time: fmtTime(ctx.checkin_time),

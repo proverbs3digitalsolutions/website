@@ -4,6 +4,8 @@
 // helper of listings.js run on its own (listings.js imports the signed-in user from app.js, so it is read as text).
 // #34 and #49: Add listing keeps the basics open; price extras, guest info, booking page and payments and booking
 //   rules are closed details.form-section groups; a group opens on Edit when the listing holds a value in it.
+// QA round 10, lane C08 (#23): More details (room type, tags, building fields) is the first closed group, and the
+//   deposit moved from the basics into Booking page and payments, no longer required.
 // #37: the channel link reset button reads "Create a new link" and names its listing.
 // #50: the pricing explainer is a closed "How pricing works" section.
 // node --test --test-concurrency=1 test/qa-r9-c16.test.js
@@ -31,11 +33,12 @@ const fieldsFn = () => between(src, 'function listingFields(', 'async function a
 const groups = () => fieldsFn().split("h('details'").slice(1);
 const titleOf = (chunk) => chunk.match(/h\('summary', null, '([^']+)'\)/)?.[1];
 
-const BASICS = ['unit_name', 'unit_type', 'room_type', 'nightly_rate', 'cleaning_fee', 'max_guests', 'deposit_pct'];
+const BASICS = ['unit_name', 'unit_type', 'nightly_rate', 'cleaning_fee', 'max_guests'];
 const GROUP_FIELDS = {
+  'More details': ['room_type'],
   'Price extras': ['weekend_rate', 'holiday_rate', 'weekly_discount', 'fortnight_discount', 'monthly_discount', 'min_price', 'security_deposit_amount'],
   'Guest info': ['checkin_time', 'checkout_time', 'wifi_name', 'wifi_password', 'checkin_instructions', 'house_rules'],
-  'Booking page and payments': ['bookable_online', 'description', 'payment_option', 'balance_due_days'],
+  'Booking page and payments': ['bookable_online', 'description', 'payment_option', 'deposit_pct', 'balance_due_days'],
   'Booking rules': ['min_nights', 'cancellation_policy', 'cancellation_policy_text'],
 };
 
@@ -44,12 +47,12 @@ test('the basics stay open and every required field sits above the first collaps
   const firstGroup = text.indexOf("h('details'");
   assert.ok(firstGroup > 0, 'the optional groups are details elements');
   const required = [...text.matchAll(/required: true/g)].map((m) => m.index);
-  assert.equal(required.length, 4, 'unit name, type, nightly rate and deposit are the required fields');
+  assert.equal(required.length, 3, 'unit name, type and nightly rate are the required fields');
   for (const at of required) assert.ok(at < firstGroup, `the required field at ${at} is not inside a collapsed group`);
 });
 
-test('the four optional groups are details.form-section elements with the titles the plan names', () => {
-  assert.deepEqual(groups().map(titleOf), ['Price extras', 'Guest info', 'Booking page and payments', 'Booking rules']);
+test('the optional groups are details.form-section elements with the titles the plan names', () => {
+  assert.deepEqual(groups().map(titleOf), ['More details', 'Price extras', 'Guest info', 'Booking page and payments', 'Booking rules']);
   for (const g of groups()) assert.match(g, /^, \{ class: 'form-section', open: holds\(u, \[/, 'each group opens when holds() says so');
 });
 
@@ -57,12 +60,12 @@ test('each field sits in its group or the basics, and none was dropped', () => {
   const text = fieldsFn();
   const basics = text.slice(0, text.indexOf("h('details'"));
   for (const name of BASICS) assert.ok(basics.includes(`name: '${name}'`), `${name} is in the basics`);
-  assert.ok(basics.includes('tagsField(u.tags)'), 'tags are in the basics');
   const byTitle = Object.fromEntries(groups().map((g) => [titleOf(g), g]));
+  assert.ok(byTitle['More details'].includes('tagsField(u.tags)'), 'tags are in More details');
   for (const [title, names] of Object.entries(GROUP_FIELDS)) {
     for (const name of names) assert.ok(byTitle[title].includes(`name: '${name}'`), `${name} is in ${title}`);
   }
-  // Every field of the original form is still there: 7 basics, 1 tags, 4 groups.
+  // Every field of the form is still there: 5 basics, room type and tags in More details, 4 more groups.
   const placed = BASICS.length + 1 + Object.values(GROUP_FIELDS).flat().length;
   assert.equal(placed, 28, 'the form keeps all 28 fields');
 });
@@ -94,7 +97,7 @@ test('an Edit opens a group only when the listing holds a value other than its s
 });
 
 test('Add listing passes an empty listing, and Edit passes the saved unit to the same form', () => {
-  assert.match(src, /fields: \[propSelect, newProp, h\('hr', \{ class: 'divider' \}\), \.\.\.listingFields\(\{\}, roomTypes\)\]/);
+  assert.match(src, /fields: \[propSelect, newProp, h\('hr', \{ class: 'divider' \}\), \.\.\.listingFields\(\{\}, roomTypes, newPropMore\)\]/);
   assert.match(src, /listingFields\(\{ \.\.\.unit, tags: unit\.tags \}, roomTypes\)/);
 });
 

@@ -6,7 +6,7 @@
 const { pool, one, query, tx } = require('../db');
 const { mailEnabled } = require('./mailer');
 const messaging = require('./messaging');
-const { FEE, REFUNDED } = require('./balance');
+const { FEE } = require('./balance');
 
 const METHOD = { cash: 'Cash', bank_transfer: 'Bank transfer', gcash: 'GCash', maya: 'Maya', card: 'Card', channel_payout: 'Channel payout', other: 'Other' };
 
@@ -32,8 +32,10 @@ async function receiptData(paymentId) {
             COALESCE(g.full_name, b.guest_label, 'Guest') AS guest_name, g.email AS guest_email,
             u.unit_name, p.property_name, o.name AS workspace_name, ru.full_name AS recorded_by_name,
             (${FEE})::numeric(12,2) AS adjustments,
-            (b.total_amount - ${FEE} + ${REFUNDED} - COALESCE((SELECT SUM(x.amount) FROM booking_payments x WHERE x.booking_id = b.booking_id AND x.voided_at IS NULL
-                                          AND (x.payment_date, x.created_at) <= (bp.payment_date, bp.created_at)), 0))::numeric(12,2) AS balance_after
+            (b.total_amount - ${FEE} - COALESCE((SELECT SUM(x.amount) FROM booking_payments x WHERE x.booking_id = b.booking_id AND x.voided_at IS NULL
+                                          AND (x.payment_date, x.created_at) <= (bp.payment_date, bp.created_at)), 0)
+              + COALESCE((SELECT SUM(r.amount) FROM booking_refunds r WHERE r.booking_id = b.booking_id AND r.voided_at IS NULL
+                                          AND (r.refund_date, r.created_at) <= (bp.payment_date, bp.created_at)), 0))::numeric(12,2) AS balance_after
        FROM booking_payments bp
        JOIN bookings b ON b.booking_id = bp.booking_id
        JOIN units u ON u.unit_id = b.unit_id

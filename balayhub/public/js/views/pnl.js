@@ -6,7 +6,8 @@ import { initFilters, filterBar, rememberFilters, changed } from '../filters.js'
 
 const neg = (v) => Number(v) < 0;
 const money = (v) => h('span', { class: neg(v) ? 'amount--neg' : null }, peso(v));
-const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+// A month is YYYY-MM with a month 01 to 12 and a year 2000 to 2100 (the window every date box uses).
+export const MONTH_RE = /^(20\d\d|2100)-(0[1-9]|1[0-2])$/;
 const monthName = (ym) => new Date(`${ym}-01T00:00:00Z`).toLocaleDateString('en-PH', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
 function stat(label, value, sub) {
@@ -33,7 +34,7 @@ export async function pnlView(el, { query = {} } = {}) {
   async function load() {
     // A month that isn't YYYY-MM is dropped and the page says so, instead of quietly showing this month.
     const bad = filters.month && !MONTH_RE.test(filters.month);
-    if (bad) filters.month = '';
+    if (bad) filters.month = thisMonth;
     const month = filters.month || thisMonth;
     basis.textContent = `Counts stays that checked out in ${fmtMonth(month)} (finished stays only). Reports counts stays by check-in date.`;
     notice.replaceChildren(bad ? h('div', { class: 'alert alert--warn', role: 'alert' }, `That month isn't valid. Showing ${monthName(month)}.`) : '');
@@ -76,5 +77,5 @@ export async function pnlView(el, { query = {} } = {}) {
     quick: properties.length > 1 ? [{ name: 'property_id', label: 'Property', all: 'All properties', options: properties }] : [],
   });
   await load();
-  el.replaceChildren(pageHead({ title: 'Profit and loss', sub: 'Per unit, by month', actions: exportLink }), basis, bar, notice, box);
+  el.replaceChildren(pageHead({ title: 'Profit and loss', sub: 'Per unit, by month', actions: exportLink }), basis, notice, bar, box);
 }

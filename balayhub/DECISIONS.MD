@@ -2,7 +2,7 @@
 
 Every decision made on BalayHub, with the date and the reason. Newest decisions go at the bottom. When a decision changes, add a new entry and mark the old one **Superseded by D-xx**. Never delete history.
 
-Last updated: 2026-10-14 (D-85, alpha focus and QA round 9 calls)
+Last updated: 2026-10-15 (D-86, QA round 10 calls)
 
 ---
 
@@ -762,7 +762,7 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 > *Money*
 > - **One shared balance rule: total, less the channel fee (channel bookings only), less payments, plus refunds** (voided payments and refunds left out). It is written once in `src/lib/balance.js` and used everywhere a balance shows: reservation, list and CSV, pay link, receipts, daily close, owner portal, message templates, the assistant and the inbox. A refund past the overpayment on a live stay now shows the money owed again. *Supersedes the balance clause of D-34 and its repeats in D-77, D-82 and D-83 (each annotated above). The refund cap, never more than was paid, stands.* *Why:* a ₱1,000 refund on a ₱600 stay paid ₱1,000 said "Nothing more is owed" while ₱600 was owed. This was the round's one severe bug.
 > - **A refund that would leave money owed on a live stay asks first** (founder question 1). Default: allowed up to what was paid, after the question.
-> - **Every peso amount the server writes shows two decimals** (₱1,500.50), through one function, `fmtPeso` in `src/lib/messaging.js`. This includes messages, emails, labels, the discount list and the public `/stay` pages ("From ₱2,500.00"). The two-decimal "From" price on `/stay` is a call the founder may want to change (BLOCKERS).
+> - **Every peso amount the server writes shows two decimals** (₱1,500.50), through one function, `fmtPeso` in `src/lib/messaging.js`. *Guest pages refined 2026-10-15 by D-86 (advertised prices may be short).* This includes messages, emails, labels, the discount list and the public `/stay` pages ("From ₱2,500.00"). The two-decimal "From" price on `/stay` is a call the founder may want to change (BLOCKERS).
 > - **A rent payment goes to the oldest unpaid month first** (as PRD says). The Record form now says which month gets the money. "Partly paid" counts every month with some money on it, overdue or not. The round 8 question stays open.
 > - **A clean you do yourself, with no pay rate for you, is "Done by you, no pay"** and isn't counted as unpaid. A clean with a rate stays unpaid with its amount. It is a computed label (`pay_status: 'self'`), not a stored status.
 > - **Discount codes can't contain spaces** when an owner creates or edits one; the message suggests dashes ("Try QA-R9-BAD."). Guests typing a code are still forgiven a space.
@@ -798,3 +798,45 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 > *Not changed (recorded so later sweeps don't file them):* the refund cap is what was paid (D-34); rent is applied oldest month first (round 8 question); P&L and Reports keep their different bases (D-44); `reservation.updated` keeps changed amounts (D-84); the admin support reply toast (round 8 question); internal ids on staff deposit answers and the unlocked compare-then-write saves are round 10 items.
 >
 > *Why:* the alpha host has one to three properties and little time. Money must never read as settled when it isn't, guests must never be messaged or registered wrongly, and the first screens must show what a small host needs first.
+
+> **D-86 · 2026-10-15 · QA round 10 calls (alpha with small hosts).** The tenth QA sweep (8 lanes, 71 entries including carried items) was fixed in 14 code lanes (C01 to C14, plus two small follow-up lanes for tests). The calls below follow D-85: friction for owners of 1 to 3 properties first, then money and guests. Open questions are in BLOCKERS.MD under "Questions from QA round 10". Suite result at the merge: 2101 of 2103 passed; the two that did not were one inbox test that depends on the time of day around midnight in Manila (already on the carry list) and one old test whose pattern was fixed straight after. Security review: PASS.
+>
+> *Privacy*
+> - **An unsent internal note stays a note after a reload.** The inbox saves whether a draft is a note or a message, next to the draft text; an older draft with no saved mode opens as an internal note, so sending to the guest is always a deliberate switch. *Why:* a reloaded note came back as a guest message, one click from being emailed to the guest. This was the round's one severe bug.
+>
+> *Money and data*
+> - **A lease can't start over booked short stays.** Creating a lease, or moving its end later or clearing it, is refused with 409 `LEASE_OVER_STAYS` while a stay that is not cancelled falls inside it. The message names up to 5 stays and the first day the lease could start, and nothing is written. *Why:* completes the rule that a unit can't be both leased and let by the night (it was only enforced from the stay side).
+> - **Changing a reservation's dates asks "Use the new price?"** on Save when the accommodation amount still matches the old dates and your rates give a different price, as APP-FLOW always said. A host who typed a new amount is not asked.
+> - **The refund question appears only when a refund turns an overpayment into money owed,** and names both numbers. A refund above what is left is refused at the Amount field first, with the server's own sentence and no question.
+> - **A receipt's "Remaining balance" is the balance at that payment:** refunds recorded after that payment are left out. (Closes the round 9 carry item.)
+> - **The guest pay page lists refunds** ("Refunded to you") so its lines add up to the balance. The bill carries only the refund amount and date, never the reason or who recorded it.
+> - **Money on guest pages:** any amount owed, charged, paid, refunded or totalled shows two decimals. Advertised prices (per night, "from") show whole pesos when exact, and calendar tiles may show a short "₱2.8k" with the exact price in the tile's accessible name. *Refines D-85's "two decimals everywhere" for the guest pages.*
+>
+> *Guests*
+> - **Switching English and Tagalog keeps what the guest typed** on every guest page that redraws itself (check-in, review, pay), through one shared helper in `i18n.js`. Photos chosen but not yet uploaded cannot be kept by a browser, so the check-in page asks the guest to choose them again.
+> - **The pay page's failure text is the agreed sentence** (D-85), like the quote and booking pages. If the host has turned online payment off, the guest still sees "Online payment is not available for this booking. Please contact your host." (409 `NOT_ACCEPTING`).
+> - **"Dates" is "Petsa" in Taglish; "Guests" stays "Guests"** (everyday Taglish).
+>
+> *Small-host screens (alpha)*
+> - **The booking page can't be turned on with no listing ticked,** on screen. Turn off is never gated. *The server does not refuse yet; carried to round 11.*
+> - **Add listing's first screen asks only for what a stay needs** (building, listing name, type, nightly rate, cleaning fee, maximum guests). Address, property type, room type and tags are under "More details"; the deposit is under "Booking page and payments" and isn't required (blank saves 50%).
+> - **Cleaner pay and Unit owners are under More tools** until the founder says otherwise.
+> - **The plan card counts "Short-term listings"** and says monthly units are not counted.
+> - **Lost and found has "+ Add item"** for owners and managers (a listing, what it is, where, date found).
+> - **Supplies used with no supplies set up** says so and points to the Supplies page (owners and managers) or to the manager (cleaners), instead of a Save that can't work.
+> - **Plain wording:** the inbox banner no longer sends the host to "whoever set up BalayHub"; the rent roll caption, the recurring-job date range, the cleaner-rate messages, the cancelled group header and the support ticket tracker say what they mean. The search box on Reservations reads "Guest, code or listing".
+> - **Long-term owners get a monthly-rent reports guide;** the short-term reports guide is hidden for them.
+> - **Printing a rent payment prints an acknowledgement receipt** (not a BIR official receipt), with no receipt number yet.
+> - **Report tiles say how they count** (for example "Rooms counted by night; cleaning and extras by check-in"). The ways of counting themselves are unchanged (D-44, D-85).
+>
+> *Screens and keyboard*
+> - **Focus is kept after every save or redraw, even a slow one:** BalayHub watches for up to 2 seconds and puts focus back on the same control, its renamed replacement in the same place (Mark clean to Mark dirty), or the page heading; never on something the person already moved to. Buttons inside dialogs are covered, and tab rows wait for the new row to be drawn. *Completes D-85's focus rule, which stopped watching before the redraw arrived.* Views add no focus code of their own for redraws.
+> - **A form's own field checks run with the required check,** so "Accommodation is required" no longer hides "Check-out must be after check-in" (New quote, New group).
+> - **Link-style buttons are at least 24px tall** (the minimum for inline text links); buttons keep the 44px house size. Chart "Show as table" toggles are 32px tall on phones.
+> - **Every date box in reports uses 2000 to 2100,** custom report dates and a month in a Profit and loss link included. A bad month in the address shows "That month isn't valid, so this is <this month>." and the address is rewritten.
+> - **A past day's close lists damage reports reported by that day and still open,** under "Damage reports still open".
+> - **The calendar-link error is announced** as an alert, marks the link field invalid and moves focus to it.
+>
+> *Not changed (recorded so later sweeps don't file them):* the platform Admin menu shows only to addresses in `PLATFORM_ADMIN_EMAILS` (local dev includes stays@); automatic message names stay app-checked with no database index (same reason as add-on names); Reopen from Done goes to In progress; staff report access waits on the open founder question; managers view and use discount codes but only the owner creates or changes them (D-28; APP-FLOW corrected).
+>
+> *Why:* a small host must never send a private note to a guest by accident, never let a unit twice, never under-bill a changed stay, and never lose a keyboard user's place.

@@ -58,5 +58,5 @@ test('#24: a line under the P&L title says what it counts and where the check-in
   const src = read('pnl.js');
   assert.match(src, /basis\.textContent = `Counts stays that checked out in \$\{fmtMonth\(month\)\} \(finished stays only\)\. Reports counts stays by check-in date\.`/);
   // The line sits right under the title, before the filter bar.
-  assert.match(src, /pageHead\(\{ title: 'Profit and loss'[^}]*\}\), basis, bar, notice, box\)/);
+  assert.match(src, /pageHead\(\{ title: 'Profit and loss'[^}]*\}\), basis, notice, bar, box\)/);
 });

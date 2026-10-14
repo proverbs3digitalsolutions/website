@@ -78,6 +78,11 @@ export function offerRate({ typed, mode, suggestion, current }) {
   return Boolean(typed) && mode !== 'type' && suggestion != null && parseAmount(current) !== Number(suggestion);
 }
 // The offer's wording for the suggestions the click will fill. A quote with missing nightly rates has no stay suggestion, so only the cleaning fee is named.
+// Moving the dates and leaving the old accommodation amount in the box: Save asks before keeping a price the rates no longer give.
+export function askNewPrice({ changedDates, typed, stored, suggested }) {
+  return !!changedDates && suggested != null && Number(suggested) !== Number(stored) && Number(typed) === Number(stored);
+}
+
 export function rateOfferText({ accommodation_total: stay, cleaning_fee: cleaning }) {
   const parts = [];
   if (stay != null) parts.push(peso(stay));
@@ -346,7 +351,7 @@ export async function reservationsView(el, { query }) {
   const bar = filterBar({
     key: 'reservations', values: filters, defaults, onChange: load,
     extra: h('div', { class: 'res-view-select' }, viewSelect),
-    search: { placeholder: 'Search guest, code or listing' },
+    search: { placeholder: 'Guest, code or listing', label: 'Search guest, code or listing' },
     // A host with a few listings only needs the view picker and search up front; channel and property sit under More filters.
     more: [
       { name: 'channel', label: 'Channel', all: 'All channels', options: Object.entries(CHANNEL_LABEL) },
@@ -525,6 +530,8 @@ export async function reservationDetailView(el, { params, rerender }) {
   const editDetails = () => {
     // Offer line for a new date range: reserved from the start (hidden, not removed) so showing it never moves Save.
     const rate = h('button', { class: 'btn btn--secondary btn--sm', type: 'button', disabled: true, style: { visibility: 'hidden' } });
+    // The latest price lookup for the dates in the form; Save awaits it so a fast Save cannot skip the question.
+    let suggested = null; let seq = 0; let pending = Promise.resolve();
     const modal = formModal({
       title: 'Edit reservation', submitText: 'Save changes',
       fields: [
@@ -547,7 +554,20 @@ export async function reservationDetailView(el, { params, rerender }) {
       ],
       onSubmit: async (d) => {
         d.channel_fee = channelFeeToSave(d.channel, r.channel_fee, d.channel_fee);
-        const changes = changedFields(r, d);
+        let changes = changedFields(r, d);
+        // Dates moved and the amount box still holds the old price: ask whether to use the rates' price. Keep, or closing the question, saves as typed.
+        if (!r.ical_feed_id && ('check_in' in changes || 'check_out' in changes)) {
+          await pending;
+          const typed = parseAmount(d.accommodation_total);
+          const stored = Number(r.accommodation_total);
+          if (askNewPrice({ changedDates: true, typed, stored, suggested })) {
+            const nights = Math.round((Date.parse(d.check_out) - Date.parse(d.check_in)) / 86400000);
+            const money = (n) => peso(Number(n));
+            if (await confirmDialog({ title: 'Use the new price?', text: `The stay is now ${nights} night${nights === 1 ? '' : 's'}. Your rates give ${money(suggested)} for accommodation; this booking still says ${money(stored)}.`, confirmText: `Use ${money(suggested)}`, cancelText: `Keep ${money(stored)}` })) {
+              d.accommodation_total = suggested; changes = changedFields(r, d);
+            }
+          }
+        }
         // A changed guest count must be a whole number from 1; checked here so the message lands at the field.
         if ('num_guests' in changes) {
           const problem = guestsProblem(changes.num_guests);
@@ -562,7 +582,6 @@ export async function reservationDetailView(el, { params, rerender }) {
     form.addEventListener('change', (e) => { if (e.target.name === 'channel') syncChannelFee(form, true); });
     syncChannelFee(form, false);
     // New dates: ask for the price from the rates and offer it. Nothing is written until the click.
-    let suggested = null; let seq = 0;
     const showRate = () => {
       const on = suggested != null && parseAmount(form.elements.accommodation_total.value) !== Number(suggested);
       rate.style.visibility = on ? '' : 'hidden'; rate.disabled = !on;
@@ -576,10 +595,12 @@ export async function reservationDetailView(el, { params, rerender }) {
       const mySeq = ++seq;
       suggested = null; showRate();
       if (!ci.value || !co.value || co.value <= ci.value) return;
-      try {
-        const q = await get(`/reservations/quote${qs({ unit_id: r.unit_id, check_in: ci.value, check_out: co.value })}`);
-        if (mySeq === seq && !q.missing_rates) { suggested = q.accommodation_total; showRate(); }
-      } catch { /* the save reports a bad range; the offer just stays away */ }
+      pending = (async () => {
+        try {
+          const q = await get(`/reservations/quote${qs({ unit_id: r.unit_id, check_in: ci.value, check_out: co.value })}`);
+          if (mySeq === seq && !q.missing_rates) { suggested = q.accommodation_total; showRate(); }
+        } catch { /* the save reports a bad range; the offer just stays away */ }
+      })();
     });
   };
 
