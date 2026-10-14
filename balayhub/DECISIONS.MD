@@ -2,7 +2,7 @@
 
 Every decision made on BalayHub, with the date and the reason. Newest decisions go at the bottom. When a decision changes, add a new entry and mark the old one **Superseded by D-xx**. Never delete history.
 
-Last updated: 2026-10-13
+Last updated: 2026-10-14 (D-80, founder answers after QA round 4)
 
 ---
 
@@ -552,7 +552,7 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 - **Sign-up checks the "I agree" box in the browser** on the Get started steps and on the standalone sign-up page, so a missed tick never uses up the hourly sign-up limit. The standalone page is English only, as it has no Taglish text. Each problem is named once. The server limit is unchanged.
 - **The public booking quote refuses more guests than the listing allows,** the same as checkout. The booking page prices again when the guest count changes after dates are picked, so the limit message shows at once, in Taglish too.
 - **Invite errors show together,** email first.
-- **Wide tables and the calendar fade the edge where more columns are hidden,** driven by scroll position, in both themes. *Replaces the D-78 "wide tables show an edge shade" bullet, which did not show.*
+- **Wide tables and the calendar fade the edge where more columns are hidden,** driven by scroll position, in both themes. *Replaces the D-78 "wide tables show an edge shade" bullet, which did not show.* *Superseded in part by D-80 (2026-10-14): on phones, wide tables are stacked cards instead. The edge fade still applies on tablet and computer widths and to the calendar.*
 - **Every dialog is a full-width sheet on a phone** below 560px, including wide ones (they sat off-centre before).
 - **Audit details read in words** ("Pricing: Per night", "Price change: -10%") with no underscores.
 
@@ -564,3 +564,14 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 - Past nights may take a price and past dates may hold a group (back-entry); two cleaning tasks for the same unit and day are allowed; a proof file left on disk after a rare database failure is left for a tidy-up sprint; add-on descriptions stay in the language they were typed in.
 
 *Why:* each call picks the safest reading of the existing decisions: nothing a person typed is replaced, rounded or wiped without asking, a save never claims to have done what it didn't, and the guest and host money rules stay exact.
+
+**D-80 · 2026-10-14 · Founder answers after QA round 4.** The founder answered two questions from "Questions from QA round 4" in BLOCKERS.MD. Each answer replaces the default that was applied until now.
+
+*Phones and tables*
+- **Wide tables on phones show as stacked cards.** Each row becomes its own card, with a label and value pair for each column, instead of a table that scrolls sideways with an edge fade. This applies at phone width only. Tablet and computer keep the table. It supersedes the D-79 phone edge-fade choice for those tables (the D-79 line is annotated, not deleted). It is to be built in QA round 5.
+- **The calendar is not covered by this answer.** It keeps its edge fade as built.
+
+*Cleaning*
+- **Two cleaning tasks for the same unit on the same day are allowed,** with no warning. This is how the app works today, and it stays that way. Each task's pay still shows separately before it is marked paid.
+
+*Why:* the founder chose stacked cards over the two smaller options in the question (keep the fade, or add a "Swipe for more" hint). The same-day answer keeps the current behaviour, so the app does not change for it.

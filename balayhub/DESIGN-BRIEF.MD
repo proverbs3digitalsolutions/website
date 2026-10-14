@@ -1,6 +1,6 @@
 # BalayHub design brief
 
-Last updated: 2026-10-13
+Last updated: 2026-10-14 (phone tables, D-80)
 
 **Summary.** BalayHub is a phone-first web app (also an installable PWA) for Filipino rental and staycation hosts. It is built with plain CSS, one stylesheet (`public/css/app.css`), and small JavaScript helpers (`public/js/ui.js`). There is no framework and no CSS preprocessor. The look is calm and practical: Forest Green on soft off-white, Sand and Sun as warm accents, Poppins for headings, Inter for text, rounded cards, and large touch targets. Colours come from CSS custom properties on `:root`. A dark theme redefines the same tokens, so any component that uses tokens gets dark mode automatically. This brief records what is **actually built**. Every value below comes from the code. Where the code doesn't define a token (spacing, type sizes), the brief lists the values in use and says so.
 
@@ -475,7 +475,7 @@ Printable views are built from `.receipt` (with a 2px `--navy` rule under the he
 
 ## 13. Patterns added in QA round 4 (2026-10-14)
 
-- **Clipped-edge fade for wide tables and the calendar.** `app.js` sets `is-more-right` or `is-more-left` on a `.table-wrap` or `.cal-scroll` while columns are hidden on that side. CSS then fades the clipped 32px of the content itself with `mask-image`, so the fade shows over any cell colour in either theme. The calendar (`.cal-scroll`) fades the right edge only, because its first column is sticky. The fade is removed when printing. Use the same class pair on any new wide scroll box. Do not use a background gradient for this: it does not show over content.
+- **Clipped-edge fade for wide tables and the calendar.** `app.js` sets `is-more-right` or `is-more-left` on a `.table-wrap` or `.cal-scroll` while columns are hidden on that side. CSS then fades the clipped 32px of the content itself with `mask-image`, so the fade shows over any cell colour in either theme. The calendar (`.cal-scroll`) fades the right edge only, because its first column is sticky. The fade is removed when printing. Use the same class pair on any new wide scroll box. Do not use a background gradient for this: it does not show over content. *Round 4 answer (D-80, 2026-10-14): on phones, wide tables become stacked cards. The fade remains for tablet and computer widths, and for the calendar if it stays a grid. The round 5 fix adds the stacked-card pattern.*
 - **Wide dialogs use a class, not an inline width.** `openModal` with `wide` adds `modal--wide` (760px on a desktop, full width minus 24px). Below 560px every dialog is a full-width sheet, wide or not. Do not set a dialog's width in the style attribute.
 - **Theme switch.** The selected icon takes the text colour of the selected button (`color: inherit`), so it reads on the green selected state in both themes.
 - **Star rating uses the amber token** (`--amber`), not a fixed colour. It is about 5:1 on white in light mode.
