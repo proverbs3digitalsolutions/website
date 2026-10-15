@@ -63,9 +63,15 @@ async function loadForReview(token) {
   return b;
 }
 
+// Happy guests (4–5 stars) are invited to share on the host's public pages; 3 or less stay private.
+const shareLinksFor = (b, rating) => (rating >= 4 ? storedReviewLinks(b.review_links) : []);
+
 publicRouter.get('/public/review/:token', ah(async (req, res) => {
   const b = await loadForReview(req.params.token);
+  // A guest who comes back to a reviewed stay sees the same share links the send response gave.
+  const shareLinks = b.reviewed_at ? shareLinksFor(b, b.rating) : [];
   res.json({
+    ...(shareLinks.length ? { share_links: shareLinks } : {}),
     host: b.host_name, listing: b.unit_name, check_in: b.check_in, check_out: b.check_out, guest_first_name: b.guest_first_name || null,
     reviewed: Boolean(b.reviewed_at), open: b.open, guest_language: b.guest_language,
     not_yet: b.status === 'confirmed' && manilaToday() < b.check_in,
@@ -90,8 +96,7 @@ publicRouter.post('/public/review/:token', ah(async (req, res) => {
     throw err;
   }
   afterReview(b, body).catch((err) => console.error('[review] after-review steps failed:', err.message));
-  // Happy guests (4–5 stars) are invited to share on the host's public pages; 3 or less stay private.
-  const shareLinks = body.rating >= 4 ? storedReviewLinks(b.review_links) : [];
+  const shareLinks = shareLinksFor(b, body.rating);
   res.status(201).json(shareLinks.length ? { ok: true, share_links: shareLinks } : { ok: true });
 }));
 

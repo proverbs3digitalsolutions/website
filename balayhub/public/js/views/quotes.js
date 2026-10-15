@@ -37,6 +37,13 @@ export async function copyText(text, msg = 'Link copied.', title = 'Copy the lin
   }
 }
 
+// A quantity the quote can't hold: over the add-on's limit (max null = no limit), negative or not whole. Never fixed silently.
+export function addonQtyProblem(qty, max, name) {
+  const n = Number(qty);
+  if (!Number.isInteger(n) || n < 0) return 'Enter 0 or more.';
+  return max != null && n > max ? `Up to ${max} ${name} per stay.` : null;
+}
+
 function addonCost(a, nights, guests, qty) {
   const mult = { per_stay: 1, per_night: nights, per_guest: guests, per_guest_night: nights * guests }[a.pricing] || 1;
   return Math.round(Number(a.price) * mult * qty * 100) / 100;
@@ -80,7 +87,14 @@ async function newQuoteModal(listings, onSaved) {
   const form = makeForm({
     fields, submitText: 'Create quote', cancel: () => modal.close(),
     // The date check runs with the required check, so a blank Accommodation box can't hide it.
-    check: (d) => { const msg = datesProblem(d.check_in, d.check_out); return msg ? { check_out: msg } : null; },
+    check: (d) => {
+      const bad = {};
+      const msg = datesProblem(d.check_in, d.check_out);
+      if (msg) bad.check_out = msg;
+      const over = addonProblem();
+      if (over) bad.addons = over;
+      return Object.keys(bad).length ? bad : null;
+    },
     onSubmit: async (d) => {
       const cap = guestLimit(listings, d.unit_id);
       if (cap && Number(d.num_guests) > cap) { const m = `This listing allows up to ${cap} guests.`; throw new ApiError(m, { status: 400, fields: { num_guests: m } }); }
@@ -118,17 +132,28 @@ async function newQuoteModal(listings, onSaved) {
     const total = (stayBox === '' ? NaN : money(stayBox)) + money(el('cleaning_fee').value) + add - money(el('discount_amount').value);
     totalLine.textContent = Number.isNaN(total) ? 'Total for the guest: -' : `Total for the guest: ${peso(Math.max(total, 0))}${add ? ` (add-ons ${peso(add)})` : ''}`;
   }
+  // The first add-on count that can't be saved, as a message (null when all are fine).
+  const addonProblem = () => addons.map((a) => picks.has(a.addon_id) && addonQtyProblem(picks.get(a.addon_id).value, a.max_quantity, a.name)).find(Boolean) || null;
+  function showAddonProblem() {
+    const msg = addonProblem();
+    const wrap = addonBox.closest('[data-field]');
+    wrap?.classList.toggle('field--invalid', !!msg);
+    const err = wrap?.querySelector('.error');
+    if (err) err.textContent = msg || '';
+    for (const [id, input] of picks) {
+      const a = addons.find((x) => x.addon_id === id);
+      if (addonQtyProblem(input.value, a.max_quantity, a.name)) input.setAttribute('aria-invalid', 'true'); else input.removeAttribute('aria-invalid');
+    }
+  }
+  // On the form, registered after makeForm's own input handler, so the message is set again after that handler clears it.
+  form.addEventListener('input', (e) => { if (e.target.classList?.contains('hp-qty')) showAddonProblem(); });
   function drawAddons() {
     const unit = el('unit_id').value;
     picks.clear();
     addonBox.replaceChildren(...addons.filter((a) => !a.unit_ids?.length || a.unit_ids.includes(unit)).map((a) => {
       const qty = h('input', { class: 'input hp-qty', type: 'number', min: 0, max: a.max_quantity, value: 0, inputmode: 'numeric', 'aria-label': `${a.name} quantity` });
-      // Clamp as the host types, so the box never holds more than the add-on allows (or a negative count).
-      qty.addEventListener('input', () => {
-        if (Number(qty.value) > a.max_quantity) qty.value = a.max_quantity;
-        if (Number(qty.value) < 0) qty.value = 0;
-        drawTotal();
-      });
+      // The typed count is kept as typed; a count the add-on can't take shows its message next to the list until it is fixed.
+      qty.addEventListener('input', drawTotal);
       picks.set(a.addon_id, qty);
       return h('div', { class: 'hp-addon' }, h('span', null, h('strong', null, a.name), h('span', { class: 'muted small' }, ` ${peso(a.price)}`)), qty);
     }));

@@ -1366,15 +1366,23 @@ router.post('/units/:id/channels/rotate', managers, ah(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// Calendar links end in .ics; Booking.com's export is ical.html?t=..., so "ical" in the path or query counts too.
+const looksLikeCalendar = (url) => /\.ics$/i.test(url.pathname) || /ical/i.test(url.pathname + url.search);
+
 router.post('/ical-feeds', managers, ah(async (req, res) => {
   const body = validate(req.body, {
     unit_id: { type: 'uuid', required: true, label: 'Listing' },
     channel: { type: 'enum', values: ['airbnb', 'booking', 'agoda', 'vrbo', 'expedia', 'tripcom', 'other'], required: true, label: 'Channel' },
     url: { type: 'string', required: true, max: 1000, label: 'Calendar link' },
+    confirm_unusual_link: { type: 'bool' },
   });
   const unit = await loadUnit(req.user, body.unit_id);
   const url = ical.validateFeedUrl(body.url);
   if (!url) throw validationError({ url: 'Paste the full https:// calendar (iCal) link from the channel.' });
+  // Asks once: the person resends with confirm_unusual_link when the link is what they meant.
+  if (!looksLikeCalendar(url) && !body.confirm_unusual_link) {
+    throw new HttpError(409, "This doesn't look like a calendar link (they usually end in .ics). Save it anyway?", { code: 'ICAL_NOT_CALENDAR' });
+  }
   let feedId;
   try {
     feedId = (await one(

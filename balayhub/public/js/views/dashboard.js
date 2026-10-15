@@ -97,7 +97,7 @@ export async function dashboardView(el, { rerender }) {
       h('dt', null, 'Rent collected'), h('dd', null, peso(d.collected_this_month)),
       h('dt', null, 'Expenses'), h('dd', null, peso(d.expenses_this_month)),
       h('dt', null, 'Net (collected − expenses)'), h('dd', null, peso(Number(d.collected_this_month) - Number(d.expenses_this_month))),
-      h('dt', null, 'Open repairs'), h('dd', null, h('a', { href: '#/maintenance' }, String(d.open_maintenance_count)))),
+      h('dt', null, 'Open repairs'), h('dd', null, h('a', { class: 'link-tap', href: '#/maintenance' }, String(d.open_maintenance_count)))),
     h('div', { class: 'bar', role: 'img', 'aria-label': `${occupancyPct}% occupied` }, h('span', { style: { width: `${occupancyPct}%` } })),
     h('hr', { class: 'divider' }),
     h('a', { class: 'btn btn--secondary btn--block', href: '#/reports' }, icon('chart'), 'Open reports'));

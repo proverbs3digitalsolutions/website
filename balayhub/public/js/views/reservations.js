@@ -361,7 +361,7 @@ export async function reservationsView(el, { query }) {
           h('th', null, 'Check-in'), h('th', null, 'Check-out'),
           h('th', { class: 'num' }, 'Total'), h('th', { class: 'num' }, 'Balance'),
           h('th', null, 'Guest'), h('th', null, 'Listing'),
-          h('th', { class: 'col-sm-hide' }, 'Channel'), h('th', { class: 'col-sm-hide' }, 'Code'))),
+          h('th', { class: 'col-sm-hide col-md-hide' }, 'Channel'), h('th', { class: 'col-sm-hide' }, 'Code'))),
         h('tbody', null, reservations.map((r) => h('tr', { class: 'row-link', onclick: () => navigate(`#/reservations/${r.booking_id}`) },
           h('td', null, h('a', { class: 'link-tap', href: `#/reservations/${r.booking_id}`, 'aria-label': `${r.guest_name || r.guest_label || 'Guest'}, ${r.unit_name}, check-in ${fmtDate(r.check_in)}` }, fmtDate(r.check_in)), h('div', { class: 'muted small' }, `${r.nights} night${r.nights > 1 ? 's' : ''}`)),
           h('td', null, fmtDate(r.check_out)),
@@ -369,8 +369,10 @@ export async function reservationsView(el, { query }) {
           h('td', { class: `num${Number(r.balance) > 0 && r.status === 'confirmed' ? ' amount--neg' : ''}` }, r.status === 'confirmed' ? peso(r.balance) : '—'),
           h('td', null, h('strong', null, r.guest_name || r.guest_label || 'Guest'), r.guest_vip ? ' ⭐' : null, r.status === 'cancelled' ? [' ', badge('voided', 'Cancelled')] : null,
             r.num_guests ? h('div', { class: 'muted small' }, `${r.num_guests} guest${r.num_guests > 1 ? 's' : ''}`) : null),
-          h('td', null, r.unit_name, h('div', { class: 'muted small' }, r.property_name)),
-          h('td', { class: 'col-sm-hide' }, channelBadge(r.channel)),
+          h('td', { class: 'res-listing' }, h('div', { class: 'res-listing__name' }, r.unit_name, h('div', { class: 'muted small' }, r.property_name)),
+            // Between 960 and 1439px the Channel column is hidden, so the channel shows here instead.
+            h('div', { class: 'muted small col-md-show' }, CHANNEL_LABEL[r.channel] || r.channel)),
+          h('td', { class: 'col-sm-hide col-md-hide' }, channelBadge(r.channel)),
           h('td', { class: 'small col-sm-hide' }, r.confirmation_code)))))));
   }
   viewSelect.addEventListener('change', () => { filters.view = viewSelect.value; rememberFilters('reservations', filters); load(); });

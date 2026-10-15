@@ -34,8 +34,9 @@ function parseMoney(raw) {
 
 /**
  * Validate `body` against `spec`. Each field:
- *   { type: 'string'|'text'|'email'|'money'|'date'|'enum'|'uuid'|'int'|'bool'|'uuids',
- *     required, max, min, values, positive, label, message }  (`message` replaces the int min / whole-number text)
+ *   { type: 'string'|'text'|'email'|'money'|'percent'|'date'|'enum'|'uuid'|'int'|'bool'|'uuids',
+ *     required, max, min, values, positive, label, message }  (`message` replaces the int min / whole-number text;
+ *     'percent' reads like 'money' but its refusal names the decimals, not the peso example)
  * `check(out, fields)` runs after the field pass and returns null or { field: message }; its messages join the same 400.
  * Returns cleaned values (only keys present in spec; absent optionals -> null,
  * unless `partial` is set, in which case absent keys are omitted).
@@ -82,9 +83,13 @@ function validate(body, spec, { partial = false, check } = {}) {
         if (typeof v !== 'string' || !/^[+\d][\d\s()-]{6,19}$/.test(v)) { fields[key] = `Enter a valid phone number.`; break; }
         out[key] = v;
         break;
-      case 'money': {
+      case 'money':
+      case 'percent': {
         const m = parseMoney(v);
-        if (m === null) { fields[key] = `${label} must be a valid amount (e.g. 8500 or 8500.50).`; break; }
+        if (m === null) {
+          fields[key] = rule.type === 'percent' ? `${label} can have up to two decimals (e.g. 20 or 12.5).` : `${label} must be a valid amount (e.g. 8500 or 8500.50).`;
+          break;
+        }
         if (m.startsWith('-')) { fields[key] = `${label} cannot be negative.`; break; }
         if (rule.positive && Number(m) <= 0) { fields[key] = `${label} must be greater than zero.`; break; }
         if (Number(m) > 99999999.99) { fields[key] = `${label} is too large.`; break; }

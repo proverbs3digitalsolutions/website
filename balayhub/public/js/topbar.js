@@ -139,12 +139,19 @@ export function buildTopbar(ctx) {
 // Phone search: a full-screen dialog holding the same search. Escape or the back button closes it and returns focus to the Search icon.
 function openSearchSheet(ctx, returnTo) {
   closeTopbarLayers();
+  let search = null; // topsearch.js, set once it has loaded (a Tab before that just moves on)
   const slot = h('div', { class: 'tb-sheet__body' });
-  const sheet = h('dialog', { class: 'tb-sheet', 'aria-label': 'Search', onclose: () => { sheet.remove(); if (returnTo.isConnected) returnTo.focus(); } },
+  const sheet = h('dialog', { class: 'tb-sheet', 'aria-label': 'Search', onkeydown: (e) => {
+      if (e.key !== 'Tab') return;
+      // Same wrap as the More sheet: Close, the box, Clear, back to Close. Results stay arrow-key options, so they are not stops.
+      const stops = [...sheet.querySelectorAll('button:not([disabled]), input')].filter((x) => !x.closest('[hidden]'));
+      const to = search?.wrapTarget(stops, document.activeElement, e.shiftKey);
+      if (to) { e.preventDefault(); to.focus(); }
+    }, onclose: () => { sheet.remove(); if (returnTo.isConnected) returnTo.focus(); } },
     h('div', { class: 'tb-sheet__head' }, h('button', { type: 'button', class: 'tb-back', 'aria-label': 'Close search', onclick: () => sheet.close() }, icon('close'))), slot);
   document.body.append(sheet);
   sheet.showModal();
-  import('./topsearch.js').then((m) => m.mountSearch(slot, ctx, { sheet: true, onDone: () => sheet.close() }).focus(document.activeElement))
+  import('./topsearch.js').then((m) => { search = m; m.mountSearch(slot, ctx, { inSheet: true, onDone: () => sheet.close() }).focus(document.activeElement); })
     .catch(() => { toast("Couldn't open this. Check your connection and try again.", 'error'); sheet.close(); });
 }
 
@@ -159,13 +166,15 @@ function buildProfile(panel, pop, ctx, me, bookmarksPop, helpPop) {
       h('div', { class: 'tb-profile__who' }, h('strong', null, u.full_name), h('span', { class: 'muted small' }, `${u.organization_name} · ${ROLES[u.role] || ''}`))),
     h('ul', { class: 'tb-list tb-menu', role: 'menu', 'aria-label': 'Account' },
       item(row('users', 'My account'), { href: '#/account', onclick: done }),
-      u.role !== 'cleaner' && item(row('settings', 'Settings'), { href: '#/settings', onclick: done }),
+      u.role !== 'cleaner' && item(row('settings', 'Settings'), { href: '#/settings', onclick: done })),
+    // Between two menu lists, not inside one: a menu may own only menu items, and the theme buttons are radios (axe aria-required-children).
+    // The switch updates its buttons in place, so choosing a theme keeps the menu open and focus on the chosen radio.
+    h('div', { class: 'tb-theme' }, themeSwitch({ compact: true })),
+    h('ul', { class: 'tb-list tb-menu', role: 'menu', 'aria-label': 'Help and sign out' },
       item(row('bookmark', 'Bookmarks'), { phone: true, onclick: () => { me.focus(); done(); bookmarksPop.open(me); } }),
       item(row('help', 'Help & support'), { phone: true, onclick: () => { me.focus(); done(); helpPop.open(me); } }),
       h('li', { class: 'tb-sep', role: 'separator' }),
-      item(row('logout', 'Log out'), { onclick: () => { done(); ctx.logout(); } })),
-    // Outside the menu list: a menu may own only menu items, and the theme buttons are radios. Tab reaches them after the menu.
-    h('div', { class: 'tb-theme' }, themeSwitch({ compact: true })));
+      item(row('logout', 'Log out'), { onclick: () => { done(); ctx.logout(); } })));
 }
 
 // Add new has nothing to offer some people (empty list): hide the button then.

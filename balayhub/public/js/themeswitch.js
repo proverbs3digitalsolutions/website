@@ -5,10 +5,16 @@ import { h } from './ui.js';
 const KEY = 'bh-theme';
 export const currentTheme = () => { try { return localStorage.getItem(KEY) || 'system'; } catch { return 'system'; } };
 
+// Every mounted switch redraws its own buttons in place when the theme changes, so a second switch on the page never shows a stale choice.
+const mounted = new Set();
+
 export function setTheme(t) {
   try { localStorage.setItem(KEY, t); } catch { /* ignore */ }
   if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
   else document.documentElement.removeAttribute('data-theme');
+  for (const m of [...mounted]) {
+    if (m.wrap.isConnected) { m.seen = true; m.draw(); } else if (m.seen) mounted.delete(m); // left the page: forget it
+  }
 }
 
 // Three icons drawn in the same 18px box so none looks smaller than the others.
@@ -28,15 +34,29 @@ function themeIcon(k) {
 const OPTIONS = [['light', 'Light'], ['dark', 'Dark'], ['system', 'Match device']];
 
 // Segmented control; `compact` shows icons only (for menus and headers).
+// One radio group: the buttons are built once and only their attributes change, so focus is never lost; the checked
+// button is the single Tab stop and the arrow keys, Home and End move focus and selection together.
 export function themeSwitch({ compact = false, onChange } = {}) {
   const wrap = h('div', { class: `themeswitch${compact ? ' themeswitch--compact' : ''}`, role: 'radiogroup', 'aria-label': 'Colour theme' });
+  const pick = (k) => { setTheme(k); onChange?.(k); };
+  const KEYS = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
+  const btns = OPTIONS.map(([k, label], i) => h('button', {
+    type: 'button', role: 'radio', title: label, 'aria-label': label,
+    onclick: () => pick(k),
+    onkeydown: (e) => {
+      const to = e.key === 'Home' ? 0 : e.key === 'End' ? OPTIONS.length - 1 : KEYS[e.key] ? (i + KEYS[e.key] + OPTIONS.length) % OPTIONS.length : -1;
+      if (to < 0) return;
+      e.preventDefault();
+      btns[to].focus();
+      pick(OPTIONS[to][0]);
+    },
+  }, h('span', { 'aria-hidden': 'true' }, themeIcon(k)), !compact && h('span', null, label)));
   const draw = () => {
     const cur = currentTheme();
-    wrap.replaceChildren(...OPTIONS.map(([k, label]) => h('button', {
-      type: 'button', role: 'radio', 'aria-checked': String(cur === k), title: label, 'aria-label': label,
-      onclick: () => { setTheme(k); draw(); onChange?.(k); },
-    }, h('span', { 'aria-hidden': 'true' }, themeIcon(k)), !compact && h('span', null, label))));
+    btns.forEach((b, i) => { const on = cur === OPTIONS[i][0]; b.setAttribute('aria-checked', String(on)); b.setAttribute('tabindex', on ? '0' : '-1'); });
   };
+  wrap.append(...btns);
   draw();
+  mounted.add({ wrap, draw, seen: false });
   return wrap;
 }

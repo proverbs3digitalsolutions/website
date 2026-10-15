@@ -62,7 +62,7 @@ test('export includes the workspace data but no secrets', async () => {
 
 test('every table is covered by workspace deletion', async () => {
   const rows = await sql(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'`);
-  const ignored = ['schema_migrations', 'mail_sync_state'];
+  const ignored = ['schema_migrations', 'mail_sync_state', 'platform_coupons']; // platform_coupons is platform-level and holds no workspace data
   const missing = rows.map((r) => r.table_name).filter((t) => !ignored.includes(t) && !account.PURGED_TABLES.includes(t));
   assert.deepEqual(missing, [], 'add new tables to purgeOrganization() and PURGED_TABLES');
 });

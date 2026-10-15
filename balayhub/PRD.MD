@@ -2,7 +2,7 @@
 
 BalayHub is a web app that helps Filipino hosts run 1 to 10 rental units from one place. It covers condo staycations listed on Airbnb, Booking.com and Agoda, and long-term monthly rentals such as apartments, boarding houses, dorms and bedspaces. Hosts get one calendar for every channel, a direct booking page with GCash, Maya and card payments, a guest inbox, cleaning tasks, condo gate passes, deposits, reports and owner statements. Long-term landlords get properties, tenants, leases, rent, expenses and repairs. This document describes what is **actually built** today, feature by feature, and lists what is planned. It was written from the code (`src/routes`, `src/lib`, `public/js`, `db/migrations`) and the existing docs.
 
-Last updated: 2026-10-15 (QA round 14; D-91, D-92, F53 built)
+Last updated: 2026-10-15 (QA round 15; D-94, D-95; F54 plan coupons built)
 
 *2026-10-14 (D-85): the alpha targets owners of 1 to 3 properties; the Guesty-inspired ideas are on hold as reference only. QA puts small-host friction first.*
 
@@ -298,6 +298,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 **Done looks like:**
 - Consent is required to submit.
 - **At least one ID photo is required per registration** (QA round 14, D-92; a guest who already sent one can edit without sending another).
+- **A registration counts once one ID photo is stored** (QA round 15, D-95). Answers saved without a stored photo are a draft: the guest is asked for the photo, the host sees "Waiting for the guest's ID photo", and no "form received" alert, gate pass form or Launchpad credit is given until a photo is stored.
 - The form closes after the stay ends or is cancelled.
 - Staff can never open guest ID files.
 
@@ -438,13 +439,14 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - Without keys: pay manually and email; the platform admin sets the plan.
 - After the trial, or 7 days after paid-until, the workspace becomes **read-only**. Nothing is deleted. View and export still work.
 - Listing limits per plan. AI drafts only on plans with AI.
+- **Plan coupons (D-94, feature F54):** an owner can type a coupon code on Plan & billing to get a percent, fixed or free discount on the months it covers; one coupon at a time; "require card" means a one-time ₱20 card payment; a free coupon activates the plan with no payment.
 
 **Done looks like:**
 - Payments are confirmed with PayMongo directly. A background check every 10 minutes catches missed webhooks.
 - Complimentary workspaces cannot pay.
 - Read-only blocks changes with a clear message (HTTP 402) but still allows billing, support, account, push and cancelling deletion.
 
-**Out of scope:** Automatic recurring card billing. Invoices with VAT.
+**Out of scope:** Automatic recurring card billing (see Future: it needs PayMongo Subscriptions approval). Invoices with VAT. Coupons at sign-up (codes are entered on Plan & billing). Stopping a coupon for workspaces already using it.
 
 ### F21. Privacy, data export and deletion
 **Status:** MVP (built)
@@ -534,7 +536,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 
 **What it does:**
 - One filter bar on Reservations, Calendar, Inbox, Housekeeping, Listings, Guests, Reviews, Discount codes, Unit owners, Stay reports, Deposits, Properties, Tenants, Rent, Reports, Maintenance and Admin.
-- Search box, quick filters, a **More filters** panel with a count, chips for active filters, **Clear all** and **Reset filters**.
+- Search box, quick filters, a **Filters** button (funnel icon and a count of every active filter except search; called **More filters** until QA round 15, D-95) that opens a panel, chips for active filters that look set and pressable, **Clear all** (shown even with one chip) and **Reset filters**. A select that is set looks set, and every select has a chevron.
 - Filters are remembered per person and per page in this browser. Filters in the URL win, so links can be shared.
 
 **Done looks like:**
@@ -568,6 +570,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 **What it does:**
 - **Platform admin** page: counts for on trial, paying, monthly revenue, ended or overdue. Workspace table with filters (status, business type, plan, signup dates, sort).
 - Click a workspace to set plan, paid until, trial end date and a note. Changes are audit-logged. The demo cannot be changed.
+- **Plan coupons** (round 15, D-94): list, make, edit and switch off coupons for BalayHub's plans, and see who used each one (F54).
 - **Support queue**: tickets from every workspace, urgent and new first. Ticket page: reply or internal note, assign to me, change status, mark resolved, customer details, attachments.
 
 **Done looks like:**
@@ -990,6 +993,30 @@ Search never matches phone numbers, emails, notes or money. Bookmarks hold up to
 
 ---
 
+### F54. Platform plan coupons
+
+**Status:** MVP (built in QA round 15, 2026-10-15; founder request, decision D-94). Contract: `docs/contracts/platform-coupons.md`.
+
+**For:** Platform admins (make and manage coupons). Workspace owners (use them). Alpha and beta testers are the first users.
+
+**What it does:**
+- **Plan coupons page** for platform admins: a percent discount (1 to 99%), a fixed peso amount off each covered month, or free access. It applies to the first month, the first N months (2 to 36) or every month. A coupon can be limited to some plans, a total number of uses, a start and end date and time (Manila time), and one use per workspace. A **Generate** button makes a readable code. A **Require a card payment** switch is available.
+- **Have a coupon code?** on Plan & billing for owners. Typing a code shows the new total before paying. Once a workspace has used a coupon, its months are discounted automatically on each later checkout until they run out.
+- **Free activation:** a free coupon without "require card" switches the plan on at once, with no payment. With "require card", the owner pays ₱20 once, by card only, and gets the free months.
+- Each coupon shows who used it and how much discount it has given. A coupon that has been used cannot have its discount changed; switch it off and make a new one.
+
+**Done looks like:**
+- A valid code lowers the single amount sent to PayMongo; the payment is trusted only after PayMongo confirms that same amount.
+- A discounted total above zero is never below ₱20 (BalayHub's own floor; PayMongo's documented minimum is ₱1).
+- Only one coupon is live per workspace; a code can be used once per workspace unless the admin turns that off.
+- A workspace that is already paid more than 45 days ahead cannot start another discounted payment ("Your plan is already paid ahead. Your coupon applies at your next renewal.").
+- Wrong codes get one generic answer; 10 failed tries per workspace or 60 per IP in 15 minutes stops further tries for the rest of that window.
+- Managers, staff, cleaners and the demo cannot use coupons; non-admins get "Not found" for the admin page.
+
+**Out of scope:** automatic monthly card charging (see Future), coupons at sign-up, stopping a coupon for workspaces already using it, referral or affiliate codes, and the hosts' guest discount codes (F17, a different feature).
+
+---
+
 ## Cross-cutting requirements (built)
 
 - **Security:** workspace scoping on every query, 404 for out-of-scope records, CSRF header on writes, strict Content-Security-Policy, text-only rendering, rate limits, scrypt passwords, HttpOnly cookies (7-day absolute, 12-hour idle).
@@ -1005,6 +1032,7 @@ Search never matches phone numbers, emails, notes or money. Bookmarks hold up to
 | Item | Priority | Notes |
 |---|---|---|
 | **Top bar: search, bookmarks, add new, notifications, help, profile (F53)** | **Built 2026-10-15 (QA round 14)** | Founder request D-90, built as D-91. Search endpoint, bookmarks table and notifications feed are in BACKEND-SCHEMA 2.17, 6.4 and 20. Rent alerts for the bell in long-term workspaces are a later alert type. |
+| **Automatic monthly card charging (true auto-renew)** | **Future; waiting on PayMongo** | Needs PayMongo's Subscriptions feature, which PayMongo must review and approve for BalayHub's account first (cards and Maya; saved cards otherwise work only while the customer is present). Would add a saved card, a monthly charge job, retries and emails. Today owners renew by hand and coupons discount each renewal. BLOCKERS asks whether to request approval. |
 | **SMS reminders to guests** | **Next (planned)** | Listed in README "Not built yet". Today all guest messages are email. |
 | **Facebook Messenger inbox** | **Later** | Listed in README "Not built yet". Today the Inbox is email only. |
 | **Phase 1: Money done right** (itemised stay bill with extras, payment proof uploads and bank transfer, cancellation policies and refund log, deposit % per listing, host net per booking) | **Built 2026-10-13** | Spec: docs/specs/PHASE-1-MONEY.md. Decisions D-31 to D-36. |

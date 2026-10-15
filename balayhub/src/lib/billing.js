@@ -6,9 +6,13 @@
 
 const crypto = require('crypto');
 const config = require('../config');
-const { tx, one, query } = require('../db');
+const { pool, tx, one, query } = require('../db');
 const { PLANS } = require('./plans');
 const { audit } = require('./audit');
+const { HttpError } = require('./http');
+const { fmtPeso } = require('./messaging');
+const coupons = require('./coupons');
+const { toCentavos, toPesos } = coupons;
 
 const MONTH_OPTIONS = { 1: 1, 3: 3, 12: 10 }; // months → months charged (12 months = 2 free)
 
@@ -23,39 +27,76 @@ function price(plan, months) {
 const paymongoClient = require('./paymongo');
 const paymongo = (method, path, body) => paymongoClient.request(config.paymongoSecretKey, method, path, body);
 
-async function createCheckout(user, plan, months) {
-  const amount = price(plan, months);
-  const billing = await one(
-    `INSERT INTO billing_payments (organization_id, plan, months, amount, created_by) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-    [user.organization_id, plan, months, amount, user.user_id]);
+// Give up a checkout that never got a payment: mark it failed and give its coupon slot back. A paid row is left alone.
+async function failCheckout(billingId, redemptionId) {
+  await query(`UPDATE billing_payments SET status = 'failed' WHERE billing_id = $1 AND status = 'pending'`, [billingId]);
+  await coupons.releaseIfUnused(pool, redemptionId);
+}
+
+// Start a PayMongo checkout, or activate the period with no payment when a coupon makes it free. The coupon code is
+// optional: a workspace that already holds a coupon keeps its discount on later checkouts (see coupons.resolve).
+async function createCheckout(user, plan, months, { couponCode } = {}) {
+  // The workspace row is locked so two checkouts can't both take the last slot of a coupon.
+  const { billing, q, redemptionId } = await tx(async (db) => {
+    const { rows: [org] } = await db.query(
+      'SELECT organization_id, plan, is_demo, trial_ends_at, paid_until FROM organizations WHERE organization_id = $1 FOR UPDATE',
+      [user.organization_id]);
+    const q = await coupons.resolve(db, { org, code: couponCode, plan, months });
+    const ahead = couponAheadError(org, q);
+    if (ahead) throw ahead;
+    // A checkout that covers no months holds no coupon slot.
+    const redemptionId = q.covered > 0
+      ? await coupons.reserve(db, { org, userId: user.user_id, coupon: q.coupon, redemption: q.redemption })
+      : null;
+    const { rows: [billing] } = await db.query(
+      `INSERT INTO billing_payments (organization_id, plan, months, amount, list_amount, discount_amount, coupon_redemption_id, coupon_months, provider, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [user.organization_id, plan, months, toPesos(q.amountC), toPesos(q.listC), toPesos(q.discountC), redemptionId, q.covered,
+        q.free ? 'coupon' : 'paymongo', user.user_id]);
+    return { billing, q, redemptionId };
+  });
+  if (q.free) {
+    try {
+      await markPaid(billing.billing_id, { method: 'coupon' });
+    } catch (err) {
+      await failCheckout(billing.billing_id, redemptionId);
+      throw err;
+    }
+    const { rows: [org] } = await query('SELECT paid_until FROM organizations WHERE organization_id = $1', [user.organization_id]);
+    return { billing_id: billing.billing_id, activated: true, plan, paid_until: org.paid_until };
+  }
   const label = `BalayHub ${PLANS[plan].name} — ${months} month${months > 1 ? 's' : ''}`;
+  const code = q.discountC > 0 ? q.coupon.code : null;
   let data;
   try {
     data = await paymongo('POST', '/checkout_sessions', {
     data: {
       attributes: {
-        line_items: [{ currency: 'PHP', amount: Math.round(amount * 100), name: label, quantity: 1 }],
-        payment_method_types: config.paymongoMethods,
-        description: `${label} for ${user.organization_name}`,
+        line_items: [{ currency: 'PHP', amount: q.amountC, name: code ? `${label} (coupon ${code})` : label, quantity: 1 }],
+        payment_method_types: q.cardOnly ? ['card'] : config.paymongoMethods,
+        description: `${label} for ${user.organization_name}${code ? ` · ${fmtPeso(toPesos(q.listC))} before coupon` : ''}`,
         reference_number: billing.billing_id,
         send_email_receipt: true,
         show_description: true,
         show_line_items: true,
         success_url: `${config.appUrl}/#/settings?billing=${billing.billing_id}`,
         cancel_url: `${config.appUrl}/#/settings?billing_cancelled=1`,
-        metadata: { billing_id: billing.billing_id, organization_id: user.organization_id },
+        metadata: { billing_id: billing.billing_id, organization_id: user.organization_id, ...(code ? { coupon_code: code } : {}) },
       },
     },
     });
   } catch (err) {
-    await query(`UPDATE billing_payments SET status = 'failed' WHERE billing_id = $1`, [billing.billing_id]);
+    await failCheckout(billing.billing_id, redemptionId);
     throw err;
   }
   const id = data?.data?.id;
   const url = data?.data?.attributes?.checkout_url;
-  if (!id || !url) throw Object.assign(new Error('The payment service returned an unexpected response.'), { status: 502 });
+  if (!id || !url) {
+    await failCheckout(billing.billing_id, redemptionId);
+    throw Object.assign(new Error('The payment service returned an unexpected response.'), { status: 502 });
+  }
   await query('UPDATE billing_payments SET checkout_id = $2, checkout_url = $3 WHERE billing_id = $1', [billing.billing_id, id, url]);
-  await audit(null, user, 'billing.checkout_started', 'billing_payment', billing.billing_id, { plan, months, amount });
+  await audit(null, user, 'billing.checkout_started', 'billing_payment', billing.billing_id, { plan, months, amount: toPesos(q.amountC) });
   return { billing_id: billing.billing_id, checkout_url: url };
 }
 
@@ -77,6 +118,18 @@ const addDays = (s, n) => { const x = new Date(`${s}T00:00:00Z`); x.setUTCDate(x
 const daysBetween = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000);
 const dayBefore = (s) => { const x = new Date(`${s}T00:00:00Z`); x.setUTCDate(x.getUTCDate() - 1); return x.toISOString().slice(0, 10); };
 const dayAfter = (s) => { const x = new Date(`${s}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + 1); return x.toISOString().slice(0, 10); };
+const manilaToday = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+
+// A discounted checkout waits until the workspace is at most this many days paid ahead. Otherwise coupon checkouts
+// stack paid time far ahead, and a later plan change converts that time into another plan at the old price.
+const AHEAD_LIMIT_DAYS = 45;
+// The error a discounted checkout gets while paid too far ahead, or null. `org` needs paid_until; `quote` is the
+// answer from coupons.resolve (discountC). The route's coupon preview calls this too, so the two can't disagree.
+function couponAheadError(org, quote) {
+  if (quote.discountC <= 0 || !org.paid_until) return null;
+  if (String(org.paid_until).slice(0, 10) <= addDays(manilaToday(), AHEAD_LIMIT_DAYS)) return null;
+  return new HttpError(409, 'Your plan is already paid ahead. Your coupon applies at your next renewal.', { code: 'COUPON_AHEAD' });
+}
 
 // Apply a confirmed payment once: switch the plan and extend "paid until".
 async function markPaid(billingId, { method } = {}) {
@@ -84,7 +137,7 @@ async function markPaid(billingId, { method } = {}) {
     const { rows: [b] } = await db.query('SELECT * FROM billing_payments WHERE billing_id = $1 FOR UPDATE', [billingId]);
     if (!b || b.status === 'paid') return false;
     const { rows: [org] } = await db.query('SELECT plan, paid_until, trial_ends_at FROM organizations WHERE organization_id = $1 FOR UPDATE', [b.organization_id]);
-    const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    const today = manilaToday();
     const paidUntil = org.paid_until ? String(org.paid_until).slice(0, 10) : null;
     let start = today;
     let bonusDays = 0;
@@ -106,6 +159,7 @@ async function markPaid(billingId, { method } = {}) {
       `UPDATE billing_payments SET status = 'paid', paid_at = now(), period_start = $2, period_end = $3, payment_method = $4 WHERE billing_id = $1`,
       [b.billing_id, start, end, method || null]);
     await db.query(`UPDATE organizations SET plan = $2, paid_until = $3 WHERE organization_id = $1`, [b.organization_id, b.plan, end]);
+    await coupons.applyPaid(db, b);
     await audit(db, { organization_id: b.organization_id, user_id: b.created_by }, 'billing.paid', 'billing_payment', b.billing_id,
       { plan: b.plan, months: b.months, amount: b.amount, paid_until: end });
     return true;
@@ -123,7 +177,7 @@ async function refresh(billingId) {
   const paidPayments = (a.payments || []).filter((p) => p?.attributes?.status === 'paid');
   const paid = paidPayments.length > 0 || a.payment_intent?.attributes?.status === 'succeeded';
   // We looked the checkout up by our own stored id, so it is ours; still check the amount (centavos).
-  const expected = Math.round(Number(b.amount) * 100);
+  const expected = toCentavos(b.amount);
   const paidAmount = paidPayments.reduce((s, p) => s + Number(p.attributes.amount || 0), 0);
   const listed = (a.line_items || []).reduce((s, li) => s + Number(li.amount || 0) * Number(li.quantity || 1), 0);
   const amountOk = paidAmount >= expected || (paidAmount === 0 && listed === expected);
@@ -135,6 +189,7 @@ async function refresh(billingId) {
   if (paid && !amountOk) console.error(`[billing] amount mismatch on ${b.billing_id}: expected ${expected}, got ${paidAmount || listed}`);
   if (a.status === 'expired' || b.status === 'expired') {
     await query(`UPDATE billing_payments SET status = 'expired' WHERE billing_id = $1 AND status = 'pending'`, [b.billing_id]);
+    await coupons.releaseIfUnused(pool, b.coupon_redemption_id);
     return 'expired';
   }
   return 'pending';
@@ -174,7 +229,12 @@ async function reconcile() {
     if (st === 'paid') paid += 1;
     else await query(`UPDATE billing_payments SET status = 'expired' WHERE billing_id = $1 AND status = 'pending'`, [r.billing_id]);
   }
+  // Coupon slots held for two days by checkouts that never got a payment go back to the coupon.
+  await query(
+    `UPDATE platform_coupon_redemptions r SET status = 'released', released_at = now()
+      WHERE r.status = 'pending' AND r.created_at < now() - interval '2 days'
+        AND NOT EXISTS (SELECT 1 FROM billing_payments b WHERE b.coupon_redemption_id = r.redemption_id AND b.status IN ('paid', 'pending'))`);
   return paid;
 }
 
-module.exports = { periodEnd, enabled, price, MONTH_OPTIONS, createCheckout, refresh, markPaid, verifySignature, reconcile, addMonths };
+module.exports = { periodEnd, enabled, price, MONTH_OPTIONS, createCheckout, refresh, markPaid, verifySignature, reconcile, addMonths, couponAheadError };

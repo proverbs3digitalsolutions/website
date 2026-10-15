@@ -200,13 +200,13 @@ test('logout() clears this person\'s recent searches (shared machines), with the
   assert.ok(strip(read('public/js/topsearch.js')).includes("`bh-recent-search-${user?.user_id ?? 'x'}`"), 'same key format as topsearch.js');
 });
 
-test('avatar menu: the menu list owns only menu items and separators; the theme switch sits outside the menu list (axe aria-required-children)', () => {
+test('avatar menu: menu lists own only menu items and separators; the theme switch sits between the lists, right after Settings (axe aria-required-children)', () => {
   const bar = strip(read('public/js/topbar.js'));
   const fn = bar.slice(bar.indexOf('function buildProfile'));
-  const ul = fn.slice(fn.indexOf("h('ul'"), fn.indexOf("h('div', { class: 'tb-theme'"));
-  assert.doesNotMatch(ul, /role: 'radiogroup'|tb-theme/, 'no theme row inside the ul');
-  assert.ok(fn.indexOf('themeSwitch(') > fn.indexOf("item(row('logout'"), 'the theme row comes after the list');
-  assert.match(fn, /tb-theme/);
+  const theme = fn.indexOf("h('div', { class: 'tb-theme'");
+  assert.ok(theme > fn.indexOf("item(row('settings'") && theme < fn.indexOf("item(row('bookmark'"), 'the theme row comes after Settings and before Bookmarks');
+  for (const ul of fn.split("h('ul'").slice(1)) assert.doesNotMatch(ul.slice(0, ul.indexOf("h('div', { class: 'tb-theme'") > 0 ? ul.indexOf("h('div', { class: 'tb-theme'") : undefined).replace(/themeSwitch\(/g, ''), /role: 'radiogroup'|tb-theme/, 'no theme row inside a ul');
+  assert.match(fn, /themeSwitch\(\{ compact: true \}\)/);
 });
 
 test('sidebar More tools summary is at least 24px tall on desktop (axe target-size)', () => {

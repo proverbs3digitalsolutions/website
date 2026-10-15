@@ -123,7 +123,8 @@ export async function reportsView(el, { query }) {
     }
     exportReady(true);
     exportLink.href = `/api/reports/export${qs(apiParams())}`;
-    body.replaceChildren(h('div', { class: 'skeleton' }));
+    // Only the first load shows the skeleton. A period change keeps the old report until the new one is ready, so the page does not collapse and regrow.
+    if (!body.firstChild) body.replaceChildren(h('div', { class: 'skeleton' }));
     let r;
     try { r = await get(`/reports${qs(apiParams())}`); } catch (err) {
       body.replaceChildren(h('div', { class: 'alert alert--error' }, err.message));

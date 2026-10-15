@@ -52,7 +52,7 @@ export async function gatepassCard(bookingId, rerender) {
       : p.status === 'failed' ? badge('overdue', 'Not sent') : badge('active', 'Sent');
   return h('div', { class: 'card' },
     h('div', { class: 'card__head' }, h('h2', null, 'Gate pass'), status),
-    !d.admin_email ? h('p', { class: 'muted small' }, 'Send the guests\' details to the building admin automatically. ', h('a', { href: '#/gatepass-settings' }, 'Set up the admin email'), '.')
+    !d.admin_email ? h('p', { class: 'muted small' }, 'Send the guests\' details to the building admin automatically. ', h('a', { class: 'link-tap', href: '#/gatepass-settings' }, 'Set up the admin email'), '.')
       : h('div', null,
         p?.sent_at && h('p', { class: 'small' }, `Sent to ${p.sent_to} on ${fmtDateTime(p.sent_at)}${p.send_count > 1 ? ` (${p.send_count} times)` : ''}.`),
         p?.acknowledged_at && h('p', { class: 'small' }, `Admin confirmed ${fmtDateTime(p.acknowledged_at)}.`),

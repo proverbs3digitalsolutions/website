@@ -356,10 +356,11 @@ export async function ownerStatementView(el, { params, query = {}, rerender }) {
       field({ name: 'amount', label: 'Amount paid', type: 'money', required: true, value: remaining > 0 ? remaining.toFixed(2) : '', hint: owes ? 'This month the owner owes you, so there is nothing to pay out.' : `${peso(remaining)} of the ${s.month_label} payout is still unpaid.` }),
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'paid_on', label: 'Date paid', type: 'date', required: true, value: todayManila(), max: todayManila() }),
-        field({ name: 'method', label: 'Method', type: 'select', required: true, value: 'gcash', placeholderOption: false, options: PAYOUT_METHODS })),
+        field({ name: 'method', label: 'Method', type: 'select', placeholderOption: 'Choose…', options: PAYOUT_METHODS })),
       field({ name: 'reference_number', label: 'Reference number (optional)', maxlength: 100 }),
       field({ name: 'note', label: 'Note (optional)', type: 'textarea', maxlength: 500 }),
     ],
+    check: (d) => (!d.method ? { method: 'Choose how you paid the owner.' } : null),
     onSubmit: async (d, { idempotencyKey }) => {
       try { await post(`${base}/payouts`, { ...d, month }, { idempotencyKey }); } catch (err) {
         if (err.code !== 'PAYOUT_OVER_DUE') throw err;
@@ -461,7 +462,7 @@ export async function ownerStatementView(el, { params, query = {}, rerender }) {
             h('td', null, [e.description || e.category.replace('_', ' '), e.vendor_name].filter(Boolean).join(' · ')),
             num(peso(e.amount)),
             h('td', null, e.has_receipt && e.receipt_file_id
-              ? h('a', { href: `/api/files/${e.receipt_file_id}`, target: '_blank', rel: 'noopener', 'aria-label': `Open receipt for ${e.description || 'expense'}` }, 'Receipt')
+              ? h('a', { class: 'link-tap', href: `/api/files/${e.receipt_file_id}`, target: '_blank', rel: 'noopener', 'aria-label': `Open receipt for ${e.description || 'expense'}` }, 'Receipt')
               : '—'))))))],
       h('h3', { class: 'subhead', style: { marginTop: '16px' } }, 'Summary'),
       h('dl', { class: 'dl statement__sum' },

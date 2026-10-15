@@ -29,7 +29,7 @@ export const ROLE_TEXT = {
 };
 let ROLE_HELP = ROLE_TEXT.short_term;
 const CLEANER_HINT = 'Cleaner: sees cleaning jobs only, no money or guest details. Needs at least one property.';
-const roleOptions = (u) => [['manager', 'Property manager'], ['staff', 'Staff (cleaner, front desk, accountant)'], ...(u.business_type === 'long_term' ? [] : [['cleaner', 'Cleaner — sees cleaning jobs only, no money or guest details']])];
+const roleOptions = (u) => [['manager', 'Property manager'], ['staff', u.business_type === 'long_term' ? 'Staff (bookkeeping, caretaker)' : 'Staff (cleaner, front desk, accountant)'], ...(u.business_type === 'long_term' ? [] : [['cleaner', 'Cleaner — sees cleaning jobs only, no money or guest details']])];
 const roleName = (r) => (r === 'cleaner' ? 'Cleaner' : label(r));
 // Managers and cleaners need at least one property, the same rule the server applies.
 const propertyProblem = (data) => (['manager', 'cleaner'].includes(data.role) && !(data.property_ids || []).length ? `Pick at least one property for a ${data.role}.` : '');
@@ -90,7 +90,7 @@ export async function settingsView(el, { rerender, query = {} }) {
     h('p', { class: 'muted small' }, 'Light, dark, or match your phone or computer. Saved on this device.'),
     themeSwitch()));
   if (!u.plan?.is_demo) sections.push(await notificationsCard(rerender).catch(() => null));
-  if (u.role === 'owner' && u.plan && !u.plan.is_demo) sections.push(await planCard(u));
+  if (u.role === 'owner' && u.plan && !u.plan.is_demo) sections.push(await planCard(u, rerender));
   if (u.role === 'owner' && u.plan && !u.plan.is_demo && u.business_type !== 'long_term') sections.push(await bookingCard(rerender));
   if (u.role === 'owner' && u.plan && !u.plan.is_demo && u.business_type !== 'long_term') sections.push(await guestExperienceCard());
   if (u.role === 'owner' && u.plan && !u.plan.is_demo && u.business_type !== 'long_term') sections.push(await manualPaymentsCard(rerender));
@@ -185,7 +185,7 @@ export async function settingsView(el, { rerender, query = {} }) {
     h('p', null, u.business_type === 'long_term'
       ? 'BalayHub stores tenant and property records to help you manage your rentals. Collect only what you need. Owners can export a tenant’s data from their profile to answer access requests under the Data Privacy Act.'
       : 'BalayHub stores guest, booking and property records to help you run your stays. Collect only what you need: guest ID photos are deleted automatically after the stay, and the owner can export or delete the workspace data under the Data Privacy Act.'),
-    h('p', { style: { marginTop: '10px' } }, h('a', { href: '#/privacy' }, 'Read the Privacy Notice'))));
+    h('p', { style: { marginTop: '10px' } }, h('a', { class: 'link-tap', href: '#/privacy' }, 'Read the Privacy Notice'))));
 
   el.replaceChildren(pageHead({ title: 'Settings', sub: u.organization_name }), h('div', { class: 'stack' }, sections));
   // The top bar's "Invite a teammate" link (#/settings?invite=1) opens the dialog once the page is drawn.
@@ -251,7 +251,7 @@ export const ACTIONS = {
   'addon.created': 'Added an add-on', 'addon.updated': 'Edited an add-on', 'addon.archived': 'Archived an add-on',
   'member.invited': 'Invited a team member', 'member.joined': 'Joined the workspace', 'member.updated': 'Changed a team member’s access',
   'member.removed': 'Removed a team member', 'member.invite_revoked': 'Cancelled an invitation', 'gatepass.sent': 'Sent a gate pass',
-  'billing.checkout_started': 'Started a plan payment', 'billing.paid': 'Plan payment received', 'platform.plan_changed': 'Changed the workspace plan',
+  'billing.checkout_started': 'Started a plan payment', 'billing.paid': 'Plan payment received', 'billing.coupon_applied': 'Used a plan coupon', 'platform.coupon_created': 'Plan coupon created', 'platform.coupon_updated': 'Plan coupon changed', 'platform.coupon_switched_on': 'Plan coupon switched on', 'platform.coupon_switched_off': 'Plan coupon switched off', 'platform.plan_changed': 'Changed the workspace plan',
   'workspace.created': 'Created the workspace', 'workspace.updated': 'Changed workspace settings', 'workspace.exported': 'Exported all workspace data',
   'workspace.deletion_requested': 'Asked to delete the workspace', 'workspace.deletion_cancelled': 'Cancelled the workspace deletion',
 };
@@ -379,8 +379,10 @@ export const shortTermCount = (listings) => listings.filter((l) => l.nightly_rat
 // A listing with no nightly rate is a monthly unit, which plans do not count. The plan card says so only then.
 export const monthlyNote = (listings) => listings.some((l) => l.nightly_rate == null);
 
-async function planCard(u) {
+async function planCard(u, rerender) {
   const p = u.plan;
+  // Loaded here, not at the top, so the rest of this file still loads without it.
+  const bc = await import('./billingcoupon.js');
   let pub = { plans: [], contact_email: '' };
   try { pub = await get('/public/plans'); } catch { /* ignore */ }
   let listings = [];
@@ -399,7 +401,7 @@ async function planCard(u) {
       h('dt', null, 'Short-term listings'), h('dd', null, `${shortTermCount(listings)} of ${p.listing_limit >= 1000 ? 'unlimited' : p.listing_limit}`,
         monthlyNote(listings) && h('div', { class: 'muted small' }, 'Monthly units are not counted.')),
       p.paid_until && [h('dt', null, 'Paid until'), h('dd', null, p.paid_until)]),
-    bill.online ? payOnline(p, bill) : [
+    bill.online ? payOnline(p, bill, rerender, bc) : [
       pub.plans.length > 0 && h('div', { class: 'plan-mini' }, pub.plans.map((x) => h('div', { class: `plan-mini__item${x.key === p.plan ? ' is-current' : ''}` },
         h('strong', null, x.name), h('span', null, `₱${x.price.toLocaleString('en-PH')}/mo`), h('span', { class: 'muted small' }, `Up to ${x.listings} listings${x.ai ? ' · AI drafts' : ''}`)))),
       h('p', { class: 'small', style: { marginTop: '12px' } },
@@ -411,49 +413,75 @@ async function planCard(u) {
       h('ul', { class: 'list' }, bill.history.map((b) => h('li', null, h('div', { class: 'row' },
         h('div', { class: 'row__main' },
           h('span', { class: 'row__title' }, `${b.plan[0].toUpperCase()}${b.plan.slice(1)} · ${b.months} month${b.months > 1 ? 's' : ''}`),
-          h('span', { class: 'row__sub' }, b.status === 'paid' ? `Paid ${fmtDateTime(b.paid_at)}${b.payment_method ? ` · ${b.payment_method}` : ''} · covers ${b.period_start} to ${b.period_end}` : `Started ${fmtDateTime(b.created_at)}, waiting for payment`)),
-        h('div', { class: 'row__end' }, h('strong', null, `₱${Number(b.amount).toLocaleString('en-PH')}`),
-          h('span', { class: `badge badge--${b.status === 'paid' ? 'paid' : 'unpaid'}` }, b.status === 'paid' ? 'Paid' : 'Pending'))))))]);
+          h('span', { class: 'row__sub' }, b.provider === 'coupon' ? `Free with coupon ${b.coupon_code} · covers ${b.period_start} to ${b.period_end}`
+            : b.status === 'paid' ? `Paid ${fmtDateTime(b.paid_at)}${b.payment_method ? ` · ${b.payment_method}` : ''} · covers ${b.period_start} to ${b.period_end}${Number(b.discount_amount) > 0 ? ` · coupon ${b.coupon_code} saved ${bc.money(b.discount_amount)}` : ''}`
+              : `Started ${fmtDateTime(b.created_at)}, waiting for payment`)),
+        h('div', { class: 'row__end' }, h('strong', null, bc.money(b.amount)),
+          h('span', { class: `badge badge--${b.status === 'paid' ? 'paid' : 'unpaid'}` }, b.provider === 'coupon' ? 'Free' : b.status === 'paid' ? 'Paid' : 'Pending'))))))]);
 }
 
 // Choose a plan and length, then pay on PayMongo's secure page.
-function payOnline(p, bill) {
+export function payOnline(p, bill, rerender, bc) {
   const current = bill.options.some((o) => o.key === p.plan) ? p.plan : 'growth';
   let plan = current;
   let months = 1;
+  let quote = null; // the server's preview with the coupon applied, or null for the list price
   const amountEl = h('strong');
-  const btn = h('button', { class: 'btn btn--primary', type: 'button' }, 'Pay now');
+  const strikeEl = h('span', { class: 'strike muted', hidden: true });
+  const msgEl = h('div', { class: 'muted small', 'aria-live': 'polite' });
+  const btn = h('button', { class: 'btn btn--primary', type: 'button' });
   const cards = h('div', { class: 'plan-mini' });
   const drawCards = () => cards.replaceChildren(...bill.options.map((o) => h('button', {
     type: 'button', class: `plan-mini__item plan-mini__pick${o.key === plan ? ' is-current' : ''}`, 'aria-pressed': String(o.key === plan),
-    onclick: () => { plan = o.key; drawCards(); update(); },
+    onclick: () => { plan = o.key; drawCards(); selectionChanged(); },
   }, h('strong', null, o.name), h('span', null, `₱${o.prices[0].amount.toLocaleString('en-PH')}/mo`),
   h('span', { class: 'muted small' }, `Up to ${o.listings} listings${o.ai ? ' · AI drafts' : ''}`))));
-  const monthSel = h('select', { class: 'input input--sm', 'aria-label': 'Months', onchange: (e) => { months = Number(e.target.value); update(); } },
+  const monthSel = h('select', { class: 'input input--sm', 'aria-label': 'Months', onchange: (e) => { months = Number(e.target.value); selectionChanged(); } },
     [[1, '1 month'], [3, '3 months'], [12, '12 months (2 months free)']].map(([m, t]) => h('option', { value: m }, t)));
+  const box = bc.couponBox({ current: bill.coupon, getSelection: () => ({ plan, months }), onQuote: (q) => { quote = q; update(); } });
+  const couponNote = h('span', { hidden: true }, ' Your coupon is applied automatically to the months it covers. BalayHub never charges your card on its own; you renew here.');
+  const label = () => (quote?.free ? 'Activate free plan' : quote?.card_only ? `Pay ${bc.plain(quote.amount)} by card` : 'Pay now');
   const update = () => {
     const o = bill.options.find((x) => x.key === plan);
-    amountEl.textContent = `₱${o.prices.find((x) => x.months === months).amount.toLocaleString('en-PH')}`;
+    const discounted = quote && Number(quote.discount_amount) > 0;
+    amountEl.textContent = bc.money(quote ? quote.amount : o.prices.find((x) => x.months === months).amount);
+    strikeEl.hidden = !discounted;
+    strikeEl.textContent = discounted ? bc.money(quote.list_amount) : '';
+    msgEl.textContent = quote?.message || '';
+    couponNote.hidden = !(quote?.coupon || bill.coupon?.status === 'active' || bill.coupon?.status === 'pending');
+    if (!btn.disabled) btn.textContent = label();
   };
+  // A new plan or length makes the old preview wrong at once; ask the server again.
+  const selectionChanged = () => { quote = null; update(); box.refresh(); };
   btn.addEventListener('click', async () => {
     btn.disabled = true;
-    btn.textContent = 'Opening secure checkout…';
+    btn.textContent = quote?.free ? 'Activating…' : 'Opening secure checkout…';
     try {
-      const r = await post('/billing/checkout', { plan, months: String(months) });
+      const code = box.getCode();
+      const r = await post('/billing/checkout', { plan, months: String(months), ...(code ? { coupon_code: code } : {}) });
+      if (r.activated) {
+        await refreshUser();
+        toast(`Your ${bill.options.find((x) => x.key === plan).name} plan is active until ${fmtDate(r.paid_until)}.`);
+        rerender();
+        return;
+      }
       location.href = r.checkout_url;
     } catch (err) {
-      toast(err.message, 'error');
+      if (/^(COUPON|COMPED|CARD_OFF)/.test(err.code || '')) box.showError(err.message); else toast(err.message, 'error');
       btn.disabled = false;
-      btn.textContent = 'Pay now';
+      update();
     }
   });
   drawCards();
   update();
+  box.refresh();
   return h('div', { class: 'payonline' },
     h('h3', { class: 'subhead', style: { marginTop: '16px' } }, p.plan === 'trial' || p.read_only ? 'Choose your plan' : 'Renew or change plan'),
     cards,
-    h('div', { class: 'payonline__row' }, monthSel, h('span', null, 'Total: ', amountEl), btn),
-    h('p', { class: 'muted small' }, 'Pay securely with GCash, Maya, card or GrabPay through PayMongo. Your plan activates as soon as the payment goes through. Renewing the same plan early adds the time on top; switching plans converts your unused days to the new plan; paying during the free trial keeps your remaining trial days.'));
+    h('div', { class: 'payonline__row' }, monthSel, h('span', null, 'Total: ', strikeEl, ' ', amountEl), btn),
+    msgEl,
+    box,
+    h('p', { class: 'muted small' }, 'Pay securely with GCash, Maya, card or GrabPay through PayMongo. Your plan activates as soon as the payment goes through. Renewing the same plan early adds the time on top; switching plans converts your unused days to the new plan; paying during the free trial keeps your remaining trial days.', couponNote));
 }
 
 
@@ -598,7 +626,7 @@ async function bookingCard(rerender) {
       h('p', { class: 'small' }, 'Guests pay you directly through your own PayMongo account (GCash, Maya, cards). In your PayMongo dashboard go to ',
         h('strong', null, 'Developers → API keys'), ' and copy the ', h('strong', null, 'Secret key'), '. Start with the test key (sk_test_…) to try it, then switch to the live key.'),
       h('p', { class: 'small' }, 'No PayMongo account yet? Sign up at ', h('a', { href: 'https://dashboard.paymongo.com/signup', target: '_blank', rel: 'noopener' }, 'paymongo.com'), '. You get a test key right away; the live key comes after PayMongo checks your business.'),
-      field({ name: 'paymongo_secret_key', label: 'PayMongo secret key', type: 'password', required: true, autocomplete: 'off', placeholder: 'sk_live_…' }),
+      field({ name: 'paymongo_secret_key', label: 'PayMongo secret key', type: 'password', required: true, autocomplete: 'off', maxlength: 500, placeholder: 'sk_live_…' }),
       h('p', { class: 'muted small' }, 'Stored encrypted and never shown again. Only used to create checkouts and check payments for your bookings.'),
     ],
     onSubmit: async (d) => {
@@ -641,7 +669,7 @@ async function bookingCard(rerender) {
         b.paymongo_connected ? (b.paymongo_checked ? `Connected (${b.paymongo_key_hint})` : `Saved, not checked yet (${b.paymongo_key_hint})`) : 'Not connected',
         b.paymongo_connected && !b.paymongo_checked && h('p', { class: 'muted small' }, "BalayHub couldn't reach PayMongo to check this key. It is checked again when you turn on your booking page.")),
       h('dt', null, 'Listings on the page'), h('dd', null, listed.length ? `${listed.length} of ${b.listings.length}` : 'None yet: edit a listing and tick "Show this listing on my booking page"'),
-      b.url && [h('dt', null, 'Your link'), h('dd', null, h('a', { href: b.url.slice(b.url.indexOf('#')), target: '_blank' }, b.url))]),
+      b.url && [h('dt', null, 'Your link'), h('dd', null, h('a', { class: 'link-tap', href: b.url.slice(b.url.indexOf('#')), target: '_blank' }, b.url))]),
     b.test_mode && h('div', { class: 'alert alert--warn', style: { marginTop: '10px' } }, 'TEST MODE: you connected a PayMongo test key, so payments on your page are not real and guests see a test-mode notice. Switch to your live key (Change key) before sharing the link.'),
     listed.some((l) => !l.photo_count) && h('p', { class: 'muted small' }, 'Tip: add photos to every listing (Listings → Photos). Pages with photos get far more bookings.'),
     h('div', { class: 'chips', style: { marginTop: '12px' } },

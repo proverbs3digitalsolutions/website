@@ -126,7 +126,7 @@ test('send by hand with IDs attached; staff and other workspaces can\'t', async 
   const tokA = outbox.at(-1).text.match(/#\/gatepass\/([A-Za-z0-9_-]+)/)[1];
   assert.equal((await host.patch(`/api/reservations/${moved.booking_id}`, { unit_id: u2.unit_id })).status, 200);
   assert.equal((await client(srv.base).get(`/api/public/gatepass/${tokA}`)).status, 404);
-  await fillForm(moved, 0);
+  await fillForm(moved, 1); // a draft (no stored ID) would not count as a form (D-95)
   outbox.length = 0;
   assert.ok(await gatepass.sendDuePasses() >= 1);
   assert.ok(outbox.some((x) => x.to === 'admin@grass.ph' && /T1-805/.test(x.text)));

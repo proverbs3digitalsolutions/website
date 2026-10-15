@@ -260,8 +260,7 @@ export async function verifyView(el, { query }) {
     await post('/auth/verify-email', { token: query.token || '' });
     try { sessionStorage.removeItem('bh-dev-verify'); } catch { /* ignore */ }
     await refreshUser();
-    // Signed in, the next screen is the English host app, so the toast stays English too.
-    toast(state.user ? 'Email verified.' : t('Email verified.'));
+    toast(t('Email verified.'));
     if (state.user) afterLogin();
     else card.replaceChildren(h('h1', null, t('Email verified')), h('p', { class: 'lead' }, t('You can now log in.')), h('a', { class: 'btn btn--primary btn--block', href: '#/login' }, t('Log in')));
   } catch (err) {

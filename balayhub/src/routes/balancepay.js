@@ -252,6 +252,10 @@ publicRouter.post('/public/pay/:token/checkout', checkoutLimiter, ah(async (req,
       `INSERT INTO balance_checkouts (organization_id, booking_id, amount, key_enc, test_mode) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
       [b.organization_id, b.booking_id, amount.toFixed(2), b.paymongo_key_enc, b.test_mode]);
     return { url: await startSession(key, b, c, req.params.token, db) };
+  }).catch(async (err) => {
+    // The transaction has rolled back and released its connection, so a key PayMongo refuses is cleared here, the same as the direct booking page.
+    if (err.unauthorized) await query('UPDATE organizations SET paymongo_key_checked_at = NULL WHERE organization_id = $1', [b.organization_id]);
+    throw err;
   });
   res.json({ checkout_url: result.url });
 }));
@@ -282,7 +286,8 @@ async function startSession(key, b, c, token, db) {
   } catch (err) {
     // The transaction rolls back, removing the unstarted checkout row.
     console.error(`[balance] checkout ${c.checkout_ref} could not start online payment: ${err.message}`);
-    throw new HttpError(502, PAYMENT_UNAVAILABLE, { code: 'PAYMENT_FAILED' });
+    // unauthorized (a key PayMongo refused) is carried past the rollback for the checkout route to act on.
+    throw Object.assign(new HttpError(502, PAYMENT_UNAVAILABLE, { code: 'PAYMENT_FAILED' }), { unauthorized: err.unauthorized });
   }
 }
 

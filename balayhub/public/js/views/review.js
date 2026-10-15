@@ -58,6 +58,7 @@ export async function guestReviewView(el, { params }, snap) {
     return;
   }
   initGuestLang(d.guest_language);
+  const httpsOnly = (links) => (Array.isArray(links) ? links.filter((l) => /^https:\/\//i.test(l?.url || '')) : []);
   const thanks = (links = []) => el.replaceChildren(page(h('div', { class: 'card bk-done' },
     h('div', { class: 'gc__tick', 'aria-hidden': 'true' }, '✓'),
     h('h1', null, t('Thank you!')),
@@ -66,7 +67,7 @@ export async function guestReviewView(el, { params }, snap) {
       h('h2', { id: 'share-h', style: { width: '100%', textAlign: 'center' } }, t('Would you share your experience?')),
       h('p', { class: 'muted small', style: { width: '100%', textAlign: 'center' } }, t('A public review helps other travellers find {host}. It only takes a minute.', { host: d.host })),
       links.map((l) => h('a', { class: 'btn btn--secondary', href: l.url, target: '_blank', rel: 'noopener noreferrer', 'aria-label': `${l.label} (${t('Opens in a new tab')})` }, l.label))))));
-  if (d.reviewed) { thanks(); return; }
+  if (d.reviewed) { thanks(httpsOnly(d.share_links)); return; }
   if (!d.open) {
     el.replaceChildren(page(h('div', { class: 'card' }, d.not_yet
       ? [h('h1', null, t('Feedback opens soon')), h('p', { class: 'muted' }, t('You can leave feedback once your stay starts.'))]
@@ -85,7 +86,7 @@ export async function guestReviewView(el, { params }, snap) {
     try {
       const res = await post(`/public/review/${encodeURIComponent(token)}`, { rating: overall.get(), cleanliness: clean.get(), comment: comment.value.trim() || undefined });
       d.reviewed = true;
-      thanks(overall.get() >= 4 && Array.isArray(res?.share_links) ? res.share_links.filter((l) => /^https:\/\//i.test(l?.url || '')) : []);
+      thanks(overall.get() >= 4 ? httpsOnly(res?.share_links) : []);
     } catch (err) { toast(tServer(err.message), 'error'); btn.disabled = false; }
   } },
   overall.el, clean.el,

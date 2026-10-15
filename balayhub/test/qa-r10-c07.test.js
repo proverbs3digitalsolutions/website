@@ -89,7 +89,7 @@ test('#3 a stay that runs no night gets the check-out message; a blank date or a
 
 test("#3 quotes passes its date check through makeForm's check hook, naming check_out, and no longer checks after the required pass", () => {
   const form = between(quotesSrc, 'const form = makeForm({', "modal = openModal({ title: 'New quote'");
-  assert.match(form, /check: \(d\) => \{ const msg = datesProblem\(d\.check_in, d\.check_out\); return msg \? \{ check_out: msg \} : null; \}/);
+  assert.match(form, /check: \(d\) => \{[\s\S]*?const msg = datesProblem\(d\.check_in, d\.check_out\);\s*if \(msg\) bad\.check_out = msg;[\s\S]*?bad\.addons = /);
   assert.doesNotMatch(form, /nightsBetween\(d\.check_in, d\.check_out\)/, 'onSubmit runs after the required pass, so the date check must not live there');
 });
 

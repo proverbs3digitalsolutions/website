@@ -86,15 +86,17 @@ async function members(orgId, type, propertyId, onlyRoles, onlyUser) {
 
 // Send to everyone concerned. Never throws.
 async function notify(orgId, type, { title, body, url, propertyId, roles, userId }) {
+  // With no property and no named person, only owners hear it (the bell's rule, D-93). Feed and push both use this.
+  const audience = (propertyId || userId) ? roles : ['owner'];
   try {
     // The feed write must never stop the push (add() catches its own errors; this guards the lookup too).
     try {
-      const people = (await members(orgId, type, propertyId, roles, userId)).filter((u) => allowed(u, type, propertyId));
+      const people = (await members(orgId, type, propertyId, audience, userId)).filter((u) => allowed(u, type, propertyId));
       await require('./notifyfeed').add(orgId, type, people.map((u) => u.user_id), { title, body, url, propertyId });
     } catch (err) {
       console.error('[notifyfeed]', err.message);
     }
-    const subs = (await recipients(orgId, type, propertyId, roles, userId)).filter((s) => allowed(s, type, propertyId));
+    const subs = (await recipients(orgId, type, propertyId, audience, userId)).filter((s) => allowed(s, type, propertyId));
     if (!subs.length) return 0;
     vapid();
     const payload = JSON.stringify({ title, body, url: url || '/#/home', tag: type });

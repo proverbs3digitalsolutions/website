@@ -26,7 +26,7 @@ const ownerSpec = {
   full_name: { type: 'string', required: true, max: 120, label: 'Owner name' },
   email: { type: 'email', label: 'Email' },
   phone: { type: 'phone', label: 'Mobile number' },
-  management_fee_pct: { type: 'money', label: 'Management fee' },
+  management_fee_pct: { type: 'percent', label: 'Management fee (%)' },
   cleaning_to_manager: { type: 'bool', label: 'Cleaning fees' },
   notes: { type: 'text', max: 1000, label: 'Notes' },
   unit_ids: { type: 'uuids', label: 'Units' },

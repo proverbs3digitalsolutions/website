@@ -35,6 +35,15 @@ export function moveActive(i, n, key) {
   return i <= 0 ? n - 1 : i - 1;
 }
 
+// Tab inside a modal sheet: the control to focus instead of letting Tab fall out to BODY, or null to let the browser move on.
+// `active` not in the list (the dialog itself) counts as before the first control.
+export function wrapTarget(items, active, shift) {
+  if (!items.length) return null;
+  const i = items.indexOf(active);
+  if (shift) return i <= 0 ? items[items.length - 1] : null;
+  return i === items.length - 1 ? items[0] : null;
+}
+
 export function pushRecent(list, q, max = 5) {
   const t = String(q ?? '').trim();
   if (!t) return list;
@@ -54,7 +63,7 @@ export function pageResults(q, user, nav, routeAllowed) {
   const type = user?.business_type;
   const entries = [
     ...nav.map(([p, label]) => ({ label, href: `#${p}`, keywords: '', sub: null })),
-    ...(user?.role === 'cleaner' ? [] : SETTINGS_INDEX.map((e) => ({ ...e, sub: 'Setting' }))),
+    ...(user?.role === 'cleaner' ? [] : SETTINGS_INDEX.map((e) => ({ ...e, sub: 'In Settings' }))),
   ].filter((e) => (!e.roles || e.roles.includes(user?.role))
     && !((e.module === 'stay' && type === 'long_term') || (e.module === 'rent' && type === 'short_term'))
     && routeAllowed(e.href.slice(1).split('?')[0], user));
@@ -76,9 +85,10 @@ function loadRecent(user) {
 }
 function saveRecent(user, list) { try { localStorage.setItem(recentKey(user), JSON.stringify(list)); } catch { /* private mode: recents just don't stick */ } }
 
-// Builds the box into `slot`. sheet: the phone full-screen version (a back button first, results always shown).
+// Builds the box into `slot`. inSheet: the phone full-screen version (the sheet's header owns the one Close button).
 // onDone() asks the top bar to close the sheet. Returns { focus(returnTo) }.
-export function mountSearch(slot, ctx, { sheet = false, onDone } = {}) {
+export function mountSearch(slot, ctx, { inSheet = false, onDone } = {}) {
+  const sheet = inSheet;
   let seq = 0; let timer = 0; let active = -1; let open = sheet; let returnTo = null;
   let server = []; let loading = false; let message = '';
   const user = () => ctx.user();
@@ -94,13 +104,12 @@ export function mountSearch(slot, ctx, { sheet = false, onDone } = {}) {
   const results = h('div', { class: 'tb-results', hidden: !open }, list, extras);
   const status = h('div', { class: 'tb-status', role: 'status', 'aria-live': 'polite' });
   const kbd = sheet ? null : h('span', { class: 'tb-kbd', 'aria-hidden': 'true' }, '/');
-  const back = sheet ? h('button', { type: 'button', class: 'tb-back', 'aria-label': 'Close search', onClick: () => onDone?.() }, icon('close')) : null;
-  const box = h('div', { class: 'tb-search' }, back, h('span', { class: 'tb-search__icon' }, icon('search')), input, kbd);
+  const box = h('div', { class: 'tb-search' }, h('span', { class: 'tb-search__icon' }, icon('search')), input, kbd);
   // Mouse presses inside the results must not blur the input (that would close the list before the click lands).
   results.addEventListener('mousedown', (e) => e.preventDefault());
   slot.append(h('div', { class: sheet ? 'tb-searchwrap tb-searchwrap--sheet' : 'tb-searchwrap' }, box, results, status));
 
-  const options = () => [...list.querySelectorAll('[role="option"]')];
+  const options = () => [...list.querySelectorAll('[role="option"]:not([aria-disabled])')];
   function setActive(i) {
     const opts = options();
     active = i;
@@ -108,9 +117,9 @@ export function mountSearch(slot, ctx, { sheet = false, onDone } = {}) {
     if (opts[i]) { input.setAttribute('aria-activedescendant', opts[i].id); opts[i].scrollIntoView?.({ block: 'nearest' }); } else input.setAttribute('aria-activedescendant', '');
   }
   function setOpen(v) {
-    open = sheet || v;
+    open = v;
     results.hidden = !open;
-    input.setAttribute('aria-expanded', String(open && options().length > 0));
+    input.setAttribute('aria-expanded', String(open && list.children.length > 0));
     if (kbd) kbd.hidden = Boolean(input.value) || document.activeElement === input;
   }
 
@@ -123,11 +132,14 @@ export function mountSearch(slot, ctx, { sheet = false, onDone } = {}) {
   function render() {
     const { q, ok } = likeTerms(input.value);
     const kids = []; const extra = []; let n = 0; let count = 0;
-    const group = (key, label, items) => {
+    let empty = null;
+    const group = (key, label, items, note) => {
       const hid = `tb-g-${key}`;
       kids.push(h('div', { role: 'group', 'aria-labelledby': hid, class: 'tb-group' },
         h('div', { class: 'tb-group-head' }, h('div', { class: 'tb-group-title', id: hid }, label)),
-        items.map((it) => { count += 1; return optionEl(it, n++); })));
+        items.map((it) => { count += 1; return optionEl(it, n++); }),
+        // Not selectable: a disabled option keeps the listbox children valid for screen readers.
+        note ? h('div', { role: 'option', 'aria-disabled': 'true', 'aria-selected': 'false', class: 'tb-note' }, note) : null));
     };
     if (!q) {
       const recent = loadRecent(user());
@@ -140,19 +152,19 @@ export function mountSearch(slot, ctx, { sheet = false, onDone } = {}) {
       const bySrv = Object.fromEntries(server.map((g) => [g.key, g]));
       const pages = pageResults(q, user(), ctx.nav(), ctx.routeAllowed);
       for (const key of GROUP_ORDER) {
-        if (key === 'pages') { if (pages.length) group('pages', 'Pages', pages); if (loading) extra.push(h('div', { class: 'tb-note' }, 'Searching…')); } else if (bySrv[key]) group(key, bySrv[key].label, bySrv[key].items);
+        if (key === 'pages') { if (pages.length) group('pages', 'Pages', pages); if (loading) extra.push(h('div', { class: 'tb-note' }, 'Searching…')); } else if (bySrv[key]) group(key, bySrv[key].label, bySrv[key].items, bySrv[key].more ? `${bySrv[key].items.length} of ${bySrv[key].total} shown. Type more of the name, or a confirmation code.` : null);
       }
       if (q.length === 1) extra.push(h('div', { class: 'tb-note' }, 'Type 2 or more letters to search records.'));
       if (message) extra.push(h('div', { class: 'tb-note tb-note--error' }, message));
-      if (ok && !count && !loading && !message) extra.push(h('div', { class: 'tb-empty' }, h('div', null, `No results for “${q}”.`), h('div', { class: 'tb-note' }, emptyHint(user()))));
+      if (ok && !count && !loading && !message) empty = h('div', { class: 'tb-empty', role: 'option', 'aria-disabled': 'true', 'aria-selected': 'false' }, h('div', null, `No results for “${q}”.`), h('div', { class: 'tb-note' }, emptyHint(user())));
     }
-    list.replaceChildren(...kids);
-    list.hidden = kids.length === 0;
+    list.replaceChildren(...kids, ...(empty ? [empty] : []));
+    list.hidden = kids.length === 0 && !empty;
     extras.replaceChildren(...extra);
     active = -1;
     input.setAttribute('aria-activedescendant', '');
     status.textContent = !q || loading ? '' : count === 0 ? 'No results' : count === 1 ? '1 result' : `${count} results`;
-    setOpen(open && (kids.length > 0 || extra.length > 0));
+    setOpen(open && (kids.length > 0 || Boolean(empty) || extra.length > 0));
   }
 
   async function run(my, q) {
@@ -201,8 +213,9 @@ export function mountSearch(slot, ctx, { sheet = false, onDone } = {}) {
 
   input.addEventListener('input', onInput);
   input.addEventListener('focus', () => { open = true; render(); });
-  // Leaving the whole box closes the list; Tab from the input to Clear stays inside it.
-  box.parentNode.addEventListener('focusout', (e) => { if (!sheet && !box.parentNode.contains(e.relatedTarget)) { setOpen(false); if (kbd) kbd.hidden = Boolean(input.value); } });
+  // Leaving the whole box (in the sheet: the whole sheet) closes the list; Tab from the input to Clear and the recents stays inside it.
+  const wrap = box.parentNode;
+  wrap.addEventListener('focusout', (e) => { if (!(wrap.closest('.tb-sheet') || wrap).contains(e.relatedTarget)) { setOpen(false); if (kbd) kbd.hidden = Boolean(input.value); } });
   input.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();

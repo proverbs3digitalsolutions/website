@@ -53,7 +53,7 @@ test('the period controls are the filter bar\'s extra slot, not a wrapping chip 
 
 test('filterBar() puts the extra slot and the quick filters side by side in one toolbar row', () => {
   // The toolbar is one flex row: extra, search, quick filters and More are siblings in it, in that order.
-  assert.match(filters, /h\('div', \{ class: 'toolbar flt__bar' \}, extra, searchEl, quickEls, moreBtn\)/);
+  assert.match(filters, /h\('div', \{ class: 'toolbar flt__bar' \}, extra, searchEl, byLabel && h\('span', \{ class: 'flt__by muted small' \}, filterIcon\(\), 'Filter by'\), quickEls, moreBtn\)/);
 });
 
 test('the period wrapper is display: contents, so its controls are items of the toolbar row itself', () => {

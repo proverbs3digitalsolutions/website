@@ -22,6 +22,7 @@ import { inboxView, inboxSettingsView, unreadCount } from './views/inbox.js';
 import { housekeepingView, housekeepingDetailView } from './views/housekeeping.js';
 import { landingView } from './views/landing.js';
 import { adminView } from './views/admin.js';
+import { adminCouponsView } from './views/admincoupons.js';
 import { guestCheckinView } from './views/checkin.js';
 import { termsView } from './views/terms.js';
 import { bookHostView, bookListingView, bookDoneView } from './views/book.js';
@@ -121,6 +122,7 @@ const routes = [
   ['/guests/:id', guestDetailView, APP],
   ['/receipts/:id', receiptView, APP],
   ['/admin', adminView, APP],
+  ['/admin/coupons', adminCouponsView, APP],
   ['/admin/support', adminSupportView, APP],
   ['/admin/support/:id', adminSupportTicketView, APP],
   ['/account', accountView, APP],
@@ -255,6 +257,8 @@ function planBanner() {
   return null;
 }
 // Phone bottom bar: the first four everyday screens; everything else is under "More".
+// Shorter names for the phone bottom bar only (#45); the sidebar and More sheet keep the long ones.
+const BOTTOM_LABELS = { 'Rent & Expenses': 'Rent', 'Group bookings': 'Groups', 'Help & support': 'Help' };
 const bottomNav = () => navFor().filter(([p]) => p !== '/launchpad').slice(0, 4);
 const moreNav = () => { const b = bottomNav(); return navFor().filter((n) => !b.includes(n)); };
 export const homeRoute = () => (state.user?.role === 'cleaner' ? '#/housekeeping' : state.user?.business_type === 'long_term' ? '#/dashboard' : '#/home');
@@ -423,7 +427,7 @@ function buildShell(path) {
     buildTopbar(topbarCtx),
     h('div', { class: 'shell__main' }, banner, content),
     h('nav', { class: 'bottomnav', 'aria-label': 'Main' },
-      bottomKeys.map(([p, t, ic]) => h('a', { href: `#${p}`, 'aria-current': isCurrent(p, path) ? 'page' : null }, icon(ic), t === 'Rent & Expenses' ? 'Rent' : t)),
+      bottomKeys.map(([p, t, ic]) => h('a', { href: `#${p}`, 'aria-current': isCurrent(p, path) ? 'page' : null }, icon(ic), BOTTOM_LABELS[t] || t)),
       h('button', { type: 'button', onclick: openMore, 'aria-current': moreNav().some(([p]) => isCurrent(p, path)) ? 'page' : null }, icon('more'), 'More')),
     u.role === 'cleaner' ? null : assistantButton());
   refreshUnread(el);

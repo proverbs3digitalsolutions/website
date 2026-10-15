@@ -175,7 +175,7 @@ export const options = (keys) => keys.map((k) => [k, label(k)]);
 
 // ---------------------------------------------------------------- feedback
 export function toast(message, kind = 'info') {
-  const el = h('div', { class: `toast${kind === 'error' ? ' toast--error' : ''}`, role: 'status' }, message);
+  const el = h('div', { class: `toast${kind === 'error' ? ' toast--error' : ''}`, role: kind === 'error' ? 'alert' : 'status' }, message);
   const box = document.getElementById('toasts');
   // The same message replaces the one on screen instead of stacking beside it.
   for (const old of [...box.children]) if (old.textContent === String(message)) old.remove();
@@ -289,10 +289,10 @@ const inLayer = (el) => { for (let p = el; p; p = p.parentElement) if (p.classLi
 // browser clamps the scroll; a list replaced in place lets scroll anchoring shift the page. The keeper notes the scroll position when the
 // person acts, holds the page height while the redraw runs, and undoes a scroll that the redraw caused. Views never touch the scroll.
 // Where the window should go back to, or null to leave it. Pure. `y` is the position when the person acted, `nowY` the position now.
-export function keptScroll({ y, nowY, maxY, sinceChange, sinceAction, sameRoute, focusTop = null, focusBottom = null, viewH = 0 }) {
+export function keptScroll({ y, nowY, maxY, sinceChange, sinceAction, sameRoute, focusTop = null, focusBottom = null, viewH = 0, focusWasVisible = true }) {
   if (!sameRoute || sinceAction > FOCUS_WATCH_MS || sinceChange > SCROLL_SETTLE_MS || Math.abs(nowY - y) <= 2) return null;
   const target = Math.max(0, Math.min(y, maxY));
-  if (typeof focusTop === 'number') { // never scroll the focused field (or the guard's target) out of view
+  if (typeof focusTop === 'number' && focusWasVisible) { // never scroll the focused field (or the guard's target) out of view; one that was already off screen is not pulled back
     const moved = nowY - target;
     if (focusTop + moved < 0 || (viewH && (focusBottom ?? focusTop) + moved > viewH)) return null;
   }
@@ -305,6 +305,13 @@ export function shouldRelease(keptY, naturalHeight, viewH, reason) {
   if (reason === 'person' || reason === 'route') return true;
   return Math.max(0, naturalHeight - viewH) >= keptY;
 }
+
+// Is the control fully on screen right now? Unknown (no layout) counts as yes.
+const onScreen = (el) => {
+  const r = el?.getBoundingClientRect?.();
+  const vh = globalThis.innerHeight;
+  return !(r && vh) || (r.top >= 0 && r.bottom <= vh);
+};
 
 const KEEPER_OUTSIDE = '.sidebar, .bottomnav, .morenav, .topbar, .tb-sheet, .assist';
 const SCROLL_KEYS = new Set(['PageUp', 'PageDown', 'Home', 'End', 'ArrowUp', 'ArrowDown', ' ']);
@@ -338,7 +345,8 @@ function installScrollKeeper(doc) {
   const act = (e) => {
     const t = e.target instanceof Element ? e.target : null;
     if (!t || !t.closest('#app, dialog.modal') || t.closest(KEEPER_OUTSIDE)) return;
-    rec = { y: win.scrollY, at: Date.now(), path: pathNow() };
+    const fa = doc.activeElement;
+    rec = { y: win.scrollY, at: Date.now(), path: pathNow(), focusWasVisible: !fa || fa === doc.body || onScreen(fa) };
     const app = doc.getElementById('app');
     if (app && !held) { held = app; app.style.minHeight = `${app.offsetHeight}px`; }
     arm(); clearTimeout(hard); hard = setTimeout(() => release('quiet'), FOCUS_WATCH_MS);
@@ -357,7 +365,7 @@ function installScrollKeeper(doc) {
     const sinceChange = now - lastChange;
     const to = keptScroll({
       y: rec.y, nowY: win.scrollY, maxY: doc.documentElement.scrollHeight - win.innerHeight, sinceChange, sinceAction: now - rec.at,
-      sameRoute: true, focusTop: r ? r.top : null, focusBottom: r ? r.bottom : null, viewH: win.innerHeight,
+      sameRoute: true, focusTop: r ? r.top : null, focusBottom: r ? r.bottom : null, viewH: win.innerHeight, focusWasVisible: rec.focusWasVisible,
     });
     if (to !== null) win.scrollTo(0, to);
     else if (sinceChange > SCROLL_SETTLE_MS) rec.y = win.scrollY; // not caused by a redraw: the new place is where the person is
@@ -403,14 +411,14 @@ export function installFocusGuard(doc = document, { observe = true } = {}) {
     // The control's ordinal among those with its tag, role and name (and, for tabs and groups, among those in its group).
     const nth = keys.filter((k, i) => i < at && k.tag === snap.tag && k.role === snap.role && k.name === snap.name).length;
     const groupNth = snap.group ? keys.filter((k, i) => i < at && k.tag === snap.tag && k.role === snap.role && k.group === snap.group).length : -1;
-    const rec = { el, snap, nth, groupNth, wide };
+    const rec = { el, snap, nth, groupNth, wide, visible: onScreen(el) };
     if (dlg) dlgRec = { ...rec, dlg }; else pageRec = rec;
   }
 
-  const focusIt = (el) => {
+  // `reveal`: the person had the control on screen when they acted. A control that was off screen is focused where it is, never scrolled to.
+  const focusIt = (el, reveal = true) => {
     el.focus({ preventScroll: true });
-    const r = el.getBoundingClientRect?.();
-    if (r && globalThis.innerHeight && (r.top < 0 || r.bottom > globalThis.innerHeight)) el.scrollIntoView?.({ block: 'nearest' });
+    if (reveal && !onScreen(el)) el.scrollIntoView?.({ block: 'nearest' });
   };
 
   // A match inside a closed "More" fold hands focus to that fold's button.
@@ -457,7 +465,7 @@ export function installFocusGuard(doc = document, { observe = true } = {}) {
       }
     }
     if (target) {
-      focusIt(target);
+      focusIt(target, rec.visible !== false);
       if (doc.activeElement === target) { lossAt = null; fallback = null; }
       return;
     }
@@ -471,7 +479,10 @@ export function installFocusGuard(doc = document, { observe = true } = {}) {
   }
 
   if (observe) {
-    doc.addEventListener('keydown', (e) => { if (e.key === 'Tab') movedAt = Date.now(); }, true);
+    doc.addEventListener('keydown', (e) => {
+      if (e.key === 'Tab') movedAt = Date.now();
+      else for (const r of [pageRec, dlgRec]) if (r && r.el === e.target) r.visible = onScreen(r.el); // typing in a box: is it on screen now?
+    }, true);
     doc.addEventListener('focusin', (e) => { if (e.target instanceof Element) note(e.target); }, true);
     doc.addEventListener('pointerdown', (e) => {
       const t = e.target instanceof Element ? e.target : null;

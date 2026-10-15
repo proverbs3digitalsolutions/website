@@ -442,17 +442,17 @@ async function calendarTab(box) {
           x.property_name && h('div', { class: 'small muted hk-job__prop' }, x.property_name),
           x.next_check_in && h('div', { class: 'small muted' }, nextGuestText({ ...x, due_date: date })),
           manager && ['todo', 'in_progress'].includes(x.status)
-            ? reassignSelect(x)
+            ? reassignSelect(x, date)
             : h('div', { class: 'small muted' }, assigneeText(x)))))
           : h('p', { class: 'small muted hk-day__empty' }, T('No cleanings')));
     }));
   }
 
-  function reassignSelect(x) {
+  function reassignSelect(x, date) {
     const eligible = x.property_id ? eligibleFor(people, x.property_id) : people;
     const outside = !x.assigned_to && x.assignee_name;
     const sel = h('select', {
-      class: 'input hk-reassign', 'aria-label': `Assign ${x.unit_name}`,
+      class: 'input hk-reassign', 'aria-label': `Assign ${x.unit_name}, ${fmtDate(date)}`,
       onchange: async (e) => {
         sel.disabled = true;
         try { await patch(`/cleaning-tasks/${x.task_id}`, { assigned_to: e.target.value || null, assignee_name: null }); toast('Assignment saved.'); await load(); } catch (err) { toast(err.message, 'error'); sel.disabled = false; sel.value = x.assigned_to || ''; }
@@ -539,7 +539,7 @@ function lostFoundModal(task, onSaved) {
 }
 
 async function suppliesModal(task, onSaved) {
-  const { supplies } = await get(`/supplies${qs({ property_id: task.property_id })}`);
+  const { supplies } = await get(`/cleaning-tasks/${task.task_id}/supplies`);
   // Nothing set up means nothing to save, so this dialog has no Save button. Owners and managers are sent to Supplies.
   if (!supplies?.length) {
     const m = openModal({

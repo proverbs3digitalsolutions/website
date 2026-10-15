@@ -303,27 +303,30 @@ export async function calendarView(el, { query }) {
     h('span', { class: 'cal-legend__item' }, h('span', { class: 'cal-swatch cal-swatch--season' }), 'Season rate'));
 
   const compact = compactCalendarFilters(meta.length);
-  // Folded: the filter bar (with its chips) sits in "Filter", open while a filter is set; the legend in "What the colours mean".
+  // Folded: the legend sits in "What the colours mean".
   const fold = (text, content, open) => (compact ? h('details', { class: 'form-section', open: open ? true : null }, h('summary', null, text), content) : content);
+  const quick = [
+    properties.length > 1 && { name: 'property_id', label: 'Property', all: 'All properties', options: properties },
+    tags.length > 0 && { name: 'tag', label: 'Tag', all: 'All tags', options: tags.map((t) => [t.tag, `${t.tag} (${t.count})`]) },
+    { name: 'avail', label: 'Availability', all: 'Any availability', options: [['open', 'Has open nights'], ['empty', 'No bookings in these dates'], ['booked', 'Has bookings in these dates']] },
+  ].filter(Boolean);
+  const more = [
+    types.length > 1 && { name: 'unit_type', label: 'Listing type', all: 'All types', options: types.map((t) => [t, label(t)]) },
+    { name: 'cleaning', label: 'Cleaning', all: 'Any', options: [['dirty', 'Needs cleaning'], ['clean', 'Clean']] },
+  ].filter(Boolean);
+  // Small hosts get search plus one "Filters" button holding every filter; bigger hosts keep the quick selects in the bar.
+  const bar = filterBar({
+    key: 'calendar', values: filters, defaults, onChange: async () => { await loadTagUnits(); if (lastData) render(lastData); },
+    search: { placeholder: 'Search listings' },
+    quick: compact ? [] : quick, more: compact ? [...quick, ...more] : more,
+  });
   el.replaceChildren(
     h('div', { class: 'page-head' },
       h('div', { class: 'page-head__title' }, h('h1', null, 'Calendar'), h('p', null, canManage ? 'Tap an open night to book, block or change its price' : 'See who is staying and which nights are open. Booking and price changes are for owners and managers.')),
       canManage && h('div', { class: 'page-head__actions' },
         h('a', { class: 'btn btn--secondary', href: '#/pricing' }, '₱ Pricing rules'),
         h('button', { class: 'btn btn--primary', onclick: () => newReservationModal({ onSaved: load }) }, icon('plus'), 'New reservation'))),
-    fold('Filter', filterBar({
-      key: 'calendar', values: filters, defaults, onChange: async () => { await loadTagUnits(); if (lastData) render(lastData); },
-      search: { placeholder: 'Search listings' },
-      quick: [
-        properties.length > 1 && { name: 'property_id', label: 'Property', all: 'All properties', options: properties },
-        tags.length > 0 && { name: 'tag', label: 'Tag', all: 'All tags', options: tags.map((t) => [t.tag, `${t.tag} (${t.count})`]) },
-        { name: 'avail', label: 'Availability', all: 'Any availability', options: [['open', 'Has open nights'], ['empty', 'No bookings in these dates'], ['booked', 'Has bookings in these dates']] },
-      ].filter(Boolean),
-      more: [
-        types.length > 1 && { name: 'unit_type', label: 'Listing type', all: 'All types', options: types.map((t) => [t, label(t)]) },
-        { name: 'cleaning', label: 'Cleaning', all: 'Any', options: [['dirty', 'Needs cleaning'], ['clean', 'Clean']] },
-      ].filter(Boolean),
-    }), Object.keys(changed(filters, defaults)).length > 0),
+    bar,
     h('div', { class: 'toolbar' },
       h('div', { class: 'chips' },
         h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': 'Earlier', onclick: () => { view.start = addDays(view.start, -7); load(); } }, '‹'),

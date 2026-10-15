@@ -1,5 +1,5 @@
 // Filter bar used by every list page: a search box, quick filters, a
-// "More filters" panel, chips for what's active, Clear all, and memory of each
+// "Filters" panel, chips for what's active, Clear all, and memory of each
 // person's last filters per page (this browser only).
 //
 //   const f = initFilters('reservations', query, { view: 'upcoming', q: '', channel: '' });
@@ -156,6 +156,24 @@ export function amountRangeCheck(lo, hi) {
   };
 }
 
+// The funnel on the Filters button. Local so ui.js is untouched; skipped where the page has no SVG support.
+const SVG_NS = 'http://www.w3.org/2000/svg';
+function filterIcon() {
+  if (!document.createElementNS) return '';
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  for (const [k, v] of Object.entries({ viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.8', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' })) svg.setAttribute(k, v);
+  const p = document.createElementNS(SVG_NS, 'path');
+  p.setAttribute('d', 'M4 5h16l-6 7.5V19l-4-2v-4.5L4 5z');
+  svg.append(p);
+  return svg;
+}
+
+// A page that redraws its bar (a Property change on Tenants, Maintenance, Rent) builds a new filterBar for the same page.
+// The panel stays open and focus stays on the same control. Remembered per page key and only for the same address path.
+const panelOpen = new Map();
+const pathNow = () => (typeof location === 'undefined' ? '' : location.hash || '').split('?')[0];
+const FOCUS_TRIES = 10;
+
 function control(f, values, emit, defaults = {}) {
   const id = `flt-${f.name}-${Math.random().toString(36).slice(2, 6)}`;
   if (f.type === 'daterange') {
@@ -167,7 +185,7 @@ function control(f, values, emit, defaults = {}) {
     const shownB = typed[b] ?? values[b];
     delete typed[a];
     delete typed[b];
-    const from = h('input', { class: 'input', type: 'date', id, value: shownA || '', 'aria-label': `${f.label}, from`, 'aria-describedby': errId });
+    const from = h('input', { class: 'input', type: 'date', id, 'data-flt': f.name, value: shownA || '', 'aria-label': `${f.label}, from`, 'aria-describedby': errId });
     const to = h('input', { class: 'input', type: 'date', value: shownB || '', 'aria-label': `${f.label}, to`, 'aria-describedby': errId });
     const err = h('div', { id: errId, role: 'alert', style: { color: 'var(--red)', fontSize: '.84rem', fontWeight: '650' } });
     // Dates are YYYY-MM-DD, so string order is calendar order. A year outside 2000 to 2100 is flagged at its box and only
@@ -202,7 +220,7 @@ function control(f, values, emit, defaults = {}) {
   if (f.type === 'amountrange') {
     const [a, b] = rangeKeys(f);
     const errId = `${id}-err`;
-    const from = h('input', { class: 'input', id, type: 'number', value: values[a] || '', min: 0, step: '0.01', inputmode: 'decimal', 'aria-label': `${f.label}, from`, 'aria-describedby': errId });
+    const from = h('input', { class: 'input', id, 'data-flt': f.name, type: 'number', value: values[a] || '', min: 0, step: '0.01', inputmode: 'decimal', 'aria-label': `${f.label}, from`, 'aria-describedby': errId });
     const to = h('input', { class: 'input', type: 'number', value: values[b] || '', min: 0, step: '0.01', inputmode: 'decimal', 'aria-label': `${f.label}, to`, 'aria-describedby': errId });
     const err = h('div', { id: errId, role: 'alert', style: { color: 'var(--red)', fontSize: '.84rem', fontWeight: '650' } });
     // The message shows once, at the range, and the ends that are wrong are marked. The check reads the boxes, so a
@@ -228,7 +246,7 @@ function control(f, values, emit, defaults = {}) {
     return { el: h('div', { class: 'flt__field flt__field--range' }, h('label', { for: id }, f.label), h('div', { class: 'flt__range' }, from, h('span', { 'aria-hidden': 'true' }, '–'), to), err), sync: () => { from.value = values[a] || ''; to.value = values[b] || ''; check(); }, invalid };
   }
   if (f.type === 'check') {
-    const box = h('input', { type: 'checkbox', id, checked: values[f.name] === '1' });
+    const box = h('input', { type: 'checkbox', id, 'data-flt': f.name, checked: values[f.name] === '1' });
     box.addEventListener('change', () => { values[f.name] = box.checked ? '1' : ''; emit(); });
     return { el: h('label', { class: 'check flt__check', for: id }, box, h('span', null, f.label)), sync: () => { box.checked = values[f.name] === '1'; } };
   }
@@ -237,7 +255,7 @@ function control(f, values, emit, defaults = {}) {
     // window message. Either applies nothing until it is fixed, the same as a bad date range. An empty box is no filter.
     const errId = `${id}-err`;
     const err = f.pattern || f.type === 'date' ? h('div', { id: errId, role: 'alert', hidden: true, style: { color: 'var(--red)', fontSize: '.84rem', fontWeight: '650' } }) : null;
-    const input = h('input', { class: 'input', id, type: f.type, value: values[f.name] || '', min: f.min, step: f.step, placeholder: f.placeholder, inputmode: f.type === 'number' ? 'decimal' : null, 'aria-describedby': err ? errId : null });
+    const input = h('input', { class: 'input', id, 'data-flt': f.name, type: f.type, value: values[f.name] || '', min: f.min, step: f.step, placeholder: f.placeholder, inputmode: f.type === 'number' ? 'decimal' : null, 'aria-describedby': err ? errId : null });
     const show = (v) => {
       const outside = f.type === 'date' && outOfWindow(v);
       const bad = outside || Boolean(f.pattern && v !== '' && !f.pattern.test(v));
@@ -259,11 +277,14 @@ function control(f, values, emit, defaults = {}) {
     if (invalid) values[f.name] = defaults[f.name] ?? '';
     return { el: h('div', { class: 'flt__field' }, h('label', { for: id }, f.label), input, err), sync: () => { input.value = values[f.name] || ''; show(input.value); }, invalid };
   }
-  const sel = h('select', { class: 'input', id, 'aria-label': f.label },
+  const sel = h('select', { class: 'input', id, 'aria-label': f.label, 'data-flt': f.name },
     f.all !== false && h('option', { value: '' }, f.all || `All`),
     (f.options || []).map(([v, t]) => h('option', { value: v, selected: String(values[f.name] ?? '') === String(v) }, t)));
-  sel.addEventListener('change', () => { values[f.name] = sel.value; emit(); });
-  return { el: f.inline ? sel : h('div', { class: 'flt__field' }, h('label', { for: id }, f.label), sel), sync: () => { sel.value = values[f.name] ?? ''; } };
+  // A quick select that is off its default is marked, so it reads as a filter that is on.
+  const mark = () => sel.classList?.toggle('is-set', String(values[f.name] ?? '') !== String(defaults[f.name] ?? ''));
+  sel.addEventListener('change', () => { values[f.name] = sel.value; mark(); emit(); });
+  mark();
+  return { el: f.inline ? sel : h('div', { class: 'flt__field' }, h('label', { for: id }, f.label), sel), sync: () => { sel.value = values[f.name] ?? ''; mark(); } };
 }
 
 function chipText(f, values) {
@@ -291,7 +312,7 @@ function clearField(f, values, defaults) {
 
 /**
  * Returns the bar element. `quick` fields sit in the toolbar; `more` fields
- * open under "More filters". Calls onChange() after any change (debounced
+ * open under "Filters". Calls onChange() after any change (debounced
  * for search), and remembers the values under `key`.
  */
 export function filterBar({ key, values, defaults, search, quick = [], more = [], onChange, extra }) {
@@ -310,14 +331,20 @@ export function filterBar({ key, values, defaults, search, quick = [], more = []
   let searchInput;
 
   const activeMore = () => more.filter((f) => chipText(f, values)).length;
+  const isOn = (f, t) => t && (isRange(f) || String(values[f.name] ?? '') !== String(defaults[f.name] ?? ''));
   function paint() {
-    if (moreBtn) moreBtn.replaceChildren('More filters', activeMore() ? h('span', { class: 'flt__count' }, String(activeMore())) : '');
-    const active = all.map((f) => [f, chipText(f, values)]).filter(([f, t]) => t && (isRange(f) || String(values[f.name] ?? '') !== String(defaults[f.name] ?? '')));
+    const active = all.map((f) => [f, chipText(f, values)]).filter(([f, t]) => isOn(f, t));
+    if (moreBtn) {
+      const n = active.length;
+      moreBtn.replaceChildren(filterIcon(), 'Filters', n ? h('span', { class: 'flt__count' }, String(n)) : '');
+      moreBtn.setAttribute('aria-label', n ? `Filters, ${n} active` : 'Filters');
+      moreBtn.classList?.toggle('is-active', n > 0);
+    }
     const q = search && values[search.name || 'q'];
     chips.replaceChildren(
       ...(q ? [h('button', { type: 'button', class: 'flt__chip', 'aria-label': `Remove search ${q}`, onclick: () => { values[search.name || 'q'] = ''; searchInput.value = ''; emit(); } }, `“${q}”`, h('span', { 'aria-hidden': 'true' }, ' ×'))] : []),
       ...active.map(([f, t]) => h('button', { type: 'button', class: 'flt__chip', 'aria-label': `Remove filter ${t}`, onclick: () => { clearField(f, values, defaults); controls.forEach((c) => c.sync()); emit(); } }, t, h('span', { 'aria-hidden': 'true' }, ' ×'))),
-      (q || active.length > 1) ? h('button', { type: 'button', class: 'flt__clear', onclick: () => clearAll() }, 'Clear all') : '');
+      (q || active.length > 0) ? h('button', { type: 'button', class: 'flt__clear', onclick: () => clearAll() }, 'Clear all') : '');
   }
   function emit() { rememberFilters(key, values); paint(); onChange(); }
   function clearAll() {
@@ -330,7 +357,7 @@ export function filterBar({ key, values, defaults, search, quick = [], more = []
   let searchEl = null;
   if (search) {
     let t;
-    searchInput = h('input', { class: 'input', type: 'search', value: values[search.name || 'q'] || '', placeholder: search.placeholder || 'Search…', 'aria-label': search.label || search.placeholder || 'Search' });
+    searchInput = h('input', { class: 'input', type: 'search', 'data-flt': search.name || 'q', value: values[search.name || 'q'] || '', placeholder: search.placeholder || 'Search…', 'aria-label': search.label || search.placeholder || 'Search' });
     searchInput.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { values[search.name || 'q'] = searchInput.value.trim(); emit(); }, 300); });
     searchEl = h('div', { class: 'search' }, searchInput);
   }
@@ -340,14 +367,30 @@ export function filterBar({ key, values, defaults, search, quick = [], more = []
     panel.append(h('div', { class: 'flt__grid' }, moreCtrls.map((c) => c.el)),
       h('div', { class: 'flt__actions' }, h('button', { type: 'button', class: 'btn btn--secondary btn--sm', onclick: () => clearAll() }, 'Reset filters'),
         h('button', { type: 'button', class: 'btn btn--primary btn--sm', onclick: () => toggle(false) }, 'Done')));
-    if (activeMore() || moreCtrls.some((c) => c.invalid)) panel.hidden = false;
+    const was = panelOpen.get(key);
+    if (activeMore() || moreCtrls.some((c) => c.invalid) || (was && was.path === pathNow() && was.open)) panel.hidden = false;
   }
   function toggle(open) {
     panel.hidden = !open;
     moreBtn.setAttribute('aria-expanded', String(open));
+    panelOpen.set(key, { open, path: pathNow() });
   }
   moreBtn?.addEventListener('click', () => toggle(panel.hidden));
   if (panel && !panel.hidden) moreBtn.setAttribute('aria-expanded', 'true');
   paint();
-  return h('div', { class: 'flt' }, h('div', { class: 'toolbar flt__bar' }, extra, searchEl, quickEls, moreBtn), panel, chips);
+  // A selected control of the bar being replaced: once this bar is in the page, focus goes to the control with the same name.
+  const old = typeof document !== 'undefined' && document.activeElement?.closest?.('.flt');
+  const focusName = old ? document.activeElement.getAttribute?.('data-flt') : null;
+  const byLabel = !moreBtn && quick.some((f) => !f.type || f.type === 'select');
+  const root = h('div', { class: 'flt' }, h('div', { class: 'toolbar flt__bar' }, extra, searchEl, byLabel && h('span', { class: 'flt__by muted small' }, filterIcon(), 'Filter by'), quickEls, moreBtn), panel, chips);
+  if (old) {
+    let tries = 0;
+    const land = () => {
+      if (!root.isConnected) { if (++tries < FOCUS_TRIES) setTimeout(land, 50); return; }
+      const next = (focusName && root.querySelector(`[data-flt="${focusName}"]`)) || root.querySelector('.flt__more') || root.querySelector('input[type="search"]');
+      next?.focus?.({ preventScroll: true });
+    };
+    setTimeout(land, 0);
+  }
+  return root;
 }

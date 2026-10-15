@@ -4,7 +4,7 @@ BalayHub is rental and staycation management software for Filipino hosts. It cov
 
 This document describes what is actually built, as checked against the code. Anything not confirmed in the code is marked **unverified**.
 
-Last updated: 2026-10-15 (QA round 14: top bar endpoints, PayMongo key check, `PAYMONGO_KEY_CHECK`)
+Last updated: 2026-10-15 (QA round 15: platform plan coupons, their endpoints and limits, the PayMongo Subscriptions note; no new environment variable)
 
 ---
 
@@ -187,6 +187,14 @@ For every variable, see the full list in section 4. Hosts' own PayMongo keys are
 | Test mode | n/a | A host key starting `sk_test_` marks checkouts and payments as TEST MODE |
 | Env vars | `PAYMONGO_SECRET_KEY`, `PAYMONGO_WEBHOOK_SECRET`, `PAYMONGO_METHODS` | `DATA_ENCRYPTION_KEY` (protects the stored host keys) |
 
+**Plan coupons and how PayMongo is called (QA round 15, D-94).** PayMongo has no coupon feature, so BalayHub applies the discount itself and sends PayMongo the final price.
+- **One line item, whole centavos.** The Checkout Session still has a single `line_items` entry; its `amount` is the price after the discount, in centavos (`list - discount`, never a float), and its name carries the code ("Growth, 3 months (coupon ALPHA50)"). `refresh()` checks the paid amount against the same centavo figure before it trusts a payment.
+- **The floor.** If a discount would leave more than 0 and less than ₱20, the amount is raised to ₱20. The floor is the constant `MIN_CHARGE_C` (2000) in `src/lib/coupons.js`. It is BalayHub's choice: PayMongo's documented minimum is ₱1 for cards, GCash and Maya (BDO and BillEase ₱100; found in the research of 2026-10-15 from official pages, not yet confirmed against the live account), and PayMongo will not take ₱0 (inferred).
+- **Card only on "require card".** A coupon with `require_card` and a total of 0 is charged ₱20 once and the session is opened with `payment_method_types: ['card']`; otherwise the types come from `PAYMONGO_METHODS`. If `card` is not in `PAYMONGO_METHODS`, the code answers `CARD_OFF` instead of opening a session.
+- **No PayMongo call when free.** A free coupon without "require card" writes a `billing_payments` row (`provider = 'coupon'`, amount 0) and runs `markPaid()` straight away.
+- **A checkout with no URL** (PayMongo answered without one) marks the billing row `failed` and releases the coupon slot at once; the 10-minute `billing` job also releases pending redemptions older than 2 days.
+- **Subscriptions (auto-renew) is not used.** Per the research, PayMongo saves a card only while the customer is present; charging a saved card later is done through its Subscriptions API (plans, subscriptions, invoices; cards and Maya), which is **gated: PayMongo must review and approve the account first**. BalayHub does not call it, keeps no customer or saved payment method, and has no subscription webhook handler. Turning it on is a separate project (BLOCKERS asks whether to request approval).
+
 **Checking a host's key (QA round 14, D-92).** When an owner saves a PayMongo key, and again when they turn the booking page on with a key that has not been checked, BalayHub asks PayMongo whether the key works: `GET https://api.paymongo.com/v1/payments?limit=1` with the key as the Basic auth user (`src/lib/paymongo.js`, `checkKey`). The call times out after **8 seconds**. The key is never logged. Answers: HTTP 2xx is `ok` (the host reads "Connected" and `organizations.paymongo_key_checked_at` is set); HTTP 401 is `rejected` (a new key is not saved; a saved one cannot be used to turn the page on); any other answer, a network error or a timeout is `unreachable` (the key is saved as "Saved, not checked yet", and turning the page on asks "Turn on anyway?"). A guest checkout that PayMongo refuses as unauthorised clears `paymongo_key_checked_at` again. `PAYMONGO_KEY_CHECK=off` skips the call and always answers `unreachable` (section 4).
 
 Plans and prices live in `src/lib/plans.js`: trial, starter, growth, pro, comped. Each has a listing limit and an AI flag. Paid plans get a 7-day grace period after `paid_until`. Billing periods are 1, 3 or 12 months (12 months are charged as 10).
@@ -242,6 +250,7 @@ Note: `ANTHROPIC_BASE_URL` is only used by the assistant (the drafts code ignore
 
 - Platform admins are the verified accounts whose email is in `PLATFORM_ADMIN_EMAILS`. This is not a workspace role.
 - They get `/api/admin/*`: workspaces, plans, trial and paid-until dates, plan notes, and the support inbox. Anyone else gets a 404.
+- **Plan coupons (round 15, D-94):** `GET /api/admin/coupons` (filters `q`, `state`, `kind`, `plan`, `sort`), `POST /api/admin/coupons`, `PATCH /api/admin/coupons/:id`, `GET /api/admin/coupons/:id/redemptions`. Creating and editing write platform-level audit rows; a used coupon's discount fields are locked (409 `COUPON_LOCKED`). The owner side is `POST /api/billing/coupon/preview` and `coupon_code` on `POST /api/billing/checkout`, with `GET /api/billing` returning the workspace's coupon (owners only; the demo gets 403 `DEMO_READ_ONLY`). Request and answer shapes: `docs/contracts/platform-coupons.md` and BACKEND-SCHEMA section 21. The rules live in `src/lib/coupons.js`; `src/lib/billing.js` builds the checkout and the 45-day `COUPON_AHEAD` check.
 
 ### 3.10 Alerts
 
@@ -341,6 +350,7 @@ Fixed in code (not configurable): privacy policy version, terms version, time zo
 | Owner portal link exchange | 60 per 15 min | IP |
 | Workspace export | 10 per hour | workspace |
 | Plan checkout | 15 per hour | workspace |
+| Failed plan coupon checks (preview and checkout; only failures count; a full window refuses valid codes too) | 10 per 15 min; 60 per 15 min | workspace; IP |
 | Support tickets | 10 new tickets per hour | user |
 | AI drafts | 60 per hour | workspace |
 | Assistant | 40 per hour per user; 300 per day per workspace | user, workspace |
@@ -375,7 +385,7 @@ Fixed in code (not configurable): privacy policy version, terms version, time zo
 | Suite | How it runs |
 |---|---|
 | API tests | `npm test` runs `node --test --test-concurrency=1 test/*.test.js`: 27 files, about 169 top-level tests. `test/helpers.js` sets `NODE_ENV=test`, points `DATABASE_URL` at `TEST_DATABASE_URL` or a local `balayhub_test`, **drops and recreates the `public` schema**, runs all migrations, and starts the app on a random port with a temporary `STORAGE_DIR`. Email goes to the in-memory `test://` outbox |
-| Outbound calls in tests | `PAYMONGO_KEY_CHECK` is `off` under `NODE_ENV=test`, so no test calls PayMongo. QA round 14 passed **2640 of 2640** at the merge and **2662 of 2662** after the re-verify follow-ups (round 14 tests: `test/qa-r14-*.test.js` and `test/migration-033.test.js`) |
+| Outbound calls in tests | `PAYMONGO_KEY_CHECK` is `off` under `NODE_ENV=test`, so no test calls PayMongo. QA round 14 passed **2640 of 2640** at the merge and **2662 of 2662** after the re-verify follow-ups (round 14 tests: `test/qa-r14-*.test.js` and `test/migration-033.test.js`). QA round 15 passed **2860 of 2860** at the merge, with the security follow-ups included (round 15 tests: `test/qa-r15-*.test.js`, `test/billing-coupons.test.js` and `test/migration-035.test.js`). The automated suite makes no outbound PayMongo call; the browser lanes ran against a local fake PayMongo (outside the repository), so a real card-only checkout and the ₱20 floor are still a live-stage check |
 | Schema coverage guard | `test/account.test.js` fails if any table (other than `schema_migrations` and `mail_sync_state`) is missing from `PURGED_TABLES` |
 | Browser journeys | Playwright (Chromium) scripts, run by hand against a running, seeded server (`npm run seed`): `test/e2e-browser.js` (long-term), `e2e-stays-browser.js`, `e2e-inbox-browser.js` (server started with `SMTP_URL=test://`), `e2e-selling-browser.js` (with a platform admin email set), `e2e-booking-browser.js`, `e2e-checkin-browser.js`. Phone-sized viewport. Screenshots go to `SHOTS_DIR` |
 | CI | No CI configuration in the repository (**unverified** elsewhere) |

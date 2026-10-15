@@ -92,6 +92,6 @@ test('D-80 Check-out and Listing show on phone cards; Channel and Code stay hidd
   const head = resSrc.slice(resSrc.indexOf("h('thead'"), resSrc.indexOf("h('tbody', null, reservations"));
   assert.doesNotMatch(head, /col-sm-hide' \}, 'Check-out'/);
   assert.doesNotMatch(head, /col-sm-hide' \}, 'Listing'/);
-  assert.match(head, /col-sm-hide' \}, 'Channel'/);
+  assert.match(head, /col-sm-hide( col-md-hide)?' \}, 'Channel'/);
   assert.match(head, /col-sm-hide' \}, 'Code'/);
 });

@@ -181,16 +181,26 @@ const SYNC_TEXT = {
   failing: (p) => (p.channel ? `${p.unit_name} · ${feedName(p)}: ${p.message}` : `${p.unit_name}: ${p.message}`),
   overlap: (p) => `${p.unit_name}: a ${feedName(p)} booking overlaps another (${fmtDate(p.check_in)} to ${fmtDate(p.check_out)}). Fix it to avoid a double booking.`,
 };
+// One row per listing and kind, with how many links share it (first row's wording, feed order kept).
+export function groupSyncProblems(problems) {
+  const rows = new Map();
+  for (const p of problems) {
+    const key = `${p.unit_id}|${p.kind}`;
+    if (rows.has(key)) rows.get(key).n += 1; else rows.set(key, { p, n: 1 });
+  }
+  return [...rows.values()];
+}
+export const syncRowText = ({ p, n }) => `${SYNC_TEXT[p.kind](p)}${n > 1 ? ` (${n} links)` : ''}`;
 // Owners and managers: calendar sync problems.
 async function syncAlert() {
   if (!['owner', 'manager'].includes(state.user.role)) return null;
   let r;
   try { r = await get('/sync-health'); } catch { return null; }
-  const { problems } = r;
-  if (!problems.length) return null;
+  const rows = groupSyncProblems(r.problems);
+  if (!rows.length) return null;
   return h('div', { class: 'alert alert--warn sync-alert', role: 'status' },
-    h('strong', null, `Calendar sync problems (${problems.length})`),
-    h('ul', { class: 'sync-alert__list' }, problems.map((p) => h('li', null, SYNC_TEXT[p.kind](p), ' ', h('a', { href: `#/listings?focus=${p.unit_id}` }, 'Open listing')))));
+    h('strong', null, `Calendar sync problems (${rows.length})`),
+    h('ul', { class: 'sync-alert__list' }, rows.map((row) => h('li', null, syncRowText(row), ' ', h('a', { href: `#/listings?focus=${row.p.unit_id}` }, 'Open listing')))));
 }
 
 // After 9 PM Manila, owners and managers are nudged to close the day.
@@ -221,9 +231,12 @@ export const channelsLink = (listings) => (listings?.[0]?.unit_id ? `#/listings?
 
 export function firstRunCard({ reservations, listings }) {
   if (reservations !== 0) return null;
-  return h('div', { class: 'card' },
-    h('p', null, 'No bookings yet. Connect your Airbnb or Booking.com calendar to see them here.'),
-    h('a', { class: 'btn btn--primary', href: channelsLink(listings) }, 'Connect calendar'));
+  return h('div', { class: 'card cta-card' },
+    h('span', { class: 'cta-card__icon', 'aria-hidden': 'true' }, icon('calendar')),
+    h('div', { class: 'cta-card__text' },
+      h('p', null, 'No bookings yet. Connect your Airbnb or Booking.com calendar to see them here.')),
+    h('div', { class: 'cta-card__actions' },
+      h('a', { class: 'btn btn--primary', href: channelsLink(listings) }, 'Connect calendar')));
 }
 
 // A chart measures its space on the next frame, and the cards are built before they are on the page. Once they are

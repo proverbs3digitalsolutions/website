@@ -77,7 +77,7 @@ router.get('/onboarding', owners, ah(async (req, res) => {
          AND NOT EXISTS (SELECT 1 FROM ical_feeds f WHERE f.organization_id = o.organization_id AND f.last_status = 'ok')) AS channels_failing,
        EXISTS (SELECT 1 FROM bookings b WHERE b.organization_id = o.organization_id AND b.kind = 'reservation') AS reservation,
        EXISTS (SELECT 1 FROM automations a WHERE a.organization_id = o.organization_id AND a.enabled) AS messages,
-       EXISTS (SELECT 1 FROM guest_registrations r WHERE r.organization_id = o.organization_id) AS checkin_form,
+       EXISTS (SELECT 1 FROM guest_registrations r WHERE r.organization_id = o.organization_id AND r.submitted_at IS NOT NULL) AS checkin_form,
        (EXISTS (SELECT 1 FROM users x WHERE x.organization_id = o.organization_id AND x.user_id <> $2)
          OR EXISTS (SELECT 1 FROM invitations i WHERE i.organization_id = o.organization_id)) AS team,
        (o.cleaning_checklist <> $3::jsonb

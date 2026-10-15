@@ -1,8 +1,9 @@
 'use strict';
 
-// Supplies per property (D-53): item, unit label, par level and on hand. Owners
-// and managers keep the list. Anyone who can open a cleaning task can record what
-// they used or restocked on it. Every change to on hand is logged as a movement.
+// Supplies per property (D-53): item, unit label, par level and on hand. Owners,
+// managers and staff keep the list. Anyone who can open a cleaning task can read the
+// supplies for its property and record what they used or restocked on it. Every change
+// to on hand is logged as a movement.
 
 const express = require('express');
 const { query, one, tx } = require('../db');
@@ -112,8 +113,8 @@ async function withNameCheck(fn) {
 }
 
 // The task must be visible to the user (housekeeping's rule: a cleaner sees only tasks assigned
-// to them or unassigned). A cancelled task takes no supplies or work orders.
-async function loadWorkableTask(user, id) {
+// to them or unassigned).
+async function loadVisibleTask(user, id) {
   const params = [id];
   const task = await one(
     `SELECT t.task_id, t.status, t.unit_id, u.unit_name, p.property_id
@@ -122,11 +123,17 @@ async function loadWorkableTask(user, id) {
        JOIN properties p ON p.property_id = u.property_id
       WHERE t.task_id = $1 AND ${taskScope(user, params)}`, params);
   if (!task) throw notFound();
+  return task;
+}
+
+// A cancelled task takes no supplies or work orders.
+async function loadWorkableTask(user, id) {
+  const task = await loadVisibleTask(user, id);
   if (task.status === 'cancelled') throw new HttpError(409, 'This task was cancelled.', { code: 'CANCELLED' });
   return task;
 }
 
-router.get('/supplies', ah(async (req, res) => {
+router.get('/supplies', requireRole('owner', 'manager', 'staff'), ah(async (req, res) => {
   const propertyId = req.query.property_id ? uuidParam(req.query.property_id) : null;
   res.json({ supplies: await listSupplies(req.user, { propertyId, lowOnly: req.query.low === '1' }) });
 }));
@@ -212,6 +219,13 @@ router.get('/supplies/:id/movements', managers, ah(async (req, res) => {
       ORDER BY m.created_at DESC
       LIMIT 20`, [supply.supply_id]);
   res.json({ movements: rows });
+}));
+
+// The property's supplies, for anyone who can see the task: the job sheet's "Supplies used" list. A cleaner
+// gets this and no other list.
+router.get('/cleaning-tasks/:id/supplies', ah(async (req, res) => {
+  const task = await loadVisibleTask(req.user, uuidParam(req.params.id));
+  res.json({ supplies: await listSupplies(req.user, { propertyId: task.property_id }) });
 }));
 
 // Cleaners record what they used or restocked on a task. Supplies must belong to the task's

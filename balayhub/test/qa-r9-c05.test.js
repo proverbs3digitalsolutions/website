@@ -15,6 +15,7 @@ const path = require('node:path');
 const { startServer, client, sql, ownerAccount, manilaToday } = require('./helpers');
 const ical = require('../src/lib/ical');
 
+const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a3a30000000049454e44ae426082', 'hex');
 const BLANK_MSG = 'Enter the name of each guest, or remove the empty row.';
 const d = (n) => ical.addDays(manilaToday(), n);
 
@@ -49,8 +50,11 @@ test('a blank guest row is refused at its field and nothing is saved', async () 
 
 test('fewer names than booked guests: the host note says "booked for N"', async () => {
   const token = await tokenFor(short.booking_id);
-  const ok = await client(srv.base).post(`/api/public/checkin/${token}`, form(['Ana Diaz']));
+  const guest = client(srv.base);
+  const ok = await guest.post(`/api/public/checkin/${token}`, form(['Ana Diaz']));
   assert.equal(ok.status, 200, JSON.stringify(ok.data));
+  // The host note is sent when the first ID photo is stored (D-95).
+  assert.equal((await guest.post(`/api/public/checkin/${token}/id`, PNG, { 'Content-Type': 'image/png' })).status, 201);
   const notes = await hostNotes(short.booking_id);
   assert.equal(notes.length, 1);
   assert.match(notes[0].body, /\(2 guests, booked for 3\)\.$/);
@@ -58,8 +62,11 @@ test('fewer names than booked guests: the host note says "booked for N"', async 
 
 test('a full list of names has no "booked for" in the host note', async () => {
   const token = await tokenFor(full.booking_id);
-  const ok = await client(srv.base).post(`/api/public/checkin/${token}`, form(['Ana Diaz', 'Leo Diaz']));
+  const guest = client(srv.base);
+  const ok = await guest.post(`/api/public/checkin/${token}`, form(['Ana Diaz', 'Leo Diaz']));
   assert.equal(ok.status, 200, JSON.stringify(ok.data));
+  // The host note is sent when the first ID photo is stored (D-95).
+  assert.equal((await guest.post(`/api/public/checkin/${token}/id`, PNG, { 'Content-Type': 'image/png' })).status, 201);
   const notes = await hostNotes(full.booking_id);
   assert.equal(notes.length, 1);
   assert.match(notes[0].body, /\(3 guests\)\.$/);

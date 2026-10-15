@@ -139,7 +139,7 @@ export async function bookListingView(el, { params, query }) {
   initGuestLang(host.guest_language);
   const l = data.listings.find((x) => x.unit_id === params.unitId);
   if (!l) {
-    el.replaceChildren(shell(host.name, slug, h('div', { class: 'card' }, h('h1', null, t('Not available')), h('p', { class: 'muted' }, t("This listing is not available. It may have been removed, or it isn't open for online booking.")), h('p', null, h('a', { href: `#/book/${slug}` }, t('See all places'))))));
+    el.replaceChildren(shell(host.name, slug, h('div', { class: 'card' }, h('h1', null, t('Not available')), h('p', { class: 'muted' }, t("This listing is not available. It may have been removed, or it isn't open for online booking.")), h('p', null, h('a', { class: 'link-tap', href: `#/book/${slug}` }, t('See all places'))))));
     return;
   }
   document.title = `${l.unit_name} — ${host.name}`;
@@ -532,7 +532,7 @@ export async function bookDoneView(el, { params }) {
     try { s = await get(`/public/book/status/${encodeURIComponent(params.token)}`); } catch {
       show(null, h('div', { class: 'card' }, h('h1', null, t('Booking not found')),
         h('p', { class: 'muted' }, t("This booking link isn't valid. Check the link, or ask your host.")),
-        params.slug && h('p', null, h('a', { href: `#/book/${params.slug}` }, t('See all places')))));
+        params.slug && h('p', null, h('a', { class: 'link-tap', href: `#/book/${params.slug}` }, t('See all places')))));
       return;
     }
     const st = s.stay;

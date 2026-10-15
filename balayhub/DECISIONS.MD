@@ -2,7 +2,7 @@
 
 Every decision made on BalayHub, with the date and the reason. Newest decisions go at the bottom. When a decision changes, add a new entry and mark the old one **Superseded by D-xx**. Never delete history.
 
-Last updated: 2026-10-15 (D-93, QA round 14 re-verify calls; D-92, QA round 14 calls; D-91, the top bar built; D-90, founder top bar request; D-89, QA round 13 calls)
+Last updated: 2026-10-15 (D-96, QA round 15 late calls; D-95, QA round 15 calls; D-94, platform plan coupons; D-93, QA round 14 re-verify calls; D-92, QA round 14 calls; D-91, the top bar built; D-90, founder top bar request; D-89, QA round 13 calls)
 
 ---
 
@@ -921,7 +921,7 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 > - **A button that looks disabled but must stay reachable uses `aria-disabled="true"`, drawn dimmed with the not-allowed cursor** (`.btn[aria-disabled]`). Real `:disabled` buttons keep their own look, which also shows progress. *Why:* a keyboard or screen reader user can still land on the button and read the hint beside it (for example Export on Reports before both dates are set).
 > - **The supplies button stays labelled "Count"** (inside the "More" list with History, Edit and Archive). Renaming it was considered and not done: the label is already in use across the supplies screens and the sweep found nothing wrong with it.
 >
-> *Not changed (recorded so later sweeps don't file them):* the host app stays English (founder question), apart from the verify screens, which follow the chosen language; the job sheet, Record use and Count keep their own quantity messages because their rules differ; the 101x32 theme buttons pass the 24px minimum; rates saved above the round 11 ceiling still price cleans (round 11 question); the staff quote route has no role guard (pre-existing; the clash text shows staff nothing they can't already see).
+> *Not changed (recorded so later sweeps don't file them):* the host app stays English (founder question), apart from the verify screens, which follow the chosen language; the job sheet, Record use and Count keep their own quantity messages because their rules differ; the 101x32 theme buttons pass the 24px minimum (*superseded 2026-10-15 by D-95: theme buttons are 44px on phones*); rates saved above the round 11 ceiling still price cleans (round 11 question); the staff quote route has no role guard (pre-existing; the clash text shows staff nothing they can't already see).
 >
 > *Why:* a small host must see true money on every list and card, must not save a wrong method or rate with one tap, and must be able to use every page with a keyboard.
 
@@ -935,7 +935,7 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 >
 > *Screens and keyboard*
 > - **"Skip to main content"** is the first Tab stop on every app page and moves focus to the page heading.
-> - **On phones (under 960px), every button (including small ones), tab, filter chip, back link, standalone link and checklist row is at least 44px tall;** the top bar brand and account link are too, and the assistant button is 44x44. **Calendar booking tiles are at least 24px** (a dense grid; the WCAG minimum). **Checkboxes in the cleaner pay rows are 24px** on phones. Small buttons stay 38px on wider screens, links 24px. Theme buttons unchanged (D-88). *Settles the DESIGN-BRIEF `.btn--sm` 38px "only in dense toolbars" conflict: the 44px phone rule wins.*
+> - **On phones (under 960px), every button (including small ones), tab, filter chip, back link, standalone link and checklist row is at least 44px tall;** the top bar brand and account link are too, and the assistant button is 44x44. **Calendar booking tiles are at least 24px** (a dense grid; the WCAG minimum). **Checkboxes in the cleaner pay rows are 24px** on phones. Small buttons stay 38px on wider screens, links 24px. Theme buttons unchanged (D-88). *Superseded 2026-10-15 by D-95: theme buttons are 44px on phones.* *Settles the DESIGN-BRIEF `.btn--sm` 38px "only in dense toolbars" conflict: the 44px phone rule wins.*
 > - **A form error shows its sentence once,** at the field; the box at the top says "Please check the highlighted fields."
 > - **Confirm dialogs start on Cancel** (the safe choice). A dialog with a reason box still starts in the box.
 >
@@ -1020,7 +1020,7 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 > - **Focus (completes D-89).** When the control you used is gone and nothing took its place, **focus goes to the page heading at once** (no pause on the page body), and moves to the control if it comes back within 10 seconds. The sweep's "page body" readings were the guard's old 800 ms pause, not a lost guard. **Matching "the same place in a group" now applies to tabs and radio buttons only,** so focus never lands on another row's Remove or Archive. New keys: automatic message Turn on/off, Pause/Resume, Skip for now/Show again. After Reopen, the Daily close page lands on the heading (accepted; carried).
 >
 > *Phones*
-> - **Also at least 44px tall under 960px:** checkbox rows (cleaning checklists, notification settings), dialog close buttons, the guest language toggle, link-style buttons, "Show as table", small inputs (Go to date, Month), the guest Privacy link and the landing page's small buttons. The cleaner pay select-all box is 24px. Unchanged: theme buttons and calendar booking tiles (24px). Plain links use a shared `link-tap` class. On desktop the page keeps room under the last row so the Ask button never covers it.
+> - **Also at least 44px tall under 960px:** checkbox rows (cleaning checklists, notification settings), dialog close buttons, the guest language toggle, link-style buttons, "Show as table", small inputs (Go to date, Month), the guest Privacy link and the landing page's small buttons. The cleaner pay select-all box is 24px. Unchanged: calendar booking tiles (24px). *Theme buttons: superseded 2026-10-15 by D-95, they are 44px on phones.* Plain links use a shared `link-tap` class. On desktop the page keeps room under the last row so the Ask button never covers it.
 >
 > *Small-host screens and wording*
 > - **The Listings filter bar scales with the number of listings:** none until there is a listing; 1 to 3 listings show only search with the rest under "More filters"; 4 or more show the full bar. *Known side effect:* with 0 active listings (all archived) the Archived listings view is reachable only by link (BLOCKERS).
@@ -1033,7 +1033,7 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 >
 > *Decision conflicts settled:* the template row in APP-FLOW (managers edit templates) against D-28 (owner only): D-28 wins and the doc changed; the gate pass has no language toggle and stays English (doc changed to match the code); the check-in copy against the code that accepted no ID (founder default: require one); D-85 against D-90 (D-90 wins for the top bar only, recorded in D-91).
 >
-> *Intended (recorded so later sweeps don't file them):* add-on descriptions show as typed in both languages (a hint now says so); "Please fill in…" for empty required fields and "Please check…" for invalid ones; calendar bars and theme buttons as D-88/D-89.
+> *Intended (recorded so later sweeps don't file them):* add-on descriptions show as typed in both languages (a hint now says so); "Please fill in…" for empty required fields and "Please check…" for invalid ones; calendar bars as D-88/D-89 (*theme buttons: superseded 2026-10-15 by D-95, 44px on phones*).
 >
 > *Carried:* identical seasons saved at the same instant (no unique index); managers and staff with no reservations get the usual Home; the server trusts the client's ID photo count (the upload is a second request).
 >
@@ -1054,3 +1054,64 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 >
 > *Why:* the re-verify exists to catch what the sweep and the unit tests cannot: keyboard order, focus and scroll timing. Each finding got a test first.
 
+---
+
+> **D-94 · 2026-10-15 · Platform plan coupons.** Founder request, for alpha and beta testers. A platform admin makes coupons for BalayHub's own plans on a **Plan coupons** page; a workspace owner types a code under **Have a coupon code?** on Plan & billing. These are not the hosts' guest discount codes (F17), which keep that name. The full contract is `docs/contracts/platform-coupons.md`.
+>
+> *What billing really is (so the coupon is honest).* BalayHub charges one prepaid period at a time. It never keeps a card and never charges anyone automatically; renewal is manual and the usual 7 grace days then read-only rules still apply. So a coupon covers a number of **billed months**, not calendar months: while months remain, every checkout the owner starts is discounted automatically (no code typed again); when they run out, checkouts are full price and the box says so.
+>
+> *Behaviour and the founder defaults (each is built in; nothing waits on an answer, see BLOCKERS "Questions from the founder requests, round 15").*
+> - **Three kinds:** percent (1 to 99% off), fixed (a peso amount off each covered month) and free (an explicit choice). **Length:** the first billed month only, the first N billed months (2 to 36), or every billed month. A 3-month coupon on a 12-month purchase covers 3 of the 12. Fixed means per covered month.
+> - **The ₱20 floor is one constant.** `MIN_CHARGE_C` (2000 centavos) in `src/lib/coupons.js`. If a discount would leave a total above zero but under ₱20, the total is raised to ₱20. *Minimum ₱20 is BalayHub's own floor. PayMongo's documented minimum is ₱1 for cards, GCash and Maya (research 2026-10-15, medium-high confidence; BDO and BillEase ₱100), so lowering the floor means changing that one constant.*
+> - **"Require card" means a one-time ₱20 card payment.** BalayHub cannot keep a card or charge it later, so a free coupon that requires a card asks for ₱20 once, card only (the PayMongo checkout is opened with `payment_method_types: ['card']`), and then gives the free months. Nothing is charged automatically afterwards. If card payments are off in `PAYMONGO_METHODS` the code answers `CARD_OFF`.
+> - **Free with no card needs no payment.** A free coupon without "require card" makes no PayMongo call: a `billing_payments` row with `provider = 'coupon'` and amount 0 is written, and the plan switches on at once ("Activate free plan"). During a trial the paid period starts when the trial ends; a coupon never lengthens the trial.
+> - **One coupon live per workspace.** A workspace can use one coupon at a time (a different code answers `COUPON_OTHER`). "Once per workspace" is on by default for every new coupon, so a used-up code cannot be used again by the same workspace.
+> - **The 45-day rule (`COUPON_AHEAD`).** A discounted checkout is refused with a 409 while the workspace is already paid more than 45 days ahead: "Your plan is already paid ahead. Your coupon applies at your next renewal." The preview uses the same check, so the two cannot disagree. *Why:* the security review (Medium) found that coupon checkouts could stack paid time far into the future, and a later plan change converts that time into another plan at the old price.
+> - **A used coupon is locked.** Once any non-released redemption exists, the code, kind, amount, length, plans and start cannot change (409 `COUPON_LOCKED`); name, note, end date, limit (never below the times used), once per workspace, require card and on/off can. There is no delete; switch it off. Ending or switching off a coupon stops **new** workspaces only; workspaces already using it keep their remaining months.
+> - **Demo workspaces get 403 `DEMO_READ_ONLY`.** The read-only guard refuses the write before any coupon code runs (the coupon library also refuses the demo, as a second line).
+> - **Failed code tries are limited:** 10 per workspace and 20 per IP, per 15 minutes (only failed checks count; *the IP cap was raised to 60 on 2026-10-15 by D-96*). *The lock also blocks valid codes for the rest of the window* (accepted; BLOCKERS asks the founder). Unknown, off, not started, ended and full codes all answer the same generic 400 `COUPON_INVALID`, so codes cannot be probed. Codes are not case-sensitive (trimmed, inner spaces removed, upper-cased; letters, digits and dashes, 3 to 32).
+> - **Preview order:** the preview checks that online billing is on (`BILLING_OFF`) before anything else, then the code, then the 45-day rule.
+> - **Other defaults:** a coupon box shows only while online payment is on; codes are entered on Plan & billing, not at sign-up; deleting a workspace deletes its coupon use, which frees a slot under the limit; the coupon box offers no way to stop a coupon for workspaces already using it.
+> - **True monthly auto-renew is not built.** It needs PayMongo's Subscriptions feature, which is gated (an account review and approval; cards and Maya; plain saved cards work only while the customer is present). Until then the prepaid checkout stays, and the coupon discounts each renewal automatically. Whether to ask PayMongo to turn Subscriptions on is a BLOCKERS question; if yes it becomes its own project (saved card, a monthly charge job, retries and emails).
+> - **Audit:** `platform.coupon_created`, `platform.coupon_updated` (field names only), `platform.coupon_switched_off` and `_on`, and `billing.coupon_applied` (written when the payment is marked paid). Migration 035 holds the schema (BACKEND-SCHEMA 2.18).
+>
+> *Why:* the founder needs to give alpha and beta testers free or cheaper access without editing each workspace by hand, in a way that fits how BalayHub really bills. The money is stored as whole centavos and the discount is applied by lowering the single line item sent to PayMongo, because PayMongo has no coupon feature of its own.
+
+---
+
+> **D-95 · 2026-10-15 · QA round 15 calls (alpha with small hosts).** The fifteenth QA sweep (8 browser lanes, 67 entries including carried items and lane notes, plus the founder's three requests) was fixed the same day in 26 code lanes. Suite 2860 of 2860 at the merge. Security review PASS (manual); its one Medium (coupon stacking) is fixed as the 45-day rule in D-94 and the Lows are fixed too; the browser re-verify is pending, so the clean-round streak stays 0 of 3. This adds to D-94, D-93 and D-92 and changes only what it says.
+>
+> *Phones and the 44px rule*
+> - **The theme buttons are 44px tall on phones (under 960px).** *Supersedes the D-88 exemption.* The same 44px now covers the guest footer links, the landing footer links, review stars (44x44 with a gap), the housekeeping calendar unit link, the filter check pill, and small buttons (now 44px wide as well as tall).
+> - **Links inside a sentence are exempt from the 44px rule** (the accessibility standard's inline exception): the consent "privacy notice", "Ask BalayHub Support" inside a sentence. Standalone links get 44px. Calendar booking tiles and cleaner-pay row boxes stay 24px.
+> - **The theme switch is one radio group:** one Tab stop, the arrow keys (and Home and End) move and select, and its buttons are updated in place, never rebuilt, so focus stays on them.
+> - **Bottom-bar labels read "Groups" and "Help"** on the phone bottom bar (the sidebar keeps the full names, "Group bookings" and "Help & support").
+> - **The account page title (h1) reads "My account"**; the person's name is a smaller heading inside the page.
+> - **The Reservations Channel column folds under the listing name between 960 and 1439px** (`col-md-hide` and `col-md-show`); wider screens show the column, narrower ones use the card layout.
+> - **The scroll keeper never reveals an off-screen control.** After a redraw, focus is put back without scrolling the control into view if it was not visible before. Error toasts are announced at once (role alert); other toasts stay polite.
+>
+> *Check-in, calendar links, add-ons, payouts, alerts, supplies*
+> - **A check-in stays a draft until an ID photo is stored.** Saving the answers without a stored photo keeps them as a draft: the guest page says "Your answers are saved. Add a photo of your ID to finish registering." and the host card says "Waiting for the guest's ID photo". The first stored photo finishes it and sends the host the usual alert and inbox note. The gate pass, the Reservations "check-in form" filter and the Launchpad step count only finished registrations. Rows registered before today stay finished. (Migration 036 makes `submitted_at` nullable; NULL means draft.) *Why:* the server used to trust the guest's own count of photos.
+> - **A calendar link that does not look like a calendar gets a "Save it anyway?" question** (409 `ICAL_NOT_CALENDAR`, resent with `confirm_unusual_link`). A link with `.ics` or `ical` in its path or query passes without a question. Refusing outright could block an unusual channel's real link.
+> - **An add-on quantity is never silently changed.** Over the limit, the typed number stays, the field says "Up to N <name> per stay." and Save is blocked.
+> - **The payout Method starts on "Choose…"** so a method is always a deliberate pick.
+> - **Alerts with no property go to owners only** (bell and phone); a future caller can no longer fan an alert out to every manager.
+> - **Cleaners see only the supplies on their own job, through a new route.** `GET /api/cleaning-tasks/:id/supplies` answers the job's property supplies (names, units, on hand); `GET /api/supplies` now refuses cleaners and the cleaner Supplies page is blocked. *Settles the conflict between the founder default ("refuse cleaners") and the job sheet's "Supplies used" picker, which needs a list.*
+>
+> *Filters, cards and search*
+> - **"Filters" replaces "More filters":** a funnel icon, the word, and a count of every active filter except the search box; set quick selects and chips look set; Clear all shows with a single chip; every select has a chevron. Small hosts get search plus Filters instead of a bare "Filter" fold (Calendar included).
+> - **A card with one message and an action uses `.cta-card`:** icon, text, then the button, with a 12px gap between the sentence and the button (a defensive rule covers deposits, cleaner pay and the booking result). The Home first-run card is the first user.
+> - **Searches name what they show:** a capped group says "5 of 8 shown"; a guest result names the latest stay; dates read "Oct 16, 2026 – Oct 17, 2026". The Launchpad **Skip for now** and **Show again** keep the step open and the page where it was; Home groups several calendar links of one listing ("(2 links)").
+>
+> *Decision conflicts settled:* theme buttons (D-88 exempt against D-89 and D-93 44px: 44px wins); cleaner supplies (BACKEND-SCHEMA 6.1 against the founder default: a job-only route); BACKEND-SCHEMA section 6 said three roles (the code has four, the doc changed); APP-FLOW 27.1 and the code agree that Property in "+ Add new" is for long-term and Both only; bulk "Set a price" asks on Apply (intended, D-88).
+>
+> *Intended (recorded so later sweeps don't file them):* the floating Ask button may pass over content while the page scrolls (D-92's bottom space keeps the last row clear); the first page load leaves focus at the start of the page so "Skip to main content" is the first Tab stop, only a change of page focuses the heading (D-89); the consent link inline in a sentence and the other inline links; a checkbox as D-89; calendar tiles and cleaner-pay row boxes at 24px; the bulk price preview only previews.
+>
+> *Why:* the money and access findings first (the check-in count, cleaner supplies, coupon stacking), then the rule that kept returning (tap sizes), with the founder's coupon, filter and card requests built in the same wave.
+
+---
+
+> **D-96 · 2026-10-15 · QA round 15 late calls (orchestrator).** Two calls made after D-95 was written. They change only what they say.
+> - **The coupon code limit per IP address is 60 per 15 minutes (was 20).** Owners in one office, or on one mobile-carrier address, share an IP address and could lock each other out of applying a code. The limit per workspace stays at 10 failed tries per 15 minutes and is the main guard against guessing. Refines D-94.
+> - **A filter bar with no extra ("more") filters shows a small, non-interactive funnel and a "Filter by" label instead of an empty Filters button.** A button that opens nothing would mislead. Search-only bars are unchanged. *Why:* founder request 3, "filters must look like filters". Refines D-95's Filters button.
+> - **Money display in the owner coupon box:** whole-peso amounts in the Total and the "saved" lines show two decimals (for example ₱499.00), matching every other peso amount in the app (D-85). Offers ("50% off your first 3 months") and the "Pay ₱20 by card" button label stay short.

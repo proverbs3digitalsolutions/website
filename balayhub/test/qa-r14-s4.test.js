@@ -102,7 +102,7 @@ test('owner: groups come in the fixed order, a code ranks its booking first, a s
   const res = group(r, 'reservations');
   assert.equal(res.label, 'Reservations');
   const ana = res.items.find((i) => i.title === 'Ana Reyes' && /HMX4Q2/.test(i.sub));
-  assert.equal(ana.sub, 'Alpha Studio · 20 Oct 2026 to 22 Oct 2026 · HMX4Q2');
+  assert.equal(ana.sub, 'Alpha Studio · Oct 20, 2026 – Oct 22, 2026 · HMX4Q2');
   assert.equal(ana.href, `#/reservations/${ana.id}`);
   assert.match(res.items.find((i) => /CNX1Z9/.test(i.sub)).sub, / · Cancelled$/);
   assert.ok(res.items.some((i) => i.title === 'Walkin Anabel'), 'a booking with only a label is found');
@@ -121,7 +121,7 @@ test('listings, properties, tenants, owners, quotes and maintenance are found wi
   const l = await search(owner, 'alpha');
   assert.deepEqual(group(l, 'listings').items.map((i) => [i.title, i.sub, i.href]), [['Alpha Studio', 'Alpha House', `#/listings?focus=${unitA.unit_id}`]]);
   assert.deepEqual(group(l, 'properties').items.map((i) => [i.title, i.sub, i.href]), [['Alpha House', 'Taguig', `#/properties/${propA.property_id}`]]);
-  assert.deepEqual(group(l, 'quotes').items.map((i) => [i.title, i.sub]), [['Quincy Alphaquote', 'Alpha Studio · 10 Jan 2027 to 12 Jan 2027 · Open']]);
+  assert.deepEqual(group(l, 'quotes').items.map((i) => [i.title, i.sub]), [['Quincy Alphaquote', 'Alpha Studio · Jan 10, 2027 – Jan 12, 2027 · Open']]);
   const t = await search(owner, 'tomas');
   assert.deepEqual(titles(t, 'tenants'), ['Tomas Tenant']);
   assert.match(group(t, 'tenants').items[0].href, /^#\/tenants\//);

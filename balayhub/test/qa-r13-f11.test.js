@@ -71,8 +71,9 @@ test('#46: the Both choice at setup says what it adds', () => {
   assert.ok(setup.includes("hint: 'Both adds monthly rentals: tenants, leases and rent. Most hosts choose Short-term. You can change this later in Settings.'"));
 });
 
-test('K14: the verify toast is English when the person is signed in and follows the chosen language when not', () => {
+test('K14 (round 15 #31): the verify toast always follows the chosen language', () => {
   const s = src('views/auth.js');
   const verify = s.slice(s.indexOf('export async function verifyView'), s.indexOf('export async function verifyPendingView'));
-  assert.match(verify, /toast\(state\.user \? 'Email verified\.' : t\('Email verified\.'\)\);/);
+  assert.ok(verify.includes("toast(t('Email verified.'));"));
+  assert.doesNotMatch(verify, /toast\(state\.user \?/);
 });

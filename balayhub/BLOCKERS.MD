@@ -2,7 +2,7 @@
 
 Things only the founder can do or decide before related work can go ahead. Automated runs add items here. The founder clears them by doing the item and ticking it, or by writing the decision in DECISIONS.MD.
 
-Last updated: 2026-10-15 (QA round 14 questions added; round 13 and earlier unchanged)
+Last updated: 2026-10-15 (QA round 15 questions added; round 14 and earlier unchanged)
 
 ## Security — do first
 
@@ -358,3 +358,42 @@ Every question has its default already built into the app; nothing waits on the 
 
 - [ ] **Staff on a long-term workspace and tenant money.** Staff can see tenant rent amounts, the due day and the outstanding balance, because they need them to record rent payments. Should staff see less (for example only the amount to record)? *Default: yes, staff see them.*
 - [ ] **Read-only workspace top bar (live stage).** The check that a read-only workspace shows no "+" menu but keeps bookmarks needs a platform admin to put a test workspace into read-only. It was not run locally and is carried to the live stage.
+
+## Questions from QA round 15 (2026-10-15)
+
+Every question has its default already built into the app; nothing waits on the answer. The first group comes from the QA sweep (D-95), the second from the plan coupons request (D-94), the third was added while writing the docs.
+
+### From the sweep (D-95)
+
+- [ ] **Cleaner supplies list.** You asked to refuse cleaners and change the access table to No. Cleaners do use a list: their job sheet's "Supplies used" picker reads it. *Default built:* cleaners get no supplies list or page, only the supplies for the job they are on (a new job-only route), so your intent holds and the job sheet still works. *The other choice:* keep the old wide list for cleaners.
+- [ ] **Theme buttons on phones.** *Default:* 44px tall like every other phone control (this reverses the earlier exemption, D-88). *The other choice:* keep them at about 33px to save room in the menus.
+- [ ] **A check-in with answers but no ID photo.** *Default:* saved as a draft. The host sees "Waiting for the guest's ID photo" and the guest page asks for the photo; no "form received" alert until a photo is stored. *The other choice:* count it as received and flag "no ID" on the host card.
+- [ ] **Calendar links that do not look like calendars.** *Default:* BalayHub asks "Save it anyway?". *The other choice:* refuse them, which could block an unusual channel's real link.
+- [ ] **Links inside a sentence on phones** (the consent "privacy notice", "Ask BalayHub Support"). *Default:* exempt from the 44px size, as the accessibility standard allows. *The other choice:* move each onto its own line at 44px.
+- [ ] **Bottom bar labels.** *Default:* "Groups" and "Help" on the phone bottom bar for staff and cleaners (the sidebar keeps the full names). *The other choice:* keep the long names and a taller bar.
+- [ ] **Reservations table at laptop width.** *Default:* the Channel column folds under the listing name between 960 and 1439px. *The other choice:* fold Check-out under Check-in instead.
+
+### Plan coupons (D-94)
+
+- [ ] **"Require card" on a free coupon.** BalayHub cannot keep a card or charge it later. *Default:* the tester pays the ₱20 floor once, by card only, and gets the free months; nothing is charged automatically afterwards. *The other choice:* hide the switch until automatic card billing exists.
+- [ ] **Automatic monthly card charging.** Not built. *Default:* not now; owners renew on Plan & billing and the coupon discounts each renewal automatically while its months last. See the PayMongo Subscriptions question below.
+- [ ] **What "months" means.** *Default:* billed months (3 months on a 12-month purchase covers 3 of the 12; on 1-month purchases it covers the next three renewals). *The other choice:* calendar months from the day it is used.
+- [ ] **Fixed amount.** *Default:* "₱200 off" is ₱200 off each covered month. *The other choice:* ₱200 off each payment.
+- [ ] **Free coupons when online payment is off.** *Default:* the coupon box shows only while online payment is on.
+- [ ] **Ending or switching off a coupon.** *Default:* it stops new workspaces only; workspaces already using it keep their remaining months.
+- [ ] **Once per workspace** is on by default for every new coupon, and a workspace uses one coupon at a time. *Default:* as stated.
+- [ ] **A discounted total under ₱20.** *Default:* raised to ₱20 (BalayHub's floor, one constant `MIN_CHARGE_C`). PayMongo's documented minimum is only ₱1, so you can lower the floor if you want smaller payments. *The other choice:* lower or remove the floor (a one-line change, after a live check with PayMongo).
+- [ ] **Changing a coupon after it has been used.** *Default:* the discount, type, length, plans, code and start are locked; name, end date, limit, card rule and on/off can change. Make a new coupon instead.
+- [ ] **Coupon code at sign-up.** *Default:* codes are entered on Plan & billing only.
+- [ ] **The filter button's word.** *Default:* "Filters" with a funnel icon and a number, replacing "More filters".
+- [ ] **Dropdown arrows everywhere.** *Default:* every select box in the app gets the same clear arrow, not only filter bars.
+- [ ] **A deleted workspace's coupon use.** *Default:* deleting a workspace deletes its coupon use, which frees a slot under the coupon's limit.
+
+### Added while writing the docs
+
+- [ ] **Should BalayHub ask PayMongo to enable Subscriptions?** True automatic monthly charging needs PayMongo's Subscriptions feature, which PayMongo reviews and approves per account (cards and Maya). Saved cards without it work only while the customer is present. *Default: no request; prepaid checkouts stay.* If you say yes, ask PayMongo support to enable it (sandbox first), then it becomes its own project: saved card, a monthly charge job, retries and emails.
+- [ ] **Is the wrong-guess lock acceptable?** After 10 wrong codes in 15 minutes from one workspace (or 60 from one IP), that workspace or IP cannot apply even a correct code until the window passes. This stops guessing but can lock out an honest owner for up to 15 minutes. *Default: keep the lock for the whole window.* *The other choice:* let a correct code through while locked (weaker against guessing).
+- [ ] **Demo workspace and coupons.** The demo answers 403 "read only" for any coupon action. *Default: as built.*
+- [ ] **Unlimited free coupons.** A free coupon with no total limit and "once per workspace" off gives unlimited free months, and the admin form does not warn about it yet. *Default: allowed; a warning is on the carry list.*
+- [ ] **Staff on a long-term workspace and tenant money.** Already asked in round 14 ("Added after the round 14 re-verify"): staff can see tenant rent amounts, due day and the outstanding balance because they need them to record payments. *Default: yes, staff see them.* Not repeated here; one answer covers both.
+- [ ] **Live stage (nothing local can answer):** a real card-only PayMongo checkout, the ₱20 floor, and PayMongo's actual minimum on BalayHub's account. The browser lanes used a local fake PayMongo.

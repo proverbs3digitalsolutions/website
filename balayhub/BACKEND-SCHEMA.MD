@@ -442,7 +442,7 @@ Money in these tables is `numeric(12,2)`. Cleaner pay is recorded on the job (`p
 | lead_name, phone, email | text | |
 | guests | jsonb | Other guests' full names |
 | arrival_time, vehicle_plate, notes | text | |
-| consent_at, submitted_at, updated_at | timestamptz | |
+| consent_at, submitted_at, updated_at | timestamptz | **`submitted_at` is nullable (migration 036, D-95).** NULL means a **draft**: the guest saved answers but no ID photo has been stored yet. The first stored ID photo sets it (and sends the host one alert and inbox note). The gate pass (`has_form`), the Reservations check-in form filter and the Launchpad count only treat rows with `submitted_at` set as finished. Rows from before migration 036 keep their value |
 | ids_purged_at | timestamptz | When ID photos were deleted under the retention rule |
 
 **guest_reviews**: private reviews from guests.
@@ -593,6 +593,8 @@ A sequence `support_ticket_no_seq` starts at 1001 and numbers tickets `T-1001`, 
 
 Phase 2 actions: `owner_portal.invited`, `owner_portal.disabled`, `owner_portal.block_created`, `owner_portal.block_cancelled` (portal actions have no team user; the owner is in `details.owner_id`), `unit_owner.statement_published`, `unit_owner.statement_unpublished`, `unit_owner.statement_sent`, `owner_payout.recorded`, `owner_payout.voided`, `owner_reserve.withdrawal_recorded`, `owner_reserve.withdrawal_voided`, and `owner_statements.reminder_sent` (the monthly reminder's once-per-month record, with `details.month`).
 
+Round 15 actions (D-94): `platform.coupon_created`, `platform.coupon_updated` (field names only), `platform.coupon_switched_off`, `platform.coupon_switched_on` (all with `organization_id` NULL, record type `platform_coupon`), and `billing.coupon_applied` (the workspace, record type `billing_payment`; written when the payment is marked paid). Platform-level rows survive a workspace purge because the purge already sets the deleted users' `actor_user_id` to NULL.
+
 ### 2.15 Billing (BalayHub plans)
 
 **billing_payments**: a host paying BalayHub online.
@@ -603,11 +605,13 @@ Phase 2 actions: `owner_portal.invited`, `owner_portal.disabled`, `owner_portal.
 | organization_id | uuid | |
 | plan | text | `starter`, `growth` or `pro` |
 | months | smallint | 1, 3 or 12 |
-| amount | numeric | > 0 |
+| amount | numeric | > 0, or exactly 0 when `provider` is `coupon` (a free coupon period). Migration 035 |
 | status | text | `pending`, `paid`, `expired` or `failed` |
-| provider | text | Default `paymongo` |
+| provider | text | `paymongo` (default) or `coupon` (a free activation with no payment). A CHECK allows only these two (migration 035) |
 | checkout_id | text | Unique |
 | checkout_url, payment_method, paid_at, period_start, period_end, last_checked_at, created_by, created_at | | |
+
+Round 15 columns (migration 035, D-94): `list_amount` numeric (the price before any coupon, > 0; NULL on older rows), `discount_amount` numeric NOT NULL default 0 (>= 0), `coupon_redemption_id` uuid → `platform_coupon_redemptions` (NULL when no coupon was used; partly indexed) and `coupon_months` smallint NOT NULL default 0 (how many billed months this payment covered). `amount` is what was actually charged: `list_amount - discount_amount`, raised to the ₱20 floor when a discount would leave less (section 2.18).
 
 Related columns: `organizations.plan`, `trial_ends_at`, `paid_until` and `plan_note`.
 
@@ -642,6 +646,28 @@ The two CHECK constraints on `path` and `url` keep a stored link on this site: `
 Rollbacks are forward-only and written in the migration files.
 
 ---
+
+### 2.18 Platform plan coupons and check-in drafts (migrations 035 and 036, QA round 15, 2026-10-15)
+
+Decisions D-94 and D-95. The contract the build followed is `docs/contracts/platform-coupons.md`. Both migrations are forward-only; the rollback steps are written in the files.
+
+**New tables (migration 035)**
+
+| Table | Key columns and rules |
+|---|---|
+| `platform_coupons` | `coupon_id` uuid PK; `code` text (CHECK `^[A-Z0-9-]{3,32}$`, **unique** through `platform_coupons_code_uq`); `name` (1 to 100 characters); `kind` (`percent`, `fixed` or `free`); `percent_off` smallint 1 to 99 (set only for `percent`); `amount_off` numeric > 0 (set only for `fixed`; pesos off each covered month); `duration` (`once`, `months` or `forever`); `duration_months` smallint 2 to 36 (set only for `months`); `plans` text[] (NULL = every paid plan, otherwise a non-empty subset of `starter`, `growth`, `pro`); `max_redemptions` integer > 0 (NULL = no limit); `once_per_workspace` boolean default true; `require_card` boolean default false; `starts_at` timestamptz NOT NULL; `ends_at` timestamptz (after `starts_at`); `active` boolean default true; `note` (up to 1000 characters); `created_by` → users (SET NULL); `created_at`, `updated_at`. CHECKs tie each of `percent_off`, `amount_off` and `duration_months` to its kind or duration. Times are stored as UTC; the admin form takes Manila time |
+| `platform_coupon_redemptions` | `redemption_id` uuid PK; `coupon_id` → platform_coupons; `organization_id` → organizations; `status` (`pending`, `active`, `used_up` or `released`); `months_total` smallint > 0 (**NULL means forever**); `months_used` smallint default 0; `redeemed_by` → users (SET NULL); `created_at`, `activated_at`, `released_at`. **Unique on (`coupon_id`, `organization_id`) while the status is `pending` or `active`** (one live redemption per workspace per coupon). Indexes on (`coupon_id`, `created_at` desc) and (`organization_id`, `created_at` desc) |
+
+**Redemption life:** `pending` when the first checkout with the code starts; `active` on the first paid payment; `used_up` when its months are used; `released` when the checkout expires or fails before any payment (a pending row older than 2 days stops counting toward the limit, and the 10-minute billing job releases it). A released row is never revived. A workspace uses **one coupon at a time**.
+
+**Column changes**
+
+| Where | Change |
+|---|---|
+| `billing_payments` (035) | The amount CHECK now allows 0 only for `provider = 'coupon'`; new provider CHECK (`paymongo` or `coupon`); new columns `list_amount`, `discount_amount`, `coupon_redemption_id`, `coupon_months` (section 2.15); a partial index on `coupon_redemption_id` |
+| `guest_registrations` (036) | `submitted_at` loses NOT NULL (section 2.4). Rollback: set NULL rows to `updated_at`, then restore NOT NULL |
+
+**Purge and export.** The purge deletes a workspace's `platform_coupon_redemptions` (after its billing rows, which point at them; deleting a workspace therefore frees a slot under a coupon's limit). `platform_coupons` themselves are kept, as the platform's own data; their `created_by` and the redemptions' `redeemed_by` are SET NULL when a user is deleted. `PURGED_TABLES` lists the redemptions table, the export includes it, and `test/account.test.js` still guards the list.
 
 ---
 
@@ -697,13 +723,16 @@ organizations ─┬─ users ─┬─ sessions / auth_tokens / consent_records
 | `stay_deposits` refund CHECK | refund + deduction = deposit once refunded |
 | `discount_codes` CHECK | Exactly one of percent or amount off |
 | `seasons` CHECKs | Valid range of at most 366 days, and a rate or a minimum stay |
+| `platform_coupons_code_uq` and the kind CHECKs | One coupon per code; percent, amount and months are set only for the matching kind or length |
+| `platform_coupon_redemptions_live_uq` (partial unique) | One pending or active redemption per workspace per coupon |
+| `billing_payments_amount_check`, `billing_payments_provider_check` | A zero amount only for a free coupon period (`provider = 'coupon'`); provider is `paymongo` or `coupon` |
 
 ### 3.2 ON DELETE behaviour
 
 | Behaviour | Where |
 |---|---|
 | CASCADE | sessions, auth_tokens, consent_records, push_subscriptions and property_assignments when their **user** is deleted; messages when their conversation is deleted; automation_runs when their automation is deleted; seasons when their unit is deleted; support_messages and support_events when their ticket is deleted |
-| SET NULL | bookings.ical_feed_id; automation_runs.message_id; units.owner_id; support_tickets.created_by and assigned_to; support_messages.author_id; support_events.actor_id |
+| SET NULL | platform_coupons.created_by; platform_coupon_redemptions.redeemed_by; bookings.ical_feed_id; automation_runs.message_id; units.owner_id; support_tickets.created_by and assigned_to; support_messages.author_id; support_events.actor_id |
 | NO ACTION (default) | Everything else. For example, a property, unit, booking or lease can't be deleted while anything references it. The app archives or voids instead |
 
 ---
@@ -758,7 +787,7 @@ The workspace export (`exportOrganization`) is not complete. It leaves out `supp
 
 ## 6. Role × data access matrix
 
-**Roles.** `owner`, `manager` and `staff` are workspace roles (`users.role`). **Platform admin** is not a role: it is any verified user whose email is in `PLATFORM_ADMIN_EMAILS`, and it unlocks the `/api/admin/*` pages. A platform admin who is also in a workspace has that workspace's role there as well. The **guest via token link** column covers people without an account who hold a private link: the guest (check-in, pay, review, booking return links), the building admin (gate-pass link), and channels (iCal export link).
+**Roles.** `owner`, `manager`, `staff` and `cleaner` are the four workspace roles (`users.role`). The tables in this section have Owner, Manager and Staff columns; the **cleaner** has its own column in section 6.1, and any row not listed there is No for a cleaner (D-48). *(Corrected 2026-10-15: this paragraph used to list three roles.)* **Platform admin** is not a role: it is any verified user whose email is in `PLATFORM_ADMIN_EMAILS`, and it unlocks the `/api/admin/*` pages. A platform admin who is also in a workspace has that workspace's role there as well. The **guest via token link** column covers people without an account who hold a private link: the guest (check-in, pay, review, booking return links), the building admin (gate-pass link), and channels (iCal export link).
 
 **Scope.** "Assigned" means only properties listed for that user in `property_assignments`, enforced in SQL by `propertyScope()`, `tenantScope()` or `guestScope()`. Records out of scope return 404. Owners always see the whole workspace. "Delete" means a real removal; most data is archived or voided instead (section 4.3).
 
@@ -805,6 +834,8 @@ The workspace export (`exportOrganization`) is not complete. It leaves out `supp
 | Owner portal (unit owner, `bh_owner` cookie, not a workspace role) | None (invites and turns access off only) | None | None | None | Unit owner, own units only: published statements (never drafts), payouts, own reserve balance, bookings and activity for own units (guests by first name), own blocks (create, cancel before start), P&L for own units, receipts on published statements. Sees history of units now assigned to them (D-46). Never guest contact details, payment proofs, other owners or other workspace data. Blocks: not while the workspace is view-only; 20 per hour (D-46) |
 | Support tickets | All of the workspace's tickets: view, create, reply, resolve, rate, attach files | Own tickets only | Own tickets only | All tickets: view, reply, internal notes, change status, assign, view attachments | None |
 | Plan and billing payments | View; start and confirm checkout | Plan status only (via session; no price or listing limit, D-83) | Plan status only (same) | Set plan and dates by hand | None |
+| Plan coupons (list, create, edit, switch off, see who redeemed; `/api/admin/coupons*`, D-94) | No (404, not a platform admin) | No (404) | No (404) | **Manages them**: list, create, edit (locked fields after use), switch on or off, redemptions. Audit-logged at platform level | None |
+| Using a plan coupon (preview a code, check out with one, see the workspace's own coupon and history) | **Redeems them**: owners only, in their own workspace. Not for the comped plan or the demo | No (403) | No (403) | Only as the owner of their own workspace | None |
 | Audit log | View all entries (latest 200) | View own actions only | None | No viewer (plan changes are written into the workspace's log) | None |
 | Workspace export and deletion | Export JSON; request and cancel deletion | None | None | None | None |
 | Files (generic) | Follows the parent record's rule | Same, assigned | Same, assigned, except lease and guest ID files | Support attachments only | Guest IDs: upload only. Building admin: view guest IDs. Public listing photos |
@@ -839,7 +870,8 @@ The cleaner role is denied by default in code (`cleanerGuard`, D-48). Any row no
 | Cleaner pay list and mark paid | View, mark paid, undo | View and mark paid (assigned); no undo | No | No |
 | My pay (page `#/my-pay`) | Not shown. The API refuses with 403 "My pay is for cleaners." | Same (403) | Same (403) | Own pay only (page and API). Cleans they finished that are paid to someone else show as hidden rows with no name and no money (2026-10-14, D-82) |
 | Expenses made by mark paid | Yes | Yes (assigned) | No | No |
-| Supplies: list | Full | Assigned | Assigned; the Supplies page opens read-only (no add, edit, count or restock buttons) | Names and counts only (assigned). No costs exist |
+| Supplies: list (`GET /supplies`) | Full | Assigned | Assigned; the Supplies page opens read-only (no add, edit, count or restock buttons) | **No (403).** *Changed 2026-10-15 (D-95): the cleaner Supplies page is blocked too.* A cleaner sees supplies only on a job, in the next row |
+| Supplies on one job (`GET /cleaning-tasks/:id/supplies`) | Yes | Yes (assigned) | Yes (jobs they can see) | **Yes, for a job they may see** (own or unassigned in an assigned property): the supplies of that job's property, names, units and on hand only. No costs, no other property. Feeds the job sheet's "Supplies used" picker. A cancelled job still answers |
 | Supplies: add, edit, archive, count, restock | Yes | Yes (assigned) | No | No |
 | Supplies: movement history (`GET /supplies/:id/movements`, last 20) | Yes | Yes (assigned) | No | No |
 | Supplies: record used or restocked on a job | Yes | Yes | Yes (jobs they can see) | Yes, on own and unassigned jobs |
@@ -1247,3 +1279,30 @@ Decisions D-91 and D-92. Two migrations (033 top bar, 034 PayMongo key check, se
 - **Workspace export** leaves out `notifications` and `bookmarks`.
 
 **Client-only rules this round (no server change):** the booking page summary's "Pay now" line (`dueNow` in `book.js`; the server already charged the right amount); the scroll keeper and focus guard changes in `ui.js`; the Listings filter bar sizes; the Reports redirect for short-term workspaces; the 44px phone rules; the `?new=` and `?invite=1` openers.
+
+## 21. API notes from QA round 15 (2026-10-15)
+
+Decisions D-94 (plan coupons) and D-95 (round 15 calls). Two migrations (035 coupons, 036 check-in drafts; section 2.18). Access rules for coupons are in the section 6 matrix; the cleaner supplies rows are in 6.1.
+
+**Owner coupon endpoints (`src/routes/billing.js`, owners only; paths under `/billing/` stay open in a read-only workspace)**
+- **`POST /api/billing/coupon/preview`** `{ code?, plan, months }`: read-only (nothing is reserved). 200 `{ coupon, plan, months, list_amount, discount_amount, amount, covered_months, free, card_only, min_charge_applied, message }`; `coupon` is null when there is nothing to apply (for example a used-up coupon, with the message "Your coupon's 3 months are used. This payment is the full price."). `code` may be left out when the workspace already has a live redemption. **Check order: online billing on (409 `BILLING_OFF`) first**, then the code and plan, then the 45-day rule.
+- **`POST /api/billing/checkout`** now takes optional `coupon_code`. Paid: 200 `{ billing_id, checkout_url }`. Free activation: 200 `{ billing_id, activated: true, plan, paid_until }`. The checkout sends PayMongo one line item in whole centavos (`list - discount`, raised to ₱20 if above 0 and under it) and `payment_method_types: ['card']` only when the coupon requires a card.
+- **`GET /api/billing`** adds `coupon: null | { code, name, kind, percent_off, amount_off, duration, duration_months, months_left, plans, require_card, status }` (the latest non-released redemption; `months_left` null = forever) and each history row adds `list_amount`, `discount_amount`, `provider`, `coupon_code`, `coupon_months`.
+- **Errors:** 400 `VALIDATION` (plan, months, or a code with characters other than letters, digits and dashes); 400 `COUPON_INVALID` (one generic answer for unknown, off, not started, ended and full: "This code isn't valid right now. Check it and try again."); 409 `COUPON_PLAN` (lists the plans it covers), `COUPON_USED`, `COUPON_OTHER`, `COMPED` (a complimentary workspace), `BILLING_OFF`, `CARD_OFF` (a card-only coupon while `card` is not in `PAYMONGO_METHODS`), **`COUPON_AHEAD`** (a discounted checkout while `paid_until` is more than 45 days after today in Manila: "Your plan is already paid ahead. Your coupon applies at your next renewal."; the preview and checkout share one helper, `couponAheadError`); 429 `RATE_LIMITED`; 403 for non-owners; **403 `DEMO_READ_ONLY` in the demo**.
+- **Rate limits:** failed code checks only count, **10 per workspace and 60 per IP, per 15 minutes** (the IP cap was 20 until D-96), on both preview and checkout. When the window is full, valid codes are refused too until it passes (accepted; BLOCKERS). The existing checkout limit (15 per hour per workspace) stays.
+- A failed checkout (no checkout URL from PayMongo, or an error on the free path) marks the row `failed` and releases the redemption slot at once. A payment confirmed against a released redemption does not revive it.
+
+**Platform admin coupon endpoints (`src/routes/admin.js`; anyone who is not a platform admin gets 404)**
+- **`GET /api/admin/coupons?q=&state=&kind=&plan=&sort=`** → `{ coupons, total, summary: { active, scheduled, ended, off, full } }`. Each coupon adds `state`, `used` (active, used-up and recent pending redemptions) and `discount_total` (a string). A coupon with no plan limit shows under every plan filter. No paging yet.
+- **`POST /api/admin/coupons`** → 201 `{ coupon }`; 400 `VALIDATION` with `fields`; 409 `CODE_TAKEN`. `starts_on`, `starts_time`, `ends_on`, `ends_time` are Manila time and stored as UTC.
+- **`PATCH /api/admin/coupons/:id`** → 200 `{ coupon }`; 404; 409 `COUPON_LOCKED` once any non-released redemption exists (code, kind, amounts, length, plans and start are locked); 409 `CODE_TAKEN`; 400 `fields.max_redemptions` below the times used. The edit locks the coupon row, so it waits for a redemption in progress.
+- **`GET /api/admin/coupons/:id/redemptions`** → `{ coupon, redemptions }` (newest first, up to 500): workspace name, owner email, status, months total and used, dates, `discount_total` and `payments`.
+
+**Other round 15 server rules**
+- **`GET /api/cleaning-tasks/:id/supplies`:** the job's property supplies, `{ supplies }`, same shape as the supplies list without money fields; only for people who may see the job. The cleaner allow-list (`src/lib/cleaner.js`) lists this route and no longer lists `GET /supplies`; **`GET /api/supplies` is owner, manager and staff only** (a cleaner gets 403). The web app's route guard sends a cleaner who types `#/supplies` to housekeeping.
+- **`POST /api/public/checkin/:token`** and the ID upload: a registration is a draft (`submitted_at` NULL) until a file of type `registration` is stored; the first stored photo sets `submitted_at` and writes the one host alert and inbox note. The guest page and the host card say so (APP-FLOW 28). Gate pass `has_form` and the onboarding count read finished rows only.
+- **`POST /api/ical-feeds`:** a link that does not look like a calendar gets 409 `ICAL_NOT_CALENDAR` ("This doesn't look like a calendar link (they usually end in .ics). Save it anyway?"), unless the body has `confirm_unusual_link: true`. A path or query containing `.ics` or `ical` passes.
+- **`GET /api/search`:** each group now carries `total` (every match) and `more` (true when the group was cut at 5), so the screen can say "5 of 8 shown". Guest rows name the latest stay in `sub`.
+- **`push.notify` with no property and no user** goes to owners only (bell row and phone alert), the same rule the bell applies when reading (section 6.4).
+- **Review page (`GET /api/public/review/:token`)** returns the share links for 4 and 5 star reviewed stays; the quote page checks the phone number format. Settings → Direct booking: a key that is too long gets its own sentence, and a balance-payment checkout answered 401 by PayMongo clears `paymongo_key_checked_at` (the balance **refresh** route still swallows a 401; carried).
+- **Payout and add-on rules** are client-side only (the Method starts on "Choose…"; an add-on quantity over its limit keeps the typed value and blocks Save).

@@ -30,12 +30,13 @@ export function nextDueWindow(today = todayManila()) {
   return { earliest: on(y - 1), latest: on(y + 5) };
 }
 
-// "From cleaning task" badge, linking to the job. Inside a list row (already a link) it navigates by click.
-const taskBadge = (m, inRow) => h('a', {
-  class: 'badge badge--ops link-tap', href: `#/housekeeping/${m.cleaning_task_id}`,
-  'aria-label': `From cleaning task, ${m.unit_name ? unitLabel(m.unit_name) : m.property_name}`,
-  ...(inRow ? { onclick: (e) => { e.preventDefault(); e.stopPropagation(); navigate(`#/housekeeping/${m.cleaning_task_id}`); } } : {}),
-}, 'From cleaning task');
+// "From cleaning task" badge. Inside a list row (already a link) it is plain text, so the row has one tab stop; the request page links to the job.
+const taskBadge = (m, inRow) => inRow
+  ? h('span', { class: 'badge badge--ops' }, 'From cleaning task')
+  : h('a', {
+    class: 'badge badge--ops link-tap', href: `#/housekeeping/${m.cleaning_task_id}`,
+    'aria-label': `From cleaning task, ${m.unit_name ? unitLabel(m.unit_name) : m.property_name}`,
+  }, 'From cleaning task');
 
 export async function newMaintenanceModal({ onSaved, propertyId, unitId } = {}) {
   let properties; let units;
@@ -112,9 +113,11 @@ export async function maintenanceView(el, { query }) {
             h('span', { class: 'row__sub' }, `${m.property_name}${m.unit_name ? ` · ${unitLabel(m.unit_name)}` : ''} · reported ${fmtDate(manilaDay(m.created_at))}${m.assigned_to ? ` · ${m.assigned_to}` : ''}`),
             (Number(m.actual_cost) > 0 || m.estimated_cost) && h('span', { class: 'row__sub' }, Number(m.actual_cost) > 0 ? `Cost ${peso(m.actual_cost)}` : `Est. ${peso(m.estimated_cost)}`)),
           h('div', { class: 'row__end' }, badge(m.status), badge(m.priority), m.cleaning_task_id && taskBadge(m, true))))))]
-      : ((isFiltered() || !['active', 'all'].includes(filters.status))
+      : (!isFiltered() && ['resolved', 'cancelled'].includes(filters.status)
+        ? emptyState({ title: `No ${filters.status} requests.`, text: 'Requests you mark this way will show up here.' })
+        : ((isFiltered() || !['active', 'all'].includes(filters.status))
         ? emptyState({ title: 'No results found', text: 'Nothing matches these filters. Try removing a filter.', action: h('button', { class: 'btn btn--secondary', onclick: () => { Object.assign(filters, defaults); rememberFilters('maintenance', filters); renderBar(); load(); } }, 'Clear filters') })
-        : emptyState({ iconName: 'wrench', title: filters.status === 'active' ? 'No open repair requests' : 'No requests here', text: 'Log repairs as they’re reported so nothing gets lost in chat threads.', action: h('button', { class: 'btn btn--primary', onclick: () => newMaintenanceModal() }, icon('plus'), 'New request') })));
+        : emptyState({ iconName: 'wrench', title: filters.status === 'active' ? 'No open repair requests' : 'No requests here', text: 'Log repairs as they’re reported so nothing gets lost in chat threads.', action: h('button', { class: 'btn btn--primary', onclick: () => newMaintenanceModal() }, icon('plus'), 'New request') }))));
   }
 
   function renderBar() {

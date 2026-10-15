@@ -40,7 +40,7 @@
 .tb-profile { justify-content: flex-start; gap: 10px; }
 .tb-profile__who { display: grid; min-width: 0; }
 .tb-profile__who strong, .tb-profile__who span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tb-theme { padding: 6px 12px; border-top: 1px solid var(--line); }
+.tb-theme { padding: 6px 12px; border-block: 1px solid var(--line); }
 
 .tb-list, .tb-menu { list-style: none; margin: 0; padding: 6px; display: grid; gap: 2px; overflow-y: auto; }
 .tb-list li { display: flex; align-items: center; gap: 4px; }
@@ -129,6 +129,7 @@
     max-height: calc(100dvh - max(12px, env(safe-area-inset-top)) - 56px - var(--bottomnav-h) - 16px - env(safe-area-inset-bottom));
   }
   .tb-pop--wide { width: auto; }
+  .tb-pop__foot a { display: inline-flex; align-items: center; min-height: 44px; }
 }
 @media (max-width: 559px) {
   .topbar .brand span { display: none; }

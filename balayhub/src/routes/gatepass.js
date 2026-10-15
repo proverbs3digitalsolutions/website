@@ -203,7 +203,7 @@ router.post('/reservations/:id/gatepass/send', managers, ah(async (req, res) => 
 async function sendDuePasses() {
   const today = manilaToday();
   const { rows } = await query(
-    `SELECT b.booking_id, b.check_in::text, (r.registration_id IS NOT NULL) AS has_form, gp.status AS pass_status, gp.missing_form_noted_at,
+    `SELECT b.booking_id, b.check_in::text, (r.submitted_at IS NOT NULL) AS has_form, gp.status AS pass_status, gp.missing_form_noted_at,
             o.plan, o.trial_ends_at, o.paid_until, o.is_demo, o.deletion_scheduled_at
        FROM bookings b JOIN units u ON u.unit_id = b.unit_id JOIN properties p ON p.property_id = u.property_id
        JOIN organizations o ON o.organization_id = b.organization_id

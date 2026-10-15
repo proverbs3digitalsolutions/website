@@ -22,6 +22,10 @@ const skippedNote = (steps) => { const n = steps.filter((x) => x.skipped).length
 export const progressLine = (o) => `${countDone(o.steps)} of ${o.total} steps done${skippedNote(o.steps)}`;
 export const phaseCount = (steps) => `${countDone(steps)}/${steps.length}${skippedNote(steps)}`;
 
+// Steps the person has skipped, un-skipped or opened stay open across the redraw that follows (module level: a redraw rebuilds the view).
+const opened = new Set();
+export const stepOpen = ({ key, isNext, isStuck }, set) => isNext || isStuck || set.has(key);
+
 function stepCard(st, isNext, rerender, syncFailing) {
   // A calendar that failed its last sync keeps the channels step open, so the reason is not missed.
   const stuck = syncFailing && st.key === 'channels';
@@ -30,9 +34,9 @@ function stepCard(st, isNext, rerender, syncFailing) {
       : isNext ? h('span', { class: 'lp-status lp-status--next' }, 'Next step')
         : h('span', { class: 'lp-status' }, `${st.minutes} min`);
   const skip = async (undo) => {
-    try { await post('/onboarding/skip', { step: st.key, undo }); rerender(); } catch (err) { toast(err.message, 'error'); }
+    try { await post('/onboarding/skip', { step: st.key, undo }); opened.add(st.key); rerender(); } catch (err) { toast(err.message, 'error'); }
   };
-  return h('details', { class: `lpad-step${st.done ? ' is-done' : ''}${isNext ? ' is-next' : ''}`, open: (isNext || stuck) ? true : null },
+  const card = h('details', { class: `lpad-step${st.done ? ' is-done' : ''}${isNext ? ' is-next' : ''}`, open: stepOpen({ key: st.key, isNext, isStuck: stuck }, opened) ? true : null },
     h('summary', null,
       h('span', { class: 'lpad-step__check', 'aria-hidden': 'true' }, st.done ? '✓' : ''),
       h('span', { class: 'lpad-step__title' }, st.title, st.optional && h('span', { class: 'muted small' }, ' · optional')),
@@ -46,6 +50,8 @@ function stepCard(st, isNext, rerender, syncFailing) {
         st.done && h('a', { class: 'btn btn--ghost btn--sm', href: st.href, 'aria-label': `Open ${st.title}` }, 'Open'),
         st.optional && !st.done && !st.skipped && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'data-focus-key': `lp-step-${st.key}`, onclick: () => skip(false), 'aria-label': `Skip for now, ${st.title}` }, 'Skip for now'),
         st.skipped && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'data-focus-key': `lp-step-${st.key}`, onclick: () => skip(true), 'aria-label': `Show again, ${st.title}` }, 'Show again'))));
+  card.addEventListener('toggle', () => { if (card.open) opened.add(st.key); else opened.delete(st.key); });
+  return card;
 }
 
 export async function launchpadView(el, { rerender }) {

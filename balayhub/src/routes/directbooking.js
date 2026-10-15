@@ -35,6 +35,7 @@ const HOLD_MINUTES = 30;
 const MAX_DAYS_AHEAD = 540; // about 18 months
 const MAX_OPEN_HOLDS = 2; // per visitor or email, across all hosts
 const MAX_PHOTOS = 12;
+const PAYMONGO_KEY_MAX = 200; // characters
 const validationError = (fields) => new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields });
 const manilaToday = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
 const nightsBetween = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000);
@@ -112,11 +113,15 @@ router.get('/direct-booking', owners, ah(async (req, res) => {
 }));
 
 router.patch('/direct-booking', owners, ah(async (req, res) => {
+  // Checked before validate(), so a long key gets the key's own sentence rather than the generic length message.
+  if (typeof req.body?.paymongo_secret_key === 'string' && req.body.paymongo_secret_key.trim().length > PAYMONGO_KEY_MAX) {
+    throw validationError({ paymongo_secret_key: 'This key is too long. Copy the Secret key again from your PayMongo dashboard.' });
+  }
   const body = validate(req.body, {
     enabled: { type: 'bool', label: 'Booking page' },
     slug: { type: 'string', max: 40, label: 'Page address' },
     intro: { type: 'text', max: 1500, label: 'Welcome text' },
-    paymongo_secret_key: { type: 'string', max: 200, label: 'PayMongo secret key' },
+    paymongo_secret_key: { type: 'string', max: PAYMONGO_KEY_MAX, label: 'PayMongo secret key' },
   }, { partial: true });
   // The row as it is now, so the activity log names only what really changes.
   const cur = await one('SELECT booking_enabled, booking_slug, booking_intro, paymongo_key_hint, paymongo_key_enc, paymongo_key_checked_at FROM organizations WHERE organization_id = $1', [req.user.organization_id]);

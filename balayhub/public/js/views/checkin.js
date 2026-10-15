@@ -29,6 +29,7 @@ extendTranslations({
   'Remove guest {n}': 'Alisin ang guest {n}',
   'Choose the photos again after changing the language.': 'Piliin ulit ang mga litrato pagkatapos magpalit ng wika.',
   'Add a photo of a valid ID for at least one guest.': 'Mag-upload ng litrato ng valid ID ng kahit isang guest.',
+  'Your answers are saved. Add a photo of your ID to finish registering.': 'Naka-save na ang mga sagot mo. Mag-upload ng litrato ng ID mo para matapos ang registration.',
 });
 
 // The heading follows the cause: only a 404 is a bad link.
@@ -71,7 +72,7 @@ export async function guestCheckinView(el, { params }, kept) {
   }
   const { stay: s, registration: r } = data;
   initGuestLang(s.guest_language);
-  const heading = h('h1', null, s.closed ? t('Guest registration') : (s.checked_in || r) ? t('Your check-in details') : s.guest_first_name ? t('Hi {name}! Please register before you arrive', { name: s.guest_first_name }) : t('Guest registration'));
+  const heading = h('h1', null, s.closed ? t('Guest registration') : (s.checked_in || r?.submitted_at) ? t('Your check-in details') : s.guest_first_name ? t('Hi {name}! Please register before you arrive', { name: s.guest_first_name }) : t('Guest registration'));
   const intro = !s.closed && h('p', { class: 'muted' }, t('The building requires the names and a valid ID of everyone staying. It takes about 2 minutes.'));
   const header = h('div', { class: 'gc__stay card' },
     h('p', { class: 'gc__eyebrow' }, s.workspace_name),
@@ -118,9 +119,12 @@ export async function guestCheckinView(el, { params }, kept) {
   const progress = h('div', { class: 'muted small', 'aria-live': 'polite' });
   const formError = h('div');
   const submit = h('button', { class: 'btn btn--primary btn--block', type: 'submit' }, r ? t('Save changes') : t('Submit registration'));
+  // The answers are saved but no ID photo is stored yet: the registration is not finished.
+  const draftNote = t('Your answers are saved. Add a photo of your ID to finish registering.');
 
   const form = h('form', { class: 'form card', novalidate: true },
-    r && h('div', { class: 'alert alert--ok' }, `${t('Received {when}', { when: fmtDateTimeL(r.submitted_at) })}${r.id_count ? (r.id_count > 1 ? t(' with {n} ID photos', { n: r.id_count }) : t(' with 1 ID photo')) : ''}${t('. You can update it below.')}`),
+    r && !r.submitted_at && h('div', { class: 'alert alert--warn' }, draftNote),
+    r?.submitted_at && h('div', { class: 'alert alert--ok' }, `${t('Received {when}', { when: fmtDateTimeL(r.submitted_at) })}${r.id_count ? (r.id_count > 1 ? t(' with {n} ID photos', { n: r.id_count }) : t(' with 1 ID photo')) : ''}${t('. You can update it below.')}`),
     formError,
     h('h2', null, t('Main guest')),
     field({ name: 'lead_name', label: t('Full name (as on your ID)'), required: true, value: r?.lead_name || '', maxlength: 120, autocomplete: 'name' }),
@@ -191,9 +195,11 @@ export async function guestCheckinView(el, { params }, kept) {
       ...(rules && !rulesAt ? { accept_rules: true } : {}),
       guests: [...others.querySelectorAll('input')].map((i) => i.value.trim()),
     };
+    let savedDraft = false;
     try {
       submit.textContent = t('Saving…');
       await post(`/public/checkin/${encodeURIComponent(token)}`, payload);
+      savedDraft = true;
       const files = picked.filter((f) => !uploaded.has(f));
       for (const [i, f] of files.entries()) {
         progress.textContent = t('Uploading ID photo {i} of {n}…', { i: i + 1, n: files.length });
@@ -212,12 +218,13 @@ export async function guestCheckinView(el, { params }, kept) {
     } catch (err) {
       progress.textContent = '';
       // Each message shows once: one whose field is on the form sits at that field; the banner names only the rest.
+      if (savedDraft) formError.replaceChildren(h('div', { class: 'alert alert--warn' }, draftNote));
       const unplaced = err.fields ? showErrors(form, tFields(err.fields)) : [];
       const msg = !(err instanceof ApiError) ? (err.message || t('Something went wrong. Please try again.'))
         : unplaced.length ? unplaced.join(' ')
         : Object.keys(err.fields || {}).length ? t('Please check the highlighted fields.')
         : tServer(err.message);
-      formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, err.offline ? t("You're offline. Your answers are still here; try again when you're connected.") : msg));
+      formError.append(h('div', { class: 'alert alert--error', role: 'alert' }, err.offline ? t("You're offline. Your answers are still here; try again when you're connected.") : msg));
       formError.scrollIntoView?.({ block: 'nearest' });
     } finally {
       busy = false;
@@ -248,7 +255,7 @@ export async function checkinCard(bookingId, rerender) {
   };
   return h('div', { class: 'card' },
     h('div', { class: 'card__head' }, h('h2', null, 'Guest check-in form'),
-      r ? h('span', { class: 'badge badge--paid' }, 'Submitted') : h('span', { class: 'badge badge--unpaid' }, 'Not yet')),
+      r?.submitted_at ? h('span', { class: 'badge badge--paid' }, 'Submitted') : h('span', { class: 'badge badge--unpaid' }, r ? 'Waiting' : 'Not yet')),
     !r && h('p', { class: 'muted small' }, 'Send this private link to the guest so they can register everyone and upload IDs before arrival. It is also included in the {{checkin_link}} message variable.'),
     h('div', { class: 'chips' },
       h('button', { class: 'btn btn--secondary btn--sm', onclick: () => copyText(d.link, 'Check-in link copied.', 'Copy the check-in link') }, 'Copy link'),
@@ -262,7 +269,8 @@ export async function checkinCard(bookingId, rerender) {
       h('dt', null, 'Arrival'), h('dd', null, r.arrival_time ? fmtTime(r.arrival_time) : '—'),
       h('dt', null, 'Plate number'), h('dd', null, r.vehicle_plate || '—'),
       r.notes && [h('dt', null, 'Notes'), h('dd', { style: { whiteSpace: 'pre-wrap' } }, r.notes)],
-      h('dt', null, 'Submitted'), h('dd', null, fmtDateTime(r.updated_at || r.submitted_at))),
+      r.submitted_at ? [h('dt', null, 'Submitted'), h('dd', null, fmtDateTime(r.updated_at || r.submitted_at))]
+        : [h('dt', null, 'Status'), h('dd', null, "Waiting for the guest's ID photo")]),
     r && (r.ids_purged_at && !d.files.length
       ? h('p', { class: 'muted small' }, `ID photos were deleted ${fmtDateTime(r.ids_purged_at)} (after the stay).`)
       : d.files.length

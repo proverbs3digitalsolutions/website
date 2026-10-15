@@ -88,7 +88,8 @@ router.post('/pricing/seasons', managers, ah(async (req, res) => {
   // ponytail: check then insert with no lock; two identical saves in the same instant can both pass. A unique index on these fields closes it.
   const twin = await one(
     `SELECT season_id FROM seasons
-      WHERE organization_id = $1 AND unit_id IS NOT DISTINCT FROM $2::uuid AND lower(trim(name)) = lower(trim($3))
+      WHERE organization_id = $1 AND unit_id IS NOT DISTINCT FROM $2::uuid
+        AND lower(regexp_replace(btrim(name), '\\s+', ' ', 'g')) = lower(regexp_replace(btrim($3), '\\s+', ' ', 'g'))
         AND start_date = $4 AND end_date = $5 AND nightly_rate IS NOT DISTINCT FROM $6
         AND adjust_pct IS NOT DISTINCT FROM $7 AND min_nights IS NOT DISTINCT FROM $8`,
     [req.user.organization_id, body.unit_id, body.name, body.start_date, body.end_date, body.nightly_rate, body.adjust_pct, body.min_nights]);

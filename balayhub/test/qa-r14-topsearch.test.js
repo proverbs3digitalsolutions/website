@@ -89,7 +89,7 @@ test('emptyHint gives the three sentences', () => {
 
 test('source: combobox pattern, exact copy, cleaner never calls /search, no app.js import', () => {
   for (const s of ["role: 'combobox'", "'aria-autocomplete': 'list'", "'aria-controls': 'tb-results'", "'aria-activedescendant'", "role: 'listbox'", "role: 'option'", "role: 'status'", "'aria-live': 'polite'",
-    'Type / to search', 'Search BalayHub', 'Close search', 'Search results', 'Recent searches', 'Type 2 or more letters to search records.', 'Searching…',
+    'Type / to search', 'Search BalayHub', 'Search results', 'Recent searches', 'Type 2 or more letters to search records.', 'Searching…',
     "Search isn't working right now. Try again.", 'Too many searches in a minute. Wait a moment and try again.', "You're offline. Only pages can be searched.",
     'No results', 'Help articles', 'bh-recent-search-', '#/help?q=']) assert.ok(src.includes(s), s);
   assert.match(src, /role === 'cleaner'[\s\S]{0,400}\/help\/articles/);
@@ -109,10 +109,13 @@ test('source: group order is fixed', () => {
 test('source: the listbox holds only option groups; notes, errors, no-results and Clear sit beside it (axe aria-required-children)', () => {
   assert.match(src, /const list = h\('div', \{ id: 'tb-results', role: 'listbox'/);
   assert.match(src, /h\('div', \{ class: 'tb-results'[^)]*\}, list, extras\)/);
-  for (const s of ['tb-empty', 'tb-note--error', 'Searching…', 'Type 2 or more letters']) {
+  for (const s of ['tb-note--error', 'Searching…', 'Type 2 or more letters']) {
     const line = src.split('\n').find((l) => l.includes(s) && /push\(/.test(l));
     assert.ok(line && line.includes('extra.push('), s);
   }
+  // No-results is a disabled option inside the listbox (r15 #32), so the combobox never points at an empty list.
+  assert.match(src, /empty = h\('div', \{ class: 'tb-empty', role: 'option', 'aria-disabled': 'true'/);
+  assert.match(src, /list\.replaceChildren\(\.\.\.kids, \.\.\.\(empty/);
   assert.equal(src.match(/kids\.push\(/g).length, 1, 'only the option group goes into the listbox');
   assert.match(src, /list\.hidden = kids\.length === 0/);
 });

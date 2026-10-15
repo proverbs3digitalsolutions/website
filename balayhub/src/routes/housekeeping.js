@@ -25,6 +25,8 @@ const managers = requireRole('owner', 'manager');
 const owners = requireRole('owner');
 const DAY_MS = 24 * 3600 * 1000;
 const validationError = (fields) => new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields });
+// "Oct 16, 2026" for a stored 'YYYY-MM-DD' date, the way the leases screens write one. The UTC read keeps the calendar day.
+const dueLabel = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 // The most one clean can be paid, in centavos, with the words for it. It is the same ceiling as a per-clean rate (D-87):
 // above it is almost always an extra zero.
 const PER_CLEAN_CEILING = { cents: 1000000, text: '₱10,000.00 per clean' };
@@ -267,7 +269,7 @@ router.patch('/cleaning-tasks/:id', managers, ah(async (req, res) => {
   });
   if (body.assigned_to && body.assigned_to !== task.assigned_to) {
     require('../lib/push').notify(req.user.organization_id, 'cleaning', {
-      title: `Cleaning assigned to you: ${task.unit_name}`, body: `Due ${task.due_date}`, url: `/#/housekeeping/${task.task_id}`,
+      title: `Cleaning assigned to you: ${task.unit_name}`, body: `Due ${dueLabel(task.due_date)}`, url: `/#/housekeeping/${task.task_id}`,
       propertyId: task.property_id, userId: body.assigned_to,
     }).catch(() => {});
   }

@@ -26,7 +26,7 @@ async function exportOrganization(orgId) {
   };
   for (const t of ['properties', 'guests', 'bookings', 'booking_payments', 'guest_registrations', 'conversations', 'messages',
     'message_templates', 'automations', 'cleaning_tasks', 'ical_feeds', 'tenants', 'leases', 'payments', 'expenses',
-    'maintenance_requests', 'files', 'billing_payments', 'invitations', 'audit_logs', 'direct_checkouts', 'balance_checkouts', 'seasons', 'unit_owners', 'guest_reviews', 'discount_codes', 'gate_passes', 'stay_deposits', 'support_tickets', 'booking_charges', 'booking_refunds', 'payment_proofs',
+    'maintenance_requests', 'files', 'billing_payments', 'platform_coupon_redemptions', 'invitations', 'audit_logs', 'direct_checkouts', 'balance_checkouts', 'seasons', 'unit_owners', 'guest_reviews', 'discount_codes', 'gate_passes', 'stay_deposits', 'support_tickets', 'booking_charges', 'booking_refunds', 'payment_proofs',
     'owner_statements', 'owner_payouts', 'owner_reserve_entries',
     'cleaner_rates', 'cleaning_inspections', 'damage_reports', 'lost_found_items', 'supplies', 'supply_movements', 'maintenance_schedules',
     'listing_addons', 'pricing_rules', 'booking_groups', 'daily_closes', 'ical_conflicts']) {
@@ -55,7 +55,7 @@ const PURGED_TABLES = [
   'owner_sessions', 'owner_login_tokens', 'owner_reserve_entries', 'owner_payouts', 'owner_statements',
   'supply_movements', 'supplies', 'cleaning_inspections', 'damage_reports', 'lost_found_items', 'cleaner_rates', 'maintenance_schedules',
   'support_events', 'support_messages', 'support_tickets', 'push_subscriptions', 'seasons', 'gate_passes', 'stay_deposits', 'payment_proofs', 'booking_refunds', 'booking_charges', 'guest_reviews', 'balance_checkouts', 'direct_checkouts', 'discount_codes', 'automation_runs', 'messages', 'conversations', 'guest_registrations', 'files', 'cleaning_tasks', 'booking_payments',
-  'billing_payments', 'receipt_counters', 'bookings', 'ical_feeds', 'guests', 'nightly_rates', 'payments', 'rent_charges',
+  'billing_payments', 'platform_coupon_redemptions', 'receipt_counters', 'bookings', 'ical_feeds', 'guests', 'nightly_rates', 'payments', 'rent_charges',
   'leases', 'tenants', 'expenses', 'maintenance_requests', 'automations', 'message_templates', 'property_assignments',
   'units', 'unit_owners', 'properties', 'invitations', 'audit_logs', 'sessions', 'auth_tokens', 'consent_records', 'users', 'organizations',
 ];
@@ -106,6 +106,7 @@ async function purgeOrganization(orgId) {
     for (const t of ['messages', 'conversations', 'guest_registrations', 'files', 'cleaning_tasks', 'booking_payments', 'billing_payments', 'receipt_counters']) {
       await run(`DELETE FROM ${t} WHERE organization_id = $1`);
     }
+    await run('DELETE FROM platform_coupon_redemptions WHERE organization_id = $1'); // billing rows point at redemptions, so they go first
     await run('DELETE FROM bookings WHERE organization_id = $1'); // bookings point at groups
     await run('DELETE FROM booking_groups WHERE organization_id = $1'); // groups point at guests
     await run('DELETE FROM ical_feeds WHERE organization_id = $1');

@@ -32,6 +32,17 @@ export function periodPatch(period) {
   return { period: '', year: '', from: '', to: '' };
 }
 
+// The values the From and To boxes show: what the person typed (even a refused date) wins over the pair the report runs on (#20). Pure.
+export function periodBoxes(typed, filters) {
+  return { from: typed.from ?? filters.from, to: typed.to ?? filters.to };
+}
+
+// The status sentence for refused custom dates, one per refused box. Pure.
+export function refusedDatesText(typed) {
+  return ['from', 'to'].filter((k) => typed[k] !== undefined)
+    .map((k) => `The ${k === 'from' ? 'From' : 'To'} date isn't used until you fix it.`).join(' ');
+}
+
 // The listings a Listing choice can name: the chosen property's, or all of them when no property is chosen (#27). Pure.
 export function listingsFor(listings, propertyId) {
   if (!propertyId) return listings;
@@ -152,7 +163,8 @@ export async function stayReportsView(el, { query = {} }) {
   const periodBox = h('div', { class: 'flt__period' });
   const status = h('span', { class: 'muted small', id: 'stay-report-status' });
   const notice = h('div');
-  const setPeriod = (patch) => { windowLink = false; linkInvalid = false; Object.assign(filters, patch); rememberFilters('stay-reports', filters); load(); };
+  const typed = {}; // custom dates the person typed that were refused: they stay in their box until fixed (#20)
+  const setPeriod = (patch) => { windowLink = false; linkInvalid = false; if ('period' in patch) { delete typed.from; delete typed.to; } else Object.keys(patch).forEach((k) => delete typed[k]); Object.assign(filters, patch); rememberFilters('stay-reports', filters); load(); };
 
   function drawPeriod() {
     // Drawing the controls again drops focus, so the control that had it gets it back (found by its name).
@@ -167,9 +179,10 @@ export async function stayReportsView(el, { query = {} }) {
     } else if (filters.period === 'range') {
       // The two dates stay together as one unit (the same .flt__range markup as the daterange fields in filters.js).
       // A year outside 2000 to 2100 is flagged at its own box, the status line under the bar says why, and nothing is sent.
-      const dateBox = (name, key) => h('input', { class: 'input', type: 'date', value: filters[key], 'aria-label': name, 'aria-describedby': 'stay-report-status',
+      const shown = periodBoxes(typed, filters);
+      const dateBox = (name, key) => h('input', { class: 'input', type: 'date', value: shown[key], 'aria-label': name, 'aria-describedby': 'stay-report-status', 'aria-invalid': typed[key] !== undefined ? 'true' : null,
         onchange: (e) => {
-          if (outOfWindow(e.target.value)) { e.target.setAttribute('aria-invalid', 'true'); status.textContent = OUT_OF_WINDOW; return; }
+          if (outOfWindow(e.target.value)) { typed[key] = e.target.value; e.target.setAttribute('aria-invalid', 'true'); status.textContent = OUT_OF_WINDOW + ' ' + refusedDatesText(typed); return; }
           setPeriod({ [key]: e.target.value });
         } });
       inputs = h('div', { class: 'flt__range' }, dateBox('From', 'from'), h('span', { 'aria-hidden': 'true' }, '–'), dateBox('To', 'to'));
@@ -194,6 +207,7 @@ export async function stayReportsView(el, { query = {} }) {
       : windowLink ? `${OUT_OF_WINDOW} Showing this month for now.`
       : backwards ? 'The end date must be after the start date. Showing this month for now.'
       : filters.period === 'range' && !(filters.from && filters.to) ? 'Choose both dates. Showing this month for now.' : '';
+    if (Object.keys(typed).length) status.textContent = `${OUT_OF_WINDOW} ` + refusedDatesText(typed); // refused typed dates win (#20)
     const apiQ = qs({ ...periodQ, ...scopeOf(filters) });
     // A custom range is exported only once both dates are set and run forwards (#28).
     const exportOk = filters.period !== 'range' || Boolean(filters.from && filters.to && !backwards);

@@ -94,5 +94,5 @@ test('the new sentence has a Taglish entry and the Valid ID heading is marked re
 });
 
 test('a guest who already registered sees "Your check-in details", not "Please register"', () => {
-  assert.match(view, /s\.closed \? t\('Guest registration'\) : \(s\.checked_in \|\| r\) \? t\('Your check-in details'\)/);
+  assert.match(view, /s\.closed \? t\('Guest registration'\) : \(s\.checked_in \|\| r\?\.submitted_at\) \? t\('Your check-in details'\)/);
 });

@@ -390,7 +390,16 @@ async function channelsModal(listing, onChange) {
     const btn = addForm.querySelector('button[type=submit]');
     btn.disabled = true; btn.textContent = 'Connecting…';
     try {
-      const r = await post('/ical-feeds', { unit_id: listing.unit_id, channel: addForm.elements.channel.value, url: addForm.elements.url.value });
+      const body = { unit_id: listing.unit_id, channel: addForm.elements.channel.value, url: addForm.elements.url.value };
+      let r;
+      try { r = await post('/ical-feeds', body); } catch (err) {
+        // A link that does not look like a calendar: ask, rather than refuse (Booking.com's ends in ical.html).
+        if (err.code !== 'ICAL_NOT_CALENDAR') throw err;
+        if (!await confirmDialog({ title: 'Check the calendar link', text: err.message, confirmText: 'Save anyway', cancelText: 'Change it' })) {
+          btn.disabled = false; btn.textContent = 'Connect calendar'; addForm.elements.url.focus(); return;
+        }
+        r = await post('/ical-feeds', { ...body, confirm_unusual_link: true });
+      }
       const text = await syncToastText(listing.unit_id, r.feed_id, r.sync);
       toast(r.sync.ok ? `Connected. ${text}` : `Connected, but the first sync failed: ${text}`, r.sync.ok ? 'info' : 'error');
       m.close(); channelsModal(listing, onChange); onChange();
@@ -543,6 +552,10 @@ async function changeArchive(listing, action, onDone) {
 // How much of the filter bar a workspace needs: none with no listings, just the search box for 1 to 3 (the rest sit
 // in the closed "More filters" fold), everything from 4 up.
 export const listingFilterMode = (n) => (n === 0 ? 'none' : n <= 3 ? 'compact' : 'full');
+// The bar only grows while the page is open (none, compact, full), and a tag filter, which shrinks the count, never moves it.
+export const nextFilterMode = (cur, n, tagSet) => (tagSet ? cur : ['none', 'compact', 'full'][Math.max(['none', 'compact', 'full'].indexOf(cur), ['none', 'compact', 'full'].indexOf(listingFilterMode(n)))]);
+// Rows that read the same get " (link 1)", " (link 2)" in feed order, so two sync problems are told apart.
+export const labelDuplicates = (texts) => texts.map((t, i) => (texts.filter((x) => x === t).length > 1 ? `${t} (link ${texts.slice(0, i + 1).filter((x) => x === t).length})` : t));
 
 export async function listingsView(el, { query }) {
   const canManage = state.user.role !== 'staff';
@@ -621,15 +634,14 @@ export async function listingsView(el, { query }) {
         h('span', { class: `badge badge--${l.cleaning_status === 'dirty' ? 'overdue' : 'paid'}` }, l.cleaning_status === 'dirty' ? '🧹 Dirty' : '✓ Clean')),
       problems.has(l.unit_id) && h('div', { class: 'alert alert--warn sync-alert', role: 'status' },
         h('strong', null, 'Calendar sync problem'),
-        h('ul', { class: 'sync-alert__list' }, problems.get(l.unit_id).map((p) => h('li', null,
-          `${CHANNEL_LABEL[p.channel]}${p.host ? ` (${p.host})` : ''}: ${p.message}${p.kind === 'overlap' ? ` (${fmtDate(p.check_in)} to ${fmtDate(p.check_out)})` : ''}`))),
+        h('ul', { class: 'sync-alert__list' }, labelDuplicates(problems.get(l.unit_id).map((p) => `${CHANNEL_LABEL[p.channel]}${p.host ? ` (${p.host})` : ''}: ${p.message}${p.kind === 'overlap' ? ` (${fmtDate(p.check_in)} to ${fmtDate(p.check_out)})` : ''}`)).map((t) => h('li', null, t))),
         canManage && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'aria-label': `Open channels for ${l.unit_name}`, onclick: () => channelsModal(l, load) }, 'Open channels')),
       h('dl', { class: 'dl' },
         h('dt', null, 'Nightly rate'), h('dd', null, l.nightly_rate ? peso(l.nightly_rate) : (unpricedNote || '—')),
         h('dt', null, 'Cleaning fee'), h('dd', null, Number(l.cleaning_fee) > 0 ? peso(l.cleaning_fee) : 'No cleaning fee'),
         h('dt', null, 'Guests'), h('dd', null, l.max_guests ? `Up to ${l.max_guests}` : '—'),
         h('dt', null, 'Check-in / out'), h('dd', null, `${l.checkin_time} / ${l.checkout_time}`),
-        h('dt', null, 'Now'), h('dd', null, l.current_booking_id ? h('a', { href: `#/reservations/${l.current_booking_id}` }, `${l.current_guest} until ${fmtDate(l.current_check_out)}`) : 'Vacant'),
+        h('dt', null, 'Now'), h('dd', null, l.current_booking_id ? h('a', { class: 'link-tap', href: `#/reservations/${l.current_booking_id}` }, `${l.current_guest} until ${fmtDate(l.current_check_out)}`) : 'Vacant'),
         h('dt', null, 'Next arrival'), h('dd', null, l.next_check_in ? `${fmtDate(l.next_check_in)} · ${l.next_guest}` : '—'),
         h('dt', null, 'Channels'), h('dd', null, Number(l.channel_count) ? `${l.channel_count} connected` : 'None')),
       h('div', { class: 'chips', style: { marginTop: '12px' } },
@@ -659,11 +671,14 @@ export async function listingsView(el, { query }) {
         h('a', { class: 'btn btn--ghost btn--sm', href: `#/reservations?q=${encodeURIComponent(l.unit_name)}&view=all`, 'aria-label': `Bookings for ${l.unit_name}` }, 'Bookings')))))
       : h('div', { class: 'card' }, empty));
   }
-  // Built once, from the first count of listings.
+  // Built from the first count of listings, then swapped in place when the count outgrows it (same filters object).
   function ensureBar(n) {
-    if (bar) return;
-    mode = listingFilterMode(n);
+    const next = bar ? nextFilterMode(mode, n, !!filters.tag) : listingFilterMode(n);
+    if (bar && next === mode) return;
+    const old = bar;
+    mode = next;
     bar = makeBar(mode);
+    if (old?.isConnected) old.replaceWith(bar);
   }
   const makeBar = (m) => {
     const quick = [

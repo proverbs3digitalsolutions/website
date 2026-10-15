@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-15 (QA round 14, section 27; D-91, D-92)
+Last updated: 2026-10-15 (QA round 15, section 28; D-94, D-95)
 
 ---
 
@@ -253,6 +253,7 @@ All guest pages have an English / Tagalog toggle (Taglish text). The default is 
 - *2026-10-15 (D-87): the form starts with no extra guest row; **+ Add guest** adds one. An empty added row is still refused.*
 - **Submit registration** → uploads IDs one by one ("Uploading ID photo 1 of 2…") → "Thank you! You're registered." → **Review or change my answers**.
 - Already submitted → green "Received …" note and **Save changes**.
+- *2026-10-15 (D-95): answers saved without a stored ID photo are a draft; see section 28.3.*
 - Stay ended or cancelled → "This stay has ended or was cancelled, so the form is closed." Bad link → "Link not found". Offline → answers kept.
 
 ### 6.6 Review `#/review/<token>`
@@ -276,7 +277,7 @@ Managers follow the same flows unless section 8 says otherwise.
 ### 7.1 Launchpad `#/launchpad`
 - Hero: progress bar, "N of 11 steps done", **Next: <step>** → that step's page.
 - Five phase cards. Each step opens to show why and how, with an action button (e.g. **Add listing** → `#/listings?new=1`, **Open Channels** → `#/listings`, **New reservation** → `#/reservations?new=1`, **Set up messages** → `#/inbox-settings`, **Invite** / **Set up booking page** / **See plans** → `#/settings`, **Open Housekeeping** → `#/housekeeping`).
-- Optional steps: **Skip for now** / **Show again**.
+- Optional steps: **Skip for now** / **Show again**. *Round 15 (D-95): choosing either keeps the step open and the page where it was; the button keeps focus.*
 - Complete → "You're all set, <name>! 🎉". "How do I…?" guides stay available.
 
 ### 7.2 Home `#/home`
@@ -289,7 +290,7 @@ Managers follow the same flows unless section 8 says otherwise.
 
 ### 7.3 Calendar `#/calendar`
 - A start date in the address that isn't a real date (such as 2026-02-30) shows today with the toast "That date wasn't valid, so we're showing today." A refused drag-move shows the reason (for example the guest limit) in its toast.
-- Toolbar: ‹ ›, **Today**, date picker, 14/30 days. Filter bar: search, property, availability, type, cleaning. Legend by channel.
+- Toolbar: ‹ ›, **Today**, date picker, 14/30 days. Filter bar: search, property, availability, type, cleaning. Legend by channel. *Round 15 (D-95): a host with 3 or fewer listings sees search and a **Filters** button (the quick filters sit inside it) instead of a bare "Filter" fold; see section 28.4.*
 - **Tap an open night** → menu: **New reservation** (form pre-filled), **🔒 Block dates** (first/last night, reason), **₱ Set nightly price** (date range; empty price removes the override).
 - **Tap a reservation bar** → `#/reservations/<id>`. **Tap a block** → "Remove this block?" (channel blocks: "Change it on the channel.").
 - **₱ Pricing rules** → `#/pricing`. **New reservation** → form.
@@ -410,7 +411,7 @@ Cards top to bottom (owner):
 2. **Language for guests** (not long-term) — English or Taglish, "Also switch my … messages" → **Save** → "Guest language saved." (notes any "(my version)" copies).
 3. **Appearance** — Light / Dark / Match device.
 4. **App & notifications** (not demo) — **Install BalayHub**, **Turn on notifications**, topics, **Send a test**, **Turn off on this device**. iPhone without Home Screen install → instructions first.
-5. **Plan & billing** (not demo) — status alert, plan, listings used, paid until. Online: pick plan, months, total, **Pay now** ("Opening secure checkout…") → PayMongo → back to `#/settings?billing=…` → "Payment received. Thank you! Your plan is active." or "still waiting…". Cancelled → "Payment cancelled. Nothing was charged." Manual: email instructions. Payment history.
+5. **Plan & billing** (not demo) — status alert, plan, listings used, paid until. Online: pick plan, months, total, **Pay now** ("Opening secure checkout…") → PayMongo → back to `#/settings?billing=…` → "Payment received. Thank you! Your plan is active." or "still waiting…". Cancelled → "Payment cancelled. Nothing was charged." Manual: email instructions. Payment history. *Round 15 (D-94): owners also get a **Have a coupon code?** box above the Pay button, a free activation and a card-only ₱20 payment; see section 28.1.*
 6. **Direct booking page** (not long-term, not demo) — **Connect PayMongo** (secret key) → **Turn on / Turn off**, **Copy link**, **Page settings** (address, welcome text), **Change key**. TEST MODE warning. Tip to add photos.
 7. **Your data** (not demo) — **Download all data**, **Delete workspace** (type the name) → "Deletion scheduled. You can cancel it within 14 days." → deleting banner.
 8. **Team & permissions** — **Invite** (email, role, properties) → "Invitation created" with the link and **Copy**. **Edit access**, **Remove** (confirm). Pending: **New link**, **Revoke**.
@@ -498,6 +499,7 @@ No assigned properties → lists are empty with "assigned to you" wording.
 - **Platform admin `#/admin`:** stats (on trial, paying, monthly revenue, ended/overdue), filter bar (status, type, plan, signup dates, sort), workspace table. **Click a workspace** (not the demo) → plan, paid until, trial ends, note → **Save** (audit-logged). **Support queue** → `#/admin/support`.
 - **Support queue `#/admin/support`:** tickets from every workspace, urgent and new first. Status tabs plus the standard filter bar (search, topic, priority, assigned to me); the filters are kept in the address and remembered. Rows open with Enter or Space. Help tickets on `#/help` use the same filter bar (search plus the Open or Closed tabs). Empty: "No tickets here".
 - **Ticket `#/admin/support/<id>`:** **Assign to me**, **Mark resolved**, reply or internal note, customer card, attachments, **Change status** buttons. Customers see replies from "BalayHub Support".
+- **Plan coupons `#/admin/coupons`** (a button next to Support queue on the admin page; platform admins only; anyone else sees "Not found"). Make and manage coupons for BalayHub's plans; see section 28.2.
 - A platform admin is also a normal member of their own workspace.
 
 ---
@@ -1125,3 +1127,66 @@ Arrow keys, Home and End move between items; Escape closes and returns focus to 
 **Rent, Record payment.** Recording from a later month's row (while an older month is unpaid) keeps that row's amount and says: "This payment goes to September 2026 first (the oldest unpaid month), then to October 2026."
 
 **Reports.** `#/reports` (long-term Reports) sends a short-term-only workspace to `#/stay-reports`. The Reports screen row reads "Whole-property expenses".
+
+---
+
+## 28. QA round 15: plan coupons, check-in drafts and other changes (D-94, D-95; 2026-10-15)
+
+### 28.1 Plan & billing: "Have a coupon code?" (owners; Settings → Plan & billing, `#/settings`)
+
+The box sits with the online payment choices, so it shows only when online payment is on (the demo has no Plan & billing). It is a fold above the Pay button, titled **Have a coupon code?**.
+
+1. Type the code (any case; spaces and dashes are tidied) and press **Apply** or Enter. BalayHub asks the server for a read-only preview for the plan and months picked. Changing the plan or months asks again.
+2. **A good code:** the total shows the list price struck through, the new total, and a line such as "50% off your first 3 months. This payment covers 1 of them." The button now reads **Pay ₱499.50** (or **Pay now**). **Remove** clears the code.
+3. **A free code (no card needed):** the button reads **Activate free plan**. Pressing it shows "Activating…", makes no PayMongo call, then a toast "Your Growth plan is active until Nov 28, 2026." and the page redraws. During a trial the paid period starts when the trial ends.
+4. **A free code that requires a card:** the button reads **Pay ₱20 by card**. It opens PayMongo with card only; paying ₱20 once gives the free months, and nothing is charged automatically afterwards. The same ₱20 applies when a discount would leave less than ₱20.
+5. **A workspace already using a coupon** sees a live line ("ALPHA50: 50% off your first 3 months, 2 months left") and the discount is applied to each checkout without typing the code again. When the months are used the box says "Your coupon's 3 months are used. This payment is the full price."
+6. **Errors** show under the code box (the box opens if it was folded) and keep focus there; a complimentary workspace hears the coupon reason, not a payment error: "Enter your coupon code."; "Enter the code using letters, numbers and dashes."; "This code isn't valid right now. Check it and try again." (one answer for unknown, off, not started, ended and full); "This code is for Growth and Pro."; "Your workspace has already used this code."; "Your workspace is already using the coupon ALPHA50. It applies until its months are used."; "Your workspace is on a complimentary plan, so coupons don't apply."; "This code needs a card payment, and card payments are off right now."; **"Your plan is already paid ahead. Your coupon applies at your next renewal."** (a discounted payment while paid more than 45 days ahead); and after 10 wrong tries in 15 minutes, the "too many tries" message (valid codes wait too).
+7. Payment history rows show "Free with coupon ALPHA50 · covers …" with a **Free** badge, or the discount on a paid row. The coupon line under the plan names the coupon and the months left.
+8. A manager, staff member or cleaner never sees the box (403 if called). The demo cannot use coupons (its pages are read-only: 403 `DEMO_READ_ONLY`). Billing paths stay usable in a read-only workspace, so an owner whose plan ended can still apply a coupon.
+
+### 28.2 Platform admin: Plan coupons (`#/admin/coupons`)
+
+- **List:** four tiles (Active, Scheduled, Ended or off, Total discount given), then the standard filter bar: search (code or name), Status, Type (Percentage, Fixed amount, Free access), Plan, Sort (Newest first, Oldest first, Code A to Z, Ending soonest, Most used). Each row shows the code, name, what it gives and the plans, start to end, used of limit, a status badge (Active, Scheduled, Ended, Switched off, Limit reached), whether a card is required, and a **Redemptions** button. Empty: "No coupons yet. Make a coupon to give your customers a discount on a BalayHub plan." or "No coupon matches these filters. Try removing a filter."
+- **New coupon** (dialog): Coupon name; Coupon code (not case-sensitive, 3 to 32 letters, numbers and dashes) with **Generate** (8 characters, no 0, O, 1 or I); Coupon type (Percentage, Fixed amount, Free access); Percent off or Amount off each month (₱); How long it applies after it is used (First month only, First N months, Every month) with Months (2 to 36); Plans (none ticked = every paid plan); Limit total uses with Total uses; Once per workspace (on by default); Require a card payment (a hint says it means one ₱20 card payment); Starts and End date with times in Manila time; Note. **Create coupon** (**Save** when editing) closes the dialog and the list shows the coupon. A code in use: "Another coupon already uses this code."
+- **Edit** (click the code in a row): after any redemption, Coupon code, type, amounts, length, plans and start are locked (shown disabled with a note: "This coupon has been used, so its discount can't change. Make a new coupon instead."). Name, note, end date, limit (not below the times used: "The limit can't be below the 4 times it has been used."), once per workspace, require card and **Switched on** can change.
+- **Redemptions** (button on the row): a list of workspaces that used it, with owner email, status (Pending, Active, Used up), months used of total, dates and the discount given. 
+- Switching a coupon off or letting it end stops **new** workspaces only; workspaces already using it keep their months. There is no Delete.
+- A free coupon with no limit and Once per workspace off gives unlimited free months; the form does not warn yet (carried).
+
+### 28.3 Guest check-in: a draft until an ID photo is stored (D-95; changes 6.5)
+
+- The guest sends the form with answers and photos. The server saves the answers at once; the registration is **finished only when an ID photo is stored**. Until then:
+  - **Guest page:** "Your answers are saved. Add a photo of your ID to finish registering." (English and Taglish) with the photo box; adding the photo finishes it and shows "Thank you! You're registered."
+  - **Host, reservation page, check-in card:** Status **Waiting for the guest's ID photo** instead of "Received". No "check-in form received" alert or inbox note is sent yet.
+  - **Gate pass, the Reservations "check-in form" filter and the Launchpad step** count only finished registrations.
+- The first stored photo finishes the registration and sends the host the usual alert and inbox note, once. Registrations made before this change stay finished.
+
+### 28.4 Filters (every list page)
+
+- The secondary button that used to read **More filters** now reads **Filters**, with a funnel icon and a number: the count of every active filter except the search box. Its spoken name is "Filters, 2 active" (or "Filters"). With a filter set the button turns green.
+- A quick filter that is set (for example **On trial**) turns green and bold; the chips under the bar have a tick and a round ×, press down when clicked, and **Clear all** now shows even with a single chip. Every select box has a chevron. "Unread only" in the Inbox is a pill that turns green when on.
+- A host with few listings (Listings 1 to 3, Rent 3 or fewer units, Calendar 3 or fewer listings) sees only search and **Filters**; the quick filters are inside the panel. The Reservations table's Channel column folds under the listing name on screens 960 to 1439px wide.
+
+### 28.5 Launchpad, Home and the calls to action
+
+- **Home first-run card** ("Connect your calendar") is a card with an icon, the sentence, then the button, with a gap between the text and the button; on a phone it stacks. Other cards with a sentence followed by a button (Security deposit "None", the cleaner pay load error, the booking not completed page) have the same 12px gap.
+- **Launchpad:** an optional step's **Skip for now** and **Show again** keep the step open and the page still, and focus stays on the button.
+- **Home calendar sync rows** that point at the same listing are grouped (for example "Sunset Loft (2 links)"); Listings shows duplicate link rows as "(link 1)" and "(link 2)".
+
+### 28.6 Listings → Channels: a link that does not look like a calendar
+
+Adding a link that is not obviously a calendar shows "This doesn't look like a calendar link (they usually end in .ics). Save it anyway?" with **Save anyway** and **Change it**. A link with `.ics` or `ical` in it (Booking.com's `ical.html`, for example) saves without a question.
+
+### 28.7 Other changes from the round 15 sweep
+
+- **My account:** the page title (h1) is "My account"; the person's name is a smaller heading in the card. The Tagalog verify toast follows the chosen language.
+- **Phone bottom bar:** staff and cleaners see **Groups** and **Help** (the sidebar keeps "Group bookings" and "Help & support").
+- **Theme switch** (Settings, sidebar, More sheet): one Tab stop; the arrow keys, Home and End move and pick; the buttons are 44px tall on phones.
+- **Search:** a capped group says "5 of 8 shown"; a guest result names the latest stay ("Last stay: Oct 16, 2026 – Oct 17, 2026"); "In Settings" for settings; "No results" is one disabled line; one Close button in the phone sheet.
+- **Reservation, add-ons:** a quantity over the limit keeps the typed number, says "Up to 3 Extra mattress per stay." and blocks Save. **Cleaner pay → Payout:** Method starts on "Choose…". A refused custom From date stays when To changes.
+- **Cleaners:** the job sheet's "Supplies used" list shows the job property's supplies (loaded for that job). The Supplies page itself is not available to cleaners (they are sent to Housekeeping).
+- **Alerts with no property** (bell and phone) go to owners only. The housekeeping alert says "Due Oct 16, 2026".
+- **Review page** (4 and 5 star guests): the share links come back when the guest returns. **Quote page:** a phone number in the wrong format is refused. "See all places" and the Privacy link on the account page are easy-to-hit links; links inside a sentence (the consent "privacy notice") keep their text size.
+- **Maintenance:** each row's badge is not a second Tab stop; empty Resolved and Cancelled tabs say so. Statements → **Receipt** and the dashboard repairs count are easy-to-hit links.
+- **"+ Add new" → Property** is shown for long-term and Both workspaces only (short-term hosts add buildings through Add listing); this is the same as 27.1.

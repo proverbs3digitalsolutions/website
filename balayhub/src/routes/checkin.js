@@ -145,29 +145,23 @@ publicRouter.post('/public/checkin/:token', express.json({ limit: '50kb' }), ah(
     throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { guests: `This unit allows up to ${b.max_guests} guests in total.` } });
   }
   const plate = body.vehicle_plate ? body.vehicle_plate.toUpperCase() : null;
-  const existed = await one('SELECT registration_id FROM guest_registrations WHERE booking_id = $1', [b.booking_id]);
+  // The row stays a draft (submitted_at NULL) until an ID photo is stored; the page's id_photos count only gates the form.
+  const prior = await one('SELECT submitted_at FROM guest_registrations WHERE booking_id = $1', [b.booking_id]);
   const r = await one(
-    `INSERT INTO guest_registrations (organization_id, booking_id, lead_name, phone, email, guests, arrival_time, vehicle_plate, notes, consent_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, now())
+    `INSERT INTO guest_registrations (organization_id, booking_id, lead_name, phone, email, guests, arrival_time, vehicle_plate, notes, consent_at, submitted_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, now(), CASE WHEN $10::int > 0 THEN now() END)
      ON CONFLICT (booking_id) DO UPDATE SET lead_name = $3, phone = $4, email = $5, guests = $6, arrival_time = $7, vehicle_plate = $8,
-       notes = $9, consent_at = now(), updated_at = now()
-     RETURNING registration_id`,
-    [b.organization_id, b.booking_id, body.lead_name, body.phone, body.email, JSON.stringify(guests), body.arrival_time, plate, body.notes]);
+       notes = $9, consent_at = now(), updated_at = now(), submitted_at = COALESCE(guest_registrations.submitted_at, CASE WHEN $10::int > 0 THEN now() END)
+     RETURNING registration_id, submitted_at`,
+    [b.organization_id, b.booking_id, body.lead_name, body.phone, body.email, JSON.stringify(guests), body.arrival_time, plate, body.notes, stored]);
   if (acceptsRules) {
     await query('UPDATE bookings SET rules_accepted_at = now(), rules_text = $2 WHERE booking_id = $1 AND rules_accepted_at IS NULL',
       [b.booking_id, houseRules]);
   }
-  // Let the host know in the guest's inbox thread.
-  if (!existed) {
-    const { notify, propertyOfBooking } = require('../lib/push');
-    notify(b.organization_id, 'checkin_form', {
-      title: 'Guest check-in form received', body: `${body.lead_name} · ${b.unit_name}, ${b.check_in}`,
-      url: `/#/reservations/${b.booking_id}`, propertyId: await propertyOfBooking(b.booking_id),
-    }).catch(() => {});
-  }
-  const booked = guests.length + 1 < b.num_guests ? `, booked for ${b.num_guests}` : '';
-  await noteToHost(b.booking_id, existed ? 'The guest updated their check-in form.' : `The guest completed the check-in form (${guests.length + 1} guest${guests.length ? 's' : ''}${plate ? `, car ${plate}` : ''}${body.arrival_time ? `, arriving ${body.arrival_time}` : ''}${booked}).`);
-  res.json({ ok: true, registration_id: r.registration_id });
+  // Only a finished registration tells the host; an edit of a finished one says so in the thread.
+  if (prior?.submitted_at) await noteToHost(b.booking_id, 'The guest updated their check-in form.');
+  else if (r.submitted_at) await finished(b, { lead_name: body.lead_name, guests, plate, arrival_time: body.arrival_time });
+  res.json({ ok: true, registration_id: r.registration_id, finished: Boolean(r.submitted_at) });
 }));
 
 publicRouter.post('/public/checkin/:token/id', uploadLimiter, express.raw({ type: ['image/jpeg', 'image/png', 'image/webp'], limit: config.maxUploadBytes }), ah(async (req, res) => {
@@ -187,10 +181,26 @@ publicRouter.post('/public/checkin/:token/id', uploadLimiter, express.raw({ type
       fileName: `guest-id-${n + 1}.${storage.ALLOWED[mime].ext}`, db,
     });
     await db.query('UPDATE guest_registrations SET ids_purged_at = NULL WHERE registration_id = $1', [r.registration_id]);
-    return { id_count: n + 1, file_id: file.file_id };
+    // The first stored photo finishes the registration.
+    const { rows: [done] } = await db.query(
+      `UPDATE guest_registrations SET submitted_at = now() WHERE registration_id = $1 AND submitted_at IS NULL RETURNING lead_name, guests, vehicle_plate, arrival_time`, [r.registration_id]);
+    return { id_count: n + 1, file_id: file.file_id, done };
   });
-  res.status(201).json({ ok: true, ...out });
+  const { done, ...rest } = out;
+  if (done) await finished(b, { lead_name: done.lead_name, guests: done.guests, plate: done.vehicle_plate, arrival_time: done.arrival_time });
+  res.status(201).json({ ok: true, ...rest, finished: true });
 }));
+
+// A registration just became finished (first stored ID photo): alert the host and leave a note in the guest's thread.
+async function finished(b, r) {
+  const { notify, propertyOfBooking } = require('../lib/push');
+  notify(b.organization_id, 'checkin_form', {
+    title: 'Guest check-in form received', body: `${r.lead_name} · ${b.unit_name}, ${b.check_in}`,
+    url: `/#/reservations/${b.booking_id}`, propertyId: await propertyOfBooking(b.booking_id),
+  }).catch(() => {});
+  const booked = r.guests.length + 1 < b.num_guests ? `, booked for ${b.num_guests}` : '';
+  await noteToHost(b.booking_id, `The guest completed the check-in form (${r.guests.length + 1} guest${r.guests.length ? 's' : ''}${r.plate ? `, car ${r.plate}` : ''}${r.arrival_time ? `, arriving ${r.arrival_time}` : ''}${booked}).`);
+}
 
 async function noteToHost(bookingId, text) {
   try {

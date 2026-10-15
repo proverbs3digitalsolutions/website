@@ -106,7 +106,7 @@ test('a cleaner is refused every route outside the allow-list, including routes 
     '/api/workspace/export', '/api/cleaner-pay', '/api/damage-reports', '/api/lost-found', '/api/files',
     '/api/properties', '/api/tenants', '/api/dashboard', '/api/billing', '/api/assistant',
     '/api/cleaning-assignees', '/api/cleaning-checklist', '/api/maintenance', '/api/direct-booking',
-    '/api/pricing', '/api/message-templates',
+    '/api/pricing', '/api/message-templates', '/api/supplies',
   ];
   for (const url of reads) {
     const r = await cleaner.get(url);
@@ -138,6 +138,7 @@ test('a cleaner reaches their own jobs, checklist, status, photos, supplies and 
   assert.equal(tick.status, 200, JSON.stringify(tick.data));
   const start = await cleaner.post(`/api/cleaning-tasks/${task.task_id}/status`, { status: 'in_progress' });
   assert.equal(start.status, 200, JSON.stringify(start.data));
+  assert.equal((await cleaner.get(`/api/cleaning-tasks/${task.task_id}/supplies`)).status, 200);
   assert.equal((await cleaner.get('/api/auth/me')).status, 200);
   assert.equal((await cleaner.get('/api/account/profile')).status, 200);
   assert.equal((await cleaner.get('/api/push/settings')).status, 200);
@@ -164,7 +165,7 @@ test('allowed routes that are not built yet are not stopped by the guard', async
     ['GET', '/api/my-pay'],
     ['GET', '/api/cleaning-calendar'],
     ['GET', '/api/cleaning-board'],
-    ['GET', '/api/supplies'],
+    ['GET', `/api/cleaning-tasks/${task.task_id}/supplies`],
     ['POST', `/api/cleaning-tasks/${task.task_id}/damage`, { description: 'Chipped tile' }],
     ['POST', `/api/cleaning-tasks/${task.task_id}/lost-found`, {}],
     ['POST', `/api/cleaning-tasks/${task.task_id}/supplies`, {}],
@@ -187,6 +188,10 @@ test('the guard matches the allow-list by method, whole segment and case, and on
     ['GET', '/CLEANING-TASKS/abc', undefined, 'passed'],
     ['POST', '/cleaning-tasks/abc/status', { status: 'done' }, 'passed'],
     ['POST', '/cleaning-tasks/abc/status', { status: 'cancelled' }, 'CLEANER_FORBIDDEN'],
+    ['GET', '/cleaning-tasks/abc/supplies', undefined, 'passed'],
+    ['GET', '/supplies', undefined, 'CLEANER_FORBIDDEN'],
+    ['POST', '/cleaning-tasks/abc/supplies', {}, 'passed'],
+    ['GET', '/cleaning-tasks/abc/supplies/extra', undefined, 'CLEANER_FORBIDDEN'],
     ['POST', '/cleaning-tasks', {}, 'CLEANER_FORBIDDEN'],
     ['PATCH', '/cleaning-tasks/abc', {}, 'CLEANER_FORBIDDEN'],
     ['GET', '/cleaning-tasks/abc/extra', undefined, 'CLEANER_FORBIDDEN'],

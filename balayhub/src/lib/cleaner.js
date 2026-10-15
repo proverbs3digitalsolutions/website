@@ -30,7 +30,7 @@ const ALLOWED = [
   ['POST', '/cleaning-tasks/:id/lost-found'],
   ['POST', '/cleaning-tasks/:id/supplies'],
   ['POST', '/cleaning-tasks/:id/work-order'],
-  ['GET', '/supplies'],
+  ['GET', '/cleaning-tasks/:id/supplies'],
   ['GET', '/my-pay'],
 ];
 

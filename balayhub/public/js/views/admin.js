@@ -83,7 +83,7 @@ export async function adminView(el, { rerender, query = {} }) {
     tbody.replaceChildren(...workspaces.map((w) => h('tr', { class: w.is_demo ? '' : 'row-link', onclick: () => { if (!w.is_demo) edit(w); } },
       h('td', null,
         // A real button, so Enter and Space work too: the key press sends the same click up to the row.
-        w.is_demo ? h('strong', null, w.name) : h('button', { type: 'button', 'aria-haspopup': 'dialog', style: { background: 'none', border: '0', padding: '0', font: 'inherit', color: 'inherit', cursor: 'pointer' } }, h('strong', null, w.name)),
+        w.is_demo ? h('strong', null, w.name) : h('button', { type: 'button', class: 'link-btn', 'aria-haspopup': 'dialog' }, w.name),
         h('div', { class: 'muted small' }, w.owner_email || '—')),
       h('td', null, statusBadge(w), h('div', { class: 'muted small' }, BUSINESS[w.business_type] || '')),
       h('td', null, w.paid_until ? fmtDate(w.paid_until) : '—'),
@@ -114,7 +114,7 @@ export async function adminView(el, { rerender, query = {} }) {
   el.replaceChildren(
     h('div', { class: 'page-head' }, h('div', { class: 'page-head__title' }, h('h1', null, 'Platform admin'),
       h('p', null, 'All BalayHub workspaces. Click one to set its plan after the customer pays.')),
-      h('div', { class: 'page-head__actions' }, h('a', { class: 'btn btn--primary', href: '#/admin/support' }, 'Support queue'))),
+      h('div', { class: 'page-head__actions' }, h('a', { class: 'btn btn--secondary', href: '#/admin/coupons' }, 'Plan coupons'), h('a', { class: 'btn btn--primary', href: '#/admin/support' }, 'Support queue'))),
     h('div', { class: 'stats' },
       h('div', { class: 'stat' }, h('div', { class: 'stat__label' }, 'On trial'), h('div', { class: 'stat__value' }, String(counts.trial))),
       h('div', { class: 'stat stat--good' }, h('div', { class: 'stat__label' }, 'Paying'), h('div', { class: 'stat__value' }, String(counts.paying))),
