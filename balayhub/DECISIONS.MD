@@ -2,7 +2,7 @@
 
 Every decision made on BalayHub, with the date and the reason. Newest decisions go at the bottom. When a decision changes, add a new entry and mark the old one **Superseded by D-xx**. Never delete history.
 
-Last updated: 2026-10-15 (D-88, QA round 12 calls)
+Last updated: 2026-10-15 (D-90, founder top bar request; D-89, QA round 13 calls)
 
 ---
 
@@ -164,7 +164,7 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 
 **D-44 · 2026-10-13 · Profit and loss per unit.**
 - For each unit, for one month: stays (checked out in the month), nights, gross bookings, channel fees, refunds (same overpayment rule as the statements), expenses (not voided, by expense date), and net (gross − channel fees − refunds − expenses).
-- Expenses with no unit appear as one "Not linked to a unit" row. This row is left out of the owner portal.
+- Expenses with no unit appear as one "Not linked to a unit" row. This row is left out of the owner portal. *Renamed 2026-10-15 (D-89): the row now reads "Whole-property expenses" on the profit and loss screen and in both CSVs (the Reports screen row adds "(dues etc.)", carried to round 14). Still left out of the owner portal.*
 - Owners and managers see it (managers only for their properties). Staff get 403. The CSV has the same table.
 - Owners see their own units only in the portal.
 - *Amended by D-76 (2026-10-13):* the refund overpayment rule here uses the same after-channel-fee measure as the statements. Building-wide expenses staying off owner statements is unchanged, and is still an open question in BLOCKERS.MD.
@@ -757,7 +757,7 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 >
 > *Why:* each call follows the access table and the money rules, asks before money or stock moves, acts only on what the person sees, and keeps one account's data away from another.
 
-> **D-85 · 2026-10-14 · Alpha with small hosts, and QA round 9 calls (2026-10-14 sweep, fixed the same day).** Founder direction: "test it in alpha first to check how beneficial it is for the 1-3 property owners." The Guesty feature recommendations (https://claude.ai/artifact/NU1YwskX8n4jyGM8BoX59h) are parked as reference only; nothing from them is being built. From now on, QA puts friction for an owner of 1 to 3 properties first: anything that blocks, confuses or misleads a small host, and anything touching money or guests. Screens that show too much for a small host are grouped or collapsed, never cut. The ninth QA sweep (8 lanes, 94 entries including carried items) was fixed in 18 code lanes (C01 to C18). These are the calls made, with the default in use until the founder says otherwise. Open questions are in BLOCKERS.MD under "Questions from QA round 9". Each call was checked against the code after the fixes landed.
+> **D-85 · 2026-10-14 · Alpha with small hosts, and QA round 9 calls (2026-10-14 sweep, fixed the same day).** Founder direction: "test it in alpha first to check how beneficial it is for the 1-3 property owners." The Guesty feature recommendations (https://claude.ai/artifact/NU1YwskX8n4jyGM8BoX59h) are parked as reference only; nothing from them is being built. From now on, QA puts friction for an owner of 1 to 3 properties first: anything that blocks, confuses or misleads a small host, and anything touching money or guests. Screens that show too much for a small host are grouped or collapsed, never cut. The ninth QA sweep (8 lanes, 94 entries including carried items) was fixed in 18 code lanes (C01 to C18). These are the calls made, with the default in use until the founder says otherwise. Open questions are in BLOCKERS.MD under "Questions from QA round 9". Each call was checked against the code after the fixes landed. *Amended 2026-10-15 (D-90): the founder asked for a Guesty-style top bar; that one item is built, the rest stays parked.*
 >
 > *Money*
 > - **One shared balance rule: total, less the channel fee (channel bookings only), less payments, plus refunds** (voided payments and refunds left out). It is written once in `src/lib/balance.js` and used everywhere a balance shows: reservation, list and CSV, pay link, receipts, daily close, owner portal, message templates, the assistant and the inbox. A refund past the overpayment on a live stay now shows the money owed again. *Supersedes the balance clause of D-34 and its repeats in D-77, D-82 and D-83 (each annotated above). The refund cap, never more than was paid, stands.* *Why:* a ₱1,000 refund on a ₱600 stay paid ₱1,000 said "Nothing more is owed" while ₱600 was owed. This was the round's one severe bug.
@@ -785,7 +785,7 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 > - **Cleaning photos show a small preview** instead of a file icon.
 >
 > *Screens and keyboard*
-> - **Focus comes back after every save or redraw:** a dialog returns focus to the button that opened it (or its replacement), and a tab row that is drawn again keeps focus on the same tab (completes D-81's tab rule).
+> - **Focus comes back after every save or redraw:** a dialog returns focus to the button that opened it (or its replacement), and a tab row that is drawn again keeps focus on the same tab (completes D-81's tab rule).  *Replaced 2026-10-15 by D-89's single focus guard.*
 > - **No question is asked about a save that can't succeed:** dates outside 2000 to 2100 are refused at the field first, and while a question is open the form's button shows its own label, not "Saving…".
 > - **Filter links drop bad values from the address too,** and date filters use 2000 to 2100 like every other date (completes D-84).
 > - **A guest count must be a whole number from 1:** "Enter a whole number of guests, 1 or more." (D-84's "At least 1 guest." is annotated above.)
@@ -830,7 +830,7 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 > - **Report tiles say how they count** (for example "Rooms counted by night; cleaning and extras by check-in"). The ways of counting themselves are unchanged (D-44, D-85).
 >
 > *Screens and keyboard*
-> - **Focus is kept after every save or redraw, even a slow one:** BalayHub watches for up to 2 seconds and puts focus back on the same control, its renamed replacement in the same place (Mark clean to Mark dirty), or the page heading; never on something the person already moved to. Buttons inside dialogs are covered, and tab rows wait for the new row to be drawn. *Completes D-85's focus rule, which stopped watching before the redraw arrived.* Views add no focus code of their own for redraws. *Extended to 10 seconds and to dialogs with no opener 2026-10-15 (D-87).* *Extended to navigation, in-place reloads, re-enabled buttons and error targets 2026-10-15 (D-88). A view's own redraw after a dialog save still lost focus; carried to round 13.*
+> - **Focus is kept after every save or redraw, even a slow one:** BalayHub watches for up to 2 seconds and puts focus back on the same control, its renamed replacement in the same place (Mark clean to Mark dirty), or the page heading; never on something the person already moved to. Buttons inside dialogs are covered, and tab rows wait for the new row to be drawn. *Completes D-85's focus rule, which stopped watching before the redraw arrived.* Views add no focus code of their own for redraws. *Extended to 10 seconds and to dialogs with no opener 2026-10-15 (D-87).* *Extended to navigation, in-place reloads, re-enabled buttons and error targets 2026-10-15 (D-88). A view's own redraw after a dialog save still lost focus; carried to round 13.*  *Replaced 2026-10-15 by D-89's single focus guard.*
 > - **A form's own field checks run with the required check,** so "Accommodation is required" no longer hides "Check-out must be after check-in" (New quote, New group).
 > - **Link-style buttons are at least 24px tall** (the minimum for inline text links); buttons keep the 44px house size. Chart "Show as table" toggles are 32px tall on phones.
 > - **Every date box in reports uses 2000 to 2100,** custom report dates and a month in a Profit and loss link included. A bad month in the address shows "That month isn't valid, so this is <this month>." and the address is rewritten.
@@ -872,7 +872,7 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 > - **Charts on an empty account show one 0 label,** not 1% or ₱1 ticks. "Show as table" sits at the left of the chart, clear of the Ask button. The sidebar shows a cue when more is below.
 >
 > *Screens and keyboard*
-> - **Focus is kept after every dialog and redraw, even with no opener or a slow network:** a dialog opened by a link (`?new=1`, `?assign=1`) hands focus to the page heading when it closes, and BalayHub keeps watching for up to 10 seconds while focus is on the page. *Completes D-86's focus rule (2 seconds was too short on a slow network).*
+> - **Focus is kept after every dialog and redraw, even with no opener or a slow network:** a dialog opened by a link (`?new=1`, `?assign=1`) hands focus to the page heading when it closes, and BalayHub keeps watching for up to 10 seconds while focus is on the page. *Completes D-86's focus rule (2 seconds was too short on a slow network).*  *Replaced 2026-10-15 by D-89's single focus guard.*
 > - **Every wrong field in a new or edited reservation is reported at once;** the stay quote and the calendar refuse dates outside 2000 to 2100.
 > - **A lease and a short stay saved at the same instant can't both pass:** both lock the unit first (round 10 security note).
 >
@@ -907,7 +907,7 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 > - **Reports:** switching the period clears the old one from the link; a date link without a period is read as custom dates; Export is off until both dates are set; By month shows every column; the By property total shows occupied units. Archived add-ons are listed only on the Archived tab.
 >
 > *Screens and keyboard*
-> - **Focus goes to the new page's heading after any navigation,** a page reloading in place stays on screen until the new one is ready, a button disabled during its own request gets focus back, and a refused form focuses the field that needs fixing (the stars, the blank guest row). *Completes D-86 and D-87's focus rule for navigation; a view's own redraw after a dialog save still loses focus (round 13 top priority).*
+> - **Focus goes to the new page's heading after any navigation,** a page reloading in place stays on screen until the new one is ready, a button disabled during its own request gets focus back, and a refused form focuses the field that needs fixing (the stars, the blank guest row). *Completes D-86 and D-87's focus rule for navigation; a view's own redraw after a dialog save still loses focus (round 13 top priority).*  *Replaced 2026-10-15 by D-89's single focus guard.*
 > - **Every page-level error has a heading;** the void reason box is labelled.
 >
 > *Access*
@@ -924,3 +924,57 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 > *Not changed (recorded so later sweeps don't file them):* the host app stays English (founder question), apart from the verify screens, which follow the chosen language; the job sheet, Record use and Count keep their own quantity messages because their rules differ; the 101x32 theme buttons pass the 24px minimum; rates saved above the round 11 ceiling still price cleans (round 11 question); the staff quote route has no role guard (pre-existing; the clash text shows staff nothing they can't already see).
 >
 > *Why:* a small host must see true money on every list and card, must not save a wrong method or rate with one tap, and must be able to use every page with a keyboard.
+
+---
+
+> **D-89 · 2026-10-15 · QA round 13 calls (alpha with small hosts).** The thirteenth QA sweep (8 lanes, 77 entries including carried items and the founder's own report) was fixed in 13 code lanes (F01 to F13), plus follow-up lanes for old tests and for gaps the re-verify found. The calls below follow D-85. Open questions are in BLOCKERS.MD under "Questions from QA round 13". No severe bug this round. Suite result at the merge: 2,430/2,430. Security review: PASS, with info notes (the template check in `inbox.js` line 563, fixed in a follow-up; a stale current page on the phone More button, fixed in a follow-up; the season double-submit race, carried). **Not a clean round:** the sweep filed 55 findings and the re-verify found more small ones (below), all carried to round 14. Clean-round streak: 0/3.
+>
+> *Founder report: the sidebar jumped to the top on every click.* Cause: every page change rebuilt the whole menu (sidebar, top bar, bottom bar), which resets the sidebar's own scroll; the page was then scrolled a second time and the heading was focused in a way that scrolled again. Fix: **the menu is kept across page changes** and only the highlighted link moves; the sidebar keeps its scroll position and the More tools fold keeps its state; a new page scrolls to the top once, when the click happens; the page heading takes focus **without scrolling** (`preventScroll`). The phone More sheet folds More tools the same way (closed on Home, open when the current page is in it). The re-verify held at 1280x900 and 1366x768: the sidebar never rebuilt, its scroll never moved, the page started at the top and never moved again, and the heading had focus. *Founder report 2026-10-15; answered in BLOCKERS.*
+>
+> *One focus rule, kept by one piece of code.* After any save, confirm or redraw, focus goes back to the control you used, the control that took its place, or the page heading (without scrolling the page). **A single focus guard in `ui.js` replaces the three older watchers** (the click watcher, the dialog-close handler and the tab watcher); they were removed and a scan test fails if any other file manages redraw focus. The guard waits while a dialog is open and acts when it closes; it never moves focus after you chose something else, and never after a page change (the router focuses the new page's heading). *Why seven rounds kept finding the same bug:* each old watcher gave up before the screen was redrawn, or tried while the page under a dialog could not take focus. The guard reacts to the screen change itself. Views add only a `data-focus-key` on controls whose label changes when used (the keys are listed in DESIGN-BRIEF section 22). *Completes D-85 to D-88's focus rule.* Two gaps the re-verify found were fixed in follow-ups: the guard now also searches the whole app (not only the main area) for a control recorded outside it, such as the guest-page language toggle in the header; and Daily close has separate keys, `dc-close` (Close the day, Update close) and `dc-reopen` (Reopen day), so focus no longer lands on Reopen day after Close the day. The first owner-portal invite got its own key, `owner-invite-<id>`.
+>
+> *Screens and keyboard*
+> - **"Skip to main content"** is the first Tab stop on every app page and moves focus to the page heading.
+> - **On phones (under 960px), every button (including small ones), tab, filter chip, back link, standalone link and checklist row is at least 44px tall;** the top bar brand and account link are too, and the assistant button is 44x44. **Calendar booking tiles are at least 24px** (a dense grid; the WCAG minimum). **Checkboxes in the cleaner pay rows are 24px** on phones. Small buttons stay 38px on wider screens, links 24px. Theme buttons unchanged (D-88). *Settles the DESIGN-BRIEF `.btn--sm` 38px "only in dense toolbars" conflict: the 44px phone rule wins.*
+> - **A form error shows its sentence once,** at the field; the box at the top says "Please check the highlighted fields."
+> - **Confirm dialogs start on Cancel** (the safe choice). A dialog with a reason box still starts in the box.
+>
+> *Money: questions before saving*
+> - **"Save anyway?" above ₱50,000** now also covers a season's fixed nightly price, an add-on's price (above ₱50,000) and a booking total above ₱50,000 a night ("This is ₱60,000.00 a night (₱60,000.00 for 1 night). Save anyway?"; ₱60,000 for 2 nights does not ask). Nothing is refused. Bulk percent changes still don't ask (round 12 question).
+> - **Duplicates.** An identical season (same listing, name ignoring capitals and spaces, dates and price settings) is refused with "You already saved this season." A unit owner email that another active owner already uses asks "This email already belongs to <name>. Save anyway?" and saves only on yes. Archived owners and the owner's own row never count. Founder question.
+> - **Checks before questions:** a deposit deduction above the deposit, and a cleaner rate above the ceiling, are refused at the field before any "return early" or "Change this rate?" question.
+> - **Wording:** "Voided only: 3 entries, not counted in totals."; "Fix the dates to export." for an inverted range; "Whole-property expenses" for expenses with no unit on the profit and loss screen and in both CSVs (the Reports screen row still adds "(dues etc.)", carried); a cleared P&L month refills with this month and says "Showing this month."; the season preview names the winner last; a Fixed price with no rate says so; "so 1 pc was recorded"; a cleaner rate added again with different capitals keeps the saved spelling.
+>
+> *Guests*
+> - **A template you renamed keeps its name** when you switch guest language (the wording still follows the language when you never edited it).
+> - **An automatic message whose template was deleted can't be turned on from the list** (the button is dimmed with "Choose a template first."), and the template row is locked while either side changes. The dimmed state is not reachable today because a template in use can't be deleted; the guard is the safety net.
+> - **Gate pass:** one guest is shown without a number; the Set up buttons are named "Set up, <listing>". The review form sits in its own card with room around it. The verify screen's toast is English when you go on to the host app.
+>
+> *Small-host screens (alpha)*
+> - Assigned to shows only when there is someone to assign to; the inbox email alert no longer names server files.
+> - Calendar on 3 or fewer listings: the filters and the colour legend fold away.
+> - A new owner Home with no reservations leads with "Connect your calendar"; the charts fold under "Trends and revenue". (Managers and staff with no reservations don't get the card yet; carried.)
+> - Add listing: a cleaning fee hint ("e.g. 500"; a card with none says "No cleaning fee"), a "Building: <name> (saved)" line after a partial save, one plain line for what a guest pays now and later (when the guest chooses: "A guest pays 50% or the full amount when booking, and any balance 3 days before check-in."), the calendar link label ending "(ends in .ics)" with a hint, a shorter description example. Settings: how to get a PayMongo account. Setup: what "Both" adds.
+>
+> *Decision conflicts settled:* APP-FLOW 5.2 and 5.8 against D-84 (D-84 wins: the saved answers fill the setup form and nothing is created until Create workspace; docs changed); DESIGN-BRIEF `.btn--sm` 38px against the 44px phone rule (44px on phones); D-88's theme buttons (stand); D-86 and D-87's "views add no focus code of their own" (stands, now enforced by a scan test).
+>
+> *Starter plan default unchanged.* Starter still covers 2 listings (D-03); raised again in round 13 (#37) and left open in BLOCKERS.
+>
+> *Not changed (recorded so later sweeps don't file them):* the gate pass contact is the owner's account email (founder question); publish, send and record payout stay three steps (founder question); paying online after check-out stays unavailable (founder question); bulk percent changes don't ask; the host app stays English; theme buttons (about 33px high, pass the 24px minimum); `charts.js` colours (low); managers and staff with no reservations see the usual Home.
+>
+> *Re-verify (10 lanes, 2026-10-15):* the sidebar, focus (reservations, money, operations, guest pages), phone sizes, roles and a 20-burst race all held after the follow-ups. Found and carried: saving on a long list page (Supplies) moves the page by about 62px because the list is replaced and Chrome keeps its own anchor (SEV3, shared fix in round 14); the deposit Return dialog says "The deduction can't be more than the deposit" twice (field and Return to guest line); the Reports screen row still says "Whole-property expenses (dues etc.)"; two small phone targets (landing page small buttons and links, the cleaner pay select-all box).
+>
+> *Why:* seven rounds of the same keyboard bug came from watchers that each gave up too early, and the founder's own navigation was jarring on every click; one guard and a kept menu end both.
+
+---
+
+> **D-90 · 2026-10-15 · FOUNDER DECISION: build a Guesty-style top bar.** The founder wrote: "add like guesty: on the middle part a search bar to search everything within BalayHub; on the upper right icons for bookmarks, + for add new, notifications, help for support, then the profile." (screenshots in the QA round 14 carry notes). **This overrides D-85's "Guesty features parked as reference, nothing built" for this one item only;** every other Guesty idea stays parked. Adapt to BalayHub's own brand and to small hosts; do not copy Guesty's look or names. Scheduled for QA round 14 / the next build sprint (it is a feature, not a bug fix). What is wanted:
+> - **Global search** in the centre of the top bar ("Type / to search"; the `/` key focuses it from anywhere except while typing in a field). It searches only what the person may see (scoped by role on the server): reservations (guest name, confirmation code), guests, listings, properties, tenants, unit owners, quotes, maintenance requests, plus pages and settings by name and help articles. Grouped results, arrow keys and Enter, Escape closes, recent searches.
+> - **Bookmarks:** star the current page and list starred pages; saved per person on the server so they follow the person across devices.
+> - **"+" Add new menu:** Reservation, Listing, Property, Owner, Cleaning task, Expense, Invite teammate (and for long-term: Tenant, Rent payment), filtered by role and by workspace, each opening the existing "new" dialog.
+> - **Notifications bell:** a panel with filters (Reservations, Payments, Cleaning, Messages, Owners), an unread count and mark as read, built on the existing events and activity log, respecting each person's notification settings.
+> - **Help icon:** help-centre search, suggested articles for the current page, and "Contact us" opening a support ticket.
+> - **Profile avatar** (initials): My account, Settings, theme, Log out.
+> - **On phones:** the top bar keeps search (an icon opening full-screen search), "+" and the bell; bookmarks and help move into the profile menu or the More sheet. 44px targets and the D-89 focus rules apply. The host app stays English.
+>
+> *Why:* the founder asked for it directly after comparing with Guesty; one search box and one "+" menu cut the number of clicks for a small host. *Docs:* PRD feature (planned), APP-FLOW and BACKEND-SCHEMA (a bookmarks table, a search endpoint and a notifications feed) and DESIGN-BRIEF get their sections when it is built.

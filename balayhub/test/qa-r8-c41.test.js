@@ -2,7 +2,7 @@
 
 // QA round 8, lane C41 (last re-verify items). Two fixes:
 // SEV2: the Listings status tabs (All / Needs cleaning / Clean) keep one tablist element for the page's life. Each render
-//   replaces only its buttons, so the shared focus restore in app.js (restoreTabFocus) finds the tablist it started from,
+//   replaces only its buttons, so the shared focus guard in ui.js (D-89) finds the tablist it started from,
 //   and keyboard focus stays on the tab after ArrowRight instead of dropping to the page body.
 // SEV3: the Notifications card Save button on My account names its card ("Save notifications"), as settings.js does.
 // Frontend-only: no database. Source scans of listings.js and account.js (both import app.js, so they are read as text).

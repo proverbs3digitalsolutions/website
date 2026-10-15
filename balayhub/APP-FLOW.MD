@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-15 (QA round 12, section 25; D-88)
+Last updated: 2026-10-15 (QA round 13, section 26; D-89, D-90)
 
 ---
 
@@ -171,7 +171,7 @@ Cleaning push notifications do not go to cleaners yet.
 1. **How many units?** Tap 1–3, 4–10 or More than 10 → step 2.
 2. **Tell us about your hosting business.** First name, last name, business name (required), mobile, what you rent out. "More than 10" shows a custom-plan note. **Back** → step 1. **Continue** → step 3, or highlights missing fields.
 3. **Create your account.** Email, password, Terms/Privacy checkbox. **Start my free trial** → "Creating your account…".
-   - Success → popup closes → `#/verify-pending` (email verification on) or straight to setup, which creates the workspace from the saved answers → `#/launchpad` (short-term/Both) or `#/properties?new=1` (long-term).
+   - Success → popup closes → `#/verify-pending` (email verification on) or straight to setup, where the saved answers fill the form and **Create workspace** creates the workspace (nothing is created until that click, D-84) → `#/launchpad` (short-term/Both) or `#/properties?new=1` (long-term).
    - Error (e.g. email taken) → red message in the popup with field errors.
    - **Sign up with Google** (if set up) saves the answers and goes to Google.
    - **Already have an account? Log in** → `#/login`.
@@ -204,7 +204,7 @@ Cleaning push notifications do not go to cleaners yet.
 - `#/reset-password?token=…` → new password + confirm → **Save new password** → `#/login?reset=1`. Bad link → error. No token → `#/forgot`.
 
 ### 5.8 Workspace setup `#/setup`
-- If answers from the Get-started popup are saved, the workspace is created right away → Launchpad or Properties.
+- If answers from the Get-started popup are saved, they fill the setup form; the workspace is created only when the person clicks **Create workspace** (D-84) → Launchpad or Properties.
 - Otherwise: business name and type → **Create workspace** → `#/launchpad` (short-term/Both) or `#/properties?new=1` (long-term).
 - Already in a workspace → `afterLogin`.
 
@@ -259,7 +259,7 @@ All guest pages have an English / Tagalog toggle (Taglish text). The default is 
 - No stars → "Please choose a star rating first." Before check-in → "Feedback opens soon". More than 60 days after check-out, cancelled, or already sent → "Feedback is closed" or the thank-you.
 
 ### 6.7 Gate pass (building admin) `#/gatepass/<token>`
-- Printable "Guest gate pass" with guests, dates, plate, notes, authorized by, and ID photos (if linked).
+- Printable "Guest gate pass" with guests, dates, plate, notes, authorized by, and ID photos (if linked). One guest is shown as a name; two or more are a numbered list. Contact: the owner's account email (founder question, round 13).
 - **Confirm received** → toast "Thank you! The host has been told you received it." **Print**.
 - Expired (day after check-out) or bad link → "Gate pass not available".
 
@@ -437,7 +437,7 @@ Cards top to bottom (owner):
 ---
 
 ### 7.23 Profit and loss `#/pnl` (owner and manager)
-- Month picker and property filter (shared filter bar). A table per unit with a totals row; a negative net is shown in the danger colour. "Not linked to a unit" appears as its own row when there are unlinked expenses.
+- Month picker and property filter (shared filter bar). A table per unit with a totals row; a negative net is shown in the danger colour. "Whole-property expenses" (renamed from "Not linked to a unit" in round 13, D-89) appears as its own row when there are expenses with no unit. Clearing the month box fills it with this month and says "Showing this month.".
 - **Download CSV**. Empty state when there are no units in scope. On a phone the table becomes stacked cards.
 - Staff don't see the menu item and get the server's 403 if they open the page directly.
 
@@ -910,7 +910,7 @@ Decision D-85. The alpha is for owners of 1 to 3 properties, so these changes ma
 - **Groups:** renaming a booking group writes one activity row, shown on each room's timeline.
 - **Reports and profit and loss:** category labels match the rest of the app; profit and loss reads "October 2026" and says it counts finished stays by check-out date; Reports counts by check-in and shows a "Direct bookings by source" card. The Period box keeps focus after a change; the tab row has the label "Report type".
 - **Calendar:** go-to-date waits 400 ms after typing, so a half-typed date loads once.
-- **Focus and forms everywhere:** after a save or redraw, focus returns to the button that opened the dialog (or its replacement); a tab row drawn again keeps focus on the same tab. A date outside 2000 to 2100 is refused at the field before any question. While a question is open the form's button shows its own label, not "Saving…". Errors inside a closed section open it. One toast per save.
+- **Focus and forms everywhere:** after a save or redraw, focus returns to the control the person used (or its replacement); a tab row drawn again keeps focus on the same tab *(rule replaced in round 13: see section 26)*. A date outside 2000 to 2100 is refused at the field before any question. While a question is open the form's button shows its own label, not "Saving…". Errors inside a closed section open it. One toast per save.
 - **Filter links:** a bad value in a link is also removed from the address; a half-typed year is ignored; date filters use 2000 to 2100.
 
 ## 23. QA round 10 flow changes (2026-10-15)
@@ -990,4 +990,57 @@ Decision D-88. Still for owners of 1 to 3 properties: less friction, true money 
 - **Automatic messages (Inbox):** the page says when the four starter messages are ready but off, with a link to the guest language setting. A template used by an automatic message can't be deleted ("Choose another template for it, or remove it, first."); an automatic message with a deleted template can't be turned on. They list in a fixed order. Snoozed conversations disappear from Mine, Upcoming and Hosting until they wake.
 - **Guest pages:** the booking summary names the price rule ("Includes: Booked-early price."); the door code card reads "Door code" (Taglish "Code ng pinto"); the check-in thank-you screen says "Thank you! You're registered." under its own heading; the review page's star message goes away when a star is picked; the guest-limit message has a Taglish line.
 - **Language:** the **verify screens** (Check your email, "I've verified, continue", Resend) follow the chosen language, including Taglish; after sign-in the app resets to the host language. **Setup and the owner portal are English throughout** for now (founder question in BLOCKERS).
-- **Focus:** after any route change focus goes to the new page's h1. A page that reloads in place stays on screen (marked `aria-busy`) until the new one is ready, then swaps; a button that was disabled during its own request gets focus back; a refused form focuses the field that needs fixing (the stars, a blank guest row, the reason box). A page-level error has a heading. *Still open, round 13 top priority:* after a dialog save that redraws the view itself (Record payment, Edit reservation, Remove room, supply Add stock, Record use, Count, Edit and Archive, Mark done, Update close, Close the day, stay report tabs on a slow network, void payout) focus can land on the page body instead of the control or the h1.
+- **Focus:** after any route change focus goes to the new page's h1. A page that reloads in place stays on screen (marked `aria-busy`) until the new one is ready, then swaps; a button that was disabled during its own request gets focus back; a refused form focuses the field that needs fixing (the stars, a blank guest row, the reason box). A page-level error has a heading. *Closed in round 13 by the D-89 focus guard (see section 26).*
+
+---
+
+## 26. QA round 13 flow changes (2026-10-15)
+
+Decision D-89 (and D-90 for the planned top bar). Where this section and an older line disagree, this section wins.
+
+### Navigation, focus and the skip link (every app page)
+- **The menu stays when you change page.** The sidebar, top bar and bottom bar are built once and kept. Clicking a link moves only the highlighted ("current page") mark. The sidebar keeps its scroll position and the **More tools** fold keeps its state; the fold opens itself when the current page is inside it and is never closed by moving around. The Inbox unread badge updates in place.
+- **A new page starts at the top, once.** The window scrolls to the top when the click happens, before the page is drawn, and not again afterwards. A page that reloads in place (a filter or a save) stays where it is.
+- **The page heading takes focus without scrolling.** After a page change focus goes to the new page's h1 (`tabindex="-1"`) and the page does not move. If you had just clicked a sidebar, top bar or bottom bar link, that counts as free and the heading takes focus.
+- **Skip to main content.** The first Tab stop on every app page is a "Skip to main content" link (visible only when focused). Enter moves focus to the page heading; the next Tab goes into the page, not the sidebar.
+- **Phone More sheet.** More tools is a fold inside the sheet: closed on pages outside it, open when the current page is one of its pages, and it remembers the choice like the sidebar does. The Tab key stays inside the sheet, including the fold's button. Escape closes the sheet and returns focus to More. The More button always marks the page you are on now, not the one the sheet was built on.
+- **Assistant panel.** Closing it puts focus back on the Ask button.
+- **Confirm dialogs start on Cancel,** unless they have a reason box (then the box).
+
+### The focus rule (replaces the "Still open" notes in sections 23 to 25)
+- After any save, confirm, void, undo or redraw, focus goes to: the control you used; else the control that took its place (same `data-focus-key`, else same role and name, else the same place in the same labelled group); else, from 0.8 seconds, the page heading (a dialog: its heading) without scrolling. It keeps looking for up to 10 seconds in case a slow page draws late, and may move from the heading to the real control then.
+- A control inside a closed fold hands focus to the fold's button. While a dialog is open the guard waits and acts when it closes.
+- It never moves focus after you chose something else, and never after a page change.
+- A control outside the main area (the guest pages' English/Tagalog toggle in the header) is found too.
+- A form error shows its sentence once, at the field; the box at the top says "Please check the highlighted fields.".
+
+### Changed flows, by screen
+- **Home (owner).** With no reservations yet: a first-run card leads ("Connect your calendar", linking to the calendar step) and the charts sit in a closed **Trends and revenue** fold (they draw on first open). With reservations: unchanged. Managers and staff don't get the card yet.
+- **Add and Edit listing.**
+  - Cleaning fee: placeholder "e.g. 500" with a hint; a listing with none shows "No cleaning fee" on its card.
+  - After a partial save (listing made, building failed), the retry shows "Building: <name> (saved)".
+  - Pay-now line: one sentence says what the guest pays now and later. Pay in full: the full-amount sentence. Guest chooses: "A guest pays 50% or the full amount when booking, and any balance 3 days before check-in." A set percentage: "A guest pays 50% when booking and the rest 3 days before check-in."
+  - The calendar link label ends "(ends in .ics)" with a hint; the short description example is shorter.
+- **Calendar.** With 3 or fewer listings the Filter box and the colour legend sit in closed folds. Night cells and booking tiles keep focus after Block, Set price and Remove block.
+- **New and Edit reservation.** A booking total above ₱50,000 a night asks "This is ₱60,000.00 a night (₱60,000.00 for 1 night). Save anyway?" (**Save anyway** / **Change it**; Change it puts focus in the amount box). ₱60,000 for 2 nights does not ask. Edit asks only when the total or the dates changed, after the date clash and "Use the new price?" steps. Nothing is refused.
+- **Security deposit, Return dialog.** The deduction is checked first: more than the deposit shows the server's sentence at the field ("The deduction can't be more than the deposit (₱1,000.00).") and no "return early" question is asked. (Known: the sentence also shows in the "Return to guest" line, carried.) Check in/out and deposit buttons keep focus.
+- **Pricing, seasons.** A season with a fixed price above ₱50,000 a night asks the "Save anyway?" question. A Fixed price with no rate says "Enter a nightly rate for a fixed price." (a percentage change likewise). The overlap line names the winner last: "Christmas rush also covers this night, but QA overlap takes it." An identical season is refused at the Name field: "You already saved this season." (a different price or dates saves; the same name on another listing saves).
+- **Unit owners.** Saving an owner whose email another active owner uses asks "This email already belongs to <name>. Save anyway?" (**Save anyway** resends with the flag; **Change it** focuses the email box). The first portal invite and "Send the invite again" keep focus on the row. Statement Publish/Unpublish to correct and Send to owner/Send again keep focus.
+- **Add-ons.** A price above ₱50,000 asks "This add-on costs ₱99,999,999.00. Save anyway?".
+- **Inbox.**
+  - **Assigned to** shows in a conversation only when there is more than one person to choose from, or it is already assigned.
+  - Switching guest language keeps a template name you gave it (and still rewrites an untouched built-in).
+  - **Turn on** on an automatic message whose template was deleted is dimmed (`aria-disabled`) with "Choose a template first." (not reachable today, see D-89).
+  - The email-alert line when mail is off reads in plain words and no longer names server files.
+  - Snooze and Archive keep focus.
+- **Cleaner pay and housekeeping.** A cleaner rate above the ceiling (₱10,000.00 per clean, ₱1,000.00 per hour) is refused at the field before "Change this rate?". A rate added again under different capitals keeps the saved spelling. The supplies shortage text reads "so 1 pc was recorded". Row checkboxes are 24px on phones. Mark done, Set pay, Edit pay and Undo paid keep focus.
+- **Daily close.** **Close the day** / **Update close** keep focus on the same button after saving; **Reopen day** is its own control.
+- **Rent and Reports.** A voided-only month reads "Voided only: 3 entries, not counted in totals." (1 entry: "Voided only: 1 entry, not counted in totals."). Export with an inverted date range reads "Fix the dates to export." (a missing date still reads "Pick both dates to export."). The Reports screen row for expenses with no unit reads "Whole-property expenses (dues etc.)"; the profit and loss screen and both CSVs read "Whole-property expenses" (the suffix goes in round 14).
+- **Stay reports.** The tab row keeps focus on the same tab, even on a slow network.
+- **Gate pass (building admin).** One guest is a name, not "1."; the Set up buttons are named "Set up, <listing>"; Confirm received hands focus to the heading.
+- **Guest pages.** The review form is its own card with spacing under the heading. The English/Tagalog toggle keeps focus on itself. Setup's "Both" says what it adds. After email verification, the toast is English when the guest goes on to the host app (signed in); otherwise it follows the chosen language.
+- **Settings, Connect payments.** The PayMongo dialog says how to get a PayMongo account, with a link (opens in a new tab, `rel="noopener"`).
+- **Lists after a save.** Known: on a long list (Supplies), saving in a dialog moves the page by about 62px because the list is replaced (carried to round 14).
+
+### Planned (not built): top bar (D-90, founder request)
+Global search in the middle ("Type / to search"), then on the right: bookmarks, "+" Add new, notifications, help and the profile avatar. The full flow is written into this file when it is built (QA round 14 / next build sprint).

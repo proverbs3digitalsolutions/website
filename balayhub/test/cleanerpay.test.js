@@ -212,7 +212,7 @@ test('rates: an outside cleaner by name, matched ignoring case, is one row', asy
   const put = (b) => owner.raw('PUT', '/api/cleaner-rates', b);
   await put({ assignee_name: 'Ate Mila', rate_type: 'per_clean', amount: '250' });
   const again = await put({ assignee_name: 'ate mila', rate_type: 'per_clean', amount: '260' });
-  assert.equal(again.data.rate.name, 'ate mila');
+  assert.equal(again.data.rate.name, 'Ate Mila', 'the spelling already saved is kept (#50)');
   assert.equal(again.data.rate.user_id, null);
   assert.equal(again.data.rate.amount, '260.00');
   const names = (await owner.get('/api/cleaner-rates')).data.rates.filter((r) => r.name.toLowerCase() === 'ate mila');
@@ -258,7 +258,7 @@ test('rates: only the owner can see or change them', async () => {
 });
 
 test('rates: delete removes a rate; a second delete or another workspace\'s rate is a 404', async () => {
-  const id = (await owner.get('/api/cleaner-rates')).data.rates.find((r) => r.name === 'ate mila').rate_id;
+  const id = (await owner.get('/api/cleaner-rates')).data.rates.find((r) => r.name === 'Ate Mila').rate_id;
   assert.deepEqual((await owner.raw('DELETE', `/api/cleaner-rates/${id}`)).data, { ok: true });
   assert.equal((await owner.raw('DELETE', `/api/cleaner-rates/${id}`)).status, 404);
   const otherRate = await other.raw('PUT', '/api/cleaner-rates', { assignee_name: 'Other Cleaner', rate_type: 'per_clean', amount: '90' });

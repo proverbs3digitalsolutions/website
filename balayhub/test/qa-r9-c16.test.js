@@ -97,7 +97,7 @@ test('an Edit opens a group only when the listing holds a value other than its s
 });
 
 test('Add listing passes an empty listing, and Edit passes the saved unit to the same form', () => {
-  assert.match(src, /fields: listingFields\(\{\}, roomTypes, newPropMore, \[h\('hr', \{ class: 'divider' \}\), propSelect, newProp\]\)/); // QA round 12 (#30): building in Basics
+  assert.match(src, /fields: \[savedLine, \.\.\.listingFields\(\{\}, roomTypes, newPropMore, \[h\('hr', \{ class: 'divider' \}\), propSelect, newProp\]\)\]/); // QA round 12 (#30): building in Basics; QA round 13 (#39): the saved-building line goes first
   assert.match(src, /listingFields\(\{ \.\.\.unit, tags: unit\.tags \}, roomTypes\)/);
 });
 

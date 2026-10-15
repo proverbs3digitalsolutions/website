@@ -2,7 +2,7 @@
 
 This document describes BalayHub's PostgreSQL schema as it stands after migrations `001`–`026` in `db/migrations/`, where uploaded files are stored, and who can see or change each kind of data. It was checked against the migrations and the route code in `src/routes/*.js` and `src/lib/*.js`. Anything not confirmed in the code is marked **unverified**.
 
-Last updated: 2026-10-15 (QA round 12, section 18, rows in section 6 and 6.1a; D-88)
+Last updated: 2026-10-15 (QA round 13, section 19; D-89)
 
 ---
 
@@ -1134,7 +1134,23 @@ Decision D-88. Servers changed only where listed; the list pages' habit of alway
   - Turning an automatic message on while its template is deleted is 409 `TEMPLATE_DELETED`: "This automatic message's template was deleted. Choose a template first." A `template_id` that points at a deleted template is a 400 at `template_id`.
   - `GET /api/automations` rows gain `template_archived`, and come back in a fixed order: `created_at`, trigger order, `name`, `automation_id` (before this, messages created at the same instant came back in a random order).
   - Snoozed conversations are left out of the Mine, Upcoming and Hosting views until they wake.
-  - *Known gap, carried to round 13:* archiving a template and moving an automatic message onto it at the same instant can leave the message on an archived template. Both paths need to lock the template row.
+  - *Closed in round 13 (section 19): both paths now lock the template row.* *Known gap, carried to round 13:* archiving a template and moving an automatic message onto it at the same instant can leave the message on an archived template. Both paths need to lock the template row.
 - **Lease end date:** `PATCH /api/leases/:id` with any `end_date` caps the unpaid move-in charge's due date at the end date, the same as the end-lease handler does. The full month is still billed. Ending a lease early also moves the due date.
 - **List defaults (client rule):** every list page sends its default filter to the server (the `apiFilters` helper in `public/js/filters.js`), so "All unpaid" on Rent means unpaid only. The servers did not change.
 - **Cleaner job supplies:** the job-route message for a quantity below 1 stays the generic one (D-87); the carry list has the clearer wording.
+
+## 19. API notes from QA round 13 (2026-10-15)
+
+Decision D-89. No table, column or access-matrix change. The role x data matrix in section 6 is unchanged.
+
+- **`POST /api/pricing/seasons`:** an identical season is refused: 409 `DUPLICATE`, message and `fields.name` both "You already saved this season." Identical means the same workspace, the same listing (both empty counts as the same), the same name ignoring capitals and spaces at the ends, and the same dates, nightly price, percentage change and minimum stay (empty values compared as equal). Nothing is written. A different price or dates, or the same name on another listing, saves as before.
+  - *Known gap (info from the round 13 security review):* two identical seasons sent at the same instant can both insert, because the check has no lock and there is no unique index. Low; a unique index migration would close it (BLOCKERS round 13).
+- **`POST /api/unit-owners`, `PATCH /api/unit-owners/:id`:** a non-empty email equal (ignoring capitals and spaces at the ends) to another **active** owner's email in the same workspace is 409 `EMAIL_IN_USE` ("This email already belongs to <their name>."), with `fields.email` and `data.owner_name`, unless the body has `confirm_duplicate_email: true`. On a PATCH it is checked only when the email changes. Archived owners, owners of other workspaces and the owner's own row never count. The view asks "Save anyway?" and resends with the flag.
+- **`PUT /api/cleaner-rates`:** when the typed name matches a saved rate ignoring capitals, the saved spelling is kept and returned (the amount is updated). The ceilings (₱10,000.00 per clean, ₱1,000.00 per hour) are unchanged; the screen now checks them before the "Change this rate?" question, using the server's own sentence.
+- **Message templates and automatic messages (inbox):**
+  - Archiving a template (`POST /api/message-templates/:id/archive`) and moving or turning on an automatic message (`PATCH /api/automations/:id`) both run in one transaction that locks the template row (`FOR UPDATE`). *Closes the round 12 known gap:* a template can no longer be archived at the same instant an automatic message moves onto it.
+  - The 409 `MAIL_OFF` answer (turning on an email message while the server has no mail) now reads in plain words for a host and no longer names server files.
+  - Changing the guest language rewrites a built-in template's wording only when the host never edited it, and keeps a name the host gave it (stock names, English and Taglish, are the only ones renamed).
+- **Profit and loss (`src/lib/pnl.js`, `src/routes/stayreports.js`):** expenses with no unit are labelled "Whole-property expenses" in the P&L answer, its CSV and the Reports performance CSV (the old "Not linked to a unit" and "Building-level expenses" labels are gone). Still left out of the owner portal. A month sent empty is the client's job: the screen refills it with the current Manila month.
+- **Gate pass (public, by token):** unchanged on the server; one guest is shown without a number in the view.
+- **Client-only rules this round (no server change):** the "Save anyway?" questions for a season's fixed price, an add-on price and a booking total above ₱50,000 a night (`highStayTotalOk`, `highAddonPriceOk` in `rates.js`); the deposit deduction check before the early-return question (`deductionProblem`).

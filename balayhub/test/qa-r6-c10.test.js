@@ -46,7 +46,7 @@ test('Stay reports: the By listing table has an Of which cleaning & extras colum
   assert.match(headers[1], /'Of which cleaning & extras'/); // QA r7 C17 (K9): the header says the cleaning part is inside Revenue.
   assert.match(headers[1], /'Channel fees'/);
   const columns = headers[1].split(',').length + 1;
-  const building = src.match(/colspan: (\d+) \}, 'Building-level expenses/);
+  const building = src.match(/colspan: (\d+) \}, 'Whole-property expenses/);
   assert.ok(building, 'building-level row found');
   assert.equal(Number(building[1]), columns - 2, 'building row spans every column before its expenses cell');
   assert.match(src, /peso\(u\.fees\)/, 'listing row prints cleaning and extras from u.fees');

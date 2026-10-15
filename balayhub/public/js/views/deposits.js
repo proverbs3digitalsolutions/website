@@ -1,6 +1,6 @@
 // Security deposit card on a reservation, and the Home reminder for deposits to return.
 
-import { get, post, uploadFile, qs } from '../api.js';
+import { get, post, uploadFile, qs, ApiError } from '../api.js';
 import { h, peso, fmtDate, fmtDateTime, field, formModal, confirmDialog, toast, badge, todayManila, emptyState, parseAmount } from '../ui.js';
 import { initFilters, filterBar, changed, apiFilters } from '../filters.js';
 import { state } from '../app.js';
@@ -12,6 +12,12 @@ const STATUS = { held: ['partial', 'Held'], refunded: ['paid', 'Returned'], part
 // The return line under the deduction box. A deduction above the deposit is one the server refuses (settle), so the line
 // says the limit and shows no return figure: a preview never shows a figure the server refuses. An amount that can't be
 // read, or a negative one, shows nothing rather than a figure built from a guess.
+// The server's sentence for a deduction above the deposit, asked at the field before any question; null when it is fine.
+export function deductionProblem(typedText, held) {
+  const typed = parseAmount(String(typedText ?? ''));
+  return typed > Number(held) ? `The deduction can't be more than the deposit (${peso(held)}).` : null;
+}
+
 export function returnLine(typedText, deposit) {
   const raw = String(typedText ?? '');
   const typed = raw.trim() === '' ? 0 : parseAmount(raw);
@@ -67,6 +73,8 @@ export async function depositCard(r, rerender) {
         (r.guest_email || r.guest_has_email) && field({ name: 'send_receipt', label: r.guest_email ? `Email the summary to ${r.guest_email}` : 'Email the summary to the guest', type: 'checkbox', value: true }),
       ],
       onSubmit: async (v) => {
+        const tooMuch = deductionProblem(v.deduction_amount, dep.amount);
+        if (tooMuch) throw new ApiError(tooMuch, { status: 400, fields: { deduction_amount: tooMuch } });
         if (askEarlyReturn(r, todayManila()) && !await confirmDialog({ title: 'Return the deposit before check-out?', text: `The stay ends ${fmtDate(r.check_out)}. Damage is usually checked after check-out.`, confirmText: 'Return deposit' })) return false;
         sent(await post(`/reservations/${r.booking_id}/deposit/settle`, v), 'Deposit settled.'); rerender();
       },
@@ -83,7 +91,7 @@ export async function depositCard(r, rerender) {
     return h('div', { class: 'card' },
       h('div', { class: 'card__head' }, h('h2', null, 'Security deposit'), badge('voided', 'None')),
       h('p', { class: 'muted small' }, 'Took a refundable deposit (e.g. ₱1,000)? Record it so you remember to return it after check-out.'),
-      h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: record }, 'Record deposit'));
+      h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'data-focus-key': 'deposit-action', onclick: record }, 'Record deposit'));
   }
   const [cls, text] = STATUS[dep.status];
   const due = dep.status === 'held' && (r.check_out <= todayManila() || Boolean(r.checked_out_at));
@@ -95,8 +103,8 @@ export async function depositCard(r, rerender) {
       dep.refund_amount !== null && [h('dt', null, 'Returned'), h('dd', null, `${peso(dep.refund_amount)}${Number(dep.refund_amount) > 0 ? ` · ${label(dep.refund_method)}${dep.refund_reference ? ` · ref. ${dep.refund_reference}` : ''}` : ''}`, h('div', { class: 'muted small' }, fmtDateTime(dep.settled_at)))]),
     dep.files.length > 0 && h('div', { class: 'gc__ids' }, dep.files.map((f) => h('a', { href: `/api/files/${f.file_id}`, target: '_blank', rel: 'noopener' }, h('img', { src: `/api/files/${f.file_id}`, alt: f.file_name, loading: 'lazy' })))),
     h('div', { class: 'chips', style: { marginTop: '12px' } },
-      dep.status === 'held' && isManager && h('button', { class: `btn ${due ? 'btn--primary' : 'btn--secondary'} btn--sm`, type: 'button', onclick: settle }, 'Return deposit'),
-      dep.status !== 'held' && state.user.role === 'owner' && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: reopen }, 'Undo')),
+      dep.status === 'held' && isManager && h('button', { class: `btn ${due ? 'btn--primary' : 'btn--secondary'} btn--sm`, type: 'button', 'data-focus-key': 'deposit-action', onclick: settle }, 'Return deposit'),
+      dep.status !== 'held' && state.user.role === 'owner' && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'data-focus-key': 'deposit-action', onclick: reopen }, 'Undo')),
     h('div', { class: 'form', style: { marginTop: '10px' } },
       h('label', { class: 'small muted' }, 'Damage / condition photos'), upload,
       h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: async (e) => {

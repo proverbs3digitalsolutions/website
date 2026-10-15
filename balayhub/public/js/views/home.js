@@ -206,8 +206,38 @@ async function dayCloseAlert() {
 
 const label = (v) => CHANNEL_LABEL[v];
 
+// Owners only: has this workspace ever had a reservation? The onboarding check already knows (its "reservation" step),
+// so Home reads that rather than counting bookings. 1 or 0 is all the first-run card needs; null means not known.
+async function reservationsSeen() {
+  if (state.user.role !== 'owner') return null;
+  let o;
+  try { o = await get('/onboarding'); } catch { return null; }
+  return o.steps.find((x) => x.key === 'reservation')?.done ? 1 : 0;
+}
+
+// A workspace with no reservation yet: say what to connect first, above the charts that are all zeros.
+export function firstRunCard({ reservations }) {
+  if (reservations !== 0) return null;
+  return h('div', { class: 'card' },
+    h('p', null, 'No bookings yet. Connect your Airbnb or Booking.com calendar to see them here.'),
+    h('a', { class: 'btn btn--primary', href: '#/listings' }, 'Connect calendar'));
+}
+
+// The trend and revenue charts fold into a closed section while there are no bookings. A chart sizes itself to the
+// space it is drawn into, and a closed section has none, so the charts are drawn the first time it opens.
+function chartsFold() {
+  let drawn = false;
+  const fold = h('details', { class: 'form-section' }, h('summary', null, 'Trends and revenue'));
+  fold.addEventListener('toggle', () => {
+    if (!fold.open || drawn) return;
+    drawn = true;
+    fold.append(trendsCard(), revenueSection());
+  });
+  return fold;
+}
+
 export async function homeView(el, { rerender } = {}) {
-  const [{ listings }, onboard, deposits, proofAlert, lowAlert, assigned, sync, closeAlert] = await Promise.all([get('/listings'), launchpadReminder(rerender), depositsDueCard(), proofsAlert(), suppliesAlert(), assignedAlert(), syncAlert(), dayCloseAlert()]);
+  const [{ listings }, onboard, deposits, proofAlert, lowAlert, assigned, sync, closeAlert, seen] = await Promise.all([get('/listings'), launchpadReminder(rerender), depositsDueCard(), proofsAlert(), suppliesAlert(), assignedAlert(), syncAlert(), dayCloseAlert(), reservationsSeen()]);
   const first = state.user.full_name.split(' ')[0];
   const head = h('div', { class: 'page-head' },
     h('div', { class: 'page-head__title' }, h('h1', null, `Welcome back, ${first}`), h('p', null, `${state.user.organization_name} · ${fmtDate(todayManila())}`)),
@@ -222,5 +252,7 @@ export async function homeView(el, { rerender } = {}) {
     })));
     return;
   }
-  el.replaceChildren(head, h('div', { class: 'stack' }, assigned, sync, closeAlert, proofAlert, lowAlert, onboard, overviewCard(), deposits, trendsCard(), revenueSection()));
+  const start = firstRunCard({ reservations: seen });
+  const charts = start ? chartsFold() : [trendsCard(), revenueSection()];
+  el.replaceChildren(head, h('div', { class: 'stack' }, start, assigned, sync, closeAlert, proofAlert, lowAlert, onboard, overviewCard(), deposits, charts));
 }

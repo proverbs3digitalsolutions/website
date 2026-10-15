@@ -45,7 +45,7 @@ extendTranslations({
   'Enter a quantity for at least one item.': 'Maglagay ng dami sa kahit isang gamit.', 'Supplies saved.': 'Na-save ang supplies.',
   'Quantity must be a whole number.': 'Dapat buong bilang ang dami.', 'Quantity can\'t be negative.': 'Hindi puwedeng negatibo ang dami.',
   '{name} was out of stock, so it wasn\'t recorded.': 'Ubos na ang {name}, kaya hindi ito na-record.', 'Tell your manager.': 'Sabihan ang manager mo.',
-  'Only {recorded} of {name} {verb} on hand, so {count} {verb} recorded.': '{recorded} lang ng {name} ang nasa stock, kaya {count} ang na-record.',
+  'Only {onHand} of {name} {verb} on hand, so {recorded} {verb} recorded.': '{onHand} lang ng {name} ang nasa stock, kaya {recorded} ang na-record.',
   'Title': 'Pamagat', 'What needs fixing?': 'Ano ang kailangang ayusin?', 'Priority': 'Prayoridad',
   'Low': 'Mababa', 'Medium': 'Katamtaman', 'High': 'Mataas', 'Urgent': 'Madalian',
   'Send to host': 'Ipadala sa host', 'Sent to the host. Thank you.': 'Naipadala na sa host. Salamat.',
@@ -590,7 +590,7 @@ async function suppliesModal(task, onSaved) {
       const { skipped, short: shortfall = [] } = await post(`/cleaning-tasks/${task.task_id}/supplies`, { items });
       // A partial shortfall (#34) is named the way a zero stock is: what was on hand and what was recorded.
       const problems = [
-        ...shortfall.map((s) => { const n = Number(s.recorded); return T('Only {recorded} of {name} {verb} on hand, so {count} {verb} recorded.', { recorded: qtyLabel(n, s.unit_label), name: s.name, count: n, verb: n === 1 ? 'was' : 'were' }); }),
+        ...shortfall.map((s) => { const n = Number(s.recorded); return T('Only {onHand} of {name} {verb} on hand, so {recorded} {verb} recorded.', { onHand: qtyLabel(n, s.unit_label), recorded: qtyLabel(n, s.unit_label), name: s.name, verb: n === 1 ? 'was' : 'were' }); }),
         ...skipped.map((name) => T('{name} was out of stock, so it wasn\'t recorded.', { name })),
       ];
       // Only cleaners are told to tell their manager.
@@ -704,7 +704,7 @@ export async function housekeepingDetailView(el, { params, rerender }) {
       h('span', null, c.text)))));
   const progress = h('span', { class: 'muted small' }, T('{n} of {total} done', { n: t.done_count, total: t.item_count }));
   const statusSlot = h('span', null, statusBadge(t.status));
-  const startBtn = t.status === 'todo' ? h('button', { class: 'btn btn--secondary', onclick: () => setStatus('in_progress', T('Started.')) }, T('Start')) : null;
+  const startBtn = t.status === 'todo' ? h('button', { class: 'btn btn--secondary', 'data-focus-key': 'hk-status', onclick: () => setStatus('in_progress', T('Started.')) }, T('Start')) : null;
   const upload = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', class: 'input', capture: 'environment', 'aria-label': T('Choose a photo') });
   const actionBtn = (text, fn) => h('button', { class: 'btn btn--secondary hk-action', type: 'button', onclick: () => fn(t, rerender) }, text);
 
@@ -714,7 +714,7 @@ export async function housekeepingDetailView(el, { params, rerender }) {
     ? (t.status === 'done' || t.pay_amount != null) && h('div', { class: 'card' },
       h('div', { class: 'card__head' }, h('h2', null, 'Cleaner pay'), t.pay_status && badge(t.pay_status === 'paid' ? 'paid' : 'unpaid', t.pay_status === 'paid' ? 'Paid' : 'Unpaid')),
       h('p', null, t.pay_amount != null ? h('strong', null, peso(t.pay_amount)) : h('span', { class: 'muted' }, payText(t, state.user))),
-      t.pay_status !== 'paid' && h('button', { class: 'btn btn--secondary', onclick: () => payModal(t, rerender) }, t.pay_amount != null ? 'Edit pay' : 'Set pay'))
+      t.pay_status !== 'paid' && h('button', { class: 'btn btn--secondary', 'data-focus-key': 'hk-pay', onclick: () => payModal(t, rerender) }, t.pay_amount != null ? 'Edit pay' : 'Set pay'))
     : t.pay_amount != null && h('div', { class: 'card' },
       h('div', { class: 'card__head' }, h('h2', null, T('Your pay for this clean')), badge(t.pay_status === 'paid' ? 'paid' : 'unpaid', T(t.pay_status === 'paid' ? 'Paid' : 'Not paid yet'))),
       h('p', null, h('strong', null, peso(t.pay_amount))));
@@ -725,12 +725,12 @@ export async function housekeepingDetailView(el, { params, rerender }) {
       h('div', { class: 'page-head__title' }, h('h1', null, T('Clean {unit}', { unit: t.unit_name })), h('p', null, `${t.property_name} · ${dueText(t)}`)),
       h('div', { class: 'page-head__actions' },
         startBtn,
-        open && h('button', { class: 'btn btn--primary', onclick: finish }, T('Mark done')),
+        open && h('button', { class: 'btn btn--primary', 'data-focus-key': 'hk-status', onclick: finish }, T('Mark done')),
         // A paid clean cannot be reopened (the server refuses it), so say how to undo the payment instead.
         t.status === 'done' && isPaidClean(t) && (isCleaner()
           ? h('span', { class: 'small muted' }, T('Paid.'))
           : h('span', { class: 'small muted' }, undoPaidLead(state.user.role), payLink, ' first.')),
-        canReopen(t, state.user.role) && h('button', { class: 'btn btn--secondary', onclick: reopen }, T('Reopen')),
+        canReopen(t, state.user.role) && h('button', { class: 'btn btn--secondary', 'data-focus-key': 'hk-status', onclick: reopen }, T('Reopen')),
         // No Inspect on a paid clean (the server refuses it, as with Reopen), and Copy for cleaner only on an open clean (#35).
         isManager && t.status === 'done' && t.checklist.length > 0 && !isPaidClean(t) && h('button', { class: 'btn btn--primary', onclick: () => inspectModal(t, rerender) }, 'Inspect'),
         isManager && open && h('button', { class: 'btn btn--secondary', onclick: () => copyText(taskText(t)) }, 'Copy for cleaner'),

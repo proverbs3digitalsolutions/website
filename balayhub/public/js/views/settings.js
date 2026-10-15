@@ -587,6 +587,7 @@ async function bookingCard(rerender) {
     fields: [
       h('p', { class: 'small' }, 'Guests pay you directly through your own PayMongo account (GCash, Maya, cards). In your PayMongo dashboard go to ',
         h('strong', null, 'Developers → API keys'), ' and copy the ', h('strong', null, 'Secret key'), '. Start with the test key (sk_test_…) to try it, then switch to the live key.'),
+      h('p', { class: 'small' }, 'No PayMongo account yet? Sign up at ', h('a', { href: 'https://dashboard.paymongo.com/signup', target: '_blank', rel: 'noopener' }, 'paymongo.com'), '. You get a test key right away; the live key comes after PayMongo checks your business.'),
       field({ name: 'paymongo_secret_key', label: 'PayMongo secret key', type: 'password', required: true, autocomplete: 'off', placeholder: 'sk_live_…' }),
       h('p', { class: 'muted small' }, 'Stored encrypted and never shown again. Only used to create checkouts and check payments for your bookings.'),
     ],

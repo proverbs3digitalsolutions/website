@@ -1,7 +1,7 @@
 // BalayHub single-page app: routing, session state and the app shell.
 
 import { get, post, onAuthLost, ApiError } from './api.js';
-import { h, icon, brand, toast, pageError, skeleton, FOCUS_CHECKS } from './ui.js';
+import { h, icon, brand, toast, pageError, skeleton, installFocusGuard } from './ui.js';
 import * as authViews from './views/auth.js';
 import { dashboardView } from './views/dashboard.js';
 import { propertiesView, propertyDetailView } from './views/properties.js';
@@ -332,13 +332,14 @@ function navGroup(g, current) {
   const links = g.items.map((n) => navLink(n, current));
   if (!g.title) return links;
   if (g.id !== 'more') return h('div', { class: 'nav__group' }, h('h2', { class: 'nav__group-title' }, g.title), links);
-  let saved = null;
-  try { saved = localStorage.getItem(NAV_MORE_KEY); } catch { /* ignore */ }
-  return h('details', { class: 'nav__group nav__group--more', open: saved === '1' || g.items.some(([p]) => isCurrent(p, current)) },
-    // The click comes before the toggle, so the box still holds the old state.
-    h('summary', { class: 'nav__group-title', onclick: (e) => { try { localStorage.setItem(NAV_MORE_KEY, e.currentTarget.parentNode.open ? '0' : '1'); } catch { /* ignore */ } } }, g.title),
+  return h('details', { class: 'nav__group nav__group--more', open: moreSaved() || g.items.some(([p]) => isCurrent(p, current)) },
+    h('summary', { class: 'nav__group-title', onclick: saveMore }, g.title),
     links);
 }
+// The More tools fold is remembered in this browser, and shared by the sidebar and the phone More sheet.
+function moreSaved() { try { return localStorage.getItem(NAV_MORE_KEY) === '1'; } catch { return false; } }
+// The click comes before the toggle, so the box still holds the old state.
+function saveMore(e) { try { localStorage.setItem(NAV_MORE_KEY, e.currentTarget.parentNode.open ? '0' : '1'); } catch { /* ignore */ } }
 
 // The Get started answers belong to whoever typed them, not to the next person on this browser.
 function forgetSetupAnswers() { try { localStorage.removeItem('bh-setup'); } catch { /* ignore */ } }
@@ -353,12 +354,14 @@ export async function logout() {
   navigate('#/login', { replace: true });
 }
 
-function openMore(current) {
+function openMore() {
+  const current = parseHash().path; // read when the button is pressed: the shell outlives the page it was built on
   const moreBtn = document.activeElement;
   let panel;
   const sheet = h('dialog', { class: 'morenav', 'aria-label': 'More', onclick: (e) => { if (e.target === sheet) sheet.close(); }, onkeydown: (e) => {
       if (e.key !== 'Tab') return;
-      const items = [...sheet.querySelectorAll('a[href], button:not([disabled])')];
+      // A link inside a closed More tools fold can't take focus; its summary can.
+      const items = [...sheet.querySelectorAll('a[href], button:not([disabled]), summary')].filter((x) => x.tagName === 'SUMMARY' || !x.closest('details:not([open])'));
       const first = items[0]; const last = items[items.length - 1];
       if (!first) return;
       // Shift+Tab from the first item, the scrollable panel or the dialog itself wraps to the last item.
@@ -369,8 +372,15 @@ function openMore(current) {
     panel = h('div', { class: 'morenav__sheet' },
       h('button', { class: 'morenav__close', type: 'button', 'aria-label': 'Close menu', onclick: () => sheet.close() }, 'Close'),
       h('a', { href: '#/account', onclick: () => sheet.close(), 'aria-current': isCurrent('/account', current) ? 'page' : null }, icon('users'), 'My account'),
-      navGroups(state.user, moreNav()).map((g) => [g.title && h('h2', { class: 'morenav__group-title' }, g.title),
-        g.items.map(([p, t, ic]) => h('a', { href: `#${p}`, onclick: () => sheet.close(), 'aria-current': isCurrent(p, current) ? 'page' : null }, icon(ic), t))]),
+      navGroups(state.user, moreNav()).map((g) => {
+        const links = g.items.map(([p, t, ic]) => h('a', { href: `#${p}`, onclick: () => sheet.close(), 'aria-current': isCurrent(p, current) ? 'page' : null }, icon(ic), t));
+        // More tools folds like the sidebar (open on one of its pages or when left open); the other groups stay open.
+        if (g.id === 'more' && g.title) {
+          return h('details', { class: 'morenav__fold', open: moreSaved() || g.items.some(([p]) => isCurrent(p, current)) },
+            h('summary', { class: 'morenav__group-title', onclick: saveMore }, g.title), links);
+        }
+        return [g.title && h('h2', { class: 'morenav__group-title' }, g.title), links];
+      }),
       h('div', { class: 'morenav__theme' }, themeSwitch()),
       h('button', { onclick: () => { sheet.close(); logout(); } }, icon('logout'), 'Log out')));
   document.body.append(sheet);
@@ -383,9 +393,11 @@ const initials = (name) => String(name || '').split(/\s+/).filter(Boolean).slice
 function buildShell(path) {
   const u = state.user;
   const content = h('main', { class: 'content', id: 'main' });
+  const banner = planBanner();
   const NAV = navFor();
   const bottomKeys = bottomNav();
   const el = h('div', { class: 'shell' },
+    h('a', { class: 'skip-link', href: '#main', onclick: skipToMain }, 'Skip to main content'),
     h('aside', { class: 'sidebar' },
       brand(homeRoute()),
       h('nav', { 'aria-label': 'Main' }, navGroups(u, NAV).map((g) => navGroup(g, path))),
@@ -397,32 +409,68 @@ function buildShell(path) {
         h('button', { class: 'btn btn--secondary btn--sm btn--block', onclick: logout }, 'Log out'))),
     h('header', { class: 'topbar' }, brand(homeRoute()), h('span', { class: 'topbar__assist' }),
       h('a', { class: 'topbar__me', href: '#/account', 'aria-label': `${u.organization_name}, my account` }, h('span', { class: 'topbar__org' }, u.organization_name), h('span', { class: 'acct-avatar acct-avatar--sm', 'aria-hidden': 'true' }, initials(u.full_name)))),
-    h('div', { class: 'shell__main' }, planBanner(), content),
+    h('div', { class: 'shell__main' }, banner, content),
     h('nav', { class: 'bottomnav', 'aria-label': 'Main' },
       bottomKeys.map(([p, t, ic]) => h('a', { href: `#${p}`, 'aria-current': isCurrent(p, path) ? 'page' : null }, icon(ic), t === 'Rent & Expenses' ? 'Rent' : t)),
-      h('button', { type: 'button', onclick: () => openMore(path), 'aria-current': moreNav().some(([p]) => isCurrent(p, path)) ? 'page' : null }, icon('more'), 'More')),
+      h('button', { type: 'button', onclick: openMore, 'aria-current': moreNav().some(([p]) => isCurrent(p, path)) ? 'page' : null }, icon('more'), 'More')),
     u.role === 'cleaner' ? null : assistantButton());
-  // Unread guest messages badge on the Inbox link.
-  if (u.role !== 'cleaner') unreadCount().then((n) => {
-    if (!n) return;
-    el.querySelectorAll('a[href="#/inbox"]').forEach((a) => a.append(h('span', { class: 'navbadge', 'aria-label': `${n} unread` }, n > 99 ? '99+' : String(n))));
+  refreshUnread(el);
+  return { el, content, banner, main: el.querySelector('.shell__main') };
+}
+
+// "Skip to main content" moves focus to the page heading. The link is a hash, so the router must not see it.
+function skipToMain(e) {
+  e.preventDefault();
+  const target = document.querySelector('#main h1') || document.getElementById('main');
+  if (!target) return;
+  target.setAttribute('tabindex', '-1');
+  target.focus();
+}
+
+// Unread guest messages badge on the Inbox links (sidebar and bottom bar), refreshed in place.
+function refreshUnread(el) {
+  if (state.user?.role === 'cleaner') return;
+  unreadCount().then((n) => {
+    el.querySelectorAll('a[href="#/inbox"]').forEach((a) => {
+      a.querySelector('.navbadge')?.remove();
+      if (n) a.append(h('span', { class: 'navbadge', 'aria-label': `${n} unread` }, n > 99 ? '99+' : String(n)));
+    });
   });
-  return { el, content };
+}
+
+// Everything buildShell reads. While it is unchanged the shell stays on the page across route changes.
+const shellKey = (u) => JSON.stringify([u.user_id, u.role, u.full_name, u.organization_id, u.organization_name, u.business_type, u.is_platform_admin,
+  navFor(u).map((n) => n[0]), bottomNav().map((n) => n[0])]);
+
+// A route change on a kept shell: only the current-page marks, the plan banner and the unread badges change. No sidebar element is replaced.
+function updateShell(sh, path) {
+  const mark = (a, on) => (on ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'));
+  sh.el.querySelectorAll('.sidebar nav a, .sidebar__me, .bottomnav a').forEach((a) => mark(a, isCurrent(a.getAttribute('href').slice(1), path)));
+  const more = sh.el.querySelector('.bottomnav button');
+  if (more) mark(more, moreNav().some(([p]) => isCurrent(p, path)));
+  const fold = sh.el.querySelector('details.nav__group--more');
+  if (fold?.querySelector('a[aria-current="page"]')) fold.open = true; // opened by landing on one of its pages, never closed by navigation
+  const banner = planBanner();
+  if (sh.banner) { if (banner) sh.banner.replaceWith(banner); else sh.banner.remove(); } else if (banner) sh.main.prepend(banner);
+  sh.banner = banner;
+  refreshUnread(sh.el);
 }
 
 // ---------------------------------------------------------------- render
 const PUBLIC_TITLES = { '/login': 'Log in', '/signup': 'Sign up', '/forgot': 'Forgot password' };
 const RESET_TITLE = 'BalayHub — Rental Property Management';
 let renderSeq = 0;
+let shellSig = null; // shellKey of the shell on screen: the same key keeps the shell across route changes
 let lastDrawing = null; // the path the shell on screen is drawing or showing
 let drawnPath = null; // the path last drawn to the end: a different path next moves focus to the new page's heading
 
 // Focus goes to the new page's heading after a route change, but only when nothing (a dialog, a field) has taken it.
+// The link the person just clicked in the menu (the shell stays now) counts as free, so the heading still takes focus.
 function focusPageHeading(root) {
   const a = document.activeElement;
-  if (a && a !== document.body && a.isConnected) return;
+  if (a && a !== document.body && a.isConnected && !a.closest('.sidebar, .topbar, .bottomnav, .skip-link, .assist-fab')) return;
   const h1 = root.querySelector('h1');
-  if (h1) { h1.setAttribute('tabindex', '-1'); h1.focus(); }
+  if (h1) { h1.setAttribute('tabindex', '-1'); h1.focus({ preventScroll: true }); }
 }
 export async function render() {
   const seq = ++renderSeq;
@@ -458,16 +506,31 @@ export async function render() {
     i18n.useHostLang?.(); // a guest page may have left the in-memory language on Taglish
     // Same page again (rerender, report tab): the old page stays on screen, busy, until the new one is drawn.
     const prev = shell?.content?.isConnected && lastDrawing === path ? shell.content : null;
-    shell = buildShell(path);
-    app.replaceChildren(shell.el);
-    placeAssistantButton();
-    let mount = shell.content;
-    if (prev) {
-      mount.replaceWith(prev);
-      prev.setAttribute('aria-busy', 'true');
-      shell.content = prev;
-      mount = h('main', { class: 'content', id: 'main' });
-    } else mount.replaceChildren(skeleton());
+    const key = shellKey(state.user);
+    if (shell?.el.isConnected && shellSig === key) updateShell(shell, path);
+    else {
+      // First render, sign-in, or a role or module change: a new shell, carrying over the sidebar's scroll and the More tools fold.
+      const old = shell?.el.isConnected ? shell.el : null;
+      const scrolled = old?.querySelector('.sidebar nav')?.scrollTop || 0;
+      const folded = old?.querySelector('details.nav__group--more')?.open;
+      shell = buildShell(path);
+      shellSig = key;
+      app.replaceChildren(shell.el);
+      placeAssistantButton();
+      const nav = shell.el.querySelector('.sidebar nav');
+      if (nav) nav.scrollTop = scrolled;
+      if (folded) shell.el.querySelector('details.nav__group--more').open = true;
+      if (prev) { shell.content.replaceWith(prev); shell.content = prev; }
+    }
+    // The view always draws into its own detached page, so a slow view that was replaced by a newer one can't write into the page on screen.
+    const mount = h('main', { class: 'content', id: 'main' });
+    if (prev) prev.setAttribute('aria-busy', 'true');
+    else {
+      // A new page starts at the top: one scroll, now, and never again when the view finishes.
+      shell.content.removeAttribute('aria-busy');
+      shell.content.replaceChildren(skeleton());
+      window.scrollTo(0, 0);
+    }
     lastDrawing = path;
     try {
       await route.view(mount, ctx);
@@ -477,15 +540,16 @@ export async function render() {
       mount.replaceChildren(pageError(err, render));
     }
     if (seq !== renderSeq) return;
-    if (prev) { prev.replaceWith(mount); shell.content = mount; }
+    shell.content.replaceWith(mount);
+    shell.content = mount;
     const title = mount.querySelector('h1')?.textContent;
     document.title = title ? `${title} — BalayHub` : 'BalayHub';
-    if (!prev) window.scrollTo(0, 0);
     if (drawnPath !== null && drawnPath !== path) focusPageHeading(mount);
     drawnPath = path;
   } else {
     lastDrawing = null;
     shell = null;
+    shellSig = null;
     const mount = h('div');
     app.replaceChildren(mount);
     document.title = RESET_TITLE;
@@ -654,38 +718,6 @@ document.addEventListener('keydown', (e) => {
   tabs[next].click();
 });
 
-// Most views redraw their tabs when one is opened, which removes the focused button and drops focus to the page (BODY). Remember the tab
-// that was activated and, once the redraw has run (it may be async), put focus on the tab at the same index of the same tablist.
-// A view that builds a whole new tablist (stay reports, listings status) leaves the old one disconnected: the new one with the same
-// aria-label, else the one at the same place in the page (listIndex), takes over.
-// Returns true when it is done (focus restored or the user moved on); false to keep polling while the new tablist or tab is not there yet.
-export function restoreTabFocus(list, index, oldTab, doc = document, listIndex = -1) {
-  const a = doc.activeElement;
-  if (a && a !== oldTab && a !== doc.body && a.isConnected) return true; // the user focused something else: never steal it
-  if (a === oldTab && oldTab.isConnected) return false; // not redrawn yet
-  let target = list;
-  if (!list.isConnected) {
-    const lists = [...(doc.querySelectorAll?.('[role="tablist"]') || [])];
-    const label = list.getAttribute?.('aria-label');
-    target = (label && lists.find((l) => l.getAttribute?.('aria-label') === label)) || lists[listIndex];
-    if (!target) return false; // the view has not drawn its new tablist yet
-  }
-  const tab = target.querySelectorAll('[role="tab"]')[index];
-  if (!tab) return false; // the tab is not drawn yet
-  tab.focus();
-  return true;
-}
-// Capture phase, so the tab is still inside its tablist when we look (its own click handler may redraw it away).
-document.addEventListener('click', (e) => {
-  const oldTab = e.target instanceof Element && e.target.closest('[role="tab"]');
-  const list = oldTab && oldTab.closest('[role="tablist"]');
-  if (!list) return;
-  const index = [...list.querySelectorAll('[role="tab"]')].indexOf(oldTab);
-  const listIndex = [...document.querySelectorAll('[role="tablist"]')].indexOf(list);
-  let done = false;
-  for (const ms of FOCUS_CHECKS) setTimeout(() => { if (!done) done = restoreTabFocus(list, index, oldTab, document, listIndex); }, ms);
-}, true);
-
 (async function boot() {
   updateOnline();
   registerServiceWorker();
@@ -695,5 +727,6 @@ document.addEventListener('click', (e) => {
     document.getElementById('app').replaceChildren(pageError({ message: "Can't reach BalayHub. Check your internet connection." }, () => location.reload()));
     return;
   }
+  installFocusGuard();
   render();
 }());

@@ -3,6 +3,7 @@
 import { get, post, patch, qs } from '../api.js';
 import { h, icon, peso, badge, field, formModal, confirmDialog, emptyState, errorState, pageHead, toast, skeleton } from '../ui.js';
 import { state } from '../app.js';
+import { highAddonPriceOk } from '../rates.js';
 import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 
 const PRICING = {
@@ -41,6 +42,7 @@ function addonModal(a, listings, onSaved) {
     onSubmit: async (d) => {
       // The maximum is sent as typed, so a 0 gets the server's message; a blank box means one.
       const body = { ...d, max_quantity: d.max_quantity.trim() || 1, unit_ids: d.unit_ids || [] };
+      if (!await highAddonPriceOk(d.price)) return false;
       if (a) await patch(`/addons/${a.addon_id}`, body); else await post('/addons', body);
       toast(a ? 'Add-on updated.' : 'Add-on added.');
       onSaved();

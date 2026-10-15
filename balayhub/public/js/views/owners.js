@@ -107,6 +107,15 @@ const moveConfirmed = (err, owner) => {
   });
 };
 
+// An email another active owner already uses asks first (409 EMAIL_IN_USE). Change it returns false: the form stays open and
+// the email box takes focus.
+const emailConfirmed = async (err) => {
+  if (err.code !== 'EMAIL_IN_USE') throw err;
+  if (await confirmDialog({ title: 'Email already used', text: `This email already belongs to ${err.data.owner_name}. Save anyway?`, confirmText: 'Save anyway', cancelText: 'Change it' })) return true;
+  document.querySelector('dialog.modal [name="email"]')?.focus();
+  return false;
+};
+
 export async function ownersView(el, { rerender, query = {} }) {
   const defaults = { q: '', has_units: '', unit_id: '', sort: '' };
   const filters = initFilters('owners', query, defaults);
@@ -116,9 +125,14 @@ export async function ownersView(el, { rerender, query = {} }) {
     title: 'Add a unit owner', submitText: 'Save owner', fields: ownerForm(units),
     onSubmit: async (d) => {
       const body = { ...d, unit_ids: d.unit_ids || [] };
-      try { await post('/unit-owners', body); } catch (err) {
-        if (!await moveConfirmed(err, d.full_name)) return false;
-        await post('/unit-owners', { ...body, move_units: true });
+      // Each 409 is asked in turn; a yes adds its flag and the save is sent again.
+      let extra = {};
+      for (;;) {
+        try { await post('/unit-owners', { ...body, ...extra }); break; } catch (err) {
+          if (err.code === 'EMAIL_IN_USE') { if (!await emailConfirmed(err)) return false; extra = { ...extra, confirm_duplicate_email: true }; continue; }
+          if (!await moveConfirmed(err, d.full_name)) return false;
+          extra = { ...extra, move_units: true };
+        }
       }
       toast('Owner saved.'); rerender();
     },
@@ -127,9 +141,13 @@ export async function ownersView(el, { rerender, query = {} }) {
     title: `Edit ${o.full_name}`, submitText: 'Save', fields: ownerForm(units, o),
     onSubmit: async (d) => {
       const body = { ...d, unit_ids: d.unit_ids || [] };
-      try { await patch(`/unit-owners/${o.owner_id}`, body); } catch (err) {
-        if (!await moveConfirmed(err, d.full_name)) return false;
-        await patch(`/unit-owners/${o.owner_id}`, { ...body, move_units: true });
+      let extra = {};
+      for (;;) {
+        try { await patch(`/unit-owners/${o.owner_id}`, { ...body, ...extra }); break; } catch (err) {
+          if (err.code === 'EMAIL_IN_USE') { if (!await emailConfirmed(err)) return false; extra = { ...extra, confirm_duplicate_email: true }; continue; }
+          if (!await moveConfirmed(err, d.full_name)) return false;
+          extra = { ...extra, move_units: true };
+        }
       }
       toast('Saved.'); rerender();
     },
@@ -187,8 +205,8 @@ export async function ownersView(el, { rerender, query = {} }) {
           h('a', { class: 'btn btn--secondary btn--sm', href: `#/owners/${o.owner_id}/statement?month=${todayManila().slice(0, 7)}`, 'aria-label': `This month so far, ${o.full_name}` }, 'This month so far'),
           o.portal_enabled
             ? [h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Turn off portal access, ${o.full_name}`, onclick: () => disablePortal(o) }, 'Turn off portal access'),
-              h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'aria-label': `Send the invite again, ${o.full_name}`, onclick: () => invite(o) }, 'Send the invite again')]
-            : h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `${o.portal_invited_at ? 'Invite again' : 'Invite to owner portal'}, ${o.full_name}`, onclick: () => invite(o) }, o.portal_invited_at ? 'Invite again' : 'Invite to owner portal'))))));
+              h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'aria-label': `Send the invite again, ${o.full_name}`, onclick: () => invite(o), 'data-focus-key': `owner-invite-${o.owner_id}` }, 'Send the invite again')]
+            : h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `${o.portal_invited_at ? 'Invite again' : 'Invite to owner portal'}, ${o.full_name}`, onclick: () => invite(o), 'data-focus-key': `owner-invite-${o.owner_id}` }, o.portal_invited_at ? 'Invite again' : 'Invite to owner portal'))))));
   }
   async function load() {
     history.replaceState(null, '', `#/owners${qs(changed(filters, defaults))}`);
@@ -315,9 +333,9 @@ export async function ownerStatementView(el, { params, query = {}, rerender }) {
     h('div', { class: 'own-status__text' }, published ? badge(record.sent_at ? 'unpaid' : 'paid', record.sent_at ? 'Sent' : 'Published') : badge('partial', 'Draft'), h('span', null, statusText),
       published && !live.owner.email && h('span', { class: 'muted small' }, 'Add an email for this owner first.')),
     h('div', { class: 'chips' },
-      !published && h('button', { class: 'btn btn--primary btn--sm', type: 'button', disabled: !monthEnded, title: monthEnded ? null : 'You can publish once the month has ended.', onclick: publish }, 'Publish'),
-      published && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: unpublish }, 'Unpublish to correct'),
-      published && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', disabled: !live.owner.email, title: live.owner.email ? null : 'Add an email for this owner first.', onclick: send }, record.sent_at ? 'Send again' : 'Send to owner'),
+      !published && h('button', { class: 'btn btn--primary btn--sm', type: 'button', disabled: !monthEnded, title: monthEnded ? null : 'You can publish once the month has ended.', onclick: publish, 'data-focus-key': 'stmt-publish' }, 'Publish'),
+      published && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: unpublish, 'data-focus-key': 'stmt-publish' }, 'Unpublish to correct'),
+      published && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', disabled: !live.owner.email, title: live.owner.email ? null : 'Add an email for this owner first.', onclick: send, 'data-focus-key': 'stmt-send' }, record.sent_at ? 'Send again' : 'Send to owner'),
       h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => window.print() }, 'Print / save as PDF')));
 
   // Payouts card.

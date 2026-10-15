@@ -206,95 +206,194 @@ export function pageError(err, retry) {
 export const skeleton = (n = 2) => h('div', { class: 'stack' }, Array.from({ length: n }, () => h('div', { class: 'skeleton' })));
 
 // ---------------------------------------------------------------- focus after a redraw
-// A page often redraws after a save or click, replacing the button the person used. Find the new control with the
-// same tag and accessible name (aria-label, else its text).
-const accName = (el) => (el.getAttribute?.('aria-label') || el.textContent || '').trim();
-export function sameControl(old, doc = document) {
-  if (!old?.tagName) return null;
-  const name = accName(old);
-  if (!name) return null;
-  return [...doc.querySelectorAll(old.tagName.toLowerCase())].find((el) => el.isConnected !== false && accName(el) === name) || null;
-}
-
-// What to look for after a redraw: the control's tag and name, and for each ancestor up to #app the ancestor itself, the control's
-// index among that ancestor's same-tag elements and their count (so a toggle that renamed itself is still found by place).
-export function snapshotControl(old) {
-  const tag = old.tagName.toLowerCase();
-  const chain = [];
-  for (let p = old.parentElement; p; p = p.parentElement) {
-    const same = [...p.querySelectorAll(tag)];
-    chain.push({ el: p, index: same.indexOf(old), count: same.length });
-    if (p.id === 'app' || p === document.body) break;
-  }
-  return { tag, name: accName(old), chain };
-}
-
-// The control that took the old one's place: (1) same tag and name; else (2) the nearest recorded ancestor still on the page whose
-// count of same-tag elements is unchanged gives the element at the recorded index; else null.
-export function findReplacement(snap, doc = document) {
-  if (!snap) return null;
-  if (snap.name) {
-    const same = [...doc.querySelectorAll(snap.tag)].find((el) => el.isConnected !== false && accName(el) === snap.name);
-    if (same) return same;
-  }
-  for (const { el, index, count } of snap.chain) {
-    if (el.isConnected === false || index < 0) continue;
-    const now = [...el.querySelectorAll(snap.tag)];
-    if (now.length === count && now[index]) return now[index];
-  }
-  return null;
-}
-
-// Checks at these times after the action: dense at first, then every 500 ms to 10 s (a slow connection redraws late).
+// ONE mechanism (D-89). A page redraws after a save or click and replaces the control the person used; focus then falls to the page.
+// The guard remembers the last control the person used, notices when it leaves the page, and puts focus on the control that took its
+// place (same data-focus-key, else same role and name, else same place in the same labelled group), else on the page heading. It reacts
+// to the screen change itself (a MutationObserver), so it covers every redraw. Views add only data-focus-key where a label changes.
 export const FOCUS_WATCH_MS = 10000;
-export const FOCUS_CHECKS = [0, 40, 100, 200, 350, 500, 800, 1200, 1600, 2000];
-for (let ms = 2500; ms <= FOCUS_WATCH_MS; ms += 500) FOCUS_CHECKS.push(ms);
+export const HEADING_AFTER_MS = 800;
 
-// Watches up to FOCUS_WATCH_MS (views redraw after their await) and puts focus where the person was working. While focus is still on
-// the old control it keeps waiting (the redraw has not happened). Never takes focus the person (or the view) has put on something else;
-// from headingAfter ms with no replacement it falls back to the page heading (and to a new heading if a redraw replaced it), and a
-// replacement that shows up later still takes over.
-export function keepFocus(old, { refocusOld = true, stop = () => false, snap, headingAfter = 800 } = {}) {
-  const taken = old?.tagName ? (snap || snapshotControl(old)) : null;
-  let done = false;
-  let heading = null;
-  let wasDisabled = false; // a button disabled during its own request loses focus; it gets it back when enabled again
-  FOCUS_CHECKS.forEach((ms) => setTimeout(() => {
-    if (done) return;
-    if (stop()) { done = true; return; }
-    const a = document.activeElement;
-    const free = !a || a === document.body || !a.isConnected || a === heading;
-    if (!free && a !== old) { done = true; return; }
-    if (old?.isConnected) {
-      if (old.disabled) wasDisabled = true;
-      else if ((free || a === old) && (refocusOld || wasDisabled)) { done = true; old.focus(); }
+const FOCUSABLE = 'a[href], button, summary, input:not([type=hidden]), select, textarea, [tabindex]:not([tabindex="-1"])';
+const NATIVE_FOCUSABLE = new Set(['BUTTON', 'SUMMARY', 'SELECT', 'TEXTAREA']);
+function focusable(el) {
+  if (!el?.tagName) return false;
+  const tag = el.tagName.toUpperCase();
+  if (tag === 'A') return el.getAttribute('href') !== null;
+  if (tag === 'INPUT') return el.getAttribute('type') !== 'hidden';
+  if (NATIVE_FOCUSABLE.has(tag)) return true;
+  const ti = el.getAttribute('tabindex');
+  return ti !== null && ti !== '-1';
+}
+
+const GROUP_ROLES = ['tablist', 'group', 'radiogroup', 'toolbar'];
+const squash = (s) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
+
+// What identifies a control across a redraw: { key, tag, role, name, group, path }. Computed when the person uses it (ids from field()
+// are random per draw, so the label text is used, not the id).
+export function focusKeyOf(el) {
+  const tag = el.tagName.toLowerCase();
+  const type = String(el.getAttribute('type') || '').toLowerCase();
+  const implicit = { button: 'button', summary: 'button', a: 'link', select: 'combobox', textarea: 'textbox' }[tag]
+    || (tag === 'input' ? ({ checkbox: 'checkbox', radio: 'radio', button: 'button', submit: 'button', reset: 'button' }[type] || 'textbox') : null);
+  const role = el.getAttribute('role') || implicit;
+  let name = el.getAttribute('aria-label');
+  if (!name && ['input', 'select', 'textarea'].includes(tag)) {
+    const doc = el.ownerDocument || document;
+    const id = el.getAttribute('id');
+    const lab = (id && doc.querySelector?.(`label[for="${globalThis.CSS?.escape ? CSS.escape(id) : id}"]`)) || el.closest?.('label');
+    name = lab?.textContent || el.getAttribute('name');
+  }
+  name = squash(name || el.textContent);
+  let group = null;
+  for (let p = el.parentElement; p && !group; p = p.parentElement) {
+    const r = p.getAttribute('role');
+    const al = p.getAttribute('aria-label');
+    if (al && (GROUP_ROLES.includes(r) || r === 'region' || r === 'navigation')) group = squash(al);
+  }
+  return { key: el.getAttribute('data-focus-key'), tag, role, name, group, path: String(globalThis.location?.hash || '').split('?')[0] };
+}
+
+// Which candidate (focusKeyOf-shaped, in document order) took the old control's place; -1 for none. Pure.
+export function pickFocusMatch(snap, candidates, snapNth = 0, snapGroupNth = -1) {
+  if (!snap) return -1;
+  if (snap.key) {
+    const i = candidates.findIndex((c) => c.key === snap.key);
+    if (i >= 0) return i;
+  }
+  const idx = (pred) => candidates.map((c, i) => (pred(c) ? i : -1)).filter((i) => i >= 0);
+  if (snap.name) {
+    const same = idx((c) => c.tag === snap.tag && c.role === snap.role && c.name === snap.name);
+    if (same.length) return same[snapNth] ?? same[same.length - 1];
+  }
+  if (snap.group) {
+    const grouped = idx((c) => c.tag === snap.tag && c.role === snap.role && c.group === snap.group);
+    if (snapGroupNth >= 0 && grouped[snapGroupNth] !== undefined) return grouped[snapGroupNth];
+  }
+  return -1;
+}
+
+const hiddenBy = (el) => { for (let p = el; p; p = p.parentElement) if (p.hidden) return true; return false; };
+const inModal = (el) => { for (let p = el; p; p = p.parentElement) if (p.tagName === 'DIALOG' && p.classList?.contains('modal')) return p; return null; };
+const inLayer = (el) => { for (let p = el; p; p = p.parentElement) if (p.classList?.contains('morenav') || p.classList?.contains('assist')) return true; return false; };
+let guardInstalled = false;
+
+// Returns { check(now), note(el), state() } (the last three for tests). `observe: false` skips the page listeners and the observer.
+export function installFocusGuard(doc = document, { observe = true } = {}) {
+  let pageRec = null; // { el, snap, nth, groupNth }
+  let dlgRec = null;  // the same, plus dlg
+  let lossAt = null;  // when the remembered control left the page and was not found again
+  let fallback = null; // the heading the guard itself focused
+
+  const pageRoot = () => doc.getElementById?.('main') || doc.getElementById?.('app') || doc.body;
+  const openDialogs = () => [...doc.querySelectorAll('dialog')].filter((d) => d.open && d.classList?.contains('modal'));
+  const appRoot = () => doc.getElementById?.('app') || doc.body;
+  const within = (el, root) => { for (let p = el; p; p = p.parentElement) if (p === root) return true; return false; };
+  // A control outside the page (the guest pages' language toggle sits in the header) is looked for in the whole app, so it beats the heading.
+  const rootFor = (rec) => (rec.wide ? appRoot() : pageRoot());
+  const candidatesIn = (root) => [...root.querySelectorAll(FOCUSABLE)].filter(focusable);
+  const pathNow = () => String(globalThis.location?.hash || '').split('?')[0];
+
+  function note(el) {
+    if (!focusable(el) || el === fallback || inLayer(el)) return;
+    const snap = focusKeyOf(el);
+    const dlg = inModal(el);
+    const wide = !dlg && !within(el, pageRoot());
+    const root = dlg || (wide ? appRoot() : pageRoot());
+    const cands = candidatesIn(root);
+    const keys = cands.map(focusKeyOf);
+    const at = cands.indexOf(el);
+    // The control's ordinal among those with its tag, role and name (and, for tabs and groups, among those in its group).
+    const nth = keys.filter((k, i) => i < at && k.tag === snap.tag && k.role === snap.role && k.name === snap.name).length;
+    const groupNth = snap.group ? keys.filter((k, i) => i < at && k.tag === snap.tag && k.role === snap.role && k.group === snap.group).length : -1;
+    const rec = { el, snap, nth, groupNth, wide };
+    if (dlg) dlgRec = { ...rec, dlg }; else pageRec = rec;
+  }
+
+  const focusIt = (el) => {
+    el.focus({ preventScroll: true });
+    const r = el.getBoundingClientRect?.();
+    if (r && globalThis.innerHeight && (r.top < 0 || r.bottom > globalThis.innerHeight)) el.scrollIntoView?.({ block: 'nearest' });
+  };
+
+  // A match inside a closed "More" fold hands focus to that fold's button.
+  function visibleTarget(el, root) {
+    let fold = null;
+    for (let p = el.parentElement; p && p !== root; p = p.parentElement) if (p.tagName === 'DETAILS' && !p.open) fold = p;
+    return fold ? ([...fold.children].find((c) => c.tagName === 'SUMMARY') || el) : el;
+  }
+
+  function check(now = Date.now()) {
+    if (!pageRec && !dlgRec) return;
+    const open = openDialogs();
+    const top = open[open.length - 1] || null;
+    if (dlgRec && (!dlgRec.dlg.isConnected || !dlgRec.dlg.open)) dlgRec = null;
+    const rec = top ? (dlgRec?.dlg === top ? dlgRec : null) : pageRec;
+    if (!rec) return;
+    const a = doc.activeElement;
+    const free = !a || a === doc.body || !a.isConnected || (a === fallback && lossAt !== null && now - lossAt <= FOCUS_WATCH_MS);
+    if (!free) {
+      if (a === fallback && !top) pageRec = null; // the heading stayed past the watch time: the old control is forgotten
+      lossAt = null; fallback = null;
       return;
     }
-    const next = findReplacement(taken);
-    if (next && !next.disabled) { done = true; next.focus(); return; }
-    if (ms >= headingAfter) {
-      const h1 = document.querySelector('#app h1') || document.querySelector('h1');
-      if (h1 && a !== h1) { heading = h1; h1.setAttribute('tabindex', '-1'); h1.focus(); }
+    if (!top && pathNow() !== rec.snap.path) { pageRec = null; lossAt = null; return; } // the router owns route changes
+    const root = top || rootFor(rec);
+    let target = null;
+    if (rec.el.isConnected && !hiddenBy(rec.el)) {
+      if (rec.el.disabled) return; // wait: a later "disabled" change runs this again
+      target = visibleTarget(rec.el, root);
+    } else {
+      const cands = candidatesIn(root);
+      const i = pickFocusMatch(rec.snap, cands.map(focusKeyOf), rec.nth, rec.groupNth);
+      if (i >= 0) {
+        target = visibleTarget(cands[i], root);
+        if (target.disabled || hiddenBy(target)) return;
+      }
     }
-  }, ms));
+    if (target) {
+      focusIt(target);
+      if (doc.activeElement === target) { lossAt = null; fallback = null; }
+      return;
+    }
+    if (lossAt === null) {
+      const mine = lossAt = now;
+      setTimeout(() => { if (lossAt === mine) check(mine + HEADING_AFTER_MS); }, HEADING_AFTER_MS);
+      setTimeout(() => { if (lossAt === mine) check(mine + FOCUS_WATCH_MS + 1); }, FOCUS_WATCH_MS);
+    }
+    if (now - lossAt > FOCUS_WATCH_MS) { if (top) dlgRec = null; else pageRec = null; lossAt = null; return; }
+    if (now - lossAt >= HEADING_AFTER_MS) {
+      const h = root.querySelector(top ? 'h2' : 'h1');
+      if (h && a !== h) { h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true }); fallback = h; }
+    }
+  }
+
+  if (observe) {
+    doc.addEventListener('focusin', (e) => { if (e.target instanceof Element) note(e.target); }, true);
+    doc.addEventListener('pointerdown', (e) => {
+      const t = e.target instanceof Element ? e.target : null;
+      const el = t?.closest(FOCUSABLE);
+      if (el) { note(el); return; }
+      if (t?.closest('.morenav, .assist')) return;
+      if (t?.closest('dialog.modal')) dlgRec = null; else pageRec = null; // the person moved on to nothing in particular
+    }, true);
+    new MutationObserver(() => check()).observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled', 'hidden', 'open'] });
+  }
+  return { check, note, state: () => ({ rec: pageRec, dlgRec, lossAt, fallback }) };
 }
 
-// Any button or link whose click drops focus to the page (its control was redrawn away) gets focus back, in dialogs too.
-// Tabs have their own rule in app.js; a dialog's own close rule restores focus to its opener.
-if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
-  document.addEventListener('click', (e) => {
-    const btn = e.target instanceof Element && e.target.closest('button, a[href]');
-    if (!btn || btn.closest('[role="tablist"]')) return;
-    const hash = location.hash;
-    const dlg = btn.closest('dialog');
-    keepFocus(btn, { refocusOld: false, stop: () => location.hash !== hash || Boolean(dlg && !dlg.isConnected) });
-  }, true);
+// Focus the page heading without scrolling (a dialog opened with no opener closes onto it).
+function focusHeadingIfFree() {
+  const a = document.activeElement;
+  if (a && a !== document.body && a.isConnected) return;
+  const h1 = document.querySelector('#main h1') || document.querySelector('#app h1');
+  if (h1) { h1.setAttribute('tabindex', '-1'); h1.focus({ preventScroll: true }); }
 }
 
 // ---------------------------------------------------------------- modal
 export function openModal({ title, body, onClose, wide }) {
-  const opener = document.activeElement;
-  const openerSnap = opener?.tagName && opener !== document.body && opener.isConnected !== false ? snapshotControl(opener) : null;
+  // Closing returns focus to the opener (the browser does it while the opener is on the page; the focus guard finds it if a redraw replaced it).
+  // With no opener (a page opened with ?new=1) the dialog closes onto the page heading.
+  const hadOpener = Boolean(document.activeElement && document.activeElement !== document.body && document.activeElement.isConnected !== false);
   const dlg = h('dialog', { class: 'modal', 'aria-label': title });
   if (wide) dlg.classList.add('modal--wide');
   const close = () => dlg.close();
@@ -302,7 +401,7 @@ export function openModal({ title, body, onClose, wide }) {
     h('div', { class: 'modal__head' }, h('h2', null, title), h('button', { class: 'modal__close', type: 'button', 'aria-label': 'Close', onclick: close }, '×')),
     h('div', { class: 'modal__body' }, body),
   );
-  dlg.addEventListener('close', () => { dlg.remove(); onClose?.(); if (openerSnap) keepFocus(opener, { snap: openerSnap }); else keepFocus(null, { headingAfter: 0 }); });
+  dlg.addEventListener('close', () => { dlg.remove(); onClose?.(); if (!hadOpener) focusHeadingIfFree(); });
   dlg.addEventListener('click', (e) => { if (e.target === dlg) close(); });
   document.body.append(dlg);
   dlg.showModal();
@@ -320,6 +419,7 @@ export function confirmDialog({ title, text, confirmText = 'Confirm', cancelText
     // A form asking this question is not saving yet: its button shows its own label until the answer is yes.
     const saving = [...document.querySelectorAll('button[data-own-label]')].filter((b) => b.textContent === 'Saving…');
     for (const b of saving) b.textContent = b.dataset.ownLabel;
+    const cancelBtn = h('button', { class: 'btn btn--secondary', type: 'button', onclick: () => m.close() }, cancelText);
     const m = openModal({
       title,
       onClose: () => { if (!done) resolve(null); },
@@ -327,7 +427,7 @@ export function confirmDialog({ title, text, confirmText = 'Confirm', cancelText
         h('p', null, text),
         reasonInput && h('div', { class: 'field' }, h('label', { for: rid }, 'Reason ', h('span', { class: 'req' }, '*')), reasonInput, err),
         h('div', { class: 'form-actions' },
-          h('button', { class: 'btn btn--secondary', type: 'button', onclick: () => m.close() }, cancelText),
+          cancelBtn,
           h('button', {
             class: `btn ${danger ? 'btn--danger' : 'btn--primary'}`, type: 'button',
             onclick: () => {
@@ -338,6 +438,8 @@ export function confirmDialog({ title, text, confirmText = 'Confirm', cancelText
             },
           }, confirmText))),
     });
+    // The safe choice first: a confirm without a reason box starts on Cancel, not on the close button.
+    if (!reasonInput) cancelBtn.focus();
   });
 }
 
@@ -473,6 +575,14 @@ export function mergeChecks(missing, extra) {
   return missing;
 }
 
+// The summary above a form after a failed save. When every field message sits on its field the summary does not repeat it.
+export function formErrorText(err, unplaced = []) {
+  const messages = Object.values(err?.fields || {});
+  if (messages.length && !unplaced.length && (err.summary || messages.includes(err.message))) return { text: 'Please check the highlighted fields.', fieldNote: true };
+  if (unplaced.length) return { text: [...new Set(unplaced)].join(' '), fieldNote: false };
+  return { text: err.message, fieldNote: false };
+}
+
 export function makeForm({ fields, submitText = 'Save', onSubmit, cancel, draftKey, idempotent = false, extra, check }) {
   const submitBtn = h('button', { class: 'btn btn--primary', type: 'submit' }, submitText);
   const formError = h('div', { class: 'form-error' });
@@ -545,10 +655,8 @@ export function makeForm({ fields, submitText = 'Save', onSubmit, cancel, draftK
         } else {
           if (err.status === 400 && idempotent) idemKey = newIdempotencyKey();
           const unplaced = showErrors(form, err.fields);
-          // Validation: show only the server messages that have no field on this form (else the generic summary).
-          const text = err.summary ? (unplaced.length ? [...new Set(unplaced)].join(' ') : err.summary) : err.message;
-          // The summary names the highlighted fields only when it is not an unplaced server message.
-          const fieldNote = Boolean(err.summary) && !unplaced.length;
+          // Messages with a field on this form show there once; the summary shows only the ones that have no field (else the generic text).
+          const { text, fieldNote } = formErrorText(err, unplaced);
           formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert', dataset: fieldNote ? { fieldNote: '' } : undefined }, text));
           if (err.onRender) err.onRender(formError);
         }

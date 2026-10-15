@@ -109,6 +109,18 @@ async function lowPriceOk(d, form, saveText) {
 
 const BUILDING_SAVED = 'The building was saved; fix the listing details and save again.';
 
+// What a guest pays now and later, said in words under the payment fields so the defaults are not silent (#40). Pure.
+// A blank or out-of-range deposit gives no line; the field itself asks for it.
+export function payNowLine({ payment_option, deposit_pct, balance_due_days } = {}) {
+  if (payment_option === 'full') return 'A guest pays the full amount when booking.';
+  const pct = Number(deposit_pct);
+  const days = Number(balance_due_days);
+  if (!Number.isInteger(pct) || pct < 10 || pct > 90 || !Number.isInteger(days) || days < 0) return '';
+  const when = days === 0 ? 'on check-in day' : `${days} ${days === 1 ? 'day' : 'days'} before check-in`;
+  if (payment_option === 'either') return `A guest pays ${pct}% or the full amount when booking, and any balance ${when}.`;
+  return `A guest pays ${pct}% when booking and the rest ${when}.`;
+}
+
 // The starting value of each optional field on a new listing. On Edit a closed group opens when one of its fields holds
 // something other than its starting value, so a listing that never used a group keeps it closed.
 const START = {
@@ -127,13 +139,19 @@ function holds(u, keys) {
 // as `buildingBasics`). The new building's property type (Add only, passed in as `building`), room type and tags sit in
 // More details, closed; the deposit is under Booking page and payments.
 function listingFields(u = {}, roomTypes = [], building = null, buildingBasics = []) {
-  return [
+  // The line under the payment fields follows them as they change, so a guest's cost is never a silent default (#40).
+  const payLine = h('p', { class: 'muted small', 'aria-live': 'polite' });
+  const paintPayLine = () => {
+    const box = payLine.parentElement;
+    payLine.textContent = payNowLine({ payment_option: box.querySelector('[name=payment_option]').value, deposit_pct: box.querySelector('[name=deposit_pct]').value, balance_due_days: box.querySelector('[name=balance_due_days]').value });
+  };
+  const fields = [
     h('div', { class: 'form-row form-row--2' },
       field({ name: 'unit_name', label: 'Listing name', required: true, value: u.unit_name, placeholder: 'e.g. Tower 1 - 1201 or Studio A', maxlength: 60 }),
       field({ name: 'unit_type', label: 'Type', type: 'select', required: true, value: u.unit_type || 'studio', placeholderOption: false, options: options(UNIT_TYPES) })),
     h('div', { class: 'form-row form-row--2' },
       field({ name: 'nightly_rate', label: 'Base nightly rate', type: 'money', required: true, value: u.nightly_rate, placeholder: '2,500' }),
-      field({ name: 'cleaning_fee', label: 'Cleaning fee per stay', type: 'money', value: u.cleaning_fee, placeholder: '500' })),
+      field({ name: 'cleaning_fee', label: 'Cleaning fee per stay', type: 'money', value: u.cleaning_fee, placeholder: 'e.g. 500', hint: "Leave blank if you don't charge a cleaning fee." })),
     ...buildingBasics,
     field({ name: 'max_guests', label: 'Maximum guests', type: 'number', min: 1, max: 50, value: u.max_guests || 2, inputmode: 'numeric' }),
     h('details', { class: 'form-section', open: holds(u, ['room_type', 'tags']) },
@@ -180,15 +198,17 @@ function listingFields(u = {}, roomTypes = [], building = null, buildingBasics =
       h('summary', null, 'Booking page and payments'),
       field({ name: 'bookable_online', label: 'Show this listing on my booking page', type: 'checkbox', value: Boolean(u.bookable_online) }),
       field({ name: 'description', label: 'Description for guests', type: 'textarea', value: u.description, maxlength: 3000,
-        placeholder: 'e.g. Bright studio with a balcony and city view, fast Wi-Fi, smart TV, kitchenette, pool and gym access. 5 minutes from the mall.' }),
-      h('div', { class: 'form-row form-row--2' },
-        field({ name: 'payment_option', label: 'Online payment', type: 'select', value: u.payment_option || 'either', placeholderOption: false, options: [
-          ['either', 'Guest chooses: full or deposit'], ['full', 'Full payment only'], ['deposit', 'Deposit only, rest before check-in'],
-        ] }),
-        field({ name: 'deposit_pct', label: 'Deposit (% of the total)', type: 'number', min: 10, max: 90, value: u.deposit_pct ?? 50, inputmode: 'numeric',
-          hint: 'What a guest pays now when they choose a deposit. From 10 to 90.' })),
-      field({ name: 'balance_due_days', label: 'Balance due (days before check-in)', type: 'number', min: 0, max: 60, value: u.balance_due_days ?? 3, inputmode: 'numeric',
-        hint: 'For deposits. Use your payment reminder message to ask for the rest.' })),
+        placeholder: 'e.g. Bright studio with a balcony' }),
+      h('div', { class: 'stack', oninput: paintPayLine, onchange: paintPayLine },
+        h('div', { class: 'form-row form-row--2' },
+          field({ name: 'payment_option', label: 'Online payment', type: 'select', value: u.payment_option || 'either', placeholderOption: false, options: [
+            ['either', 'Guest chooses: full or deposit'], ['full', 'Full payment only'], ['deposit', 'Deposit only, rest before check-in'],
+          ] }),
+          field({ name: 'deposit_pct', label: 'Deposit (% of the total)', type: 'number', min: 10, max: 90, value: u.deposit_pct ?? 50, inputmode: 'numeric',
+            hint: 'What a guest pays now when they choose a deposit. From 10 to 90.' })),
+        field({ name: 'balance_due_days', label: 'Balance due (days before check-in)', type: 'number', min: 0, max: 60, value: u.balance_due_days ?? 3, inputmode: 'numeric',
+          hint: 'For deposits. Use your payment reminder message to ask for the rest.' }),
+        payLine)),
     h('details', { class: 'form-section', open: holds(u, ['min_nights', 'cancellation_policy', 'cancellation_policy_text']) },
       h('summary', null, 'Booking rules'),
       field({ name: 'min_nights', label: 'Minimum nights', type: 'number', min: 1, max: 60, value: u.min_nights || 1, inputmode: 'numeric' }),
@@ -198,12 +218,18 @@ function listingFields(u = {}, roomTypes = [], building = null, buildingBasics =
       field({ name: 'cancellation_policy_text', label: 'Custom policy text', type: 'textarea', value: u.cancellation_policy_text, maxlength: 1000,
         hint: 'Shown to guests only when the policy is Custom. The presets show their own wording.' })),
   ];
+  // The form may restore a saved draft into these fields after they are built (makeForm), and that sets values without an event,
+  // so the line is read again once the form is in place.
+  queueMicrotask(paintPayLine);
+  return fields;
 }
 
 async function addListingModal(onSaved) {
   const [{ properties }, roomTypes] = await Promise.all([get('/properties'), roomTypeNames()]);
   const isOwner = state.user.role === 'owner';
   let savedPropertyId = null; // the building this form saved, reused if the listing save fails and is retried
+  // Once the building is saved its fields are hidden; this line keeps its name in view while the listing is retried (#39).
+  const savedLine = h('p', { class: 'muted small', hidden: true });
   // The new building's name and address are asked for in Basics, marked required. A hidden building is not required:
   // makeForm's quick check reads every required field, so a blank hidden one would stop a save on an existing building.
   const newProp = h('div', { class: 'form', hidden: properties.length > 0 },
@@ -228,7 +254,7 @@ async function addListingModal(onSaved) {
   // Not formModal: a cancelled question must leave the form open with what was typed.
   const modal = openModal({ title: 'Add listing', body: makeForm({
     submitText: 'Save listing', draftKey: 'listing-new', cancel: () => modal.close(),
-    fields: listingFields({}, roomTypes, newPropMore, [h('hr', { class: 'divider' }), propSelect, newProp]),
+    fields: [savedLine, ...listingFields({}, roomTypes, newPropMore, [h('hr', { class: 'divider' }), propSelect, newProp])],
     onSubmit: async (raw, { form }) => {
       const d = prepUnit(raw);
       checkBaseRate(d);
@@ -241,6 +267,7 @@ async function addListingModal(onSaved) {
         if (!savedPropertyId) {
           const res = await post('/properties', { property_name: d.property_name, property_type: d.property_type, address: d.address, city: d.city, province: d.province });
           savedPropertyId = res.property.property_id;
+          savedLine.textContent = `Building: ${d.property_name} (saved)`; savedLine.hidden = false;
           // The form now points at the saved building, so the new-building fields are no longer used.
           const sel = propSelect?.querySelector('select');
           if (sel) {
@@ -355,7 +382,7 @@ async function channelsModal(listing, onChange) {
     status,
     h('div', { class: 'form-row form-row--2' },
       field({ name: 'channel', label: 'Channel', type: 'select', value: 'airbnb', placeholderOption: false, options: [['airbnb', 'Airbnb'], ['booking', 'Booking.com'], ['agoda', 'Agoda'], ['vrbo', 'Vrbo'], ['expedia', 'Expedia'], ['tripcom', 'Trip.com'], ['other', 'Other (any site with a calendar link)']] }),
-      field({ name: 'url', label: 'Calendar link from Airbnb, Booking.com or Agoda (iCal)', type: 'url', placeholder: 'https://www.airbnb.com/calendar/ical/…' })),
+      field({ name: 'url', label: 'Calendar link from Airbnb, Booking.com or Agoda (ends in .ics)', type: 'url', placeholder: 'https://www.airbnb.com/calendar/ical/…', hint: 'In Airbnb or Booking.com, look for Export calendar or Sync calendars and copy the link that ends in .ics.' })),
     h('div', { class: 'form-actions' }, h('button', { class: 'btn btn--primary', type: 'submit' }, 'Connect calendar')));
   addForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -587,7 +614,7 @@ export async function listingsView(el, { query }) {
         canManage && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'aria-label': `Open channels for ${l.unit_name}`, onclick: () => channelsModal(l, load) }, 'Open channels')),
       h('dl', { class: 'dl' },
         h('dt', null, 'Nightly rate'), h('dd', null, l.nightly_rate ? peso(l.nightly_rate) : (unpricedNote || '—')),
-        h('dt', null, 'Cleaning fee'), h('dd', null, peso(l.cleaning_fee)),
+        h('dt', null, 'Cleaning fee'), h('dd', null, Number(l.cleaning_fee) > 0 ? peso(l.cleaning_fee) : 'No cleaning fee'),
         h('dt', null, 'Guests'), h('dd', null, l.max_guests ? `Up to ${l.max_guests}` : '—'),
         h('dt', null, 'Check-in / out'), h('dd', null, `${l.checkin_time} / ${l.checkout_time}`),
         h('dt', null, 'Now'), h('dd', null, l.current_booking_id ? h('a', { href: `#/reservations/${l.current_booking_id}` }, `${l.current_guest} until ${fmtDate(l.current_check_out)}`) : 'Vacant'),
@@ -660,7 +687,7 @@ export async function guestsView(el, { query }) {
   const box = h('div', { class: 'card' });
   async function load() {
     history.replaceState(null, '', `#/guests${qs(changed(filters, defaults))}`);
-    const { guests } = await get(`/guests${qs(apiFilters(filters, defaults))}`);
+    const { guests } = await get(`/guests${qs(apiFilters(filters))}`);
     const filtered = Object.keys(changed(filters, defaults)).some((k) => k !== 'sort');
     box.replaceChildren(...(guests.length ? [
       filtered ? h('p', { class: 'muted small' }, `Showing ${guests.length} guest${guests.length === 1 ? '' : 's'}`) : '',

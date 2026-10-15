@@ -29,7 +29,7 @@ test('#33: the owner\'s own finished clean with no pay reads "Done by you, no pa
 
 test('#33: the task pay card asks payText for its line and keeps the Set pay button', () => {
   assert.match(src, /h\('span', \{ class: 'muted' \}, payText\(t, state\.user\)\)/);
-  assert.match(src, /t\.pay_status !== 'paid' && h\('button', \{ class: 'btn btn--secondary', onclick: \(\) => payModal\(t, rerender\) \}, t\.pay_amount != null \? 'Edit pay' : 'Set pay'\)/);
+  assert.match(src, /t\.pay_status !== 'paid' && h\('button', \{ class: 'btn btn--secondary', 'data-focus-key': 'hk-pay', onclick: \(\) => payModal\(t, rerender\) \}, t\.pay_amount != null \? 'Edit pay' : 'Set pay'\)/);
 });
 
 test('#36: an owner or manager logs a repair; cleaners and staff still send it to the host', () => {
@@ -72,20 +72,20 @@ const short = [{ name: 'toilet paper', unit_label: 'rolls', asked: 20, recorded:
 
 test('#34: a cleaner who asks for more than is on hand is told what was recorded, then to tell the manager', async () => {
   const toast = await saveToast({ rows: [row('sup-1', '20', { onHand: 7 })], cleaner: true, post: async () => ({ skipped: [], short }) });
-  assert.equal(toast.msg, 'Only 7 rolls of toilet paper were on hand, so 7 were recorded. Tell your manager.');
+  assert.equal(toast.msg, 'Only 7 rolls of toilet paper were on hand, so 7 rolls were recorded. Tell your manager.');
   assert.equal(toast.kind, 'error');
 });
 
 test('#34: an owner gets the same sentence without the manager line, and a single item uses "was" and "1 roll"', async () => {
   const one = [{ name: 'toilet paper', unit_label: 'roll', asked: 2, recorded: 1 }];
   const toast = await saveToast({ rows: [row('sup-1', '2', { onHand: 1 })], cleaner: false, post: async () => ({ skipped: [], short: one }) });
-  assert.equal(toast.msg, 'Only 1 roll of toilet paper was on hand, so 1 was recorded.');
+  assert.equal(toast.msg, 'Only 1 roll of toilet paper was on hand, so 1 roll was recorded.');
   assert.equal(toast.kind, 'error');
 });
 
 test('#34: a short item and a zero-stock item are both named, then the manager line once for a cleaner', async () => {
   const toast = await saveToast({ rows: [row('sup-1', '20', { onHand: 7 })], cleaner: true, post: async () => ({ skipped: ['Shampoo bar'], short }) });
-  assert.equal(toast.msg, 'Only 7 rolls of toilet paper were on hand, so 7 were recorded. Shampoo bar was out of stock, so it wasn\'t recorded. Tell your manager.');
+  assert.equal(toast.msg, 'Only 7 rolls of toilet paper were on hand, so 7 rolls were recorded. Shampoo bar was out of stock, so it wasn\'t recorded. Tell your manager.');
 });
 
 test('#34: with nothing short or skipped the toast still says Supplies saved.', async () => {
@@ -95,7 +95,7 @@ test('#34: with nothing short or skipped the toast still says Supplies saved.', 
 
 test('#34: the handler reads short from the save response, and the Taglish sentence is in the dictionary', () => {
   assert.match(src, /const \{ skipped, short: shortfall = \[\] \} = await post\(`\/cleaning-tasks\/\$\{task\.task_id\}\/supplies`, \{ items \}\);/);
-  assert.ok(src.includes("'Only {recorded} of {name} {verb} on hand, so {count} {verb} recorded.': '{recorded} lang ng {name} ang nasa stock, kaya {count} ang na-record.'"), 'Taglish entry for the shortfall sentence');
+  assert.ok(src.includes("'Only {onHand} of {name} {verb} on hand, so {recorded} {verb} recorded.': '{onHand} lang ng {name} ang nasa stock, kaya {recorded} ang na-record.'"), 'Taglish entry for the shortfall sentence');
 });
 
 test('#28: the lost-item name field is labelled Item, so the required message reads "Item is required."', () => {

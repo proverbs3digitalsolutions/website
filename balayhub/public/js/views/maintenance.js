@@ -220,6 +220,7 @@ export async function maintenanceDetailView(el, { params, rerender }) {
 
   const statusButtons = canManage && nextStatuses(m.status).map((s) => h('button', {
     class: `btn btn--sm ${s === 'resolved' ? 'btn--primary' : 'btn--secondary'}`,
+    'data-focus-key': 'mt-status',
     onclick: async (e) => {
       if (s === 'cancelled' && !await confirmDialog({ title: 'Cancel this request?', text: 'Recorded costs stay on the books.', confirmText: 'Cancel request', cancelText: 'Keep request' })) return;
       e.target.disabled = true;

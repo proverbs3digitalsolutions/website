@@ -1,6 +1,6 @@
 # BalayHub design brief
 
-Last updated: 2026-10-15 (QA round 12: patterns in section 21; D-88)
+Last updated: 2026-10-15 (QA round 13: patterns in section 22; D-89)
 
 **Summary.** BalayHub is a phone-first web app (also an installable PWA) for Filipino rental and staycation hosts. It is built with plain CSS, one stylesheet (`public/css/app.css`), and small JavaScript helpers (`public/js/ui.js`). There is no framework and no CSS preprocessor. The look is calm and practical: Forest Green on soft off-white, Sand and Sun as warm accents, Poppins for headings, Inter for text, rounded cards, and large touch targets. Colours come from CSS custom properties on `:root`. A dark theme redefines the same tokens, so any component that uses tokens gets dark mode automatically. This brief records what is **actually built**. Every value below comes from the code. Where the code doesn't define a token (spacing, type sizes), the brief lists the values in use and says so.
 
@@ -371,7 +371,7 @@ Icons are inline SVG on a 24×24 grid with no fill, a `currentColor` stroke at 1
 | ARIA | The theme switch is a radiogroup with radios and `aria-checked`. The language toggle uses `aria-pressed`. The More filters button has `aria-expanded`. Filter chips are labelled "Remove filter …". Field errors use `role="alert"` and `aria-describedby`, and invalid inputs get `aria-invalid`. Toasts use `role="status"` in an `aria-live` region. Modals are native `<dialog>` with `aria-label`. Charts use `role="img"` with an `aria-label` and offer a table. The tracker step has `aria-current="step"`. The unread badge is labelled "{n} unread". Icons are `aria-hidden`, and `.sr-only` exists. |
 | Reduced motion | `@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }` stops the skeleton shimmer, the typing dots and button transitions. |
 | Contrast (WCAG ratios computed from the tokens) | Light: text on bg 13.9:1, muted on surface 5.9:1, white on Forest 9.4:1. Status pairs are 4.7–5.8:1 (amber is the lowest at 4.7). Dark: text on bg 15.3:1, muted on surface 7.4:1, accent on surface 9.4:1, status pairs 6.1–7.8:1, white on dark Forest 5.3:1. See section 10 for the known failures. |
-| Tap targets | Buttons are at least 46px (small ones 38px), inputs at least 48px, the modal close button is 40×40, the hk checklist boxes are 24px, and bottom-nav items are about 56px tall across a fifth of the screen width. Smaller controls exist (see section 10). |
+| Tap targets | *Round 13: on phones every button, tab, chip, back link and standalone link is at least 44px (section 22).* Buttons are at least 46px (small ones 38px), inputs at least 48px, the modal close button is 40×40, the hk checklist boxes are 24px, and bottom-nav items are about 56px tall across a fifth of the screen width. Smaller controls exist (see section 10). |
 | Text | The base size is 16px and inputs use `1rem`, so iOS doesn't zoom on focus. Text sizing follows the browser setting (`text-size-adjust: 100%`). Long names ellipsise or wrap (`overflow-wrap: anywhere` on stats). |
 | Safe areas | `viewport-fit=cover`, plus `env(safe-area-inset-*)` on the topbar, bottom nav, More sheet, content padding, toasts and the assistant button. |
 | Language | Guest pages set `<html lang="fil">` when Tagalog is chosen. |
@@ -421,7 +421,7 @@ Printable views are built from `.receipt` (with a 2px `--navy` rule under the he
 | Handle the empty, error and loading states with `emptyState`, `errorState(err, retry)` and `skeleton()`. | Don't leave a blank card or a raw error. |
 | Ask before destructive actions with `confirmDialog({ danger: true })`, and add `reason: true` when it should be audited. | Don't use `window.confirm`, and don't put destructive actions in primary green. |
 | Use one primary button per view. Use secondary for Cancel and ghost for tertiary actions. | Don't put two primary buttons side by side. |
-| Keep tap targets at least 44px (use `.btn`, or `.btn--sm` at 38px only in dense toolbars). | Don't ship icon-only buttons smaller than 34px or without an `aria-label`. |
+| Keep tap targets at least 44px (use `.btn`; `.btn--sm` is 38px only at 960px and wider, and 44px on phones, round 13). | Don't ship icon-only buttons smaller than 34px or without an `aria-label`. |
 | Design for the phone first. Check at 375px, 560px, 760px and 960px. Wrap tables in `.table-wrap`. | Don't assume the sidebar is there, or allow horizontal page scroll. |
 | Write in sentence case, plainly. Say what happened and what to do next. Use ₱ via `peso()` and dates via `fmtDate()`. | Don't use Title Case, jargon or exclamation-heavy copy. Don't format money or dates by hand. |
 | Put guest-facing strings through `t()` and add Tagalog to the dictionary. | Don't hard-code English on booking, check-in, pay or review pages. |
@@ -447,9 +447,9 @@ Printable views are built from `.receipt` (with a 2px `--navy` rule under the he
 | 9 | Channel colours drift: the Airbnb calendar bar is `#d93b52` in the app vs `#d93a50` on landing. The Vrbo, Expedia and Trip.com bar colours differ from their badge text colours. Calendar bars and the blocked colour don't change in dark mode. `.lp-plan--pop` uses an old teal `rgba(14,124,102,.15)`. | `app.css` |
 | 10 | Contrast below 4.5:1: white on the Vrbo bar `#0891b2` (3.7:1) and on Airbnb `#d93b52` (4.5:1, borderline); `--muted-2` text (2.2:1 light); chart orange and aqua against white (3.2 and 2.8:1, acceptable for graphics but not for text); review stars `#e0a526` (2.2:1); the sage "Hub" on white (2.5:1, decorative wordmark). | tokens and `app.css` |
 | 11 | `offline.html` / `offline.css` have no dark mode and use `system-ui` rather than Inter. | `public/offline.html` |
-| 12 | Small tap targets: theme-switch buttons (about 30px), `.langtoggle` buttons (about 26px), `.flt__chip` (about 26px), assistant icon buttons (34px) and `.tabs--compact`. | `app.css` |
+| 12 | Small tap targets: theme-switch buttons (about 30px), `.langtoggle` buttons (about 26px), `.flt__chip` (about 26px), assistant icon buttons (34px) and `.tabs--compact`. *Round 13: on phones `.flt__chip`, tabs and `.btn--sm` are now 44px (section 22); the theme-switch buttons stay (D-88); `.langtoggle` and the assistant icon buttons: assistant button 44x44.* | `app.css` |
 | 13 | No spacing, type-size or breakpoint tokens. Radius values of 12, 16, 18 and 20px are hard-coded alongside `--radius` and `--radius-sm`. `--navy-2` is unused. `--teal` and `--forest` are duplicate aliases. | `app.css` |
-| 14 | There is no "skip to content" link, even though `main#main` exists. The More sheet uses `role="menu"` without menu keyboard handling and has no Esc-to-close or focus management. The More sheet part was fixed in round 5 (section 14: a dialog with Escape and focus handling, and no menu role). | `app.js` |
+| 14 | ~~There is no "skip to content" link, even though `main#main` exists.~~ *Fixed in round 13: a "Skip to main content" link (`.skip-link`, section 22).* The More sheet uses `role="menu"` without menu keyboard handling and has no Esc-to-close or focus management. The More sheet part was fixed in round 5 (section 14: a dialog with Escape and focus handling, and no menu role). | `app.js` |
 | 15 | The `theme-color` meta follows the device theme, not a forced `bh-theme` choice. The nav label "Rent & Expenses" breaks sentence case. | `index.html`, `app.js` |
 
 ---
@@ -562,8 +562,36 @@ Printable views are built from `.receipt` (with a 2px `--navy` rule under the he
 
 - **Star tokens:** review stars use `--star-off` and `--star-on`, set in every theme block so both pass 3:1 contrast. Never hard-code a star colour.
 - **Looks disabled, stays reachable:** `.btn[aria-disabled="true"]` is dimmed (opacity 0.6) with the `not-allowed` cursor and no link. Use it when a keyboard or screen reader user should still land on the control and read the hint beside it (Reports Export). A real `:disabled` button keeps its own look, which also shows progress.
-- **Switch rows:** notification rows are at least 44px tall and are no longer capped at 220px wide. *Not yet done:* other `.checks` lists (settings property picker, owner units, add-on listings) have rows of about 22 to 25px on phones (round 13).
+- **Switch rows:** notification rows are at least 44px tall and are no longer capped at 220px wide. *Closed in round 13: `.checks` rows are 44px on phones (section 22).*
 - **Chart hover band:** a class using a token (navy at 5%), not a hard-coded colour in the chart code. Grid and axis colours in `charts.js` are overridden by CSS; the series palette is still fixed in code (low).
 - **Reservations on phones (480px and below):** the Channel and Code columns are hidden. The hiding rule has higher specificity than the stacked-card rule, so the card no longer shows them. *Brings the code to what this brief already said.*
 - **Page headings and focus:** a route change focuses the new page's `h1` (`tabindex="-1"`). A page reloading in place keeps the old `main` on screen with `aria-busy` until the new one is ready. A refused form focuses, in order: the row input, an element marked `data-focus`, then the group's button. A page-level error has an `h1`.
 - **Extra row actions:** a row's less common actions sit under a "More for <name>" disclosure (supply rows: Count, History, Edit, Archive).
+
+## 22. Patterns added in QA round 13 (2026-10-15)
+
+Decision D-89. These lines replace the older tap-target wording in sections 5 and 9 where they differ.
+
+- **Phone 44px block (under 960px).** In one block in `app.css`: `.btn--sm`, `[role="tab"]` (tabs), `.flt__chip` (filter chips), `.back`, `.inbox__back`, `.link-tap`, `.checks label` (checklist rows), `.topbar .brand`, `.topbar__me` (the account link) are at least 44px tall; the assistant button `.assist-fab` is 44x44. At 960px and wider, `.btn--sm` stays 38px, and `.back` and `.link-tap` are at least 24px. *Settles the earlier "`.btn--sm` 38px only in dense toolbars": on phones it is 44px everywhere. Theme buttons are unchanged (D-88: about 33px high, pass the 24px minimum).* The mobile More sheet's "More tools" fold summary is also a 44px tap target, with an arrow and a focus ring.
+- **`.link-tap`:** a shared class for a standalone text link that must be easy to hit (for example the four links in the inbox). `display: inline-flex; align-items: center; min-height: 24px`, and 44px below 960px. Use it instead of per-component sizes.
+- **Skip link (`.skip-link`):** the first child of the app shell, "Skip to main content". Visually hidden until it has focus, then a visible pill at the top left above the top bar. Tokens only, no hex. Debt row 14 ("no skip to content link") is closed.
+- **Calendar tile at 24px:** the calendar's booking tiles (`.cal-bar`) are at least 24px tall (a dense grid; WCAG 2.5.8 minimum) and carry a `data-focus-key`.
+- **Checkboxes at 24px:** the cleaner pay row checkboxes are 24px on phones. Other `.checks` lists (settings property picker, owner units, add-on listings) are covered by the 44px row rule on phones. The "Not yet done" note in section 21 is closed, except the cleaner pay "select all" box at 20px (its label is 44px high; round 14).
+- **More-sheet fold:** on phones, "More tools" is a fold (a `details` with a summary) inside the More sheet, the same as in the sidebar. Closed when the current page is outside it, open when inside, remembered in the same place as the sidebar's state (`bh-nav-more`). The Tab trap counts the summary and skips links inside a closed fold.
+- **The `data-focus-key` convention.** Put `data-focus-key` on a control whose label or presence changes when it is used (Publish becomes Unpublish to correct; Close the day becomes Update close), so the focus guard can find "the same control" after a redraw. Every control that can take the same place carries the same key. Views never call `.focus()` after a redraw themselves. A scan test (`qa-r13-focus-scan`) checks that every key below is present. Keys:
+
+  | Key | Control | File |
+  |---|---|---|
+  | `stay-status` | Check in, Check out, Undo check-in, Undo check-out | `views/reservations.js` |
+  | `deposit-action` | Record deposit, Return deposit, Undo | `views/deposits.js` |
+  | `cal-night-<night>`, `cal-booking-<id>` | a calendar night cell; a booking tile | `views/calendar.js` |
+  | `stmt-publish`, `stmt-send` | Publish / Unpublish to correct; Send to owner / Send again | `views/owners.js` |
+  | `owner-invite-<id>` | Invite to owner portal / Invite again / Send the invite again | `views/owners.js` |
+  | `conv-snooze`, `conv-archive` | Snooze / Unsnooze; Archive / Unarchive | `views/inbox.js` |
+  | `mt-status` | every maintenance status button | `views/maintenance.js` |
+  | `tenant-archive` | tenant Archive / Restore | `views/tenants.js` |
+  | `hk-status`, `hk-pay` | Start / Mark done / Reopen; Set pay / Edit pay | `views/housekeeping.js` |
+  | `cp-pay-<id>` | a cleaner pay row's Edit pay and Undo paid | `views/cleanerpay.js` |
+  | `dc-close`, `dc-reopen` | Close the day / Update close; Reopen day | `views/dailyclose.js` |
+
+- **Planned: the top bar (D-90).** Global search in the centre; bookmarks, "+" Add new, notifications, help and the profile avatar on the right; on phones search (icon), "+" and the bell stay, bookmarks and help move into the profile menu or More sheet. Adapted to BalayHub's brand, tokens only, 44px targets on phones, the D-89 focus rules. The design section is written when it is built.

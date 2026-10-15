@@ -116,7 +116,7 @@ test('the locked-close line names the kind of close: whole workspace, or propert
 
 test('the page shows Reopen and Update only when the viewer may change the close, with the locked-close line', () => {
   const src = fs.readFileSync(DAILYCLOSE_JS, 'utf8');
-  assert.match(src, /closed\?\.can_change && h\('button', \{ class: 'btn btn--secondary', onclick: reopen \}, 'Reopen day'\)/);
-  assert.match(src, /\(!closed \|\| closed\.can_change\) && h\('button', \{ class: 'btn btn--primary', onclick: closeDay \}/);
+  assert.match(src, /closed\?\.can_change && h\('button', \{ class: 'btn btn--secondary', 'data-focus-key': 'dc-reopen', onclick: reopen \}, 'Reopen day'\)/);
+  assert.match(src, /\(!closed \|\| closed\.can_change\) && h\('button', \{ class: 'btn btn--primary', 'data-focus-key': 'dc-close', onclick: closeDay \}/);
   assert.match(src, /closed && !closed\.can_change && h\('p', \{ class: 'muted small' \}, lockedCloseText\(closed\)\)/);
 });

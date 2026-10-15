@@ -43,29 +43,7 @@ function world() {
   return w;
 }
 
-test('(a) a button disabled during its own request gets focus back when it is enabled again', (t) => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
-  const w = world();
-  const btn = w.body.add(w.make('button', { 'aria-label': 'Pay now' }));
-  btn.focus();
-  ui.keepFocus(btn, { refocusOld: false });
-  btn.disabled = true; w.activeElement = w.body; // the click handler disables it: focus falls to the page
-  t.mock.timers.tick(1500);
-  btn.disabled = false;
-  t.mock.timers.tick(500);
-  assert.equal(w.activeElement, btn);
-});
-
-test('(a2) a button that was never disabled is not refocused when refocusOld is false', (t) => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
-  const w = world();
-  const btn = w.body.add(w.make('button', { 'aria-label': 'Open' }));
-  btn.focus();
-  ui.keepFocus(btn, { refocusOld: false });
-  w.activeElement = w.body;
-  t.mock.timers.tick(3000);
-  assert.notEqual(w.activeElement, btn);
-});
+// (a), (a2) (a disabled button gets focus back; a button never disabled is not refocused) moved to the single focus guard: see qa-r13-f01.test.js (g).
 
 // A field wrapper: tree of {tag, attrs, children}, with the querySelector selectors showErrors uses.
 function field(w, spec) {
@@ -153,11 +131,10 @@ test('(e) source: router focuses the page heading after a path change, keeps the
   const r = appSrc.slice(appSrc.indexOf('export async function render'));
   assert.match(appSrc, /function focusPageHeading/);
   assert.match(appSrc, /drawnPath !== null && drawnPath !== path\) focusPageHeading\(mount\)/);
-  assert.match(r, /if \(seq !== renderSeq\) return;\n\s*if \(prev\)/);
-  assert.match(r, /prev\.replaceWith\(mount\)/);
+  assert.match(r, /if \(seq !== renderSeq\) return;\n\s*shell\.content\.replaceWith\(mount\)/);
   assert.match(r, /aria-busy/);
   assert.match(r, /i18n\.useHostLang\?\.\(/);
   assert.match(r, /pageError\(err, render\)/);
   assert.doesNotMatch(r, /errorState\(/);
-  assert.match(appSrc, /if \(a && a !== document\.body && a\.isConnected\) return;/);
+  assert.match(appSrc, /if \(a && a !== document\.body && a\.isConnected && !a\.closest\(/);
 });

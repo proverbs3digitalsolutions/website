@@ -2,7 +2,7 @@
 
 BalayHub is a web app that helps Filipino hosts run 1 to 10 rental units from one place. It covers condo staycations listed on Airbnb, Booking.com and Agoda, and long-term monthly rentals such as apartments, boarding houses, dorms and bedspaces. Hosts get one calendar for every channel, a direct booking page with GCash, Maya and card payments, a guest inbox, cleaning tasks, condo gate passes, deposits, reports and owner statements. Long-term landlords get properties, tenants, leases, rent, expenses and repairs. This document describes what is **actually built** today, feature by feature, and lists what is planned. It was written from the code (`src/routes`, `src/lib`, `public/js`, `db/migrations`) and the existing docs.
 
-Last updated: 2026-10-15 (QA round 12; D-88)
+Last updated: 2026-10-15 (QA round 13; D-89, D-90, F53 planned)
 
 *2026-10-14 (D-85): the alpha targets owners of 1 to 3 properties; the Guesty-inspired ideas are on hold as reference only. QA puts small-host friction first.*
 
@@ -622,6 +622,9 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - Publishing doesn't change when an expense is added later (the published copy stays the same).
 - Money is exact to the centavo. A payout can't be deleted. A withdrawal can't take the reserve below zero.
 
+
+*Round 13 (D-89):* saving an owner whose email another active owner already uses asks "This email already belongs to <name>. Save anyway?".
+
 ### F32. Profit and loss per unit
 **Status:** Built 2026-10-13 (Phase 2)
 
@@ -804,6 +807,9 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 
 **Done looks like:** The booking total equals accommodation plus cleaning plus add-ons, to the centavo. An add-on bought twice by a retried request is recorded once.
 
+
+*Round 13 (D-89):* an add-on price above ₱50,000 asks "Save anyway?" (nothing is refused).
+
 ### F43. Quotes for Facebook and Messenger inquiries
 **Status:** Phase 4 (built 2026-10-13, D-60)
 
@@ -870,6 +876,9 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 **Done looks like:** Bookings already made keep their prices. The direct booking page, quotes, the new-reservation suggestion, the calendar and the preview all use one engine, so they agree. Each night says why its price is what it is.
 
 **Out of scope:** occupancy-based automatic pricing (founder decision pending in BLOCKERS.MD).
+
+
+*Round 13 (D-89):* a season with a fixed nightly price above ₱50,000 asks "Save anyway?" (nothing is refused), and an identical season can't be saved twice ("You already saved this season.").
 
 ### F48. Bulk price and block changes, tags and room types
 **Status:** Phase 5 (built 2026-10-13, D-67, D-68)
@@ -945,6 +954,27 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 
 ---
 
+### F53. Top bar: search, bookmarks, add new, notifications, help, profile
+
+**Status:** Planned (founder request 2026-10-15, D-90; QA round 14 / next build sprint). This overrides D-85's "Guesty features out of scope" for this one item only.
+
+**For:** Every signed-in role, filtered by what the role may see and do.
+
+**What it does:**
+- **Global search** in the middle of the top bar ("Type / to search"; the `/` key focuses it from anywhere except inside a field). Searches only what the person may see: reservations (guest name, confirmation code), guests, listings, properties, tenants, unit owners, quotes, maintenance requests, pages and settings by name, and help articles. Results are grouped; arrow keys and Enter pick one, Escape closes; recent searches are kept.
+- **Bookmarks:** star the current page and list starred pages. Saved per person on the server, so they follow the person across devices.
+- **"+" Add new:** Reservation, Listing, Property, Owner, Cleaning task, Expense, Invite teammate (and for long-term: Tenant, Rent payment), filtered by role and workspace; each opens the existing "new" dialog.
+- **Notifications bell:** a panel with filters (Reservations, Payments, Cleaning, Messages, Owners), an unread count and mark as read, built on the existing events and activity log and respecting each person's notification settings.
+- **Help icon:** help-centre search, suggested articles for the current page, and "Contact us" opening a support ticket.
+- **Profile avatar** (initials): My account, Settings, theme, Log out.
+- **Phones:** the top bar keeps search (an icon that opens a full-screen search), "+" and the bell; bookmarks and help move into the profile menu or the More sheet. 44px targets and the D-89 focus rules apply.
+
+**Done looks like:** a small host can find any reservation, guest or setting from one box, add anything from one menu, and see what needs attention in one panel, without leaving the page they are on. Results never include anything the person's role may not see.
+
+**Out of scope:** copying Guesty's look or names (adapt to BalayHub's brand); other Guesty features (still parked, D-85); host app translation (the host app stays English).
+
+---
+
 ## Cross-cutting requirements (built)
 
 - **Security:** workspace scoping on every query, 404 for out-of-scope records, CSRF header on writes, strict Content-Security-Policy, text-only rendering, rate limits, scrypt passwords, HttpOnly cookies (7-day absolute, 12-hour idle).
@@ -959,6 +989,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 
 | Item | Priority | Notes |
 |---|---|---|
+| **Top bar: search, bookmarks, add new, notifications, help, profile (F53)** | **Next (planned, founder request, D-90)** | Round 14 / next build sprint. Needs a search endpoint, a bookmarks table and a notifications feed (BACKEND-SCHEMA when built). |
 | **SMS reminders to guests** | **Next (planned)** | Listed in README "Not built yet". Today all guest messages are email. |
 | **Facebook Messenger inbox** | **Later** | Listed in README "Not built yet". Today the Inbox is email only. |
 | **Phase 1: Money done right** (itemised stay bill with extras, payment proof uploads and bank transfer, cancellation policies and refund log, deposit % per listing, host net per booking) | **Built 2026-10-13** | Spec: docs/specs/PHASE-1-MONEY.md. Decisions D-31 to D-36. |
@@ -1032,3 +1063,5 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - QA round 9: the Starter plan allows 2 listings while the alpha targets 1 to 3 units (BLOCKERS, default no pricing change).
 - QA round 9: the automatic-message preview with sample guest details is not built yet (round 10).
 - QA round 10: rent payments have no receipt numbers (founder question in BLOCKERS, default none). Automatic message names have no database index, only an app check (accepted gap, same reason as add-on names). The booking page can be turned on with no listing on screen-gated only; the server doesn't refuse yet (round 11).
+- QA round 13 (small-host simplifications, shipped): a new owner's Home with no reservations leads with "Connect your calendar" and folds the charts under "Trends and revenue"; on 3 or fewer listings the Calendar folds its filters and colour legend; Assigned to shows only when there is someone to assign to; the phone More sheet folds More tools; Add listing has a cleaning fee hint, a plain "what the guest pays now and later" line and a plainer calendar link label; Settings explains how to get a PayMongo account. Managers and staff with no reservations don't get the first-run card yet (carried).
+- QA round 13: the gate pass contact is the owner's account email; publish, send and record payout stay separate steps; a guest can't pay online after check-out (all three are founder questions in BLOCKERS round 13).

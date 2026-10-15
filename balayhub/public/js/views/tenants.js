@@ -310,13 +310,14 @@ export async function tenantDetailView(el, { params, query, rerender }) {
         canManage && h('button', { class: 'btn btn--secondary', onclick: edit }, 'Edit'),
         canManage && !active && !archived && h('button', {
           class: 'btn btn--danger',
+          'data-focus-key': 'tenant-archive',
           onclick: async () => {
             const owed = totals.outstanding > 0 ? ` They still owe ${peso(totals.outstanding)}. The unpaid balance stays on record until it is paid.` : '';
             if (!await confirmDialog({ title: 'Archive tenant?', text: `Their lease and payment history is kept. You can restore them later.${owed}`, confirmText: 'Archive', danger: true })) return;
             try { await post(`/tenants/${tenant.tenant_id}/archive`); toast('Tenant archived.'); rerender(); } catch (err) { toast(err.message, 'error'); }
           },
         }, 'Archive'),
-        canManage && archived && h('button', { class: 'btn btn--secondary', onclick: async () => { await post(`/tenants/${tenant.tenant_id}/restore`); toast('Tenant restored.'); rerender(); } }, 'Restore'),
+        canManage && archived && h('button', { class: 'btn btn--secondary', 'data-focus-key': 'tenant-archive', onclick: async () => { await post(`/tenants/${tenant.tenant_id}/restore`); toast('Tenant restored.'); rerender(); } }, 'Restore'),
         role === 'owner' && h('a', { class: 'btn btn--ghost', href: `/api/tenants/${tenant.tenant_id}/export`, download: '' }, 'Export data'),
       ],
     }),

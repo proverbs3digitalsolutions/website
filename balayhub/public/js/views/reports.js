@@ -21,6 +21,19 @@ function presets(today) {
   };
 }
 
+// The line under Export while the range is incomplete. A range that runs backwards needs its dates fixed; a missing date needs picking.
+export const exportHint = ({ from, to } = {}) => (from && to && from > to ? 'Fix the dates to export.' : 'Pick both dates to export.');
+
+// The date box with this aria-label under root. Walks the children to find it.
+function boxByLabel(root, label) {
+  if (root.tagName?.toLowerCase() === 'input' && root.getAttribute('aria-label') === label) return root;
+  for (const c of root.children || []) {
+    const hit = boxByLabel(c, label);
+    if (hit) return hit;
+  }
+  return null;
+}
+
 export async function reportsView(el, { query }) {
   const today = todayManila();
   const P = presets(today);
@@ -40,11 +53,17 @@ export async function reportsView(el, { query }) {
   const body = h('div');
   const barBox = h('div', { class: 'no-print' });
   const exportLink = h('a', { class: 'btn btn--primary', download: '' }, 'Export (Excel / CSV)');
-  const exportHint = h('span', { class: 'muted small' }, 'Pick both dates to export.');
+  const exportNote = h('span', { class: 'muted small' }, exportHint({}));
+  // The Custom dates boxes as the person left them. A backwards pair is cleared in the filter values, but its dates stay on screen.
+  const boxDates = () => ({
+    from: boxByLabel(barBox, 'Custom dates, from')?.value || '',
+    to: boxByLabel(barBox, 'Custom dates, to')?.value || '',
+  });
   // Export has no address until the range is complete: say so to the eye and to a screen reader.
   const exportReady = (ready) => {
     exportLink.className = ready ? 'btn btn--primary' : 'btn btn--secondary';
-    exportHint.hidden = ready;
+    exportNote.hidden = ready;
+    if (!ready) exportNote.textContent = exportHint(boxDates());
     if (ready) exportLink.removeAttribute('aria-disabled'); else { exportLink.removeAttribute('href'); exportLink.setAttribute('aria-disabled', 'true'); }
   };
 
@@ -180,7 +199,7 @@ export async function reportsView(el, { query }) {
   el.replaceChildren(
     pageHead({
       title: 'Reports', sub: 'Income, expenses and unpaid rent for any period',
-      actions: [exportLink, exportHint, h('button', { class: 'btn btn--secondary', onclick: () => window.print() }, 'Print / PDF'), h('a', { class: 'btn btn--ghost', href: '#/dashboard' }, icon('home'), 'Dashboard')],
+      actions: [exportLink, exportNote, h('button', { class: 'btn btn--secondary', onclick: () => window.print() }, 'Print / PDF'), h('a', { class: 'btn btn--ghost', href: '#/dashboard' }, icon('home'), 'Dashboard')],
     }),
     barBox,
     body);

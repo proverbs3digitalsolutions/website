@@ -97,7 +97,7 @@ export async function helpView(el, { query }) {
     h('div', { class: 'help-hero card' },
       h('h2', null, 'How can we help?'),
       articleSearch,
-      h('p', { class: 'muted small' }, 'Can’t find it? ', h('a', { href: '#/help/new' }, 'Open a support ticket'), ' — we usually reply within 1 business day.')),
+      h('p', { class: 'muted small' }, 'Can’t find it? ', h('a', { class: 'link-tap', href: '#/help/new' }, 'Open a support ticket'), ' — we usually reply within 1 business day.')),
     askCard,
     h('div', { class: 'grid grid--help' },
       articlesBox,

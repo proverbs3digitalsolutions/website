@@ -151,7 +151,7 @@ test('owner report: every unit, the refunds rule, unlinked expenses; cancelled, 
     gross: '0.00', channel_fees: '0.00', refunds: '0.00', expenses: '500.00', net: '-500.00',
   });
   assert.deepEqual(r.data.rows[3], {
-    unit_id: null, unit_name: 'Not linked to a unit', property_name: null, stays: 0, nights: 0,
+    unit_id: null, unit_name: 'Whole-property expenses', property_name: null, stays: 0, nights: 0,
     gross: '0.00', channel_fees: '0.00', refunds: '0.00', expenses: '225.00', net: '-225.00',
   });
   // Totals: expenses 800 + 500 + 225 = 1,525; net = 7,000 - 600 - 250 - 1,525 = 4,625 (unit 301's -500 and the unlinked -225 included).
@@ -163,7 +163,7 @@ test('owner report: every unit, the refunds rule, unlinked expenses; cancelled, 
 test('property filter keeps that property\'s unlinked expenses', async () => {
   const r = await host.get(`/api/reports/pnl?month=${M}&property_id=${p2.property_id}`);
   assert.equal(r.status, 200);
-  assert.deepEqual(r.data.rows.map((x) => x.unit_name), ['301', 'Not linked to a unit']);
+  assert.deepEqual(r.data.rows.map((x) => x.unit_name), ['301', 'Whole-property expenses']);
   assert.deepEqual(r.data.totals, {
     stays: 0, nights: 0, gross: '0.00', channel_fees: '0.00', refunds: '0.00', expenses: '575.00', net: '-575.00',
   });
@@ -172,7 +172,7 @@ test('property filter keeps that property\'s unlinked expenses', async () => {
 test('a manager sees only assigned properties; other workspaces get 404', async () => {
   const r = await manager.get(`/api/reports/pnl?month=${M}`);
   assert.equal(r.status, 200, JSON.stringify(r.data));
-  assert.deepEqual(r.data.rows.map((x) => x.unit_name), ['1201', '805', 'Not linked to a unit']);
+  assert.deepEqual(r.data.rows.map((x) => x.unit_name), ['1201', '805', 'Whole-property expenses']);
   assert.equal(r.data.rows[2].expenses, '150.00', 'the unlinked row covers only the assigned property');
   // Manager totals: net = 7,000 - 600 - 250 - 950 (800 for 1201 plus the unlinked 150 at Azure) = 5,200.
   assert.deepEqual(r.data.totals, {
@@ -198,7 +198,7 @@ test('CSV download has the same rows and totals as the screen', async () => {
   assert.match(csv.headers.get('content-disposition'), new RegExp(`balayhub-pnl-${M}\\.csv`));
   assert.ok(csv.data.startsWith('BalayHub profit and loss\r\n'));
   assert.ok(csv.data.includes('Azure,1201,2,3,7000.00,600.00,250.00,800.00,5350.00'));
-  assert.ok(csv.data.includes(',Not linked to a unit,0,0,0.00,0.00,0.00,225.00,-225.00'));
+  assert.ok(csv.data.includes(',Whole-property expenses,0,0,0.00,0.00,0.00,225.00,-225.00'));
   assert.ok(csv.data.includes('Total,,2,3,7000.00,600.00,250.00,1525.00,4625.00'));
 });
 

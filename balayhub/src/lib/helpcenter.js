@@ -459,7 +459,7 @@ const ARTICLES = [
     keywords: 'profit loss pnl per unit income expenses net gross report month property csv download',
     body: [
       'Open Profit and loss from the menu (owners and managers). Pick a month and, if you want, one property.',
-      'Each unit shows its stays, nights, gross bookings, channel fees, refunds, expenses and net. Expenses with no unit are shown in one "Not linked to a unit" row.',
+      'Each unit shows its stays, nights, gross bookings, channel fees, refunds, expenses and net. Expenses with no unit are shown in one "Whole-property expenses" row.',
       'Guest cleaning fees count as the unit\'s income here, because this is the whole unit\'s result. An owner statement is different: it leaves out cleaning fees you keep, because that is the owner\'s share.',
       'Managers see only their assigned properties. Staff don\'t see this page. Download CSV gives the same table for a spreadsheet.',
     ],

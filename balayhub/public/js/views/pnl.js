@@ -8,6 +8,8 @@ const neg = (v) => Number(v) < 0;
 const money = (v) => h('span', { class: neg(v) ? 'amount--neg' : null }, peso(v));
 // A month is YYYY-MM with a month 01 to 12 and a year 2000 to 2100 (the window every date box uses).
 export const MONTH_RE = /^(20\d\d|2100)-(0[1-9]|1[0-2])$/;
+// The month the page shows: the chosen one, else this month in Manila (a cleared month box means this month).
+export const monthOrToday = (month) => month || todayManila().slice(0, 7);
 const monthName = (ym) => new Date(`${ym}-01T00:00:00Z`).toLocaleDateString('en-PH', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
 function stat(label, value, sub) {
@@ -23,7 +25,7 @@ export async function pnlView(el, { query = {} } = {}) {
   const notice = h('div');
   // Says which stays the month counts (the check-out rule), and where the check-in counts are.
   const basis = h('p', { class: 'muted small' });
-  const monthInput = h('input', { class: 'input input--sm', type: 'month', value: filters.month || thisMonth, 'aria-label': 'Month', onchange: (e) => { if (e.target.value) { filters.month = e.target.value; rememberFilters('pnl', filters); load(); } } });
+  const monthInput = h('input', { class: 'input input--sm', type: 'month', value: monthOrToday(filters.month), 'aria-label': 'Month', onchange: changeMonth });
 
   let properties = [];
   try {
@@ -35,7 +37,7 @@ export async function pnlView(el, { query = {} } = {}) {
     // A month that isn't YYYY-MM is dropped and the page says so, instead of quietly showing this month.
     const bad = filters.month && !MONTH_RE.test(filters.month);
     if (bad) filters.month = thisMonth;
-    const month = filters.month || thisMonth;
+    const month = monthOrToday(filters.month);
     basis.textContent = `Counts stays that checked out in ${fmtMonth(month)}. Upcoming stays are not in this total. Reports counts nights in the month, including upcoming stays.`;
     notice.replaceChildren(bad ? h('div', { class: 'alert alert--warn', role: 'alert' }, `That month isn't valid. Showing ${monthName(month)}.`) : '');
     monthInput.value = month;
@@ -65,10 +67,18 @@ export async function pnlView(el, { query = {} } = {}) {
         h('caption', { class: 'sr-only' }, `Profit and loss per unit for ${fmtMonth(month)}`),
         h('thead', null, h('tr', null, ['Unit', 'Stays', 'Nights', 'Gross', 'Channel fees', 'Refunds', 'Expenses', 'Net'].map((x, i) => h('th', { scope: 'col', class: i ? 'num' : null }, x)))),
         h('tbody', null, r.rows.map((x) => h('tr', null,
-          h('td', null, x.unit_id ? x.unit_name : 'Not linked to a unit', x.unit_id && x.property_name && h('div', { class: 'muted small' }, x.property_name)),
+          h('td', null, x.unit_id ? x.unit_name : 'Whole-property expenses', x.unit_id && x.property_name && h('div', { class: 'muted small' }, x.property_name)),
           cells(x)))),
         h('tfoot', null, h('tr', { class: 'is-total' }, h('td', null, 'Total'), cells(t)))))),
       h('p', { class: 'muted small' }, 'Cancelled stays are left out, including money kept or refunded on them. The Income summary (for taxes) counts all money received and refunded.'));
+  }
+
+  // A cleared month box goes back to this month: the page reloads, the box is filled again, and the status line says so.
+  async function changeMonth(e) {
+    filters.month = e.target.value;
+    rememberFilters('pnl', filters);
+    await load();
+    if (!filters.month) notice.replaceChildren(h('p', { class: 'muted small', role: 'status' }, 'Showing this month.'));
   }
 
   const bar = filterBar({

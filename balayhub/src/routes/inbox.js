@@ -6,7 +6,7 @@
 // automatic messages is owner-only (workspace-wide settings).
 
 const express = require('express');
-const { query, one } = require('../db');
+const { query, one, tx } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
 const { own } = require('../lib/pick');
 const { validate, uuidParam, isValidDate, UUID_RE } = require('../lib/validate');
@@ -338,7 +338,7 @@ router.post('/inbox/:id/messages', ah(async (req, res) => {
       throw new HttpError(409, "This guest has no email address. Add one on the guest's profile first, or save this as an internal note.", { code: 'NO_EMAIL' });
     }
     if (!mailEnabled()) {
-      throw new HttpError(409, 'Email sending is not set up on the server yet, so messages cannot be sent. See EMAIL-SETUP.md.', { code: 'MAIL_OFF' });
+      throw new HttpError(409, "Email sending isn't turned on for BalayHub yet, so messages can't be sent. Contact BalayHub support.", { code: 'MAIL_OFF' });
     }
   }
   if (body.note && body.body.search(MENTION_RE) !== -1) await applyLimit(mentionLimiter, req, res);
@@ -493,9 +493,13 @@ router.patch('/message-templates/:id', owners, ah(async (req, res) => {
 
 router.post('/message-templates/:id/archive', owners, ah(async (req, res) => {
   const t = await loadTemplate(req.user, uuidParam(req.params.id));
-  const used = await one('SELECT name FROM automations WHERE template_id = $1 ORDER BY created_at LIMIT 1', [t.template_id]);
-  if (used) throw new HttpError(409, `This template is used by the automatic message "${used.name}". Choose another template for it, or remove it, first.`, { code: 'IN_USE' });
-  await query('UPDATE message_templates SET archived = true, updated_at = now() WHERE template_id = $1', [t.template_id]);
+  // The template row is locked while the in-use check and the write run, so an automation can't be pointed at it in between.
+  await tx(async (db) => {
+    await db.query('SELECT 1 FROM message_templates WHERE template_id = $1 FOR UPDATE', [t.template_id]);
+    const { rows: [used] } = await db.query('SELECT name FROM automations WHERE template_id = $1 ORDER BY created_at LIMIT 1', [t.template_id]);
+    if (used) throw new HttpError(409, `This template is used by the automatic message "${used.name}". Choose another template for it, or remove it, first.`, { code: 'IN_USE' });
+    await db.query('UPDATE message_templates SET archived = true, updated_at = now() WHERE template_id = $1', [t.template_id]);
+  });
   await audit(null, req.user, 'template.archived', 'message_template', t.template_id);
   res.json({ ok: true });
 }));
@@ -552,12 +556,17 @@ router.post('/automations', owners, ah(async (req, res) => {
   const body = validate(req.body, automationSpec);
   await checkAutomationName(req.user.organization_id, body.name);
   if (DAY_TRIGGERS.includes(body.trigger_event) && body.offset_days === null) throw validationError({ offset_days: 'Enter the number of days.' });
-  const tpl = await loadTemplate(req.user, body.template_id);
-  if (tpl.archived) throw validationError({ template_id: "Choose a template that hasn't been deleted." });
-  const a = await one(
-    `INSERT INTO automations (organization_id, template_id, name, trigger_event, offset_days, send_time, enabled)
-     VALUES ($1,$2,$3,$4,$5,COALESCE($6::time, '10:00'),$7) RETURNING *`,
-    [req.user.organization_id, body.template_id, body.name, body.trigger_event, body.offset_days || 0, body.send_time, body.enabled]);
+  await loadTemplate(req.user, body.template_id);
+  // Locks the template row so it can't be archived between the check and the insert.
+  const a = await tx(async (db) => {
+    const { rows: [tpl] } = await db.query('SELECT archived FROM message_templates WHERE template_id = $1 FOR UPDATE', [body.template_id]);
+    if (!tpl || tpl.archived) throw validationError({ template_id: "Choose a template that hasn't been deleted." });
+    const { rows: [row] } = await db.query(
+      `INSERT INTO automations (organization_id, template_id, name, trigger_event, offset_days, send_time, enabled)
+       VALUES ($1,$2,$3,$4,$5,COALESCE($6::time, '10:00'),$7) RETURNING *`,
+      [req.user.organization_id, body.template_id, body.name, body.trigger_event, body.offset_days || 0, body.send_time, body.enabled]);
+    return row;
+  });
   await audit(null, req.user, 'automation.created', 'automation', a.automation_id, { enabled: a.enabled });
   res.status(201).json({ automation: a });
 }));
@@ -572,21 +581,24 @@ router.patch('/automations/:id', owners, ah(async (req, res) => {
   const keys = Object.keys(body).filter((k) => body[k] !== null);
   // Only the fields whose stored value really changed are written and logged, by name; a save with no change writes nothing.
   const fields = changedKeys(a, Object.fromEntries(keys.map((k) => [k, body[k]])));
-  if (body.template_id) {
+  if (body.template_id) await loadTemplate(req.user, body.template_id);
+  // The template row is locked while the archived check and the write run, so it can't be deleted in between.
+  await tx(async (db) => {
+    const { rows: [tpl] } = await db.query('SELECT archived FROM message_templates WHERE template_id = $1 FOR UPDATE', [body.template_id || a.template_id]);
     // A deleted template can't be chosen, and an automatic message whose template was deleted can't be turned on.
-    if ((await loadTemplate(req.user, body.template_id)).archived) throw validationError({ template_id: "Choose a template that hasn't been deleted." });
-  } else if (body.enabled === true && !a.enabled
-    && (await one('SELECT archived FROM message_templates WHERE template_id = $1', [a.template_id])).archived) {
-    throw new HttpError(409, "This automatic message's template was deleted. Choose a template first.", { code: 'TEMPLATE_DELETED' });
-  }
-  if (fields.length) {
+    if (body.template_id) {
+      if (tpl?.archived) throw validationError({ template_id: "Choose a template that hasn't been deleted." });
+    } else if (body.enabled === true && !a.enabled && tpl?.archived) {
+      throw new HttpError(409, "This automatic message's template was deleted. Choose a template first.", { code: 'TEMPLATE_DELETED' });
+    }
+    if (!fields.length) return;
     // Turning an automation on (again) starts counting from now, so it never
     // catches up on stays whose send time passed while it was off.
     const restart = body.enabled === true && !a.enabled ? ', created_at = now()' : '';
-    await query(`UPDATE automations SET ${fields.map((k, i) => `${k} = $${i + 2}`).join(', ')}${restart} WHERE automation_id = $1`,
+    await db.query(`UPDATE automations SET ${fields.map((k, i) => `${k} = $${i + 2}`).join(', ')}${restart} WHERE automation_id = $1`,
       [a.automation_id, ...fields.map((k) => body[k])]);
-    await audit(null, req.user, 'automation.updated', 'automation', a.automation_id, { fields, name: a.name });
-  }
+  });
+  if (fields.length) await audit(null, req.user, 'automation.updated', 'automation', a.automation_id, { fields, name: a.name });
   res.json({ automation: await loadAutomation(req.user, a.automation_id) });
 }));
 

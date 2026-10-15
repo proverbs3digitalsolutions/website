@@ -1,6 +1,6 @@
 'use strict';
 
-// QA round 9, lane C13 (shell-nav): tab focus when a view builds a whole new tablist (#45, K11), the menu in groups (#35, #51),
+// QA round 9, lane C13 (shell-nav): the menu in groups (#35, #51),
 // the router's blank-segment rule (K6) and the trial banner (K17). Frontend-only: no database.
 
 const fs = require('node:fs');
@@ -20,62 +20,7 @@ const fnSrc = (name) => {
   throw new Error(`${name} has no closing brace`);
 };
 
-// ---- restoreTabFocus with a rebuilt tablist
-const restore = new Function(`${fnSrc('restoreTabFocus')}; return restoreTabFocus;`)();
-function tabs(doc, label, n = 3) {
-  const list = { isConnected: true, getAttribute: (k) => (k === 'aria-label' ? label : null) };
-  list.tabs = Array.from({ length: n }, (_, i) => ({ i, isConnected: true, focus() { doc.activeElement = this; } }));
-  list.querySelectorAll = () => list.tabs;
-  return list;
-}
-function world() {
-  const doc = { body: { isConnected: true }, lists: [] };
-  doc.activeElement = doc.body;
-  doc.querySelectorAll = () => doc.lists;
-  return doc;
-}
-
-test('a disconnected tablist hands focus to the connected one with the same aria-label', () => {
-  const doc = world();
-  const other = tabs(doc, 'Other');
-  const old = tabs(doc, 'Status');
-  doc.lists = [other, old];
-  const oldTab = old.tabs[1]; oldTab.focus();
-  assert.equal(restore(old, 1, oldTab, doc, 1), false, 'not redrawn yet');
-  old.isConnected = false; oldTab.isConnected = false; doc.activeElement = doc.body;
-  const fresh = tabs(doc, 'Status');
-  doc.lists = [other, fresh];
-  assert.equal(restore(old, 1, oldTab, doc, 1), true);
-  assert.equal(doc.activeElement, fresh.tabs[1]);
-});
-
-test('without a label the new tablist at the same place in the page takes over', () => {
-  const doc = world();
-  const old = tabs(doc, null);
-  const oldTab = old.tabs[2];
-  old.isConnected = false; oldTab.isConnected = false;
-  const fresh = tabs(doc, null);
-  doc.lists = [tabs(doc, 'Other'), fresh];
-  assert.equal(restore(old, 2, oldTab, doc, 1), true);
-  assert.equal(doc.activeElement, fresh.tabs[2]);
-});
-
-test('no replacement tablist yet keeps polling; the user moving on leaves focus alone', () => {
-  const doc = world();
-  const old = tabs(doc, 'Status'); old.isConnected = false;
-  assert.equal(restore(old, 0, old.tabs[0], doc, 0), false);
-  assert.equal(doc.activeElement, doc.body);
-  const elsewhere = { isConnected: true };
-  doc.activeElement = elsewhere;
-  doc.lists = [tabs(doc, 'Status')];
-  assert.equal(restore(old, 0, old.tabs[0], doc, 0), true);
-  assert.equal(doc.activeElement, elsewhere);
-});
-
-test('the click handler passes the tablist position', () => {
-  assert.match(src, /listIndex = \[\.\.\.document\.querySelectorAll\('\[role="tablist"\]'\)\]\.indexOf\(list\)/);
-  assert.match(src, /restoreTabFocus\(list, index, oldTab, document, listIndex\)/);
-});
+// restoreTabFocus (focus for a rebuilt tablist) was replaced by the single focus guard (QA r13 F01): see qa-r13-f01.test.js and qa-r10-c01.test.js (h).
 
 // ---- menu groups
 const navSrc = src.slice(src.indexOf('const NAV_SHORT'), src.indexOf('// Trial / read-only'));

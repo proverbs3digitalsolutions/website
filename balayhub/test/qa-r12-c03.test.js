@@ -67,8 +67,8 @@ test('#5 #7 Edit has the source box (optional), shown only for direct, null for 
 });
 
 test('list requests and the export link use apiFilters, never changed()', () => {
-  assert.match(res, /get\(`\/reservations\$\{qs\(apiFilters\(filters, defaults\)\)\}`\)/);
-  assert.match(res, /\/api\/reservations\/export\$\{qs\(apiFilters\(filters, defaults\)\)\}/);
+  assert.match(res, /get\(`\/reservations\$\{qs\(apiFilters\(filters\)\)\}`\)/);
+  assert.match(res, /\/api\/reservations\/export\$\{qs\(apiFilters\(filters\)\)\}/);
   assert.doesNotMatch(res, /get\(`[^`]*qs\(changed\(/);
 });
 

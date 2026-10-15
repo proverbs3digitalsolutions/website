@@ -148,6 +148,7 @@ router.put('/cleaner-rates', owners, ah(async (req, res) => {
     const same = await teamMemberByName({ query }, org, body.assignee_name);
     if (same) throw validationError({ assignee_name: 'That name belongs to someone on your team. Pick them from the team list instead.' });
   }
+  // An outside name typed in other capitals keeps the spelling already saved: past pay is filed under it (#50).
   const rate = body.user_id
     ? await one(`INSERT INTO cleaner_rates (organization_id, user_id, rate_type, amount) VALUES ($1, $2, $3, $4)
         ON CONFLICT (organization_id, user_id) WHERE user_id IS NOT NULL
@@ -155,7 +156,7 @@ router.put('/cleaner-rates', owners, ah(async (req, res) => {
         RETURNING rate_id`, [org, body.user_id, body.rate_type, body.amount])
     : await one(`INSERT INTO cleaner_rates (organization_id, assignee_name, rate_type, amount) VALUES ($1, $2, $3, $4)
         ON CONFLICT (organization_id, lower(assignee_name)) WHERE assignee_name IS NOT NULL
-        DO UPDATE SET assignee_name = EXCLUDED.assignee_name, rate_type = EXCLUDED.rate_type, amount = EXCLUDED.amount, updated_at = now()
+        DO UPDATE SET rate_type = EXCLUDED.rate_type, amount = EXCLUDED.amount, updated_at = now()
         RETURNING rate_id`, [org, body.assignee_name, body.rate_type, body.amount]);
   await audit(null, req.user, 'cleaner_rate.saved', 'cleaner_rate', rate.rate_id, { rate_type: body.rate_type, amount: body.amount });
   const saved = await one(`${RATE_SELECT} WHERE r.rate_id = $1 AND r.organization_id = $2`, [rate.rate_id, org]);

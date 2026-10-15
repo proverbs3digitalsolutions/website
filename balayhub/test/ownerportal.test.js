@@ -462,7 +462,7 @@ test('profit and loss shows the owner\'s own units; an owner with no units sees 
   assert.equal(r.status, 200, JSON.stringify(r.data));
   assert.equal(r.data.rows.length, 1);
   assert.equal(r.data.rows[0].unit_id, unitB.unit_id, 'Ben sees only unit 805');
-  assert.ok(!r.data.rows.some((row) => row.unit_name === 'Not linked to a unit'));
+  assert.ok(!r.data.rows.some((row) => row.unit_name === 'Whole-property expenses'));
 
   // Maria was switched off earlier; invite her again for her own table.
   outbox.length = 0;

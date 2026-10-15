@@ -123,7 +123,7 @@ test('the view asks before a unit moves, names the move, and resends with move_u
   // Cancel returns false, so the form stays open with nothing posted.
   assert.match(move, /return confirmDialog\(/);
   assert.equal((src.match(/if \(!await moveConfirmed\(err, d\.full_name\)\) return false;/g) || []).length, 2, 'add and edit both ask');
-  assert.equal((src.match(/\{ \.\.\.body, move_units: true \}/g) || []).length, 2, 'add and edit both resend with move_units');
+  assert.equal((src.match(/extra = \{ \.\.\.extra, move_units: true \};/g) || []).length, 2, 'add and edit both resend with move_units');
 });
 
 test('a new owner\'s fee box starts empty, the label says what the fee is, and an owner-operator is told they don\'t need this page (#25)', () => {

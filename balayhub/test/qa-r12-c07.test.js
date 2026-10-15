@@ -84,7 +84,7 @@ test('K7 automatic messages with the same created_at come back in stay order, th
 test('#16 #17 #40 source: the all-off line, the language link, the mode click focuses the message box', () => {
   assert.match(view, /These automatic messages are ready but off\. Check each one's wording, then turn on the ones you want\./);
   assert.match(view, /automations\.every\(\(a\) => !a\.enabled\)/);
-  assert.match(view, /Guest messages are in English or Taglish\. Change it in ', h\('a', \{ href: '#\/settings' \}, 'Settings, Language for guests'\)/);
+  assert.match(view, /Guest messages are in English or Taglish\. Change it in ', h\('a', \{ class: 'link-tap', href: '#\/settings' \}, 'Settings, Language for guests'\)/);
   assert.match(view, /href: '#\/settings'/);
   assert.match(view, /onclick: \(\) => \{ setMode\(k\); body\.focus\(\); \}/);
   assert.match(view, /Template deleted, choose another/);

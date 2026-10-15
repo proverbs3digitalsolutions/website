@@ -47,8 +47,11 @@ function toTicket(msgs) {
 
 export function closeAssistant() {
   if (!panel) return;
+  const hadFocus = panel.contains(document.activeElement);
   panel.hidden = true;
-  document.querySelector('.assist-fab')?.setAttribute('aria-expanded', 'false');
+  const fab = document.querySelector('.assist-fab');
+  fab?.setAttribute('aria-expanded', 'false');
+  if (hadFocus) fab?.focus(); // closing the panel gives focus back to the Ask button, not the page body
 }
 
 export function openAssistant(question) {

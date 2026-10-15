@@ -228,7 +228,7 @@ export async function stayReportsView(el, { query = {} }) {
             h('td', null, u.unit_name, h('div', { class: 'muted small' }, u.property_name)),
             h('td', { class: 'num' }, String(u.nights)), h('td', { class: 'num' }, pct(u.occupancy)), h('td', { class: 'num' }, peso(u.adr)),
             h('td', { class: 'num' }, peso(u.revenue)), h('td', { class: 'num' }, peso(u.fees)), h('td', { class: 'num' }, peso(u.channel_fees)), h('td', { class: 'num' }, peso(u.expenses)), h('td', { class: 'num' }, peso(u.net)))),
-          Number(r.building_expenses) > 0 && h('tr', null, h('td', { colspan: 7 }, 'Building-level expenses (dues etc.)'), h('td', { class: 'num' }, peso(r.building_expenses)), h('td', null, '')))))));
+          Number(r.building_expenses) > 0 && h('tr', null, h('td', { colspan: 7 }, 'Whole-property expenses (dues etc.)'), h('td', { class: 'num' }, peso(r.building_expenses)), h('td', null, '')))))));
   }
   const bar = filterBar({
     key: 'stay-reports', values: filters, defaults, onChange: load,

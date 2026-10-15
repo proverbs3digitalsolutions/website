@@ -85,7 +85,8 @@ export async function dailyCloseView(el, { query, rerender }) {
   el.replaceChildren(
     h('div', { class: 'page-head' },
       h('div', { class: 'page-head__title' }, h('h1', null, 'Daily close'), h('p', null, 'Check the day is wrapped up, then close it')),
-      h('div', { class: 'page-head__actions' }, picker, closed?.can_change && h('button', { class: 'btn btn--secondary', onclick: reopen }, 'Reopen day'), (!closed || closed.can_change) && h('button', { class: 'btn btn--primary', onclick: closeDay }, closed ? 'Update close' : 'Close the day'))),
+      // The group names the header's buttons, so after Reopen day the focus guard lands on Close the day (its shared fallback).
+      h('div', { class: 'page-head__actions', role: 'group', 'aria-label': 'Daily close actions' }, picker, closed?.can_change && h('button', { class: 'btn btn--secondary', 'data-focus-key': 'dc-reopen', onclick: reopen }, 'Reopen day'), (!closed || closed.can_change) && h('button', { class: 'btn btn--primary', 'data-focus-key': 'dc-close', onclick: closeDay }, closed ? 'Update close' : 'Close the day'))),
     message && h('div', { class: 'alert alert--warn', id: 'dc-date-msg', role: 'alert' }, message),
     closed
       ? h('div', { class: 'alert alert--ok', role: 'status' }, `Closed ${fmtDateTime(closed.closed_at)} by ${closed.closed_by_name || 'a team member'}${closed.note ? `: ${closed.note}` : ''}`)

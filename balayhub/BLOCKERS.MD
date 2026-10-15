@@ -2,7 +2,7 @@
 
 Things only the founder can do or decide before related work can go ahead. Automated runs add items here. The founder clears them by doing the item and ticking it, or by writing the decision in DECISIONS.MD.
 
-Last updated: 2026-10-15 (QA round 12 questions added; earlier rounds unchanged apart from one inline note)
+Last updated: 2026-10-15 (QA round 13 questions added, two founder items answered; earlier rounds unchanged apart from inline notes)
 
 ## Security — do first
 
@@ -77,7 +77,7 @@ Each one has the default we will use if you don't answer. None of them stops the
 - [ ] **Sign-up and taken emails.** Sign-up says an email is already registered, which tells anyone that address has an account. Keep the friendly message, or use a neutral one? *Default: keep it, as most apps do.* *Round 7: team invites say the same ("This email already has a BalayHub account"), so the same answer covers both (D-83).*
 
   Asked again in round 4.
-- [ ] **Building-wide expenses on statements.** Expenses for the whole building (such as association dues) never reach an owner statement; they only show on your profit and loss as "Not linked to a unit". Is that what you want? *Default: keep it (D-44).*
+- [ ] **Building-wide expenses on statements.** Expenses for the whole building (such as association dues) never reach an owner statement; they only show on your profit and loss as "Whole-property expenses" (renamed from "Not linked to a unit" in round 13). Is that what you want? *Default: keep it (D-44).*
 - [ ] **Cleaner pay in the owner portal.** The owner portal's recent activity lists cleaner pay as an expense, but statements never deduct it. Hide it from owners, or deduct it on statements? *Default: hide it from the owner portal activity.*
 - [ ] **Bottom tab bar on tablets.** The phone bottom tab bar also shows at tablet width (768px). Is that intended? *Default: keep it.*
 - [ ] **Live Reyes manual-payment instructions.** During QA the Reyes manual-payment instructions were cleared on the local test copy only (no live data was touched). If the live Reyes workspace has instructions, please check they are still there. *Default: nothing to do unless you see them missing.*
@@ -298,12 +298,31 @@ Every question has its default already applied in the app; nothing waits on the 
 - [ ] **Owner portal language.** Should the owner portal be Taglish? Today it is English throughout, because a mixed Taglish heading over an English body was worse. The two strings that were translated are English again. *Default: English.*
 - [ ] **Who finished a clean.** A cleaner's task list still sends `completed_by_name`, so a cleaner can see who finished another cleaner's job. May they? Or should a cleaner see only "Done by you" and "Done"? *Default: unchanged (names shown).*
 - [ ] **Bulk price changes.** Saving one nightly rate above ₱50,000 now asks "Save anyway?". "Change prices by %" can push many nights over that in one go and does not ask yet. Should it ask when any result is above ₱50,000? *Default: no question on bulk percent changes.*
-- [ ] **High nightly rate.** Is ₱50,000 the right limit for the "Save anyway?" question, or should it refuse above some amount instead? *Default: ask above ₱50,000, refuse nothing.*
-- [ ] **Host app language.** A host who signs up in Tagalog gets an English app (only guest pages and the verify screens switch). Should the host app offer Tagalog? *Default: English.*
-- [ ] **Starter plan and a 3-unit host.** Starter allows 2 short-term listings, so a host with 3 units needs Growth (₱999 a month). Is that right for the alpha? *Default: unchanged (D-03).*
+- [ ] **High nightly rate.** Is ₱50,000 the right limit for the "Save anyway?" question, or should it refuse above some amount instead? *Default: ask above ₱50,000, refuse nothing.* *Round 13 applied the same limit to add-ons and booking totals; see round 13 question 3.*
+- [ ] **Host app language.** A host who signs up in Tagalog gets an English app (only guest pages and the verify screens switch). Should the host app offer Tagalog? *Default: English.* *Raised again in round 13 (#36, #37).*
+- [ ] **Starter plan and a 3-unit host.** Starter allows 2 short-term listings, so a host with 3 units needs Growth (₱999 a month). Is that right for the alpha? *Default: unchanged (D-03).* *Raised again in round 13 (#36, #37).*
 - [ ] **Automatic messages start off.** The page now says the four starter messages are ready but off. Should they start on instead? *Default: off, with the line.*
 - [ ] **Rent filters for small hosts.** With 3 or fewer units, Month and Property sit under More filters. OK? *Default: yes.*
 - [ ] **Supply row buttons.** Each supply shows Add stock and Record use. Count, History, Edit and Archive are under More. OK? *Default: yes.*
 - [ ] **Where did they book?** A direct booking still asks where the guest found you, now marked optional. Fold it into Booked through instead? *Default: keep, optional.*
 - [ ] **Record payment method.** A direct booking's payment now starts with no method and the host must pick one. Or remember the last method used? *Default: no method.*
 - [ ] **Taglish check (native speaker).** Please check: "Code ng pinto"; "Kasama: ..." and the price-rule names; "Hanggang 50 na guests lang ang puwede."; and the verify screens (Check your email, "I've verified, continue", Resend). The setup screens and the owner portal are English for now. *Default: as written.*
+
+## Questions from QA round 13 (2026-10-15)
+
+Every question has its default already applied in the app; nothing waits on the answer. The two earlier questions about "Host app language" and "Starter plan" (round 12) were raised again this round and stay open.
+
+- [ ] **Gate pass contact.** The gate pass shows the owner's account email to the building admin and guard. Keep that, or add a contact field (name, phone, email) to the gate pass settings? *Default: account email.*
+- [ ] **Owner email shared by two owners.** Saving an owner whose email another owner already uses now asks "Save anyway?" instead of refusing. Should it be refused? *Default: ask.*
+- [ ] **High amounts.** Add-on prices above ₱50,000, and booking totals that work out above ₱50,000 a night, now ask "Save anyway?" (so do seasons with a fixed price above that). Are those the right limits? *Default: ₱50,000.*
+- [ ] **Publish and send in one step.** An owner statement is published, sent and the payout recorded as three separate steps. Add a "Publish and send" button? *Default: separate.*
+- [ ] **Paying after check-out.** A guest who still owes money after the stay cannot pay online; the page tells them to contact the host. Is that intended? *Default: unchanged.*
+- [ ] **Small-host folds.** With 3 or fewer listings the Calendar folds its filters and colour legend; an owner's Home with no reservations leads with "Connect your calendar" and folds the charts under "Trends and revenue". OK? *Default: yes.*
+- [ ] **First-run card for managers and staff.** The "Connect your calendar" card shows to owners only. Should a manager or staff member with no reservations see it too? It needs a reservation count on a Home endpoint. *Default: owners only.*
+- [ ] **Identical seasons saved at the same instant.** Two identical seasons sent in the same moment can both save (no database lock yet). Add a unique index? *Default: leave it; it needs a deliberate double-click.*
+- [ ] **Theme buttons and small landing buttons.** The theme buttons measure about 33px high (D-88: pass the 24px minimum); the public landing page's small buttons and links are still under 44px on phones. Bring them to 44px? *Default: leave as is.*
+
+### Answered by the founder (round 13)
+
+- [x] **Sidebar jumps to the top on every click.** Reported by the founder 2026-10-15. Fixed in round 13: the menu is kept when you change page, its scroll position and the More tools fold stay where they were, and a new page starts at the top once. Confirmed in the re-verify at 1280x900 and 1366x768 (D-89).
+- [x] **A top bar like Guesty's.** Founder decision 2026-10-15: global search in the middle; bookmarks, "+" add new, notifications, help and the profile on the upper right. Recorded as D-90 (overrides D-85's "Guesty features out of scope" for this item only); planned for round 14 (PRD).

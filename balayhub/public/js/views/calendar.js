@@ -50,6 +50,9 @@ export function nightTaken(bookings, unitId, date) {
   return bookings.find((b) => b.unit_id === unitId && b.check_in <= date && date < b.check_out) || null;
 }
 
+// A host with 3 or fewer listings gets the filters and the colour legend folded away (QA round 13, #43, D-85).
+export const compactCalendarFilters = (listingCount) => listingCount <= 3;
+
 export async function calendarView(el, { query }) {
   const canManage = state.user.role !== 'staff';
   const view = { start: calendarStart(query.start), days: Number(query.days) === 30 ? 30 : 14 };
@@ -147,6 +150,7 @@ export async function calendarView(el, { query }) {
         const price = p ? p.price : rates.has(`${l.unit_id}|${d}`) ? rates.get(`${l.unit_id}|${d}`) : l.nightly_rate;
         const why = p?.label ? ` (${p.label})` : '';
         return h('button', {
+          'data-focus-key': `cal-night-${l.unit_id}-${d}`,
           class: `cal-cell${d < data.today ? ' is-past' : ''}${d === data.today ? ' is-today' : ''}${rates.has(`${l.unit_id}|${d}`) ? ' has-override' : ''}${p && ['holiday', 'season', 'weekend'].includes(p.kind) ? ` is-${p.kind}` : ''}`,
           type: 'button', 'aria-label': `${l.unit_name}, ${fmtDate(d)}, ${shortPeso(price) || 'no rate'}${why}`, title: price ? `${shortPeso(price)}${why}` : null,
           onclick: () => cellMenu(l, d, price, p, rates.has(`${l.unit_id}|${d}`)),
@@ -161,6 +165,7 @@ export async function calendarView(el, { query }) {
         const isBlock = b.kind === 'block';
         const locked = !isBlock && b.from_channel;
         return h('button', {
+          'data-focus-key': `cal-booking-${b.booking_id}`,
           type: 'button',
           draggable: canManage && !isBlock ? 'true' : null,
           ondragstart: (e) => {
@@ -297,13 +302,16 @@ export async function calendarView(el, { query }) {
     h('span', { class: 'cal-legend__item' }, h('span', { class: 'cal-swatch cal-swatch--holiday' }), 'Holiday rate'),
     h('span', { class: 'cal-legend__item' }, h('span', { class: 'cal-swatch cal-swatch--season' }), 'Season rate'));
 
+  const compact = compactCalendarFilters(meta.length);
+  // Folded: the filter bar (with its chips) sits in "Filter", open while a filter is set; the legend in "What the colours mean".
+  const fold = (text, content, open) => (compact ? h('details', { class: 'form-section', open: open ? true : null }, h('summary', null, text), content) : content);
   el.replaceChildren(
     h('div', { class: 'page-head' },
       h('div', { class: 'page-head__title' }, h('h1', null, 'Calendar'), h('p', null, canManage ? 'Tap an open night to book, block or change its price' : 'See who is staying and which nights are open. Booking and price changes are for owners and managers.')),
       canManage && h('div', { class: 'page-head__actions' },
         h('a', { class: 'btn btn--secondary', href: '#/pricing' }, '₱ Pricing rules'),
         h('button', { class: 'btn btn--primary', onclick: () => newReservationModal({ onSaved: load }) }, icon('plus'), 'New reservation'))),
-    filterBar({
+    fold('Filter', filterBar({
       key: 'calendar', values: filters, defaults, onChange: async () => { await loadTagUnits(); if (lastData) render(lastData); },
       search: { placeholder: 'Search listings' },
       quick: [
@@ -315,7 +323,7 @@ export async function calendarView(el, { query }) {
         types.length > 1 && { name: 'unit_type', label: 'Listing type', all: 'All types', options: types.map((t) => [t, label(t)]) },
         { name: 'cleaning', label: 'Cleaning', all: 'Any', options: [['dirty', 'Needs cleaning'], ['clean', 'Clean']] },
       ].filter(Boolean),
-    }),
+    }), Object.keys(changed(filters, defaults)).length > 0),
     h('div', { class: 'toolbar' },
       h('div', { class: 'chips' },
         h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': 'Earlier', onclick: () => { view.start = addDays(view.start, -7); load(); } }, '‹'),
@@ -325,7 +333,7 @@ export async function calendarView(el, { query }) {
         dateInput,
         h('select', { class: 'input input--sm', 'aria-label': 'Days shown', onchange: (e) => { view.days = Number(e.target.value); load(); } },
           h('option', { value: 14, selected: view.days === 14 }, '14 days'), h('option', { value: 30, selected: view.days === 30 }, '30 days')))),
-    legend,
+    fold('What the colours mean', legend, false),
     h('div', { class: 'card card--flush' }, grid));
   await load();
 }

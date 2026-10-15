@@ -1,6 +1,6 @@
 // Pricing rules: how nightly prices are worked out, seasons, and the PH holiday calendar.
 
-import { get, post, patch, qs } from '../api.js';
+import { get, post, patch, qs, ApiError } from '../api.js';
 import { h, peso, parseAmount, fmtDate, field, formModal, openModal, confirmDialog, emptyState, pageHead, toast, todayManila, showErrors } from '../ui.js';
 import { highRateOk } from '../rates.js';
 import { state } from '../app.js';
@@ -67,6 +67,15 @@ export const clashText = (c) => {
   if (c.takeovers.length) return `${head}: ${c.wins === 'this' ? `this season beats ${c.name}` : `${c.name} beats this season`} on the nights they share, except where ${c.takeovers.join(' or ')} takes over.`;
   return `${head}: ${c.wins === 'this' ? 'this season' : c.name} wins the shared nights.`;
 };
+// The preview line for a shared night: the season that lost first, the one that won last ("A also covers this night, but B takes it.").
+export const overlapLine = (winner, ...losers) => `${losers.join(', ')} also cover${losers.length === 1 ? 's' : ''} this night, but ${winner} takes it.`;
+// The chosen price mode needs its own box filled; the server can't see the mode, so the view says which box (QA round 13, #31).
+export function seasonModeProblem({ mode, nightly_rate: rate, adjust_pct: pct }) {
+  const blank = (v) => v === undefined || v === null || String(v).trim() === '';
+  if (mode === 'fixed' && blank(rate)) return { nightly_rate: 'Enter a nightly rate for a fixed price.' };
+  if (mode === 'pct' && blank(pct)) return { adjust_pct: 'Enter a percentage change.' };
+  return null;
+}
 const pctNum = (v) => (v === '' || v === undefined || v === null ? v : Number(v));
 
 export async function pricingView(el, { rerender }) {
@@ -90,12 +99,16 @@ export async function pricingView(el, { rerender }) {
         field({ name: 'adjust_pct', label: 'Change (%)', type: 'number', min: -90, max: 300, step: 1, inputmode: 'numeric', hint: 'From -90 to 300. Use a minus for a discount, e.g. -10.' })),
       field({ name: 'min_nights', label: 'Minimum nights', type: 'number', min: 1, max: 60, inputmode: 'numeric', hint: 'For stays that include any of these nights.' }),
     ],
-    onSubmit: async (d) => {
+    onSubmit: async (d, { form }) => {
       const { price_mode: mode, ...body } = d;
+      const problem = seasonModeProblem({ mode, ...d });
+      if (problem) throw new ApiError('Please check the highlighted fields.', { status: 400, code: 'VALIDATION', fields: problem });
       if (mode !== 'fixed') body.nightly_rate = '';
       if (mode !== 'pct') body.adjust_pct = '';
       else body.adjust_pct = pctNum(body.adjust_pct);
       if (body.adjust_pct === '') delete body.adjust_pct;
+      // A fixed price above the ceiling is asked about first; "Change it" keeps this dialog open with the price box focused.
+      if (mode === 'fixed' && !await highRateOk(parseAmount(body.nightly_rate))) { form.elements.nightly_rate.focus(); return false; }
       const { overlaps } = await post('/pricing/seasons', body);
       const clash = overlaps.map((o) => `${o.name}${o.on ? ` on ${o.on}` : ''}`);
       toast(clash.length ? `Season saved. It overlaps ${clash.join(', ')}.` : 'Season saved.'); rerender();
@@ -243,7 +256,7 @@ export async function pricingView(el, { rerender }) {
 // Other seasons that cover a night a season priced, and so lost to it.
 function losingSeasons(n, seasons, unitId) {
   const lost = seasons.filter((s) => (!s.unit_id || s.unit_id === unitId) && prices(s) && s.start_date <= n.date && s.end_date >= n.date && s.name !== n.label);
-  return lost.length ? h('p', { class: 'muted small' }, `Also covers this night, but ${n.label} wins: ${lost.map((s) => s.name).join(', ')}.`) : null;
+  return lost.length ? h('p', { class: 'muted small' }, overlapLine(n.label, ...lost.map((s) => s.name))) : null;
 }
 function previewCard(listings, seasons) {
   const out = h('div', { 'aria-live': 'polite' });

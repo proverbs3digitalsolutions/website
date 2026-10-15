@@ -18,23 +18,7 @@ test.before(async () => {
   ui = await import(pathToFileURL(path.join(dir, 'ui.js')));
 });
 
-const el = (tagName, attrs = {}, text = '', isConnected = true) => ({
-  tagName, isConnected, textContent: text, getAttribute: (k) => attrs[k] ?? null,
-});
-
-test('sameControl finds the new control by tag and aria-label, else by text, else null', () => {
-  const old = el('BUTTON', { 'aria-label': 'Mark paid' }, 'x', false);
-  const fresh = el('BUTTON', { 'aria-label': 'Mark paid' });
-  const other = el('BUTTON', { 'aria-label': 'Undo' });
-  const doc = { querySelectorAll: (t) => (t === 'button' ? [other, fresh] : []) };
-  assert.equal(ui.sameControl(old, doc), fresh);
-  const oldText = el('BUTTON', {}, ' Record ', false);
-  const byText = el('BUTTON', {}, 'Record');
-  assert.equal(ui.sameControl(oldText, { querySelectorAll: () => [other, byText] }), byText);
-  assert.equal(ui.sameControl(oldText, { querySelectorAll: () => [other] }), null);
-  assert.equal(ui.sameControl(el('A', {}, '', false), { querySelectorAll: () => [other] }), null);
-  assert.equal(ui.sameControl(null, doc), null);
-});
+// sameControl (find the new control by tag and name) was replaced by focusKeyOf/pickFocusMatch and the focus guard: see qa-r13-f01.test.js.
 
 test('dateOutOfRange refuses years outside 2000 to 2100', () => {
   assert.equal(ui.dateOutOfRange('1900-01-01'), true);
@@ -48,8 +32,8 @@ test('dateOutOfRange refuses years outside 2000 to 2100', () => {
 
 test('source: dialogs restore focus, confirm swaps the saving label, summaries, toasts, thumbnails', () => {
   const modal = src.slice(src.indexOf('export function openModal'), src.indexOf('export function confirmDialog'));
-  assert.match(modal, /const opener = document\.activeElement/);
-  assert.match(modal, /keepFocus\(opener/);
+  assert.match(modal, /const hadOpener = Boolean\(document\.activeElement/);
+  assert.doesNotMatch(modal, /keepFocus/);
   const confirm = src.slice(src.indexOf('export function confirmDialog'), src.indexOf('// ---------------------------------------------------------------- forms'));
   assert.match(confirm, /b\.textContent = b\.dataset\.ownLabel/);
   assert.match(confirm, /= 'Saving…'/);
@@ -61,5 +45,4 @@ test('source: dialogs restore focus, confirm swaps the saving label, summaries, 
   assert.match(src, /clearSuccessToasts\(\);\s*\n\s*if \(err instanceof ApiError\)/);
   assert.match(src, /class: 'file-thumb'/);
   assert.match(src, /startsWith\('image\/'\)/);
-  assert.match(src, /document\.addEventListener\('click'/);
 });

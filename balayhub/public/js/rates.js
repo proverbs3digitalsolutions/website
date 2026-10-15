@@ -13,3 +13,23 @@ export async function highRateOk(amount) {
     title: 'Check the nightly rate', text: `This is ${peso(n)} a night. Save anyway?`, confirmText: 'Save anyway', cancelText: 'Change it',
   }));
 }
+
+// A booking total that works out above the ceiling a night asks the same question (QA round 13). 60,000 for 2 nights
+// is 30,000 a night and goes ahead.
+export async function highStayTotalOk(total, nights) {
+  if (!Number.isFinite(total) || !Number.isInteger(nights) || nights < 1 || total / nights <= HIGH_NIGHTLY_RATE) return true;
+  return Boolean(await confirmDialog({
+    title: 'Check the total',
+    text: `This is ${peso(total / nights)} a night (${peso(total)} for ${nights} night${nights === 1 ? '' : 's'}). Save anyway?`,
+    confirmText: 'Save anyway', cancelText: 'Change it',
+  }));
+}
+
+// An add-on price above the same ceiling asks before it is saved (QA round 13).
+export async function highAddonPriceOk(amount) {
+  const n = parseAmount(amount);
+  if (!Number.isFinite(n) || n <= HIGH_NIGHTLY_RATE) return true;
+  return Boolean(await confirmDialog({
+    title: 'Check the price', text: `This add-on costs ${peso(n)}. Save anyway?`, confirmText: 'Save anyway', cancelText: 'Change it',
+  }));
+}

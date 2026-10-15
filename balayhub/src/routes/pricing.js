@@ -84,6 +84,18 @@ router.post('/pricing/seasons', managers, ah(async (req, res) => {
   let unit = null;
   if (body.unit_id) unit = await loadUnit(req.user, body.unit_id);
   else if (req.user.role !== 'owner') throw validationError({ unit_id: 'Choose a listing. Only the owner can set seasons for every listing.' });
+  // An identical season (same scope, name ignoring case and spaces, dates and price settings) is refused, not saved twice (QA round 13 #29).
+  // ponytail: check then insert with no lock; two identical saves in the same instant can both pass. A unique index on these fields closes it.
+  const twin = await one(
+    `SELECT season_id FROM seasons
+      WHERE organization_id = $1 AND unit_id IS NOT DISTINCT FROM $2::uuid AND lower(trim(name)) = lower(trim($3))
+        AND start_date = $4 AND end_date = $5 AND nightly_rate IS NOT DISTINCT FROM $6
+        AND adjust_pct IS NOT DISTINCT FROM $7 AND min_nights IS NOT DISTINCT FROM $8`,
+    [req.user.organization_id, body.unit_id, body.name, body.start_date, body.end_date, body.nightly_rate, body.adjust_pct, body.min_nights]);
+  if (twin) {
+    const msg = 'You already saved this season.';
+    throw new HttpError(409, msg, { code: 'DUPLICATE', fields: { name: msg } });
+  }
   const { rows: [{ n }] } = await query('SELECT COUNT(*)::int AS n FROM seasons WHERE organization_id = $1 AND end_date >= $2', [req.user.organization_id, manilaToday()]);
   if (n >= 200) throw new HttpError(409, 'You have too many upcoming seasons. Remove some first.', { code: 'LIMIT' });
   // Overlaps are allowed, and the saver is told which season prices each shared night (D-66, D-76). A listing

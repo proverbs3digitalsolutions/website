@@ -35,7 +35,7 @@ export async function gatepassSettingsView(el, { rerender }) {
       h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, p.property_name),
         h('span', { class: 'row__sub' }, p.admin_email ? `${p.admin_email} · ${p.gatepass_enabled ? `automatic, ${p.gatepass_days_before === 0 ? 'on check-in day' : `${p.gatepass_days_before} day${p.gatepass_days_before > 1 ? 's' : ''} before`}` : 'send by hand from each reservation'}${p.gatepass_attach_ids ? ' · IDs included' : ''}` : 'No admin email yet')),
       h('div', { class: 'row__end' }, p.gatepass_enabled ? badge('paid', 'On') : badge('voided', 'Off'),
-        h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => edit(p) }, 'Set up')))))))
+        h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'aria-label': `Set up, ${p.property_name}`, onclick: () => edit(p) }, 'Set up')))))))
       : h('div', { class: 'card' }, emptyState({ iconName: 'building', title: 'No listings yet', text: 'Add a listing first.' })));
 }
 
@@ -64,6 +64,11 @@ export async function gatepassCard(bookingId, rerender) {
 }
 
 // ---------------------------------------------------------------- building admin's page
+// One guest reads as a plain name. Two or more keep the numbered list.
+export function guestNamesBlock(names) {
+  return names.length === 1 ? h('p', null, names[0]) : h('ol', { class: 'gp__names' }, names.map((n) => h('li', null, n)));
+}
+
 export async function gatepassPublicView(el, { params }) {
   const token = params.token;
   const page = (...children) => h('div', { class: 'gc' },
@@ -85,7 +90,7 @@ export async function gatepassPublicView(el, { params }) {
           h('div', null, h('h1', null, 'Guest gate pass'), h('div', { class: 'muted small' }, `${d.property}${d.address ? ` · ${d.address}` : ''}`)),
           h('div', { class: 'receipt__no' }, h('div', { class: 'subhead' }, 'Unit'), h('strong', null, d.unit))),
         h('dl', { class: 'dl' },
-          h('dt', null, `Guest${d.guests.length > 1 ? 's' : ''}`), h('dd', null, h('ol', { class: 'gp__names' }, d.guests.map((n) => h('li', null, n)))),
+          h('dt', null, `Guest${d.guests.length > 1 ? 's' : ''}`), h('dd', null, guestNamesBlock(d.guests)),
           h('dt', null, 'Check-in'), h('dd', null, `${fmtDate(d.check_in)}${d.checkin_time ? `, ${d.checkin_time}` : ''}${d.arrival_time ? ` (arriving ${d.arrival_time})` : ''}`),
           h('dt', null, 'Check-out'), h('dd', null, `${fmtDate(d.check_out)}${d.checkout_time ? `, ${d.checkout_time}` : ''}`),
           h('dt', null, 'Number of guests'), h('dd', null, String(d.guests.length > 1 ? d.guests.length : (d.num_guests || 1))),

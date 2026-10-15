@@ -48,7 +48,7 @@ test('#21: the calendar-link error box is an alert, and a link problem is shown 
   assert.match(src, /import \{[^}]*\bshowErrors\b[^}]*\} from '\.\.\/ui\.js'/, 'showErrors is imported from ui.js');
   assert.match(src, /import \{[^}]*\bclearErrors\b[^}]*\} from '\.\.\/ui\.js'/, 'clearErrors is imported from ui.js');
   // The link field is built by field(), which ties its input to an alert box with aria-describedby.
-  assert.match(modal, /field\(\{ name: 'url', label: 'Calendar link from Airbnb, Booking\.com or Agoda \(iCal\)', type: 'url'/); // QA round 12 (#31) relabelled it
+  assert.match(modal, /field\(\{ name: 'url', label: 'Calendar link from Airbnb, Booking\.com or Agoda \(ends in \.ics\)', type: 'url'/); // QA round 12 (#31) relabelled it; QA round 13 (#41) says ".ics" in plain words
 });
 
 // ---- #23: the Add listing screen

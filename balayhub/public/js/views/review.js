@@ -77,7 +77,7 @@ export async function guestReviewView(el, { params }, snap) {
   const clean = starPicker('cleanliness', t('How clean was the place?'), false);
   const comment = h('textarea', { class: 'input', name: 'comment', rows: 4, maxlength: 2000, placeholder: t('What did you like? What could be better?') });
   const btn = h('button', { class: 'btn btn--primary btn--block', type: 'submit' }, t('Send feedback'));
-  const form = h('form', { class: 'form', novalidate: true, onsubmit: async (e) => {
+  const form = h('form', { class: 'form card', novalidate: true, onsubmit: async (e) => {
     e.preventDefault();
     clearErrors(form);
     if (!overall.get()) { showErrors(form, { rating: t('Please choose a star rating first.') }); return; }
@@ -94,8 +94,8 @@ export async function guestReviewView(el, { params }, snap) {
   el.replaceChildren(page(h('div', { class: 'card' },
     h('p', { class: 'gc__eyebrow' }, d.host),
     h('h1', null, `${d.guest_first_name ? t('Hi {name}! ', { name: d.guest_first_name }) : ''}${t('How was your stay?')}`),
-    h('p', { class: 'muted' }, t('{listing} · {dates}. This is private: only your host sees it.', { listing: d.listing, dates: `${fmtDate(d.check_in)} – ${fmtDate(d.check_out)}` })),
-    form)));
+    h('p', { class: 'muted' }, t('{listing} · {dates}. This is private: only your host sees it.', { listing: d.listing, dates: `${fmtDate(d.check_in)} – ${fmtDate(d.check_out)}` }))),
+    form));
   // Back from a language switch: put the typed comment and the stars back.
   restoreFormValues(el, snap);
   overall.set(Number(overall.store.value) || 0);

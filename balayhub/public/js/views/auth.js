@@ -260,7 +260,8 @@ export async function verifyView(el, { query }) {
     await post('/auth/verify-email', { token: query.token || '' });
     try { sessionStorage.removeItem('bh-dev-verify'); } catch { /* ignore */ }
     await refreshUser();
-    toast(t('Email verified.'));
+    // Signed in, the next screen is the English host app, so the toast stays English too.
+    toast(state.user ? 'Email verified.' : t('Email verified.'));
     if (state.user) afterLogin();
     else card.replaceChildren(h('h1', null, t('Email verified')), h('p', { class: 'lead' }, t('You can now log in.')), h('a', { class: 'btn btn--primary btn--block', href: '#/login' }, t('Log in')));
   } catch (err) {
@@ -341,7 +342,7 @@ export async function setupView(el) {
         ['short_term', 'Short-term stays (Airbnb, staycations, per night)'],
         ['long_term', 'Long-term rentals (monthly tenants, leases)'],
         ['both', 'Both'],
-      ], hint: 'You can change this later in Settings.' }),
+      ], hint: 'Both adds monthly rentals: tenants, leases and rent. Most hosts choose Short-term. You can change this later in Settings.' }),
       // A saved number the server refused is corrected here; the number typed in this box is what gets sent.
       field({ name: 'phone', label: 'Mobile number', type: 'tel', inputmode: 'tel', maxlength: 20, placeholder: '0917 123 4567', autocomplete: 'tel', value: saved?.phone }),
     ],

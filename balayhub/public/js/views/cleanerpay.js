@@ -1,7 +1,7 @@
 // Cleaner pay: owners and managers see what each cleaner earned in a month, tick the unpaid cleans and
 // mark them paid; owners also set rates. `myPayView` is the cleaner's own phone-first list.
 
-import { get, post, patch, api, qs } from '../api.js';
+import { get, post, patch, api, qs, ApiError } from '../api.js';
 import { h, peso, manilaDay, fmtDate, field, formModal, makeForm, openModal, confirmDialog, emptyState, pageHead, toast, todayManila, options, label, errorState, skeleton } from '../ui.js';
 import { state } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
@@ -26,6 +26,20 @@ export const readRate = (text) => {
   const plain = String(text).replace(/[₱\s]/g, '').replace(/^PHP/i, '');
   if (!/^(\d{1,3}(,\d{3})+|\d+)(\.\d{1,2})?$/.test(plain)) return NaN;
   return Number(plain.replace(/,/g, ''));
+};
+
+// The most a rate can be, with the words for it: the same ceilings as PUT /cleaner-rates (D-87).
+const RATE_CEILING = {
+  per_clean: { cents: 1000000, text: '₱10,000.00 per clean' },
+  per_hour: { cents: 100000, text: '₱1,000.00 per hour' },
+};
+
+// The server's sentence for a typed rate above its ceiling, or null. An amount that cannot be read is left to the server.
+export const rateCeilingProblem = (rateType, text) => {
+  const amount = readRate(text);
+  const ceiling = RATE_CEILING[rateType];
+  if (!ceiling || !Number.isFinite(amount) || Math.round(amount * 100) <= ceiling.cents) return null;
+  return `That's more than ${ceiling.text}. Check for an extra zero.`;
 };
 
 export const rateText = (r) => `${peso(r.amount)} ${r.rate_type === 'per_hour' ? 'per hour' : 'per clean'}`;
@@ -180,8 +194,8 @@ export async function cleanerPayView(el, { query = {} } = {}) {
                   ? h('span', null, h('span', { class: 'badge badge--paid' }, 'Paid'), h('span', { class: 'muted small ops-note' }, ` ${x.paid_on ? fmtDate(manilaDay(x.paid_on)) : ''}${x.paid_method ? ` · ${label(x.paid_method)}` : ''}`))
                   : x.pay_status === 'unpaid' && h('span', { class: 'badge badge--unpaid' }, 'Unpaid')),
                 h('td', { class: 'ops-actions' },
-                  x.pay_status === 'unpaid' && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => editPay(x), 'aria-label': `${x.pay_amount == null ? 'Set pay' : 'Edit pay'} for ${unitOf(x)} on ${fmtDate(doneDay(x))}` }, x.pay_amount == null ? 'Set pay' : 'Edit pay'),
-                  x.pay_status === 'paid' && isOwner && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => unpay(x), 'aria-label': `Undo paid for ${unitOf(x)} on ${fmtDate(doneDay(x))}` }, 'Undo paid')));
+                  x.pay_status === 'unpaid' && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'data-focus-key': `cp-pay-${x.task_id}`, onclick: () => editPay(x), 'aria-label': `${x.pay_amount == null ? 'Set pay' : 'Edit pay'} for ${unitOf(x)} on ${fmtDate(doneDay(x))}` }, x.pay_amount == null ? 'Set pay' : 'Edit pay'),
+                  x.pay_status === 'paid' && isOwner && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'data-focus-key': `cp-pay-${x.task_id}`, onclick: () => unpay(x), 'aria-label': `Undo paid for ${unitOf(x)} on ${fmtDate(doneDay(x))}` }, 'Undo paid')));
             })))))
         : h('div', { class: 'card' }, emptyState({ iconName: 'inbox', title: data.tasks.length ? 'No cleans match these filters' : 'No finished cleans this month', text: data.tasks.length ? 'Try removing a filter.' : 'Pay shows up here once a cleaner marks a clean as done. Check the rates below if amounts are missing.' })));
   }
@@ -230,6 +244,10 @@ export async function cleanerPayView(el, { query = {} } = {}) {
         submitText: 'Save rate',
         cancel: () => modal.close(),
         onSubmit: async (d, { form: dialogForm }) => {
+          // The ceiling is checked first and refused at the amount field with the server's sentence, so the question
+          // below is only asked about an amount the server will take (#49).
+          const over = rateCeilingProblem(d.rate_type, d.amount);
+          if (over) throw new ApiError('Please check the highlighted fields.', { status: 400, code: 'VALIDATION', fields: { amount: over } });
           const body = { rate_type: d.rate_type, amount: d.amount };
           if (r) { if (r.user_id) body.user_id = r.user_id; else body.assignee_name = r.assignee_name; } else if (d.user_id) body.user_id = d.user_id; else body.assignee_name = d.assignee_name;
           // Adding a rate for a cleaner who already has one replaces it, so ask first. Only a readable positive

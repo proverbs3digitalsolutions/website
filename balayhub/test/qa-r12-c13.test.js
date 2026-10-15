@@ -141,7 +141,7 @@ test('#30 the Launchpad step names the listing name, the rate, the cleaning fee 
 test('#31 the calendar page is headed "Calendar", and the channel link field names the channels it comes from', () => {
   assert.match(calendar, /h\('h1', null, 'Calendar'\)/);
   assert.ok(!calendar.includes("'Multi-calendar'"), 'no Multi-calendar heading');
-  assert.ok(listings.includes("label: 'Calendar link from Airbnb, Booking.com or Agoda (iCal)'"));
+  assert.ok(listings.includes("label: 'Calendar link from Airbnb, Booking.com or Agoda (ends in .ics)'"));
   assert.ok(!listings.includes("'Their calendar (iCal) link'"), 'the old label is gone');
 });
 
@@ -155,7 +155,7 @@ test('#26 the bulk block preview has a "Last night" column: the check-out day le
 // ---- class: list defaults on the guests list
 test('the guests list request is built with apiFilters, and the address keeps changed()', () => {
   assert.match(listings, /import \{[^}]*\bapiFilters\b[^}]*\} from '\.\.\/filters\.js';/);
-  assert.match(listings, /get\(`\/guests\$\{qs\(apiFilters\(filters, defaults\)\)\}`\)/);
+  assert.match(listings, /get\(`\/guests\$\{qs\(apiFilters\(filters\)\)\}`\)/);
   assert.ok(!listings.includes('qs(active)'), 'no request is built from the changed() copy');
   assert.ok(listings.includes('`#/guests${qs(changed(filters, defaults))}`'), 'the address still uses changed()');
 });

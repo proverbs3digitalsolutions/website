@@ -6,6 +6,7 @@ import {
 } from '../ui.js';
 import { state, navigate } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed, apiFilters } from '../filters.js';
+import { highStayTotalOk } from '../rates.js';
 import { messageGuest } from './inbox.js';
 import { copyText } from './quotes.js';
 import { checkinCard } from './checkin.js';
@@ -157,6 +158,8 @@ function syncChannelFee(form, switched) {
   if (src) src.hidden = !direct;
 }
 
+const nightsBetween = (ci, co) => Math.round((Date.parse(co) - Date.parse(ci)) / 86400000);
+
 // ---------------------------------------------------------------- new reservation
 export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
   let listings;
@@ -209,6 +212,7 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
       if (problem) throw new ApiError(problem, { status: 400, fields: { num_guests: problem } });
       if (!data.guest_email) data.send_confirmation = false;
       if (data.channel !== 'direct' || !data.source) delete data.source;
+      if (!await highStayTotalOk(parseAmount(data.accommodation_total), nightsBetween(data.check_in, data.check_out))) { form.elements.accommodation_total.focus(); return false; }
       if (data.pick_mode === 'type') {
         const [property_id, ...rt] = String(data.room_pick || '').split('|');
         if (!property_id) throw new ApiError('Choose a room type.', { status: 400, fields: { room_pick: 'Choose a room type.' } });
@@ -327,10 +331,10 @@ export async function reservationsView(el, { query }) {
   async function load() {
     history.replaceState(null, '', `#/reservations${qs(changed(filters, { ...defaults, view: '' }))}`);
     // Same query as the list below, so the export matches what is on screen. view is always sent, once.
-    exportLink.href = `/api/reservations/export${qs(apiFilters(filters, defaults))}`;
+    exportLink.href = `/api/reservations/export${qs(apiFilters(filters))}`;
     viewSelect.value = filters.view;
     side.replaceChildren(...VIEWS.map(([v, t]) => h('button', { type: 'button', 'aria-current': v === filters.view ? 'true' : null, onclick: () => { filters.view = v; rememberFilters('reservations', filters); load(); } }, t)));
-    const { reservations } = await get(`/reservations${qs(apiFilters(filters, defaults))}`);
+    const { reservations } = await get(`/reservations${qs(apiFilters(filters))}`);
     const filtered = Object.keys(changed(filters, defaults)).some((k) => k !== 'view' && k !== 'sort');
     if (!reservations.length) {
       listBox.replaceChildren(emptyState({
@@ -509,10 +513,10 @@ export async function reservationDetailView(el, { params, rerender }) {
   };
   const stayButtons = [];
   if (confirmed) {
-    if (!r.checked_in_at && r.check_in <= today) stayButtons.push(h('button', { class: 'btn btn--primary', onclick: () => act('check_in', 'Guest checked in.') }, 'Check in'));
-    if (r.checked_in_at && !r.checked_out_at) stayButtons.push(h('button', { class: 'btn btn--primary', onclick: () => act('check_out', 'Checked out. Listing marked for cleaning.') }, 'Check out'));
-    if (r.checked_in_at && !r.checked_out_at) stayButtons.push(h('button', { class: 'btn btn--ghost btn--sm', onclick: () => act('undo_check_in', 'Check-in undone.') }, 'Undo check-in'));
-    if (r.checked_out_at) stayButtons.push(h('button', { class: 'btn btn--ghost btn--sm', onclick: () => act('undo_check_out', 'Check-out undone.') }, 'Undo check-out'));
+    if (!r.checked_in_at && r.check_in <= today) stayButtons.push(h('button', { class: 'btn btn--primary', 'data-focus-key': 'stay-status', onclick: () => act('check_in', 'Guest checked in.') }, 'Check in'));
+    if (r.checked_in_at && !r.checked_out_at) stayButtons.push(h('button', { class: 'btn btn--primary', 'data-focus-key': 'stay-status', onclick: () => act('check_out', 'Checked out. Listing marked for cleaning.') }, 'Check out'));
+    if (r.checked_in_at && !r.checked_out_at) stayButtons.push(h('button', { class: 'btn btn--ghost btn--sm', 'data-focus-key': 'stay-status', onclick: () => act('undo_check_in', 'Check-in undone.') }, 'Undo check-in'));
+    if (r.checked_out_at) stayButtons.push(h('button', { class: 'btn btn--ghost btn--sm', 'data-focus-key': 'stay-status', onclick: () => act('undo_check_out', 'Check-out undone.') }, 'Undo check-out'));
   }
   const stayState = !confirmed ? badge('voided', 'Cancelled')
     : r.checked_out_at ? badge('paid', 'Checked out') : r.checked_in_at ? badge('active', 'In house') : r.check_in > today ? badge('unpaid', 'Upcoming') : badge('partial', 'Not checked in');
@@ -595,6 +599,10 @@ export async function reservationDetailView(el, { params, rerender }) {
         if ('num_guests' in changes) {
           const problem = guestsProblem(changes.num_guests);
           if (problem) throw new ApiError(problem, { status: 400, fields: { num_guests: problem } });
+        }
+        // A changed total or changed dates that work out above the ceiling a night ask first (after the price question above).
+        if ('accommodation_total' in changes || 'check_in' in changes || 'check_out' in changes) {
+          if (!await highStayTotalOk(parseAmount(d.accommodation_total), nightsBetween(d.check_in || r.check_in, d.check_out || r.check_out))) { form.elements.accommodation_total.focus(); return false; }
         }
         // The server says whether it wrote anything (a blank fee is stored as 0, which can be no change at all).
         const saved = Object.keys(changes).length ? await patch(`/reservations/${r.booking_id}`, changes) : { changed: false };

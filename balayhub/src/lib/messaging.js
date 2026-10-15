@@ -181,6 +181,8 @@ async function setTemplateLanguage(organizationId, language, userId) {
   ];
   const stockBodies = new Set([...all.map((t) => t.body), `${oldThanks}\n\n{{review_link}}`, ...oldCheckin]);
   const stockSubjects = new Set(all.map((t) => t.subject));
+  // A name the host gave a built-in template is kept; only the stock English and Taglish names switch.
+  const stockNames = new Set(all.map((t) => t.name));
   let copied = 0;
   await tx(async (db) => {
     for (const [key, t] of Object.entries(target)) {
@@ -192,7 +194,7 @@ async function setTemplateLanguage(organizationId, language, userId) {
         copied += 1;
       }
       await db.query('UPDATE message_templates SET name = $2, subject = $3, body = $4, updated_at = now() WHERE template_id = $1',
-        [cur.template_id, t.name, t.subject, t.body]);
+        [cur.template_id, stockNames.has(cur.name) ? t.name : cur.name, t.subject, t.body]);
     }
   });
   return { copied };

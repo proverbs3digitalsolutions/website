@@ -261,7 +261,7 @@ router.get('/stay-reports/export', managers, ah(async (req, res) => {
     const r = await performance(req.user, p, reportFilters(req.query));
     lines = [['Listing', 'Building', 'Stays', 'Nights', 'Occupancy %', 'Avg nightly rate', 'Revenue', 'Channel fees', 'Expenses', 'Net'],
       ...r.units.map((u) => [u.unit_name, u.property_name, u.stays, u.nights, u.occupancy ?? '', u.adr, u.revenue, u.channel_fees, u.expenses, u.net]),
-      ['Building-level expenses', '', '', '', '', '', '', '', r.building_expenses, ''],
+      ['Whole-property expenses', '', '', '', '', '', '', '', r.building_expenses, ''],
       ['Total', '', r.totals.stays, r.totals.nights, r.totals.occupancy, r.totals.adr, r.totals.revenue, r.totals.channel_fees, r.totals.expenses, r.totals.net]];
     name = `balayhub-stays-report-${p.label.replace(/\s+/g, '_')}.csv`;
   }

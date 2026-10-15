@@ -163,6 +163,8 @@ const STATUS_OWN_EMPTY_TEXT = ['outstanding', 'overdue', 'all'];
 export const statusCountsAsFilter = (status) => !STATUS_OWN_EMPTY_TEXT.includes(status);
 // A host with 3 or fewer units rarely needs to pick a month or a property first, so those two sit under More filters.
 export const compactRentFilters = (unitCount) => unitCount <= 3;
+// The line above a "Voided only" list. Those rows are left out of the totals, so the line says so.
+export const voidedOnlyLine = (n) => `Voided only: ${n} entr${n === 1 ? 'y' : 'ies'}, not counted in totals.`;
 
 // The last 24 months, newest first, for the rent roll's month filter.
 function recentMonths(today) {
@@ -254,9 +256,13 @@ export async function rentView(el, { query }) {
     const { payments } = await get(`/payments${apiQuery()}`);
     const kept = payments.filter((p) => !p.voided_at);
     const total = kept.reduce((s, p) => s + Number(p.amount_paid), 0);
+    // "Voided only" lists rows the totals leave out, so the line says that instead of "0 payments · ₱0.00" above them.
+    const countLine = valuesFor('payments').include_voided === 'only'
+      ? voidedOnlyLine(payments.length)
+      : `${kept.length} payment${kept.length === 1 ? '' : 's'} · ${peso(total)}`;
     summary.replaceChildren();
     body.replaceChildren(h('div', { class: 'card' }, payments.length
-      ? [h('p', { class: 'muted small' }, `${kept.length} payment${kept.length === 1 ? '' : 's'} · ${peso(total)}${payments.length >= 500 ? ' (latest 500)' : ''}`),
+      ? [h('p', { class: 'muted small' }, `${countLine}${payments.length >= 500 ? ' (latest 500)' : ''}`),
         h('ul', { class: 'list' }, payments.map((p) => h('li', null, h('a', { class: 'row', href: `#/payments/${p.payment_id}` },
           h('div', { class: 'row__main' }, h('span', { class: `row__title${p.voided_at ? ' strike' : ''}` }, p.tenant_name), h('span', { class: 'row__sub' }, `${fmtDate(p.payment_date)} · ${label(p.payment_method)} · ${p.property_name}, ${unitLabel(p.unit_name)}${p.reference_number ? ` · Ref ${p.reference_number}` : ''}`)),
           h('div', { class: 'row__end' }, h('span', { class: `amount${p.voided_at ? ' strike muted' : ''}` }, peso(p.amount_paid)), p.voided_at && badge('voided', 'Voided'))))))]
@@ -268,9 +274,13 @@ export async function rentView(el, { query }) {
     const { expenses } = await get(`/expenses${apiQuery()}`);
     const kept = expenses.filter((x) => !x.voided_at);
     const total = kept.reduce((s, x) => s + Number(x.amount), 0);
+    // Same as payments: a "Voided only" list says its rows are not in the totals.
+    const countLine = valuesFor('expenses').include_voided === 'only'
+      ? voidedOnlyLine(expenses.length)
+      : `${kept.length} expense${kept.length === 1 ? '' : 's'} · ${peso(total)}`;
     summary.replaceChildren();
     body.replaceChildren(h('div', { class: 'card' }, expenses.length
-      ? [h('p', { class: 'muted small' }, `${kept.length} expense${kept.length === 1 ? '' : 's'} · ${peso(total)}${expenses.length >= 500 ? ' (latest 500)' : ''}`),
+      ? [h('p', { class: 'muted small' }, `${countLine}${expenses.length >= 500 ? ' (latest 500)' : ''}`),
         h('ul', { class: 'list' }, expenses.map((x) => h('li', null, h('a', { class: 'row', href: `#/expenses/${x.expense_id}` },
           h('div', { class: 'row__main' }, h('span', { class: `row__title${x.voided_at ? ' strike' : ''}` }, x.description || label(x.category)), h('span', { class: 'row__sub' }, `${fmtDate(x.expense_date)} · ${label(x.category)} · ${x.property_name}${x.unit_name ? `, ${unitLabel(x.unit_name)}` : ''}${x.vendor_name ? ` · ${x.vendor_name}` : ''}`)),
           h('div', { class: 'row__end' }, h('span', { class: `amount${x.voided_at ? ' strike muted' : ''}` }, peso(x.amount)), x.voided_at && badge('voided', 'Voided'))))))]

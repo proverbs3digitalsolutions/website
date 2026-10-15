@@ -30,7 +30,7 @@ const line = (meta, a) => ({
   net: money(a.gross - a.channel - a.refunds - a.expenses),
 });
 
-// One row per unit in scope, then a "Not linked to a unit" row for workspace expenses with no unit.
+// One row per unit in scope, then a "Whole-property expenses" row for workspace expenses with no unit.
 // `unitIds` (owner portal) limits the report to those units and leaves that row out.
 // `propertyId` limits it to one property. `user` applies the same property scope as the rest of the app.
 async function unitPnl(orgId, month, { unitIds, user, propertyId } = {}) {
@@ -90,7 +90,7 @@ async function unitPnl(orgId, month, { unitIds, user, propertyId } = {}) {
     const unlinked = await one(sql, params);
     if (unlinked.count) {
       lines.push({
-        meta: { unit_id: null, unit_name: 'Not linked to a unit', property_name: null },
+        meta: { unit_id: null, unit_name: 'Whole-property expenses', property_name: null },
         a: { ...zero(), expenses: cents(unlinked.amount) },
       });
     }

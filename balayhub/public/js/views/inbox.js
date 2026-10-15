@@ -56,7 +56,7 @@ function stayLabel(c) {
 function statusAlerts(status) {
   const out = [];
   if (!status.sending) {
-    out.push(h('div', { class: 'alert alert--warn' }, 'Email sending is not set up on the server yet, so messages can\'t be sent. Follow EMAIL-SETUP.md (step 7 of the server guide).'));
+    out.push(h('div', { class: 'alert alert--warn' }, 'Email sending isn\'t turned on for BalayHub yet, so messages can\'t be sent. Contact BalayHub support.'));
   } else if (!status.replies.configured) {
     out.push(h('div', { class: 'alert alert--info' }, 'Guest replies go to your email inbox for now. Reply from there, or send a new message here.'));
   } else if (status.replies.last_error) {
@@ -231,17 +231,18 @@ async function renderThread(pane, id, { status, back, rerender }) {
         h('h2', null, c.guest_name),
         h('div', { class: 'small muted' }, `${c.unit_name} · ${fmtDate(c.check_in)} – ${fmtDate(c.check_out)}`)),
       h('div', { class: 'inbox__head-actions' },
-        h('select', {
+        // A host who works alone has no one to assign to, so the select only shows with a second person or an existing assignment.
+        (assignees.length > 1 || c.assigned_to) && h('select', {
           class: 'input input--sm', 'aria-label': 'Assigned to',
           onchange: assign,
         }, h('option', { value: '' }, 'Unassigned'), c.assigned_to && !assignees.some((a) => a.user_id === c.assigned_to) && h('option', { value: c.assigned_to, selected: true }, c.assigned_name), assignees.map((a) => h('option', { value: a.user_id, selected: a.user_id === c.assigned_to }, a.full_name))),
         c.snoozed_until && new Date(c.snoozed_until) > new Date()
-          ? h('button', { class: 'btn btn--secondary btn--sm', onclick: () => act(() => patch(`/inbox/${id}`, { snoozed_until: null }), 'Unsnoozed.') }, 'Unsnooze')
-          : h('button', { class: 'btn btn--secondary btn--sm', onclick: snooze }, 'Snooze'),
+          ? h('button', { class: 'btn btn--secondary btn--sm', 'data-focus-key': 'conv-snooze', onclick: () => act(() => patch(`/inbox/${id}`, { snoozed_until: null }), 'Unsnoozed.') }, 'Unsnooze')
+          : h('button', { class: 'btn btn--secondary btn--sm', 'data-focus-key': 'conv-snooze', onclick: snooze }, 'Snooze'),
         h('button', { class: 'btn btn--secondary btn--sm', onclick: markUnread }, 'Mark unread'),
         c.status === 'open'
-          ? h('button', { class: 'btn btn--secondary btn--sm', onclick: () => act(() => patch(`/inbox/${id}`, { status: 'archived' }), 'Archived.') }, 'Archive')
-          : h('button', { class: 'btn btn--secondary btn--sm', onclick: () => act(() => patch(`/inbox/${id}`, { status: 'open' }), 'Moved to open.') }, 'Unarchive'))));
+          ? h('button', { class: 'btn btn--secondary btn--sm', 'data-focus-key': 'conv-archive', onclick: () => act(() => patch(`/inbox/${id}`, { status: 'archived' }), 'Archived.') }, 'Archive')
+          : h('button', { class: 'btn btn--secondary btn--sm', 'data-focus-key': 'conv-archive', onclick: () => act(() => patch(`/inbox/${id}`, { status: 'open' }), 'Moved to open.') }, 'Unarchive'))));
 
   const bubble = (m) => {
     const who = m.direction === 'in' ? (m.from_name || c.guest_name) : (m.sent_by_name || m.from_name || 'Automatic');
@@ -552,7 +553,7 @@ function composer(c, templates, status, rerender, assignees = []) {
 
 function summary(c) {
   return h('aside', { class: 'card inbox__summary' },
-    h('div', { class: 'card__head' }, h('h2', null, 'Reservation'), h('a', { href: `#/reservations/${c.booking_id}` }, 'Open')),
+    h('div', { class: 'card__head' }, h('h2', null, 'Reservation'), h('a', { class: 'link-tap', href: `#/reservations/${c.booking_id}` }, 'Open')),
     h('div', { class: 'chips' }, stayLabel(c), h('span', { class: `badge badge--ch-${c.channel}` }, CHANNEL_LABEL[c.channel] || c.channel)),
     h('dl', { class: 'dl', style: { marginTop: '12px' } },
       h('dt', null, 'Listing'), h('dd', null, `${c.unit_name}, ${c.property_name}`),
@@ -563,7 +564,7 @@ function summary(c) {
       h('dt', null, 'Balance'), h('dd', { class: Number(c.balance) > 0 ? 'amount--neg' : '' }, peso(c.balance)),
       h('dt', null, 'Code'), h('dd', null, c.confirmation_code),
       h('dt', null, 'Email'), h('dd', null, c.guest_email || '—'),
-      h('dt', null, 'Mobile'), h('dd', null, c.guest_phone ? h('a', { href: `tel:${c.guest_phone.replace(/[^\d+]/g, '')}` }, c.guest_phone) : '—')));
+      h('dt', null, 'Mobile'), h('dd', null, c.guest_phone ? h('a', { class: 'link-tap', href: `tel:${c.guest_phone.replace(/[^\d+]/g, '')}` }, c.guest_phone) : '—')));
 }
 
 // Open (or start) the conversation for a reservation.
@@ -694,7 +695,7 @@ export async function inboxSettingsView(el, { rerender }) {
         h('div', { class: 'row__end' },
           a.template_archived ? badge('archived', 'Template deleted, choose another') : a.enabled ? badge('active', 'On') : badge('archived', 'Off'),
           canEdit && h('div', { class: 'chips' },
-            h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `${a.enabled ? 'Turn off' : 'Turn on'} automatic message: ${a.name}, ${describeAutomation(a)}`, onclick: () => (a.template_archived && !a.enabled ? toast("This automatic message's template was deleted. Choose a template first.", 'error') : toggle(a, !a.enabled)) }, a.enabled ? 'Turn off' : 'Turn on'),
+            h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `${a.enabled ? 'Turn off' : 'Turn on'} automatic message: ${a.name}, ${describeAutomation(a)}`, 'aria-disabled': a.template_archived && !a.enabled ? 'true' : undefined, title: a.template_archived && !a.enabled ? 'Choose a template first.' : undefined, onclick: () => (a.template_archived && !a.enabled ? toast("This automatic message's template was deleted. Choose a template first.", 'error') : toggle(a, !a.enabled)) }, a.enabled ? 'Turn off' : 'Turn on'),
             h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Edit automatic message: ${a.name}, ${describeAutomation(a)}`, onclick: () => editAutomation(a) }, 'Edit'),
             h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Delete automatic message: ${a.name}, ${describeAutomation(a)}`, onclick: () => removeAutomation(a) }, 'Delete')))))))
         : h('p', { class: 'muted small' }, 'No automatic messages yet.')),
@@ -702,7 +703,7 @@ export async function inboxSettingsView(el, { rerender }) {
       h('div', { class: 'card__head' }, h('h2', null, 'Message templates'),
         canEditTemplates && h('button', { class: 'btn btn--primary btn--sm', onclick: () => editTemplate(null) }, icon('plus'), 'New template')),
       !canEditTemplates && h('p', { class: 'muted small' }, 'Only the workspace owner can change these.'),
-      h('p', { class: 'muted small' }, 'Guest messages are in English or Taglish. Change it in ', h('a', { href: '#/settings' }, 'Settings, Language for guests'), '.'),
+      h('p', { class: 'muted small' }, 'Guest messages are in English or Taglish. Change it in ', h('a', { class: 'link-tap', href: '#/settings' }, 'Settings, Language for guests'), '.'),
       h('ul', { class: 'list' }, templates.map((t) => h('li', null, h('div', { class: 'row' },
         h('div', { class: 'row__main' },
           h('span', { class: 'row__title' }, t.name),
