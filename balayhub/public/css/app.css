@@ -1135,11 +1135,15 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 /* Beats `.sidebar__foot span { color: var(--muted) }`, which would otherwise grey the selected icon on green. */
 .themeswitch button[aria-checked="true"] > [aria-hidden] { color: inherit; }
 .sidebar__foot .themeswitch button[aria-checked="true"] > [aria-hidden] { color: inherit; }
-.themeswitch--compact button { padding: 4px 9px; }
+.themeswitch--compact button { flex: 1 1 0; min-width: 40px; min-height: 32px; justify-content: center; padding: 4px 9px; }
 .morenav__theme { padding: 10px 12px; }
 .morenav__theme .themeswitch { display: flex; width: 100%; }
-.morenav__theme .themeswitch button { flex: 1 1 0; width: auto; justify-content: center; padding: 6px 8px; font-size: .85rem; }
-.sidebar__foot .themeswitch { margin: 8px 0; }
+.morenav__theme .themeswitch button { flex: 1 1 0; min-width: 0; width: auto; flex-direction: column; justify-content: center; gap: 2px; padding: 6px 4px; font-size: .85rem; line-height: 1.2; white-space: normal; text-align: center; }
+/* Sidebar footer switch (QA round 16): as wide as the account card and Log out, three equal segments. `.sidebar__foot button`
+   adds a 10px top margin that pushed the buttons off centre, so it is reset here. */
+.sidebar__foot .themeswitch { display: flex; width: 100%; box-sizing: border-box; margin: 8px 0; }
+.sidebar__foot .themeswitch button { margin-top: 0; }
+.tb-theme .themeswitch { display: flex; width: 100%; box-sizing: border-box; }
 .chart-grid { stroke: var(--line); }
 .chart-axis { fill: var(--muted); }
 .chart-band { fill: transparent; }

@@ -80,3 +80,12 @@ test('#41 phone calendar month bar is two rows', () => {
   assert.match(decls('.toolbar > .cal-nav > :nth-child(5)'), /grid-column:\s*1 \/ 3/);
   assert.match(decls('.toolbar > .cal-nav > :nth-child(6)'), /grid-column:\s*3 \/ 5/);
 });
+
+test('theme switch: equal segments, full width in the sidebar footer, no stray button margin', () => {
+  assert.match(decls('.sidebar__foot .themeswitch'), /display:\s*flex;\s*width:\s*100%/);
+  assert.match(decls('.sidebar__foot .themeswitch button'), /margin-top:\s*0/);
+  assert.match(decls('.themeswitch--compact button'), /flex:\s*1 1 0/);
+  assert.match(decls('.themeswitch--compact button'), /justify-content:\s*center/);
+  assert.match(decls('.tb-theme .themeswitch'), /width:\s*100%/);
+  assert.match(decls('.morenav__theme .themeswitch button'), /flex:\s*1 1 0/);
+});
