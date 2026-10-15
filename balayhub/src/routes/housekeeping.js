@@ -267,7 +267,8 @@ router.patch('/cleaning-tasks/:id', managers, ah(async (req, res) => {
   });
   if (body.assigned_to && body.assigned_to !== task.assigned_to) {
     require('../lib/push').notify(req.user.organization_id, 'cleaning', {
-      title: `Cleaning assigned to you: ${task.unit_name}`, body: `Due ${task.due_date}`, url: `/#/housekeeping/${task.task_id}`, userId: body.assigned_to,
+      title: `Cleaning assigned to you: ${task.unit_name}`, body: `Due ${task.due_date}`, url: `/#/housekeeping/${task.task_id}`,
+      propertyId: task.property_id, userId: body.assigned_to,
     }).catch(() => {});
   }
   res.json({ task: await loadTask(req.user, task.task_id) });

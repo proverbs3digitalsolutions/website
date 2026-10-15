@@ -58,7 +58,7 @@ function statusAlerts(status) {
   if (!status.sending) {
     out.push(h('div', { class: 'alert alert--warn' }, 'Email sending isn\'t turned on for BalayHub yet, so messages can\'t be sent. Contact BalayHub support.'));
   } else if (!status.replies.configured) {
-    out.push(h('div', { class: 'alert alert--info' }, 'Guest replies go to your email inbox for now. Reply from there, or send a new message here.'));
+    out.push(h('p', { class: 'muted small' }, 'Guest replies arrive in your email for now.'));
   } else if (status.replies.last_error) {
     out.push(h('div', { class: 'alert alert--warn' }, `Couldn't check for guest replies: ${status.replies.last_error}`));
   }
@@ -147,7 +147,7 @@ export async function inboxView(el, { params, query, rerender }) {
       { name: 'stay', label: 'Stay', all: 'Any stay', options: [['upcoming', 'Upcoming'], ['in_house', 'Staying now'], ['past', 'Checked out'], ['cancelled', 'Cancelled']] },
       { name: 'channel', label: 'Channel', all: 'All channels', options: Object.entries(CHANNEL_LABEL) },
       properties.length > 1 && { name: 'property_id', label: 'Property', all: 'All properties', options: properties.map((p) => [p.property_id, p.property_name]) },
-      { name: 'unit_id', label: 'Listing', all: 'All listings', options: stUnits.map((u) => [u.unit_id, repeated.has(u.unit_name) ? `${u.unit_name} · ${u.property_name || ''}` : u.unit_name]) },
+      stUnits.length > 1 && { name: 'unit_id', label: 'Listing', all: 'All listings', options: stUnits.map((u) => [u.unit_id, repeated.has(u.unit_name) ? `${u.unit_name} · ${u.property_name || ''}` : u.unit_name]) },
       assignees.length > 1 && { name: 'assigned', label: 'Assigned to', all: 'Anyone', options: [['unassigned', 'Not assigned'], ...assignees.map((a) => [a.user_id, a.full_name])] },
       { name: 'attention', label: 'Needs attention', all: 'Any', options: [['awaiting_reply', 'Guest wrote last'], ['failed', 'Message not sent'], ['scheduled', 'Has scheduled messages']] },
       { name: 'msg', keys: ['msg_from', 'msg_to'], label: 'Last message between', type: 'daterange' },
@@ -462,6 +462,7 @@ function composer(c, templates, status, rerender, assignees = []) {
     class: 'btn btn--secondary btn--sm', type: 'button',
     onclick: async (e) => {
       const btn = e.currentTarget;
+      err.textContent = '';
       btn.disabled = true;
       btn.textContent = 'Drafting…';
       try {
@@ -481,6 +482,7 @@ function composer(c, templates, status, rerender, assignees = []) {
     }, t)));
   const setMode = (k) => {
     mode = k;
+    err.textContent = '';
     composerModes.set(c.conversation_id, k);
     try { sessionStorage.setItem(modeKey, k); } catch { /* ignore */ }
     [...modeTabs.children].forEach((b, i) => b.setAttribute('aria-pressed', String(i === (k === 'note' ? 1 : 0))));
@@ -695,7 +697,7 @@ export async function inboxSettingsView(el, { rerender }) {
         h('div', { class: 'row__end' },
           a.template_archived ? badge('archived', 'Template deleted, choose another') : a.enabled ? badge('active', 'On') : badge('archived', 'Off'),
           canEdit && h('div', { class: 'chips' },
-            h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `${a.enabled ? 'Turn off' : 'Turn on'} automatic message: ${a.name}, ${describeAutomation(a)}`, 'aria-disabled': a.template_archived && !a.enabled ? 'true' : undefined, title: a.template_archived && !a.enabled ? 'Choose a template first.' : undefined, onclick: () => (a.template_archived && !a.enabled ? toast("This automatic message's template was deleted. Choose a template first.", 'error') : toggle(a, !a.enabled)) }, a.enabled ? 'Turn off' : 'Turn on'),
+            h('button', { class: 'btn btn--secondary btn--sm', 'data-focus-key': `auto-toggle-${a.automation_id}`, 'aria-label': `${a.enabled ? 'Turn off' : 'Turn on'} automatic message: ${a.name}, ${describeAutomation(a)}`, 'aria-disabled': a.template_archived && !a.enabled ? 'true' : undefined, title: a.template_archived && !a.enabled ? 'Choose a template first.' : undefined, onclick: () => (a.template_archived && !a.enabled ? toast("This automatic message's template was deleted. Choose a template first.", 'error') : toggle(a, !a.enabled)) }, a.enabled ? 'Turn off' : 'Turn on'),
             h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Edit automatic message: ${a.name}, ${describeAutomation(a)}`, onclick: () => editAutomation(a) }, 'Edit'),
             h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Delete automatic message: ${a.name}, ${describeAutomation(a)}`, onclick: () => removeAutomation(a) }, 'Delete')))))))
         : h('p', { class: 'muted small' }, 'No automatic messages yet.')),

@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const { startServer, client, sql, ownerAccount } = require('./helpers');
 const push = require('../src/lib/push');
 
-const TYPE_KEYS = ['new_booking', 'guest_message', 'checkin_form', 'payment', 'cleaning', 'mention', 'assignment', 'sync_problem'];
+const TYPE_KEYS = ['new_booking', 'guest_message', 'checkin_form', 'payment', 'cleaning', 'mention', 'assignment', 'sync_problem', 'owner_activity'];
 
 let srv; let shortOwner; let longOwner; let longCleaner; let bothOwner;
 

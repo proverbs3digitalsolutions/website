@@ -123,7 +123,7 @@ test('a signature-only PNG, JPEG or WEBP is refused as a guest ID photo', async 
   const b = await stay('Guest');
   const token = (await owner.get(`/api/reservations/${b.booking_id}/checkin`)).data.link.split('/checkin/')[1];
   const guest = client(srv.base);
-  const form = await guest.post(`/api/public/checkin/${token}`, { lead_name: 'Rafael Diaz', phone: '09171112222', consent: true, guests: ['Ana Diaz'] });
+  const form = await guest.post(`/api/public/checkin/${token}`, { lead_name: 'Rafael Diaz', phone: '09171112222', consent: true, guests: ['Ana Diaz'], id_photos: 1 });
   assert.equal(form.status, 200, JSON.stringify(form.data));
   for (const [body, mime] of [
     [PNG_SIGNATURE_ONLY, 'image/png'],

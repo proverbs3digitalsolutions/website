@@ -10,7 +10,7 @@ const label = (m) => METHODS.find(([k]) => k === m)?.[1] || m;
 const STATUS = { held: ['partial', 'Held'], refunded: ['paid', 'Returned'], partly_refunded: ['paid', 'Partly returned'], kept: ['overdue', 'Kept'] };
 
 // The return line under the deduction box. A deduction above the deposit is one the server refuses (settle), so the line
-// says the limit and shows no return figure: a preview never shows a figure the server refuses. An amount that can't be
+// shows no return figure, and no second copy of the limit: the field already says it (K1). An amount that can't be
 // read, or a negative one, shows nothing rather than a figure built from a guess.
 // The server's sentence for a deduction above the deposit, asked at the field before any question; null when it is fine.
 export function deductionProblem(typedText, held) {
@@ -22,7 +22,7 @@ export function returnLine(typedText, deposit) {
   const raw = String(typedText ?? '');
   const typed = raw.trim() === '' ? 0 : parseAmount(raw);
   if (Number.isNaN(typed) || typed < 0) return '';
-  if (typed > Number(deposit.amount)) return `The deduction can't be more than the deposit (${peso(deposit.amount)}).`;
+  if (typed > Number(deposit.amount)) return '';
   return `Return to guest: ${peso(Number(deposit.amount) - typed)}`;
 }
 

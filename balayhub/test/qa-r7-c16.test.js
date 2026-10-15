@@ -1,7 +1,7 @@
 'use strict';
 // QA round 7, lane C16 (deposits view, frontend only, no database).
 // #28: a deduction above the deposit is one the server refuses (src/routes/deposits.js, settle). The return preview under the
-//      deduction box used to clamp it and show "Return to guest: ₱0.00". Now it says the limit and shows no return figure.
+//      deduction box used to clamp it and show "Return to guest: ₱0.00". Now it shows no return figure, and the field under the box says the limit (QA round 14, K1).
 // returnLine(typedText, deposit) is pure. The view's own peso and parseAmount are loaded from ui.js the way the other
 // frontend tests do, so the figures are formatted exactly as the page shows them.
 
@@ -34,9 +34,9 @@ const returnLine = new Function('peso', 'parseAmount', `${grab(depSrc, 'returnLi
 
 const dep = { amount: '1000.00' };
 
-test('#28 a deduction above the deposit shows the server\'s limit sentence and no return figure', () => {
+test('#28 a deduction above the deposit shows no return figure, and no copy of the limit sentence (the field says it, K1)', () => {
   const out = returnLine('1500', dep);
-  assert.equal(out, "The deduction can't be more than the deposit (₱1,000.00).");
+  assert.equal(out, '', 'the field under the box already says the limit');
   assert.doesNotMatch(out, /Return to guest/, 'no return figure for a deduction the server refuses');
   assert.ok(!out.includes('₱0.00'), 'never ₱0.00');
 });

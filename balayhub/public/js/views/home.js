@@ -28,7 +28,7 @@ async function stayAction(id, action, rerender) {
 }
 
 // ---------------------------------------------------------------- daily overview
-function overviewCard() {
+async function overviewCard() {
   const card = h('section', { class: 'card' });
   let range = 'today';
   async function load() {
@@ -60,12 +60,12 @@ function overviewCard() {
         h('div', null, h('h3', { class: 'subhead' }, 'Departures'),
           o.departures.length ? h('ul', { class: 'list' }, o.departures.map((b) => row(b, 'out'))) : h('p', { class: 'muted small' }, 'No departures.'))));
   }
-  load().catch((err) => card.replaceChildren(h('div', { class: 'alert alert--error' }, err.message)));
+  await load().catch((err) => card.replaceChildren(h('div', { class: 'alert alert--error' }, err.message)));
   return card;
 }
 
 // ---------------------------------------------------------------- trends
-function trendsCard() {
+async function trendsCard() {
   const card = h('section', { class: 'card' });
   let days = 7;
   async function load() {
@@ -95,12 +95,12 @@ function trendsCard() {
         fmt: (v) => `${Math.round(Number(v))}%`,
       }));
   }
-  load().catch((err) => card.replaceChildren(h('div', { class: 'alert alert--error' }, err.message)));
+  await load().catch((err) => card.replaceChildren(h('div', { class: 'alert alert--error' }, err.message)));
   return card;
 }
 
 // ---------------------------------------------------------------- revenue
-function revenueSection() {
+async function revenueSection() {
   const section = h('section');
   let month = null;
   async function load() {
@@ -141,7 +141,7 @@ function revenueSection() {
           }))),
       h('p', { class: 'muted small', style: { marginTop: '8px' } }, 'Stay revenue is spread across the nights of each booking; cleaning and other fees count in the check-in month. Imported Airbnb/Booking.com stays show ₱0 until you add their amounts.'));
   }
-  load().catch((err) => section.replaceChildren(h('div', { class: 'alert alert--error' }, err.message)));
+  await load().catch((err) => section.replaceChildren(h('div', { class: 'alert alert--error' }, err.message)));
   return section;
 }
 
@@ -216,12 +216,19 @@ async function reservationsSeen() {
 }
 
 // A workspace with no reservation yet: say what to connect first, above the charts that are all zeros.
-export function firstRunCard({ reservations }) {
+// "Connect calendar" opens the first listing's Channels dialog; with no listings it just goes to Listings.
+export const channelsLink = (listings) => (listings?.[0]?.unit_id ? `#/listings?channels=${listings[0].unit_id}` : '#/listings');
+
+export function firstRunCard({ reservations, listings }) {
   if (reservations !== 0) return null;
   return h('div', { class: 'card' },
     h('p', null, 'No bookings yet. Connect your Airbnb or Booking.com calendar to see them here.'),
-    h('a', { class: 'btn btn--primary', href: '#/listings' }, 'Connect calendar'));
+    h('a', { class: 'btn btn--primary', href: channelsLink(listings) }, 'Connect calendar'));
 }
+
+// A chart measures its space on the next frame, and the cards are built before they are on the page. Once they are
+// attached, the charts' own resize handler redraws them at the real width.
+const redrawCharts = () => globalThis.window?.dispatchEvent(new Event('resize'));
 
 // The trend and revenue charts fold into a closed section while there are no bookings. A chart sizes itself to the
 // space it is drawn into, and a closed section has none, so the charts are drawn the first time it opens.
@@ -231,12 +238,14 @@ function chartsFold() {
   fold.addEventListener('toggle', () => {
     if (!fold.open || drawn) return;
     drawn = true;
-    fold.append(trendsCard(), revenueSection());
+    Promise.all([trendsCard(), revenueSection()]).then((cards) => { fold.append(...cards); redrawCharts(); });
   });
   return fold;
 }
 
 export async function homeView(el, { rerender } = {}) {
+  // The cards fetch their own data and are awaited below before anything is drawn: Home is drawn once, in one go,
+  // and nothing moves while the cards fill in.
   const [{ listings }, onboard, deposits, proofAlert, lowAlert, assigned, sync, closeAlert, seen] = await Promise.all([get('/listings'), launchpadReminder(rerender), depositsDueCard(), proofsAlert(), suppliesAlert(), assignedAlert(), syncAlert(), dayCloseAlert(), reservationsSeen()]);
   const first = state.user.full_name.split(' ')[0];
   const head = h('div', { class: 'page-head' },
@@ -252,7 +261,8 @@ export async function homeView(el, { rerender } = {}) {
     })));
     return;
   }
-  const start = firstRunCard({ reservations: seen });
-  const charts = start ? chartsFold() : [trendsCard(), revenueSection()];
-  el.replaceChildren(head, h('div', { class: 'stack' }, start, assigned, sync, closeAlert, proofAlert, lowAlert, onboard, overviewCard(), deposits, charts));
+  const start = firstRunCard({ reservations: seen, listings });
+  const [overview, charts] = await Promise.all([overviewCard(), start ? chartsFold() : Promise.all([trendsCard(), revenueSection()])]);
+  el.replaceChildren(head, h('div', { class: 'stack' }, start, assigned, sync, closeAlert, proofAlert, lowAlert, onboard, overview, deposits, charts));
+  redrawCharts();
 }

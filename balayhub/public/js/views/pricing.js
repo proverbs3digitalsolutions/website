@@ -188,7 +188,7 @@ export async function pricingView(el, { rerender }) {
   const canEditRule = (r) => canManage && (r.unit_id || isOwner);
 
   const ruleRows = listings.map((l) => h('tr', null,
-    h('td', null, h('a', { href: `#/listings?focus=${l.unit_id}`, 'aria-label': `${l.unit_name}, ${l.property_name}` }, l.unit_name), h('div', { class: 'muted small' }, l.property_name)),
+    h('td', null, h('a', { href: `#/listings?focus=${l.unit_id}`, class: 'link-tap', 'aria-label': `${l.unit_name}, ${l.property_name}` }, l.unit_name), h('div', { class: 'muted small' }, l.property_name)),
     h('td', null, peso(l.nightly_rate)),
     h('td', null, l.weekend_rate ? peso(l.weekend_rate) : '—'),
     h('td', null, l.holiday_rate ? peso(l.holiday_rate) : '—'),
@@ -235,7 +235,7 @@ export async function pricingView(el, { rerender }) {
     h('div', { class: 'card' },
       h('div', { class: 'card__head' }, h('h2', null, 'Seasons')),
       seasons.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'table' },
-        h('thead', null, h('tr', null, ['Season', 'Nights', 'Listing', 'Price', 'Min. nights'].map((t) => h('th', null, t)), h('th', null, h('span', { class: 'sr-only' }, 'Actions')))),
+        h('thead', null, h('tr', null, ['Season', 'Dates', 'Listing', 'Price', 'Min. nights'].map((t) => h('th', null, t)), h('th', null, h('span', { class: 'sr-only' }, 'Actions')))),
         h('tbody', null, seasons.map((s) => h('tr', null,
           h('td', null, s.name, seasonClashes(s, seasons).map((c) => h('div', { class: 'muted small' }, clashText(c)))),
           h('td', null, `${fmtDate(s.start_date)} – ${fmtDate(s.end_date)}`),

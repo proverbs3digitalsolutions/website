@@ -68,7 +68,7 @@ export async function helpView(el, { query }) {
           h('span', { class: 'row__sub' }, `${t.number} · ${t.category_label} · updated ${fmtDateTime(t.updated_at)}`),
           state.user.role === 'owner' && t.created_by_name && h('span', { class: 'row__sub' }, `Opened by ${t.created_by_name}`)),
         h('div', { class: 'row__end' }, t.priority === 'urgent' && badge('urgent'), statusBadge(t))))))
-      : h('p', { class: 'muted', style: { padding: '8px 2px' } }, ticketFilters.tq ? 'No tickets match your search.' : ticketFilters.view === 'open' ? 'No open tickets. If something is wrong, contact support and we’ll help.' : 'No tickets yet.'));
+      : h('p', { class: 'muted', style: { padding: '8px 2px' } }, ticketFilters.tq ? 'No tickets match your search.' : ticketFilters.view === 'open' ? 'No open tickets. If something is wrong, contact support and we’ll help.' : ticketFilters.view === 'resolved' ? 'No resolved tickets.' : 'No tickets yet.'));
   }
 
   const sync = () => history.replaceState(null, '', `#/help${qs({ q: filters.q, ...changed(ticketFilters, TICKET_DEFAULTS) })}`);

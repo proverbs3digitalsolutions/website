@@ -7,6 +7,14 @@ import { initFilters, filterBar, changed, apiFilters } from '../filters.js';
 
 export const stars = (n) => h('span', { class: 'rating', 'aria-label': `${n} out of 5` }, '★'.repeat(n) + '☆'.repeat(5 - n));
 
+// The dates a discount code runs: the range when both ends are set, else "From …" or "Until …" for the one that is (#32). Null for neither.
+export function codeDates({ valid_from: from, valid_until: until } = {}) {
+  if (from && until) return `${fmtDate(from)} – ${fmtDate(until)}`;
+  if (from) return `From ${fmtDate(from)}`;
+  if (until) return `Until ${fmtDate(until)}`;
+  return null;
+}
+
 export async function reviewsView(el, { query = {} } = {}) {
   const defaults = { q: '', rating: '', property_id: '', unit_id: '', from: '', to: '', has_comment: '', sort: '' };
   const filters = initFilters('reviews', query, defaults);
@@ -98,10 +106,10 @@ export async function discountCodesView(el, { rerender, query = {} }) {
       h('td', { class: 'small' }, [
         c.min_nights > 1 ? `${c.min_nights}+ nights` : null,
         c.returning_only ? 'returning guests' : null,
-        c.valid_from || c.valid_until ? `${c.valid_from ? fmtDate(c.valid_from) : '…'} – ${c.valid_until ? fmtDate(c.valid_until) : '…'}` : null,
+        codeDates(c),
       ].filter(Boolean).join(' · ') || 'Anyone'),
       h('td', null, `${c.uses}${c.max_uses ? ` / ${c.max_uses}` : ''}`, Number(c.total_discounted) > 0 && h('div', { class: 'muted small' }, `${peso(c.total_discounted)} given`)),
-      h('td', null, canManage && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => toggle(c) }, c.active ? 'Turn off' : 'Turn on')))))));
+      h('td', null, canManage && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `${c.active ? 'Turn off' : 'Turn on'} ${c.code}`, 'data-focus-key': `dc-toggle-${c.code_id}`, onclick: () => toggle(c) }, c.active ? 'Turn off' : 'Turn on')))))));
   const listBox = h('div', { class: 'card' });
   const welcomeBox = h('div');
 

@@ -2,6 +2,7 @@
 
 import { get, post, onAuthLost, ApiError } from './api.js';
 import { h, icon, brand, toast, pageError, skeleton, installFocusGuard } from './ui.js';
+import { buildTopbar, updateTopbar, installTopbarKeys } from './topbar.js';
 import * as authViews from './views/auth.js';
 import { dashboardView } from './views/dashboard.js';
 import { propertiesView, propertyDetailView } from './views/properties.js';
@@ -348,6 +349,8 @@ export async function logout() {
   await forgetThisDevice();
   resetAssistant();
   try { await post('/auth/logout'); } catch { /* ignore */ }
+  // Recent searches belong to this person, not to the next one on a shared machine (key as in topsearch.js).
+  try { localStorage.removeItem(`bh-recent-search-${state.user?.user_id ?? 'x'}`); } catch { /* ignore */ }
   state.user = null;
   try { sessionStorage.clear(); } catch { /* ignore */ }
   forgetSetupAnswers();
@@ -390,6 +393,16 @@ function openMore() {
 
 const initials = (name) => String(name || '').split(/\s+/).filter(Boolean).slice(0, 2).map((x) => x[0].toUpperCase()).join('') || '?';
 
+// What the top bar reads. Each is read when used: the shell outlives the page it was built on. topbar.js never imports this file.
+const topbarCtx = {
+  user: () => state.user,
+  path: () => parseHash().path,
+  hash: () => location.hash,
+  nav: () => navFor(),
+  home: () => homeRoute(),
+  navigate, logout, routeAllowed,
+};
+
 function buildShell(path) {
   const u = state.user;
   const content = h('main', { class: 'content', id: 'main' });
@@ -407,8 +420,7 @@ function buildShell(path) {
           h('span', null, h('strong', null, u.full_name), h('span', null, `${u.organization_name} · ${({ owner: 'Owner', manager: 'Manager', staff: 'Staff', cleaner: 'Cleaner' })[u.role]}`))),
         themeSwitch({ compact: true }),
         h('button', { class: 'btn btn--secondary btn--sm btn--block', onclick: logout }, 'Log out'))),
-    h('header', { class: 'topbar' }, brand(homeRoute()), h('span', { class: 'topbar__assist' }),
-      h('a', { class: 'topbar__me', href: '#/account', 'aria-label': `${u.organization_name}, my account` }, h('span', { class: 'topbar__org' }, u.organization_name), h('span', { class: 'acct-avatar acct-avatar--sm', 'aria-hidden': 'true' }, initials(u.full_name)))),
+    buildTopbar(topbarCtx),
     h('div', { class: 'shell__main' }, banner, content),
     h('nav', { class: 'bottomnav', 'aria-label': 'Main' },
       bottomKeys.map(([p, t, ic]) => h('a', { href: `#${p}`, 'aria-current': isCurrent(p, path) ? 'page' : null }, icon(ic), t === 'Rent & Expenses' ? 'Rent' : t)),
@@ -454,6 +466,7 @@ function updateShell(sh, path) {
   if (sh.banner) { if (banner) sh.banner.replaceWith(banner); else sh.banner.remove(); } else if (banner) sh.main.prepend(banner);
   sh.banner = banner;
   refreshUnread(sh.el);
+  updateTopbar(sh.el.querySelector('.topbar'), topbarCtx);
 }
 
 // ---------------------------------------------------------------- render
@@ -493,7 +506,7 @@ export async function render() {
   // Pages this role or workspace module can't use go home instead of opening by URL.
   if (route.access === APP && !routeAllowed(path, state.user)) { toast("That page isn't available for your role or workspace.", 'error'); navigate(homeRoute(), { replace: true }); return; }
 
-  document.querySelectorAll('dialog.modal, .morenav').forEach((d) => d.remove());
+  document.querySelectorAll('dialog.modal, .morenav, .tb-sheet').forEach((d) => d.remove());
   delete document.documentElement.dataset.h1title; // set below when a guest page's tab title is taken from its heading
   const ctx = { params: route.params, query, state, navigate, rerender: render };
 
@@ -690,7 +703,7 @@ document.addEventListener('focusin', (e) => {
   const bar = document.querySelector('.bottomnav');
   if (!bar || !window.matchMedia('(max-width: 959px)').matches || !(e.target instanceof Element)) return;
   // The bar's own controls and the layers above the page (chat panel, More sheet, dialogs) don't move with the page, so scrolling would only shift the page.
-  if (e.target.closest('.bottomnav, .assist, .morenav, dialog')) return;
+  if (e.target.closest('.bottomnav, .assist, .morenav, .tb-pop, dialog')) return;
   const hidden = e.target.getBoundingClientRect().bottom - bar.getBoundingClientRect().top;
   if (hidden > 0) window.scrollBy(0, hidden + 16);
 });
@@ -727,6 +740,7 @@ document.addEventListener('keydown', (e) => {
     document.getElementById('app').replaceChildren(pageError({ message: "Can't reach BalayHub. Check your internet connection." }, () => location.reload()));
     return;
   }
+  installTopbarKeys(topbarCtx);
   installFocusGuard();
   render();
 }());

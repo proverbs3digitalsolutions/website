@@ -96,11 +96,12 @@ export async function settingsView(el, { rerender, query = {} }) {
   if (u.role === 'owner' && u.plan && !u.plan.is_demo && u.business_type !== 'long_term') sections.push(await manualPaymentsCard(rerender));
   if (u.role === 'owner' && u.plan && !u.plan.is_demo) sections.push(dataCard(u, rerender));
 
+  let invite = null;
   if (u.role === 'owner') {
     const [{ members, invitations }, { properties }] = await Promise.all([get('/team'), get('/properties')]);
     const propName = (id) => properties.find((p) => p.property_id === id)?.property_name || 'Archived property';
 
-    const invite = () => formModal({
+    invite = () => formModal({
       title: 'Invite a team member',
       submitText: 'Create invitation',
       fields: [
@@ -187,6 +188,8 @@ export async function settingsView(el, { rerender, query = {} }) {
     h('p', { style: { marginTop: '10px' } }, h('a', { href: '#/privacy' }, 'Read the Privacy Notice'))));
 
   el.replaceChildren(pageHead({ title: 'Settings', sub: u.organization_name }), h('div', { class: 'stack' }, sections));
+  // The top bar's "Invite a teammate" link (#/settings?invite=1) opens the dialog once the page is drawn.
+  query.invite && invite && (delete query.invite, history.replaceState(null, '', '#/settings'), invite());
 }
 
 // Audit actions in plain words. My account shows the same labels (it imports actionText from here).
@@ -581,6 +584,13 @@ async function bookingCard(rerender) {
   const save = async (payload, msg) => {
     try { await patch('/direct-booking', payload); toast(msg); rerender(); } catch (err) { toast(err.message, 'error'); }
   };
+  // An unchecked key that PayMongo can't be reached for asks first (409 PAYMONGO_UNCHECKED); a yes sends it again with the flag.
+  const turnOn = async (confirmed) => {
+    try { await patch('/direct-booking', { enabled: true, ...(confirmed && { confirm_unchecked_key: true }) }); toast('Your booking page is live!'); rerender(); } catch (err) {
+      if (err.code !== 'PAYMONGO_UNCHECKED') { toast(err.message, 'error'); return; }
+      if (await confirmDialog({ title: 'Key not checked yet', text: err.message, confirmText: 'Turn on anyway', cancelText: 'Cancel' })) await turnOn(true);
+    }
+  };
   const connect = () => formModal({
     title: 'Connect your PayMongo account',
     submitText: 'Save key',
@@ -591,7 +601,13 @@ async function bookingCard(rerender) {
       field({ name: 'paymongo_secret_key', label: 'PayMongo secret key', type: 'password', required: true, autocomplete: 'off', placeholder: 'sk_live_…' }),
       h('p', { class: 'muted small' }, 'Stored encrypted and never shown again. Only used to create checkouts and check payments for your bookings.'),
     ],
-    onSubmit: async (d) => { await patch('/direct-booking', { paymongo_secret_key: d.paymongo_secret_key }); toast('PayMongo connected.'); rerender(); },
+    onSubmit: async (d) => {
+      await patch('/direct-booking', { paymongo_secret_key: d.paymongo_secret_key });
+      // PayMongo accepted it ("Connected"), or couldn't be reached and the key waits for a check when the page is turned on.
+      const { paymongo_checked: checked } = await get('/direct-booking').catch(() => ({}));
+      toast(checked ? 'PayMongo connected.' : "Key saved. It couldn't be checked yet.");
+      rerender();
+    },
   });
   const edit = () => formModal({
     title: 'Booking page settings',
@@ -621,7 +637,9 @@ async function bookingCard(rerender) {
       b.enabled ? h('span', { class: 'badge badge--paid' }, 'Live') : h('span', { class: 'badge badge--archived' }, 'Off')),
     h('p', { class: 'small' }, 'Let guests book and pay you directly, with no channel fees. Guests choose dates on your page and pay through your PayMongo account; the booking, confirmation, receipt and check-in form are created automatically, and your Airbnb and Booking.com calendars are updated through calendar sync.'),
     h('dl', { class: 'dl', style: { marginTop: '12px' } },
-      h('dt', null, 'PayMongo'), h('dd', null, b.paymongo_connected ? `Connected (${b.paymongo_key_hint})` : 'Not connected'),
+      h('dt', null, 'PayMongo'), h('dd', null,
+        b.paymongo_connected ? (b.paymongo_checked ? `Connected (${b.paymongo_key_hint})` : `Saved, not checked yet (${b.paymongo_key_hint})`) : 'Not connected',
+        b.paymongo_connected && !b.paymongo_checked && h('p', { class: 'muted small' }, "BalayHub couldn't reach PayMongo to check this key. It is checked again when you turn on your booking page.")),
       h('dt', null, 'Listings on the page'), h('dd', null, listed.length ? `${listed.length} of ${b.listings.length}` : 'None yet: edit a listing and tick "Show this listing on my booking page"'),
       b.url && [h('dt', null, 'Your link'), h('dd', null, h('a', { href: b.url.slice(b.url.indexOf('#')), target: '_blank' }, b.url))]),
     b.test_mode && h('div', { class: 'alert alert--warn', style: { marginTop: '10px' } }, 'TEST MODE: you connected a PayMongo test key, so payments on your page are not real and guests see a test-mode notice. Switch to your live key (Change key) before sharing the link.'),
@@ -630,7 +648,7 @@ async function bookingCard(rerender) {
       b.paymongo_connected
         ? (b.enabled
           ? h('button', { class: 'btn btn--secondary btn--sm', onclick: () => save({ enabled: false }, 'Booking page turned off.') }, 'Turn off')
-          : h('button', { class: 'btn btn--primary btn--sm', disabled: noListing, 'aria-describedby': noListing ? 'bp-on-hint' : undefined, onclick: () => save({ enabled: true }, 'Your booking page is live!') }, 'Turn on'))
+          : h('button', { class: 'btn btn--primary btn--sm', disabled: noListing, 'aria-describedby': noListing ? 'bp-on-hint' : undefined, onclick: () => turnOn(false) }, 'Turn on'))
         : h('button', { class: 'btn btn--primary btn--sm', onclick: connect }, 'Connect PayMongo'),
       b.enabled && b.url && h('button', { class: 'btn btn--secondary btn--sm', onclick: copy }, 'Copy link'),
       h('button', { class: 'btn btn--ghost btn--sm', onclick: edit }, 'Page settings'),

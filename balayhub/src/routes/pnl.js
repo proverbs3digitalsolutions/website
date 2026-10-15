@@ -46,7 +46,7 @@ router.get('/reports/pnl.csv', requireRole('owner', 'manager'), ah(async (req, r
   const t = r.totals;
   const lines = [
     ['BalayHub profit and loss'], ['Workspace', req.user.organization_name], ['Month', month],
-    ['Generated', new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' })], ['Currency', 'PHP'], [],
+    ['Generated', new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })], ['Currency', 'PHP'], [],
     ['Property', 'Unit', 'Stays', 'Nights', 'Gross', 'Channel fees', 'Refunds', 'Expenses', 'Net'],
     ...r.rows.map((x) => [x.property_name, x.unit_name, x.stays, x.nights, x.gross, x.channel_fees, x.refunds, x.expenses, x.net]),
     ['Total', '', t.stays, t.nights, t.gross, t.channel_fees, t.refunds, t.expenses, t.net],

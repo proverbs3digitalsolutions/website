@@ -55,7 +55,7 @@ test('check-in with every field empty: one 400 that names the name, phone, conse
   const r = await client(base).post(`/api/public/checkin/${rulesCheckin}`, {});
   assert.equal(r.status, 400, JSON.stringify(r.data));
   assert.equal(r.data.code, 'VALIDATION');
-  assert.deepEqual(names(r), ['accept_rules', 'consent', 'lead_name', 'phone']);
+  assert.deepEqual(names(r), ['accept_rules', 'consent', 'id_photos', 'lead_name', 'phone']);
   assert.equal(r.data.fields.consent, 'Please agree so your host can register you with the building.');
   assert.equal(r.data.fields.accept_rules, 'Please agree to the house rules.');
 });
@@ -63,18 +63,18 @@ test('check-in with every field empty: one 400 that names the name, phone, conse
 test('check-in on a listing with no house rules: the empty form names name, phone and consent, not house rules', async () => {
   const r = await client(base).post(`/api/public/checkin/${plainCheckin}`, {});
   assert.equal(r.status, 400, JSON.stringify(r.data));
-  assert.deepEqual(names(r), ['consent', 'lead_name', 'phone']);
+  assert.deepEqual(names(r), ['consent', 'id_photos', 'lead_name', 'phone']);
 });
 
 test('check-in: a bad phone number and no consent come back together, and house rules are asked only until accepted', async () => {
   const g = client(base);
   const both = await g.post(`/api/public/checkin/${rulesCheckin}`, { lead_name: 'Rafael Diaz', phone: '12' });
   assert.equal(both.status, 400);
-  assert.deepEqual(names(both), ['accept_rules', 'consent', 'phone']);
-  const saved = await g.post(`/api/public/checkin/${rulesCheckin}`, { lead_name: 'Rafael Diaz', phone: '09171112222', consent: true, accept_rules: true });
+  assert.deepEqual(names(both), ['accept_rules', 'consent', 'id_photos', 'phone']);
+  const saved = await g.post(`/api/public/checkin/${rulesCheckin}`, { lead_name: 'Rafael Diaz', phone: '09171112222', consent: true, accept_rules: true, id_photos: 1 });
   assert.equal(saved.status, 200, JSON.stringify(saved.data));
   const again = await g.post(`/api/public/checkin/${rulesCheckin}`, {});
-  assert.deepEqual(names(again), ['consent', 'lead_name', 'phone'], 'house rules already accepted, so not asked again');
+  assert.deepEqual(names(again), ['consent', 'id_photos', 'lead_name', 'phone'], 'house rules already accepted, so not asked again');
 });
 
 test('quote checkout with every field empty: one 400 that names email, phone, consent and house rules', async () => {

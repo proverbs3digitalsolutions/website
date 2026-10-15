@@ -184,7 +184,7 @@ export async function calendarView(el, { query }) {
       const lines = [...new Set(warn.map(problemLine))];
       const row = h('div', { class: 'cal-row' },
         h('div', { class: 'cal-side' },
-          h('a', { href: `#/listings?focus=${l.unit_id}`, class: 'cal-name' }, l.unit_name),
+          h('a', { href: `#/listings?focus=${l.unit_id}`, class: 'cal-name link-tap' }, l.unit_name),
           h('span', { class: 'cal-prop' }, l.property_name),
           h('span', { class: `badge badge--${l.cleaning_status === 'dirty' ? 'overdue' : 'paid'}` }, l.cleaning_status === 'dirty' ? 'Dirty' : 'Clean'),
           lines.length > 0 && h('a', { class: 'badge badge--partial cal-warn', href: `#/listings?focus=${l.unit_id}`, title: lines.join(' '), 'aria-label': `Sync problem on ${l.unit_name}: ${lines.join(' ')}` }, `⚠ ${lines.length > 1 ? `${lines.length} sync problems` : 'Sync problem'}`)),

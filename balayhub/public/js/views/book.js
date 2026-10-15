@@ -10,6 +10,7 @@ extendTranslations({
   'Cancellation policy': 'Patakaran sa pagkansela',
   'Pay a {pct}% deposit now, the rest before check-in': '{pct}% deposit ngayon, ang natitira bago mag-check-in',
   'Add-ons': 'Mga add-on',
+  'Pay now': 'Bayad ngayon',
   'Optional extras for your stay. Add-ons are paid in full now, together with your deposit.': 'Mga dagdag na pwede mong idagdag sa stay mo. Bayad na agad ang buong halaga ng add-ons ngayon, kasama ng deposit.',
   'Optional extras for your stay.': 'Mga dagdag na pwede mong idagdag sa stay mo.',
   'Includes: {list}.': 'Kasama: {list}.',
@@ -69,7 +70,7 @@ let keep = null;
 function shell(hostName, slug, ...children) {
   return h('div', { class: 'bk' },
     h('header', { class: 'bk__top' }, h('div', { class: 'bk__wrap bk__top-inner' },
-      h('a', { class: 'bk__host', href: `#/book/${slug}` }, hostName || t('Book your stay')),
+      h('a', { class: 'bk__host link-tap', href: `#/book/${slug}` }, hostName || t('Book your stay')),
       h('span', { class: 'bk__right' }, langToggle(() => redraw()), h('span', { class: 'bk__powered' }, t('Secure booking by '), brand(null))))),
     h('main', { class: 'bk__wrap bk__main', id: 'main' }, children),
     h('footer', { class: 'bk__wrap bk__foot muted small' }, t('Payments are processed securely by PayMongo. '), h('a', { href: '#/privacy' }, t('Privacy notice'))));
@@ -83,6 +84,14 @@ function cover(l, cls = 'bk-card__img') {
 
 // ---------------------------------------------------------------- host page
 // "Includes: Booked-early price." under the nightly price; nothing when no rule changed a night.
+// What the guest pays now for the ticked choice. Add-ons are always paid in full up front; the deposit covers the stay only.
+export function dueNow(q, choice) {
+  if (choice === 'deposit' && q.deposit_allowed) {
+    const now = Number(q.deposit) + Number(q.addons_total || 0);
+    return { kind: 'deposit', now, rest: Number(q.total) - now, date: q.balance_due_date };
+  }
+  return { kind: 'full', now: Number(q.total) };
+}
 export const priceRulesLine = (rules) => (rules?.length ? t('Includes: {list}.', { list: rules.map((r) => t(r)).join(', ') }) : null);
 
 export async function bookHostView(el, { params, query }) {
@@ -215,6 +224,8 @@ export async function bookListingView(el, { params, query }) {
     (opt === 'full' || opt === 'either') && h('label', { class: 'check' }, h('input', { type: 'radio', name: 'pay', value: 'full', checked: true }), h('span', null, t('Pay in full now'))),
     (opt === 'deposit' || opt === 'either') && h('label', { class: 'check' }, h('input', { type: 'radio', name: 'pay', value: 'deposit', checked: opt === 'deposit' }), h('span', { class: 'pay-dep' }, t('Pay a {pct}% deposit now, the rest before check-in', { pct: l.deposit_pct }))),
     h('div', { class: 'error', role: 'alert' }));
+  // Changing the choice redraws the summary from the quote already held.
+  payChoice.addEventListener('change', () => { if (current) drawSummary(); });
   const formError = h('div');
   // Discount code
   let promoCode = '';
@@ -286,6 +297,24 @@ export async function bookListingView(el, { params, query }) {
   const guestCountOk = () => { const n = Number(form.elements.num_guests.value); return Number.isInteger(n) && n >= 1; };
   // A fraction (2.5) is not "at least 1": ask for a whole number.
   const guestCountMsg = () => (Number.isInteger(Number(form.elements.num_guests.value)) ? t('At least 1 guest.') : t('Enter a whole number of guests, 1 or more.'));
+  // The summary, drawn from the current quote and the ticked pay choice (so changing the choice needs no new quote).
+  function drawSummary() {
+    const q = current;
+    const due = dueNow(q, form.querySelector('input[name=pay]:checked')?.value || 'full');
+    summary.replaceChildren(h('dl', { class: 'dl' },
+      h('dt', null, t('Dates')), h('dd', null, `${fmtDate(checkIn)} – ${fmtDate(checkOut)}`),
+      h('dt', null, q.nights > 1 ? t('{n} nights', { n: q.nights }) : t('1 night')), h('dd', null, money(q.discount_label || q.promo_code ? q.subtotal : q.accommodation_total)),
+      q.discount_label && [h('dt', null, tServer(q.discount_label).replace(/^./, (c) => c.toUpperCase())), h('dd', null, `− ${money(q.discount_amount)}`)],
+      q.promo_code && [h('dt', null, t('Code {code}', { code: q.promo_code })), h('dd', null, `− ${money(q.promo_discount)}`)],
+      Number(q.cleaning_fee) > 0 && [h('dt', null, t('Cleaning fee')), h('dd', null, money(q.cleaning_fee))],
+      Number(q.addons_total) > 0 && [h('dt', null, t('Add-ons')), h('dd', null, money(q.addons_total))],
+      h('dt', null, t('Total')), h('dd', null, h('strong', null, money(q.total))),
+      due.kind === 'deposit'
+        ? [h('dt', null, t('{pct}% deposit', { pct: l.deposit_pct })), h('dd', null, t('{now} now, {rest} due by {date}', { now: money(due.now), rest: money(due.rest), date: fmtDate(due.date) }))]
+        : [h('dt', null, t('Pay now')), h('dd', null, h('strong', null, money(due.now)))]),
+    priceRulesLine(q.price_rules) && h('p', { class: 'muted small' }, priceRulesLine(q.price_rules)),
+    !q.available && h('div', { class: 'alert alert--error' }, t('Sorry, these dates are no longer available.')));
+  }
   async function updateQuote() {
     current = null;
     submit.disabled = true;
@@ -319,21 +348,7 @@ export async function bookListingView(el, { params, query }) {
       if (!q.deposit_allowed && opt === 'deposit' && !full) {
         payChoice.querySelector('.error').textContent = t('Your stay is too soon for a deposit; it will be charged in full.');
       }
-      summary.replaceChildren(h('dl', { class: 'dl' },
-        h('dt', null, t('Dates')), h('dd', null, `${fmtDate(checkIn)} – ${fmtDate(checkOut)}`),
-        h('dt', null, q.nights > 1 ? t('{n} nights', { n: q.nights }) : t('1 night')), h('dd', null, money(q.discount_label || q.promo_code ? q.subtotal : q.accommodation_total)),
-        q.discount_label && [h('dt', null, tServer(q.discount_label).replace(/^./, (c) => c.toUpperCase())), h('dd', null, `− ${money(q.discount_amount)}`)],
-        q.promo_code && [h('dt', null, t('Code {code}', { code: q.promo_code })), h('dd', null, `− ${money(q.promo_discount)}`)],
-        Number(q.cleaning_fee) > 0 && [h('dt', null, t('Cleaning fee')), h('dd', null, money(q.cleaning_fee))],
-        Number(q.addons_total) > 0 && [h('dt', null, t('Add-ons')), h('dd', null, money(q.addons_total))],
-        h('dt', null, t('Total')), h('dd', null, h('strong', null, money(q.total))),
-        q.deposit_allowed && (() => {
-          // Deposit covers the stay only; add-ons are paid in full now.
-          const now = Number(q.deposit) + Number(q.addons_total || 0);
-          return [h('dt', null, t('{pct}% deposit', { pct: l.deposit_pct })), h('dd', null, t('{now} now, {rest} due by {date}', { now: money(now), rest: money(Number(q.total) - now), date: fmtDate(q.balance_due_date) }))];
-        })()),
-      priceRulesLine(q.price_rules) && h('p', { class: 'muted small' }, priceRulesLine(q.price_rules)),
-      !q.available && h('div', { class: 'alert alert--error' }, t('Sorry, these dates are no longer available.')));
+      drawSummary();
       submit.disabled = !q.available || !host.accepting;
     } catch (err) {
       // Over the guest limit the Guests box carries the sentence, so the summary stays quiet about it.

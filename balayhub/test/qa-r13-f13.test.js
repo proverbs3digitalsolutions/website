@@ -154,6 +154,8 @@ describe('#44 Home for each state', () => {
     // Opening the fold draws the trend and revenue cards once, so a chart measures the space it is drawn into.
     fold.setAttribute('open', '');
     fold.dispatch('toggle');
+    // R14 OB1: the cards wait for their data, then land together.
+    await new Promise((r) => setTimeout(r, 20));
     assert.equal(walk(fold, (n) => n.tagName === 'section').length, 2, 'the trend and revenue cards are drawn on open');
     fold.dispatch('toggle');
     assert.equal(walk(fold, (n) => n.tagName === 'section').length, 2, 'they are not drawn a second time');

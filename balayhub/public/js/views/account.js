@@ -178,7 +178,7 @@ export async function accountView(el, { rerender }) {
           h('div', { class: 'card__head' }, h('h2', null, 'Preferences')),
           h('div', { class: 'acct-pref' }, h('span', null, 'Appearance'), themeSwitch()),
           h('div', { class: 'acct-pref' }, h('span', null, 'Notifications on this device'),
-            h('a', { href: '#/settings' }, u.notifications_on ? 'On · manage' : 'Turn on'))),
+            h('a', { class: 'link-tap', href: '#/settings' }, u.notifications_on ? 'On · manage' : 'Turn on'))),
 
         d.support && h('div', { class: 'card' },
           h('div', { class: 'card__head' }, h('h2', null, 'Help & support')),

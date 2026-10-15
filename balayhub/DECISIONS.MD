@@ -2,7 +2,7 @@
 
 Every decision made on BalayHub, with the date and the reason. Newest decisions go at the bottom. When a decision changes, add a new entry and mark the old one **Superseded by D-xx**. Never delete history.
 
-Last updated: 2026-10-15 (D-90, founder top bar request; D-89, QA round 13 calls)
+Last updated: 2026-10-15 (D-93, QA round 14 re-verify calls; D-92, QA round 14 calls; D-91, the top bar built; D-90, founder top bar request; D-89, QA round 13 calls)
 
 ---
 
@@ -978,3 +978,79 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 > - **On phones:** the top bar keeps search (an icon opening full-screen search), "+" and the bell; bookmarks and help move into the profile menu or the More sheet. 44px targets and the D-89 focus rules apply. The host app stays English.
 >
 > *Why:* the founder asked for it directly after comparing with Guesty; one search box and one "+" menu cut the number of clicks for a small host. *Docs:* PRD feature (planned), APP-FLOW and BACKEND-SCHEMA (a bookmarks table, a search endpoint and a notifications feed) and DESIGN-BRIEF get their sections when it is built.
+
+---
+
+> **D-91 · 2026-10-15 · The top bar built (F53).** The Guesty-style top bar the founder asked for in D-90 is built. **D-90 said it overrides D-85's "Guesty features parked, nothing built" for this one item only, and that is still the whole of the override:** every other Guesty idea stays parked as reference, and the look and names are BalayHub's own.
+> - **What is in it (desktop, 960px and wider):** a search box in the middle ("Type / to search"), then on the right Bookmarks, "+" Add new, the Notifications bell, Help and the profile avatar. The sidebar keeps the brand and its own account box (name, theme, Log out); the avatar menu repeats them, and the sidebar copy stays (D-85: group, never cut).
+> - **Search:** pages and settings by name (found in the browser from the menu the person already has), plus records from the server: reservations (guest name or confirmation code), guests, listings, properties, tenants, unit owners, quotes, maintenance requests and help articles. Grouped, arrow keys and Enter, Escape closes, recent searches kept on that device only. It matches names and codes, never phone numbers, emails, notes or money. Active records only; cancelled reservations show marked "Cancelled".
+> - **Bookmarks:** star the current page; up to 20 per person, saved on the server so they follow the person across devices. A bookmark to a page the person's role can no longer open is hidden, not deleted.
+> - **Add new:** Reservation, Listing, Property, Unit owner, Cleaning task, Expense, Tenant, Rent payment, Invite a teammate, each opening the page's existing "new" dialog through a `?new=` or `?invite=1` link, filtered by role and workspace.
+> - **Bell:** a panel with an unread count, mark as read, and filters (Reservations, Payments, Cleaning, Messages, Owners).
+> - **Help:** help-centre search, suggested articles for the current page, and "Contact us" (a new support ticket).
+> - **Profile menu:** My account, Settings, theme, Log out.
+> - **Role rules:** owners and managers see everything above. Staff see all of it but the "+" menu holds only Expense (and Rent payment in a long-term or Both workspace). Cleaners get search (pages and help only, the server refuses them), bookmarks, the bell, help and the profile, with no "+" menu. Read-only and demo workspaces have no "+" menu. Long-term-only workspaces have no bell (no rent alert type exists yet). Owners, managers and staff only ever see records of their own workspace; managers and staff only those of their assigned properties.
+> - **Phones (under 960px):** the bar holds the logo (no word under 560px), Ask, Search (an icon that opens full-screen search), "+", the bell and the avatar. **Bookmarks and Help move into the avatar menu.** Every control is 44px; panels open full width under the bar and never sit under the bottom bar. The host app stays English.
+> - **Calls made with the build (each has a default in use; questions are in BLOCKERS.MD under "Questions from QA round 14"):**
+>   - The bell is fed by a new `notifications` table written at the same place that already sends phone alerts (`push.notify`), one row per person who is meant to get that alert. It is not built on the audit log: the audit log has no "who should see this" and no read state.
+>   - Alert settings in My account also hide items from the bell, and so does a property filter. Rows are re-checked against role, property assignment and settings when they are read, so someone who loses access to a property stops seeing its alerts.
+>   - A new alert type, "Unit owner activity" (`owner_activity`), when a unit owner blocks or unblocks dates in the owner portal. It fills the Owners filter, and owners get it on the phone too unless they turn it off.
+>   - Notifications are kept 90 days.
+>   - The Ask button stays at the bottom right on desktop.
+>   - "Property" is in the "+" menu for long-term and Both workspaces only (a short-term host adds buildings through Add listing).
+> - **Cost:** two new tables (`bookmarks`, `notifications`, migration 033) and three new endpoints (`GET /api/search`, `/api/account/bookmarks`, `/api/account/notifications`). No change to existing access rules.
+>
+> *Why:* the founder asked for it directly after comparing with Guesty; one search box and one "+" menu cut the number of clicks for a small host. *Docs:* PRD F53 (built), APP-FLOW 27, BACKEND-SCHEMA 2.17, 6.4 and 20, TRD 3.3 and 4, DESIGN-BRIEF 23.
+
+---
+
+> **D-92 · 2026-10-15 · QA round 14 calls (alpha with small hosts).** The fourteenth QA sweep (8 lanes, 60 entries including carried items) was fixed in the same wave as the top bar (19 code lanes). Calls follow D-85. Open questions are in BLOCKERS.MD under "Questions from QA round 14". One severe bug (the booking summary). Suite result at the merge: 2640 of 2640 passing. Security review: PASS. Round 14 re-verify result: pending re-verify.
+>
+> *Money and trust*
+> - **The booking page shows what the guest pays now for the option they picked.** "Pay in full now" shows one "Pay now" line with the total; the deposit line shows only for "Pay a deposit". Changing the choice updates it at once. *Severe: the page showed the deposit when the guest would be charged in full. The server was right all along.*
+> - **No money method is pre-chosen for a refund.** Record refund starts on "Choose…" and asks "Choose how the money was refunded." (the same as Record payment on a direct booking), so a one-tap save can no longer record cash as GCash. A zero or negative refund is refused at the field before any question.
+> - **A PayMongo key is checked with PayMongo before it is called Connected.** On save BalayHub asks PayMongo whether the key works. Accepted: "Connected". Refused: nothing is saved and the field says so. **If PayMongo can't be reached, the key is saved and reads "Saved, not checked yet".** Turning the booking page on then tries the check again; if PayMongo still can't be reached, the owner is asked "Turn on anyway?". A key PayMongo refuses can't be used to turn the page on. A guest checkout that PayMongo refuses as unauthorised marks the key unchecked again. *Default for a key that can't be checked: allow, after a clear warning (the safer alternative, refusing until PayMongo confirms, would block the host whenever PayMongo is briefly down).*
+> - **Check-in needs at least one ID photo per registration,** because the page already tells guests the building requires one. A guest who already sent a photo can edit their answers without sending another. *Founder default; the alternative is softer wording with photos optional.*
+> - **A unit owner email that is a teammate's login asks first:** "This email is a login for <name>. Save anyway?", the same way the round 13 duplicate-owner question works.
+> - **Recording rent from a later month's row keeps the amount of the row clicked,** and the form now says in words that the money goes to the oldest unpaid month first (D-85), then to this one. Only the wording changed.
+>
+> *Smooth screens (founder priority)*
+> - **Saving, searching, filtering or switching a tab keeps the page where you were.** One shared piece of code in `ui.js` (the scroll keeper) notes the window position when the person acts, holds the page height while the redraw runs, and undoes any scroll the redraw caused; scroll anchoring is off for the page content. Views never move the window themselves (a scan test enforces it). Only a page change scrolls to the top, once (D-89).
+> - **Home draws its cards in one go,** so nothing jumps while it loads.
+> - **Focus (completes D-89).** When the control you used is gone and nothing took its place, **focus goes to the page heading at once** (no pause on the page body), and moves to the control if it comes back within 10 seconds. The sweep's "page body" readings were the guard's old 800 ms pause, not a lost guard. **Matching "the same place in a group" now applies to tabs and radio buttons only,** so focus never lands on another row's Remove or Archive. New keys: automatic message Turn on/off, Pause/Resume, Skip for now/Show again. After Reopen, the Daily close page lands on the heading (accepted; carried).
+>
+> *Phones*
+> - **Also at least 44px tall under 960px:** checkbox rows (cleaning checklists, notification settings), dialog close buttons, the guest language toggle, link-style buttons, "Show as table", small inputs (Go to date, Month), the guest Privacy link and the landing page's small buttons. The cleaner pay select-all box is 24px. Unchanged: theme buttons and calendar booking tiles (24px). Plain links use a shared `link-tap` class. On desktop the page keeps room under the last row so the Ask button never covers it.
+>
+> *Small-host screens and wording*
+> - **The Listings filter bar scales with the number of listings:** none until there is a listing; 1 to 3 listings show only search with the rest under "More filters"; 4 or more show the full bar. *Known side effect:* with 0 active listings (all archived) the Archived listings view is reachable only by link (BLOCKERS).
+> - **The "Cancel lease" button names keep their visible text**, so the spoken name always contains the words on screen (WCAG 2.5.3). When a tenant has more than one lease, the lease buttons also say which lease they belong to.
+> - New reservation: Channel fee only when booked through a channel; "Where did they book?" and "Other fees" under "More details". The guest limit follows the listing's own limit.
+> - Inbox: the email note is one line; Property and Listing filters show only when there is more than one.
+> - "Connect calendar" on Home opens the first listing's Channels dialog.
+> - Reports: a short-term workspace opening the long-term Reports goes to Stay reports; "Billed" names its dates; the CSV "Generated" line reads like the screen; Stay reports CSV is disabled for a bad date range; the Listing filter follows the Property; the Reports row reads "Whole-property expenses".
+> - Copy: "No resolved tickets."; cleaner pay labels follow the chosen month; seasons column "Dates"; discount codes "Until …"; the deposit cap sentence shows once; an inbox error clears when you switch tabs.
+>
+> *Decision conflicts settled:* the template row in APP-FLOW (managers edit templates) against D-28 (owner only): D-28 wins and the doc changed; the gate pass has no language toggle and stays English (doc changed to match the code); the check-in copy against the code that accepted no ID (founder default: require one); D-85 against D-90 (D-90 wins for the top bar only, recorded in D-91).
+>
+> *Intended (recorded so later sweeps don't file them):* add-on descriptions show as typed in both languages (a hint now says so); "Please fill in…" for empty required fields and "Please check…" for invalid ones; calendar bars and theme buttons as D-88/D-89.
+>
+> *Carried:* identical seasons saved at the same instant (no unique index); managers and staff with no reservations get the usual Home; the server trusts the client's ID photo count (the upload is a second request).
+>
+> *Why:* a made-up PayMongo key showed "Connected" and let the booking page go live, the booking page showed the wrong amount, and the founder's own navigation was jarring; these are money and guest trust first (D-85), then friction.
+
+---
+
+> **D-93 · 2026-10-15 · QA round 14 re-verify calls.** Nine browser lanes re-checked round 14. Most fixes held; the new findings were fixed in follow-ups (suite 2662 of 2662; browser check in round 15). The round is not clean, so the clean-round streak stays 0 of 3. This adds to D-92 and D-91 and changes none of their calls except where it says so.
+> - **The booking page's add-on line moves the rows below it, by design.** The summary has to list the add-ons the guest picked; the checkbox and the scroll position do not move. Recorded so it is not filed again.
+> - **The scroll keeper holds a short page's height until the person scrolls or changes page.** The quiet timer no longer lets go (and never clamps the scroll); a search that makes the page shorter no longer leaves the window about 50px out of place. Refines D-92's scroll keeper.
+> - **Bell rows with no property are owner-only.** Managers and staff see only rows for properties they are assigned to, so a person who loses a property stops seeing its alerts. Every alert call site was checked; the housekeeping assignment alert now carries its property. Refines D-91's read-time scoping.
+> - **The theme switch sits below the profile menu list, not inside it.** Arrow keys move through the menu items; Tab reaches the theme buttons (a menu cannot hold a radio group). Refines D-91's profile menu.
+> - **The `?new=` and `?invite=` openers fire once per navigation.** Once a page has opened its dialog it drops the opener from its own state and the address, so saving does not reopen it.
+> - **Tab counts as the person's own move.** For 300 ms after a Tab the focus guard leaves focus alone, so the search list can close without focus being pulled back.
+> - **The first listing, for "Connect your calendar" and the Launchpad calendar step, is the first active listing in Listings order;** with none, the Listings page opens.
+> - **Group room buttons name the room's dates** (and "room N" when two are identical), so Remove cannot be confused with another row's.
+> - **Open question (BLOCKERS):** should staff on a long-term workspace see tenant rent amounts, due day and outstanding? Default: yes, they need them to record payments.
+>
+> *Why:* the re-verify exists to catch what the sweep and the unit tests cannot: keyboard order, focus and scroll timing. Each finding got a test first.
+

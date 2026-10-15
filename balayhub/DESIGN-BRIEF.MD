@@ -1,6 +1,6 @@
 # BalayHub design brief
 
-Last updated: 2026-10-15 (QA round 13: patterns in section 22; D-89)
+Last updated: 2026-10-15 (QA round 14: sections 22 additions and 23; D-91, D-92)
 
 **Summary.** BalayHub is a phone-first web app (also an installable PWA) for Filipino rental and staycation hosts. It is built with plain CSS, one stylesheet (`public/css/app.css`), and small JavaScript helpers (`public/js/ui.js`). There is no framework and no CSS preprocessor. The look is calm and practical: Forest Green on soft off-white, Sand and Sun as warm accents, Poppins for headings, Inter for text, rounded cards, and large touch targets. Colours come from CSS custom properties on `:root`. A dark theme redefines the same tokens, so any component that uses tokens gets dark mode automatically. This brief records what is **actually built**. Every value below comes from the code. Where the code doesn't define a token (spacing, type sizes), the brief lists the values in use and says so.
 
@@ -594,4 +594,38 @@ Decision D-89. These lines replace the older tap-target wording in sections 5 an
   | `cp-pay-<id>` | a cleaner pay row's Edit pay and Undo paid | `views/cleanerpay.js` |
   | `dc-close`, `dc-reopen` | Close the day / Update close; Reopen day | `views/dailyclose.js` |
 
-- **Planned: the top bar (D-90).** Global search in the centre; bookmarks, "+" Add new, notifications, help and the profile avatar on the right; on phones search (icon), "+" and the bell stay, bookmarks and help move into the profile menu or More sheet. Adapted to BalayHub's brand, tokens only, 44px targets on phones, the D-89 focus rules. The design section is written when it is built.
+- **The top bar (D-90, built in round 14).** See section 23.
+
+*Added in round 14 (D-92), completing the lists above:*
+
+- **More 44px classes under 960px.** `.check` (checkbox rows, text centred), `.link-btn`, `.linkbtn`, `.flt__clear`, `.chart-foot .link-btn` (repeated because its own rule is more specific), `.input--sm` (Go to date, Month), `.langtoggle button` (guest language toggle), `.lp-top .btn--sm` (landing page), `.gc__foot a` (guest footer Privacy link, `inline-flex`), `.lpad-guide summary` (10px top and bottom padding) are at least 44px tall, and `.modal__close` is 44x44 (40x40 on desktop). Plain links with no class use `.link-tap`. `.btn--sm` still follows the 44px phone rule from the list above.
+- **24px boxes.** Row checkboxes in the ops and cleaner-pay tables (`.table .ops-check input`) and the select-all box in the ops bar (`.ops-bar .check input`) are 24x24 on phones; their label rows are 44px. Theme buttons and calendar tiles are unchanged (D-88).
+- **Scroll anchoring off, space under the last row.** `.content` has `overflow-anchor: none`. On desktop (960px and wider) `.content` keeps `padding-bottom: 96px` so the Ask button never covers the last row.
+- **The scroll keeper rule.** `ui.js` holds the page height during a redraw and undoes any scroll the redraw caused (a scroll within `SCROLL_SETTLE_MS` = 150 ms of the change). It releases on a route change, wheel, touch, keys or when things go quiet. **Views never read or set `window.scrollY` or call `scrollTo` themselves;** a scan test enforces it. Only a page change scrolls to the top, once (D-89). A page that draws several cards (Home) draws them in one go.
+- **Heading at once.** `HEADING_AFTER_MS` is 0: when the control the person used is gone and nothing took its place, focus goes to the page heading immediately; if the control (or a match) returns within `FOCUS_WATCH_MS` (10 s), focus moves to it. The "same position in the same labelled group" match is for `tab` and `radio` controls only.
+- **New `data-focus-key` values:**
+
+  | Key | Control | File |
+  |---|---|---|
+  | `auto-toggle-<automation_id>` | automatic message Turn on / Turn off | `views/inbox.js` |
+  | `mt-pause-<schedule_id>` | recurring maintenance Pause / Resume | `views/maintenance.js` |
+  | `lp-step-<step key>` | Launchpad Skip for now / Show again | `views/launchpad.js` |
+  | `dc-toggle-<code_id>` | discount code Turn on / Turn off | `views/guestcare.js` |
+  | `dc-close`, `dc-reopen` | Close the day / Update close; Reopen day (already listed above) | `views/dailyclose.js` |
+
+---
+
+## 23. Top bar (QA round 14, 2026-10-15)
+
+Decisions D-90, D-91. Styles are in `public/css/topbar.css` (loaded after `app.css`); tokens only, no hex. The behaviour is in APP-FLOW section 27.
+
+- **Layout, desktop (960px and wider).** The shell grid has two rows (`--topbar-h`: 64px, then the page). The sidebar spans both rows in column 1. The bar sits in column 2, `position: sticky; top: 0`, 64px tall, 24px side padding, 16px gap, background `--surface` with a `--line` bottom border. The brand is hidden in the bar (the sidebar shows it). The search box is centred (`flex: 1 1 auto; max-width: 560px; margin: 0 auto`), 40px tall, radius 10, `--surface-2` background (becomes `--surface` with an `--accent` border while focused), with a "/" key cap (`.tb-kbd`) at its right end while empty. Right side: Bookmarks, Add new, Notifications, Help, then the avatar, 4px apart.
+- **Icon buttons (`.tb__icon`).** 40x40 on desktop (44x44 under 960px), radius 10, 22px icon, colour `--navy`; hover or open (`aria-expanded`) uses `--teal-soft` with `--accent`. Focus ring `2px solid var(--focus-ring)`, offset 2px. The unread badge (`.tb__badge`) is an 18px pill, `--badge-bg`, white 0.72rem bold text, top right of the bell. The avatar (`.tb__avatar`) is a round 40px button (44px on phones) holding the initials.
+- **Icons** (`icon(name)` in `ui.js`, 24px viewBox, stroke style like the rest): `search`, `bookmark`, `bell`, `star` (filled with `.is-on` when saved), `close`, `help`, `plus`. Menu rows use the existing `bed`, `building`, `users`, `sparkle`, `wallet`, `cash`.
+- **Panels (`.tb-pop`).** Anchored under the button: `position: absolute; right: 0; top: calc(100% + 6px)`, 320px wide (`.tb-pop--wide`: 400px, used by the bell and help), `max-width: calc(100vw - 16px)`, `max-height: min(80vh, 640px)`, `--surface`, `--line` border, `--radius`, `--shadow`. Head, scrolling body (`overscroll-behavior: contain`) and foot. Rows (`.tb-item`) are 8px/10px padded, radius 10, hover `--gray-soft`, active `--teal-soft`. One panel is open at a time; Escape closes it and returns focus to the button.
+- **Search results (`.tb-results`).** Under the box, at least 420px wide, at most `min(70vh, 560px)` tall, scrolling. Group titles are 0.78rem, 600, `--muted`. The active option (`.tb-opt.is-active`) uses `--teal-soft`.
+- **Sticky behaviour and the kept bar.** The bar is built once and kept across page changes (round 13 shell), so it never flickers; it stays at the top while the page scrolls. On phones the same sticky bar (12px/16px padding) holds the controls described below.
+- **Stacking order (z-index).** Top bar 30; **top bar panels and search results 35**; bottom nav 40; **Ask button (`.assist-fab`) 45**; More sheet and **phone search sheet 50**; offline banner and the Ask panel 60; toasts 100; skip link 200. Dialogs opened with `showModal()` sit in the browser's top layer above all of these. The Ask button stays at the bottom right on desktop and never covers a row (the 96px bottom space above).
+- **Phone and tablet (under 960px).** The bar holds the brand, Ask, Search, Add new, the bell and the avatar. Below 560px the brand shows only the logo (the text is hidden). Bookmarks and Help are hidden in the bar (`.tb-desktop-only`) and appear as menu items in the avatar menu (`.tb-phone-only`). Every control and panel row is at least 44px. Panels become a fixed layer 8px from each side, starting 56px under the top safe area, with `max-height: calc(100dvh - top - 56px - var(--bottomnav-h) - 16px - env(safe-area-inset-bottom))`, so they never sit under the bottom nav. Search opens a full-screen `dialog.tb-sheet` (z-index 50, `--surface`, a 44px back button and the box in its head, results below, `--scrim` backdrop).
+- **`data-focus-key` values** (added to the table above): `tb-search`, `tb-bookmarks`, `tb-add`, `tb-bell`, `tb-help`, `tb-profile`, `tb-mark-all`, `tb-older`, `tb-bm-toggle`.
+- **Motion.** Icon hover colour changes take 0.15 s and are turned off for `prefers-reduced-motion`.

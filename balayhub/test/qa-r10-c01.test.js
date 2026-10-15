@@ -96,7 +96,7 @@ test('(f) a button disabled while saving gets focus back when it is enabled agai
 test('(g) the guard listens to focus, pointer and DOM changes; there is no click watcher', () => {
   assert.match(uiSrc, /doc\.addEventListener\('focusin'/);
   assert.match(uiSrc, /doc\.addEventListener\('pointerdown'/);
-  assert.match(uiSrc, /new MutationObserver\(\(\) => check\(\)\)/);
+  assert.match(uiSrc, /new MutationObserver\(\(muts\) => \{ keeper\.changed\(muts\); check\(\); \}\)/);
   assert.doesNotMatch(uiSrc, /document\.addEventListener\('click'/);
   assert.doesNotMatch(uiSrc, /keepFocus|settleFocus/);
 });

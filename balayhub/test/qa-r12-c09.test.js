@@ -34,6 +34,7 @@ test.before(async () => {
   for (const f of ['api.js', 'ui.js', 'filters.js']) fs.copyFileSync(path.join(__dirname, '../public/js', f), path.join(dir, f));
   fs.copyFileSync(path.join(__dirname, '../public/js/views/stayreports.js'), path.join(dir, 'views', 'stayreports.js'));
   fs.writeFileSync(path.join(dir, 'views', 'deposits.js'), 'export const depositsPanel = () => null;\n');
+  fs.writeFileSync(path.join(dir, 'views', 'reports.js'), 'export const exportHint = () => \'\';\n');
   fs.writeFileSync(path.join(dir, 'views', 'reservations.js'), 'export const CHANNEL_LABEL = {}; export const SOURCE_LABEL = {};\n');
   fs.writeFileSync(path.join(dir, 'app.js'), 'export const state = { user: { user_id: 1 } };\nexport function navigate() {}\n');
   sr = await import(pathToFileURL(path.join(dir, 'views', 'stayreports.js')));
@@ -104,6 +105,6 @@ test('#28: the All tab says how many archived add-ons are not shown, with a link
   const src = read('addons.js');
   assert.match(src, /const hidden = filters\.status \? 0 : addons\.filter\(\(a\) => matches\(a\) && !a\.active\)\.length;/);
   assert.match(src, /`\$\{hidden\} archived add-on\$\{hidden === 1 \? '' : 's'\} not shown\. `/);
-  assert.match(src, /h\('a', \{ href: '#\/addons\?status=archived' \}, 'See Archived'\)/);
+  assert.match(src, /h\('a', \{ href: '#\/addons\?status=archived', class: 'link-tap' \}, 'See Archived'\)/);
   assert.match(src, /box\.replaceChildren\(\.\.\.\[content, note\]\.filter\(Boolean\)\);/, 'a zero count adds no line');
 });

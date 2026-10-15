@@ -2,7 +2,7 @@
 // mark them paid; owners also set rates. `myPayView` is the cleaner's own phone-first list.
 
 import { get, post, patch, api, qs, ApiError } from '../api.js';
-import { h, peso, manilaDay, fmtDate, field, formModal, makeForm, openModal, confirmDialog, emptyState, pageHead, toast, todayManila, options, label, errorState, skeleton } from '../ui.js';
+import { h, peso, manilaDay, fmtDate, fmtMonth, field, formModal, makeForm, openModal, confirmDialog, emptyState, pageHead, toast, todayManila, options, label, errorState, skeleton } from '../ui.js';
 import { state } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 import { t, initGuestLang, extendTranslations, fmtDateL } from '../i18n.js';
@@ -62,6 +62,11 @@ export const cleanerStatus = (c) => {
 // The ticks that still count after a filter change: a ticked clean the filter hides is dropped, so the count,
 // the total and Mark paid only ever cover rows on screen.
 export const visibleSelection = (selected, rows) => new Set(rows.filter((x) => selected.has(x.task_id)).map((x) => x.task_id));
+
+// The Pay card and the empty list say "this month" for the current month, and name any other month (#41).
+export const monthWords = (month, today = todayManila()) => (month === today.slice(0, 7)
+  ? { paid: 'Paid this month', empty: 'No finished cleans this month' }
+  : { paid: `Paid in ${fmtMonth(month)}`, empty: `No finished cleans in ${fmtMonth(month)}` });
 
 function stat(lbl, value, sub, cls = '') {
   return h('div', { class: `stat stat--flat ${cls}` }, h('div', { class: 'stat__value' }, value), h('div', { class: 'stat__label' }, lbl), sub && h('div', { class: 'muted small' }, sub));
@@ -150,6 +155,7 @@ export async function cleanerPayView(el, { query = {} } = {}) {
     selected.clear();
     kept.forEach((id) => selected.add(id));
     const totals = data.totals || {};
+    const words = monthWords(month());
     const unpaidC = cents(totals.unpaid); const paidC = cents(totals.paid);
     const missing = data.tasks.filter((x) => x.pay_amount == null && x.pay_status !== 'self').length;
     const payable = rows.filter((x) => x.pay_status === 'unpaid' && x.pay_amount != null);
@@ -168,7 +174,7 @@ export async function cleanerPayView(el, { query = {} } = {}) {
     box.replaceChildren(
       h('div', { class: 'grid grid--3 stats' },
         stat('Still to pay', peso(fromCents(unpaidC)), missing ? `${missing} clean${missing === 1 ? '' : 's'} with no pay set yet. Use Set pay.` : null, unpaidC ? 'stat--alert' : ''),
-        stat('Paid this month', peso(fromCents(paidC))),
+        stat(words.paid, peso(fromCents(paidC))),
         stat('Cleans done', String(data.tasks.length), perCleaner.length ? `${perCleaner.length} cleaner${perCleaner.length === 1 ? '' : 's'}` : null)),
       perCleaner.length > 1 && h('div', { class: 'card ops-card' }, h('h2', null, 'By cleaner'),
         h('ul', { class: 'list' }, perCleaner.map((c) => h('li', { class: 'ops-line' },
@@ -197,7 +203,7 @@ export async function cleanerPayView(el, { query = {} } = {}) {
                   x.pay_status === 'unpaid' && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'data-focus-key': `cp-pay-${x.task_id}`, onclick: () => editPay(x), 'aria-label': `${x.pay_amount == null ? 'Set pay' : 'Edit pay'} for ${unitOf(x)} on ${fmtDate(doneDay(x))}` }, x.pay_amount == null ? 'Set pay' : 'Edit pay'),
                   x.pay_status === 'paid' && isOwner && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'data-focus-key': `cp-pay-${x.task_id}`, onclick: () => unpay(x), 'aria-label': `Undo paid for ${unitOf(x)} on ${fmtDate(doneDay(x))}` }, 'Undo paid')));
             })))))
-        : h('div', { class: 'card' }, emptyState({ iconName: 'inbox', title: data.tasks.length ? 'No cleans match these filters' : 'No finished cleans this month', text: data.tasks.length ? 'Try removing a filter.' : 'Pay shows up here once a cleaner marks a clean as done. Check the rates below if amounts are missing.' })));
+        : h('div', { class: 'card' }, emptyState({ iconName: 'inbox', title: data.tasks.length ? 'No cleans match these filters' : words.empty, text: data.tasks.length ? 'Try removing a filter.' : 'Pay shows up here once a cleaner marks a clean as done. Check the rates below if amounts are missing.' })));
   }
 
   function renderBar() {

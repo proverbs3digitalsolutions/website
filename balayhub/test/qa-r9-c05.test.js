@@ -30,7 +30,7 @@ test.before(async () => {
 test.after(async () => { await srv.close(); });
 
 const tokenFor = async (bookingId) => (await owner.get(`/api/reservations/${bookingId}/checkin`)).data.link.split('/checkin/')[1];
-const form = (guests) => ({ lead_name: 'Rafael Diaz', phone: '09171112222', consent: true, guests });
+const form = (guests) => ({ lead_name: 'Rafael Diaz', phone: '09171112222', consent: true, guests, id_photos: 1 });
 const hostNotes = (bookingId) => sql(
   `SELECT m.body FROM messages m JOIN conversations c USING (conversation_id)
     WHERE c.booking_id = $1 AND m.direction = 'note' AND m.body LIKE 'The guest completed%' ORDER BY m.created_at`, [bookingId]);

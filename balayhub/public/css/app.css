@@ -248,11 +248,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .topbar .brand { font-size: 1.1rem; }
 .topbar .brand svg { width: 30px; height: 30px; }
-.topbar__org { font-size: .8rem; color: var(--muted); max-width: 45vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The Ask button's slot in the top bar (below 960px). Pushed to the right, next to the account link. */
 .topbar__assist { margin-left: auto; display: flex; flex: none; }
 .topbar__assist:empty { display: none; }
-.content { padding: 16px 16px calc(var(--bottomnav-h) + 32px + env(safe-area-inset-bottom)); max-width: 1180px; width: 100%; min-width: 0; margin: 0 auto; }
+.content { padding: 16px 16px calc(var(--bottomnav-h) + 32px + env(safe-area-inset-bottom)); max-width: 1180px; width: 100%; min-width: 0; margin: 0 auto; overflow-anchor: none; }
 
 .bottomnav {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 40; background: var(--surface);
@@ -288,7 +287,7 @@ dialog.morenav::backdrop { background: var(--scrim); }
 
 @media (min-width: 960px) {
   .shell { display: grid; grid-template-columns: var(--sidebar) 1fr; }
-  .topbar, .bottomnav { display: none; }
+  .bottomnav { display: none; }
   .sidebar {
     display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; height: 100vh;
     background: var(--surface); color: var(--text); padding: 20px 14px; border-right: 1px solid var(--line);
@@ -315,7 +314,7 @@ dialog.morenav::backdrop { background: var(--scrim); }
   .nav__group-title { margin: 0; padding: 0 12px 4px; font-family: inherit; font-size: .78rem; font-weight: 600; line-height: 1.3; color: var(--muted); }
   details.nav__group--more { display: block; }
   details.nav__group--more > a + a { margin-top: 2px; }
-  details.nav__group--more > summary.nav__group-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; list-style: none; border-radius: 8px; }
+  details.nav__group--more > summary.nav__group-title { display: flex; align-items: center; min-height: 24px; justify-content: space-between; gap: 8px; cursor: pointer; list-style: none; border-radius: 8px; }
   details.nav__group--more > summary.nav__group-title::-webkit-details-marker { display: none; }
   details.nav__group--more > summary.nav__group-title::after { content: ""; flex: none; width: 6px; height: 6px; margin: 0 4px 2px 0; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); transition: transform .15s ease; }
   details.nav__group--more[open] > summary.nav__group-title::after { transform: rotate(45deg); }
@@ -325,6 +324,8 @@ dialog.morenav::backdrop { background: var(--scrim); }
   .sidebar__foot button { margin-top: 10px; }
   /* The floating Ask button (20px from the bottom, about 48px tall) plus a 16px gap, so the last row scrolls clear of it. */
   .content { padding: 28px 32px calc(20px + 48px + 16px); }
+  /* Round 14 (#19): 96px, so the Ask button never covers the last Record button at 1280 by 900. */
+  .content { padding-bottom: 96px; }
 }
 
 /* ---------------------------------------------------------------- page structure */
@@ -1512,7 +1513,7 @@ a.op__row:hover { background: var(--surface-2); }
 .bk-addon__main span { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
 .bk-addon__qty { width: 72px; min-height: 44px; text-align: center; }
 .bk-addon__amt { grid-column: 1 / -1; text-align: right; }
-.bk-addon__amt:empty { display: none; }
+.bk-addon__amt { min-height: 1.4em; }
 .bk-rules { display: grid; gap: 8px; }
 .bk-rules__text { max-height: 180px; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); font-size: .9rem; }
 .bk-rules__text:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
@@ -1670,4 +1671,12 @@ a.op__row:hover { background: var(--surface-2); }
   .assist-fab--bar { width: 44px; height: 44px; }
   /* Row checkboxes in the ops and cleaner-pay tables (QA round 13, #55): 20px was too small to tap on a phone. */
   .table .ops-check input[type="checkbox"] { width: 24px; height: 24px; }
+  /* Round 14 (class E): the controls the list above missed. .chart-foot .link-btn and .lp-top .btn--sm are repeated here
+     because their own rules are more specific and would otherwise win. */
+  .check, .link-btn, .linkbtn, .flt__clear, .chart-foot .link-btn, .input--sm, .langtoggle button, .lp-top .btn--sm, .gc__foot a, .lpad-guide summary { min-height: 44px; }
+  .check { align-items: center; }
+  .gc__foot a { display: inline-flex; align-items: center; }
+  .lpad-guide summary { padding: 10px 0; }
+  .modal__close { width: 44px; height: 44px; }
+  .ops-bar .check input { width: 24px; height: 24px; }
 }

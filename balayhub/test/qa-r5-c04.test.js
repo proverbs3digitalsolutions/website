@@ -65,8 +65,9 @@ test('#41/#42: the More sheet is a native dialog with showModal, no role=menu, s
   assert.match(rules('dialog.morenav::backdrop'), /background:\s*var\(--scrim\)/);
 });
 
-test('#43: top-bar account link name starts with the workspace name', () => {
-  assert.match(appJs, /'aria-label': `\$\{u\.organization_name\}, my account`/);
+test('#43: top-bar account button has an accessible name that includes who it is (topbar.js, QA r14 F1)', () => {
+  // The workspace name moved into the account menu header; the button's own name carries the person's name.
+  assert.match(read('public', 'js', 'topbar.js'), /'aria-label': `\$\{u\.full_name\}, account menu`/);
 });
 
 test('#45: placeholders use the muted token at full opacity', () => {

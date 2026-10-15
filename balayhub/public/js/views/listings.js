@@ -540,6 +540,10 @@ async function changeArchive(listing, action, onDone) {
   } catch (err) { toast(err.message, 'error'); }
 }
 
+// How much of the filter bar a workspace needs: none with no listings, just the search box for 1 to 3 (the rest sit
+// in the closed "More filters" fold), everything from 4 up.
+export const listingFilterMode = (n) => (n === 0 ? 'none' : n <= 3 ? 'compact' : 'full');
+
 export async function listingsView(el, { query }) {
   const canManage = state.user.role !== 'staff';
   const isOwner = state.user.role === 'owner';
@@ -552,10 +556,17 @@ export async function listingsView(el, { query }) {
   if (!isOwner || !['', 'archived'].includes(filters.status)) filters.status = '';
   const [{ properties }, tagList] = await Promise.all([get('/properties'), get('/tags').then((r) => r.tags).catch(() => [])]);
   const box = h('div');
+  // "Connect calendar" links here with ?channels=<unit id>; the filter of that name only takes connected / none.
+  const channelsFor = /^[0-9a-f-]{36}$/i.test(filters.channels) ? filters.channels : null;
+  if (channelsFor) filters.channels = '';
+  let bar = null;
+  let mode = 'full';
+  let shownListings = [];
   // One tablist for the page's life: each render swaps its buttons, so the focus restore in app.js finds the same list.
   const tabs = h('div', { class: 'tabs', role: 'tablist' });
   // Archived units are not in GET /listings, so they are read from each building's own page.
   async function loadArchived() {
+    ensureBar(4);
     bar.hidden = false;
     const perBuilding = await Promise.all(properties.map((p) => get(`/properties/${p.property_id}`).then((r) => r.units
       .filter((u) => u.status === 'archived').map((u) => ({ ...u, property_name: p.property_name, city: p.city })))));
@@ -575,6 +586,8 @@ export async function listingsView(el, { query }) {
     history.replaceState(null, '', `#/listings${qs(changed(filters, defaults))}`);
     if (filters.status === 'archived') return loadArchived();
     const { listings } = await get(`/listings${qs({ tag: filters.tag })}`);
+    shownListings = listings;
+    ensureBar(listings.length);
     // Calendar sync problems per listing (owners and managers; the page works without them).
     const problems = new Map();
     if (['owner', 'manager'].includes(state.user.role)) {
@@ -592,8 +605,7 @@ export async function listingsView(el, { query }) {
       h('button', { role: 'tab', 'aria-selected': String(!filters.cleaning), onclick: () => setCleaning('') }, `All (${base.length})`),
       h('button', { role: 'tab', 'aria-selected': String(filters.cleaning === 'dirty'), onclick: () => setCleaning('dirty') }, `Needs cleaning (${dirtyCount})`),
       h('button', { role: 'tab', 'aria-selected': String(filters.cleaning === 'clean'), onclick: () => setCleaning('clean') }, `Clean (${base.length - dirtyCount})`));
-    // Owners keep the filter bar even with no active listings, so they can reach the archived ones.
-    bar.hidden = !listings.length && !isOwner;
+    bar.hidden = mode === 'none';
     if (!listings.length) {
       box.replaceChildren(h('div', { class: 'card' }, emptyState({ iconName: 'building', title: 'No listings yet', text: 'Add each unit you rent out per night, with its base nightly rate and cleaning fee.', action: canManage && h('button', { class: 'btn btn--primary', onclick: () => addListingModal(load) }, icon('plus'), 'Add listing') })));
       return;
@@ -647,23 +659,32 @@ export async function listingsView(el, { query }) {
         h('a', { class: 'btn btn--ghost btn--sm', href: `#/reservations?q=${encodeURIComponent(l.unit_name)}&view=all`, 'aria-label': `Bookings for ${l.unit_name}` }, 'Bookings')))))
       : h('div', { class: 'card' }, empty));
   }
-  const bar = filterBar({
-    key: 'listings', values: filters, defaults, onChange: load,
-    search: { placeholder: 'Search listing, building or city' },
-    quick: [
+  // Built once, from the first count of listings.
+  function ensureBar(n) {
+    if (bar) return;
+    mode = listingFilterMode(n);
+    bar = makeBar(mode);
+  }
+  const makeBar = (m) => {
+    const quick = [
       properties.length > 1 && { name: 'property_id', label: 'Property', all: 'All properties', options: properties.map((p) => [p.property_id, p.property_name]) },
       tagList.length > 0 && { name: 'tag', label: 'Tag', all: 'All tags', options: tagList.map((t) => [t.tag, `${t.tag} (${t.count})`]) },
       { name: 'occupancy', label: 'Occupancy', all: 'Any occupancy', options: [['vacant', 'Vacant tonight'], ['occupied', 'Guest staying now'], ['arriving', 'Arrival in the next 7 days'], ['no_next', 'No upcoming booking']] },
       isOwner && { name: 'status', label: 'Show', all: 'Active listings', options: [['archived', 'Archived listings']] },
-    ].filter(Boolean),
-    more: [
+    ].filter(Boolean);
+    const more = [
       { name: 'unit_type', label: 'Type', all: 'Any type', options: options(UNIT_TYPES) },
       { name: 'channels', label: 'Channels', all: 'Any', options: [['connected', 'Calendar connected'], ['none', 'No channel connected']] },
       canManage && { name: 'direct', label: 'Booking page', all: 'Any', options: [['on', 'Shown on my booking page'], ['off', 'Not on my booking page']] },
       { name: 'min_guests', label: 'Fits guests (at least)', type: 'number', min: 1 },
       { name: 'sort', label: 'Sort by', all: 'Property and name', options: [['rate', 'Highest nightly rate'], ['rate_asc', 'Lowest nightly rate'], ['next', 'Next arrival'], ['guests', 'Most guests']] },
-    ].filter(Boolean),
-  });
+    ].filter(Boolean);
+    return filterBar({
+      key: 'listings', values: filters, defaults, onChange: load,
+      search: { placeholder: 'Search listing, building or city' },
+      quick: m === 'compact' ? [] : quick, more: m === 'compact' ? [...quick, ...more] : more,
+    });
+  };
   await load();
   el.replaceChildren(
     h('div', { class: 'page-head' },
@@ -674,6 +695,9 @@ export async function listingsView(el, { query }) {
     bar,
     box);
   if (query.new && canManage) addListingModal(load);
+  // An id that isn't one of these listings (or a role that can't manage channels) opens nothing.
+  const wanted = channelsFor && canManage && filters.status !== 'archived' ? shownListings.find((l) => l.unit_id === channelsFor) : null;
+  if (wanted) channelsModal(wanted, load);
 }
 
 // ---------------------------------------------------------------- guests

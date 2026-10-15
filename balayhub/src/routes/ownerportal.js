@@ -12,6 +12,7 @@ const { query, one, tx } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
 const { validate, uuidParam } = require('../lib/validate');
 const { audit } = require('../lib/audit');
+const push = require('../lib/push');
 const { requireRole, rateLimit, hashToken } = require('../lib/auth');
 const { sendMail } = require('../lib/mailer');
 const { addDays, randomCode } = require('../lib/ical');
@@ -348,7 +349,7 @@ publicRouter.post('/owner-portal/blocks', requireOwnerSession, requirePortalWrit
     reason: { type: 'string', max: 200, label: 'Reason' },
   });
   const unit = await one(
-    `SELECT u.unit_id, u.unit_name, p.property_name
+    `SELECT u.unit_id, u.unit_name, p.property_id, p.property_name
        FROM units u JOIN properties p ON p.property_id = u.property_id
       WHERE u.unit_id = $1 AND u.owner_id = $2 AND p.organization_id = $3 AND u.status = 'active' AND p.status = 'active'`,
     [body.unit_id, o.owner_id, o.organization_id]);
@@ -375,6 +376,7 @@ publicRouter.post('/owner-portal/blocks', requireOwnerSession, requirePortalWrit
     { owner_id: o.owner_id, unit_id: unit.unit_id, check_in: body.check_in, check_out: body.check_out });
 
   const range = `${dayLabel(body.check_in)} to ${dayLabel(body.check_out)}`;
+  push.notify(o.organization_id, 'owner_activity', { title: `${o.full_name} blocked dates`, body: `${unit.unit_name}: ${range}`, url: '/#/calendar', propertyId: unit.property_id }).catch(() => {});
   const { rows: hosts } = await query(
     `SELECT email FROM users WHERE organization_id = $1 AND role = 'owner' AND account_status = 'active'`, [o.organization_id]);
   for (const h of hosts) {
@@ -392,8 +394,8 @@ publicRouter.post('/owner-portal/blocks/:id/cancel', requireOwnerSession, requir
   const o = req.portalOwner;
   const id = uuidParam(req.params.id);
   const b = await one(
-    `SELECT booking_id, status, check_in FROM bookings
-      WHERE booking_id = $1 AND owner_block_by = $2 AND kind = 'block'`, [id, o.owner_id]);
+    `SELECT b.booking_id, b.status, b.check_in, b.check_out, u.unit_name, u.property_id FROM bookings b JOIN units u ON u.unit_id = b.unit_id
+      WHERE b.booking_id = $1 AND b.owner_block_by = $2 AND b.kind = 'block'`, [id, o.owner_id]);
   if (!b) throw notFound();
   if (b.status !== 'confirmed') throw new HttpError(409, 'This block is already cancelled.', { code: 'ALREADY_CANCELLED' });
   if (b.check_in <= manilaToday()) {
@@ -403,6 +405,7 @@ publicRouter.post('/owner-portal/blocks/:id/cancel', requireOwnerSession, requir
     `UPDATE bookings SET status = 'cancelled', cancelled_at = now(), cancel_reason = 'Cancelled by owner'
       WHERE booking_id = $1 AND status = 'confirmed'`, [id]);
   await audit(null, portalActor(o), 'owner_portal.block_cancelled', 'booking', id, { owner_id: o.owner_id });
+  push.notify(o.organization_id, 'owner_activity', { title: `${o.full_name} cancelled a block`, body: `${b.unit_name}: ${dayLabel(b.check_in)} to ${dayLabel(b.check_out)}`, url: '/#/calendar', propertyId: b.property_id }).catch(() => {});
   res.json({ ok: true });
 }));
 

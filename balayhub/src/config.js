@@ -44,6 +44,8 @@ const config = {
   dataEncryptionKey: env.DATA_ENCRYPTION_KEY || '',
   paymongoSecretKey: env.PAYMONGO_SECRET_KEY || '',
   paymongoWebhookSecret: env.PAYMONGO_WEBHOOK_SECRET || '',
+  // Whether a host's PayMongo key is checked with PayMongo when saved. Off in tests so none make a network call.
+  paymongoKeyCheck: env.PAYMONGO_KEY_CHECK || (env.NODE_ENV === 'test' ? 'off' : 'on'),
   paymongoMethods: (env.PAYMONGO_METHODS || 'gcash,paymaya,card,grab_pay').split(',').map((x) => x.trim()).filter(Boolean),
   guestIdRetentionDays: Number(env.GUEST_ID_RETENTION_DAYS || 30),
   privacyPolicyVersion: '2026-10-01',

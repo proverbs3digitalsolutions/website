@@ -58,7 +58,7 @@ test('never steals focus the user moved elsewhere, and leaves focus alone while 
   old.focus(); g.note(old);
   w.remove(list);
   g.check(0);
-  assert.equal(w.activeElement, w.body, 'no new tablist yet: nothing to focus, the heading waits');
+  assert.equal(w.activeElement, w.h1, 'no new tablist yet: nothing to focus, the heading gets focus at once (r14)');
   const other = w.main.add(w.make('input', { type: 'text' }));
   other.focus();
   drawTabs(w, w.main.add(w.make('div', { role: 'tablist', 'aria-label': 'Report type' })));

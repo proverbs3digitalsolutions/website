@@ -87,7 +87,7 @@ test('(e) bounded: a replacement that appears after 10000 ms is not focused', ()
 });
 
 test('(f) source: the guard waits up to FOCUS_WATCH_MS and the heading comes after HEADING_AFTER_MS', () => {
-  assert.equal(ui.HEADING_AFTER_MS, 800);
+  assert.equal(ui.HEADING_AFTER_MS, 0); // r14: the heading gets focus at once
   assert.match(uiSrc, /setTimeout\(\(\) => \{ if \(lossAt === mine\) check\(mine \+ FOCUS_WATCH_MS \+ 1\); \}, FOCUS_WATCH_MS\)/);
   assert.doesNotMatch(appSrc, /FOCUS_CHECKS|restoreTabFocus/);
 });

@@ -21,6 +21,7 @@ const TYPES = {
   mention: { label: 'Mentions in notes', roles: ['owner', 'manager'], module: 'stay' },
   assignment: { label: 'Conversations assigned to you', roles: ['owner', 'manager'], module: 'stay' },
   sync_problem: { label: 'Calendar sync problems', roles: ['owner', 'manager'], module: 'stay' },
+  owner_activity: { label: 'Unit owner activity', roles: ['owner'], module: 'stay' },
 };
 
 // May this person (a users row: role and notify_prefs) get a `type` notification about `propertyId`?
@@ -70,9 +71,29 @@ async function recipients(orgId, type, propertyId, onlyRoles, onlyUser) {
   return rows;
 }
 
+// The bell (D-90): everyone this alert is for, with or without a device. Same people and the same settings check as the push.
+async function members(orgId, type, propertyId, onlyRoles, onlyUser) {
+  const roles = onlyRoles || TYPES[type].roles;
+  const { rows } = await query(
+    `SELECT u.user_id, u.role, u.notify_prefs FROM users u
+      WHERE u.organization_id = $1 AND u.account_status = 'active' AND u.role = ANY($2)
+        AND (u.role = 'owner' OR $3::uuid IS NULL
+             OR EXISTS (SELECT 1 FROM property_assignments pa WHERE pa.user_id = u.user_id AND pa.property_id = $3))
+        AND ($4::uuid IS NULL OR u.user_id = $4)`,
+    [orgId, roles, propertyId || null, onlyUser || null]);
+  return rows;
+}
+
 // Send to everyone concerned. Never throws.
 async function notify(orgId, type, { title, body, url, propertyId, roles, userId }) {
   try {
+    // The feed write must never stop the push (add() catches its own errors; this guards the lookup too).
+    try {
+      const people = (await members(orgId, type, propertyId, roles, userId)).filter((u) => allowed(u, type, propertyId));
+      await require('./notifyfeed').add(orgId, type, people.map((u) => u.user_id), { title, body, url, propertyId });
+    } catch (err) {
+      console.error('[notifyfeed]', err.message);
+    }
     const subs = (await recipients(orgId, type, propertyId, roles, userId)).filter((s) => allowed(s, type, propertyId));
     if (!subs.length) return 0;
     vapid();

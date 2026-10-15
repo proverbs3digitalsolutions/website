@@ -55,6 +55,8 @@ function startScheduler() {
   every(15 * 60 * 1000, 'abandoned-followup', () => require('../routes/directbooking').sendAbandonedFollowups(new Date()), 45 * 1000);
   // Balance payments whose guest didn't return to the page.
   every(3 * 60 * 1000, 'balance-pay', require('../routes/balancepay').reconcileBalance, 35 * 1000);
+  // Bell notifications older than 90 days (D-90).
+  every(24 * 60 * 60 * 1000, 'notifications-cleanup', require('./notifyfeed').purgeOld, 150 * 1000);
   // Workspaces whose owner asked for deletion, after the grace period.
   every(60 * 60 * 1000, 'support', require('../routes/support').autoClose, 95 * 1000);
 

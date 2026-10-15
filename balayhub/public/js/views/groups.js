@@ -395,15 +395,19 @@ export async function groupDetailView(el, { params, rerender }) {
         h('thead', null, h('tr', null, cols.map((x) => h('th', null, x)), canManage && ['Total', 'Paid', 'Balance'].map((x) => h('th', { class: 'num' }, x)), canManage && !cancelled && h('th', null, h('span', { class: 'sr-only' }, 'Actions')))),
         h('tbody', null, rooms.map((r) => {
           const off = r.status === 'cancelled';
+          // Rooms of one listing repeat, so each row's controls are named by listing and dates (and room number if even those match).
+          const which = `${r.unit_name}, ${fmtDate(r.check_in)} – ${fmtDate(r.check_out)}`;
+          const twin = rooms.filter((x) => `${x.unit_name}|${x.check_in}|${x.check_out}` === `${r.unit_name}|${r.check_in}|${r.check_out}`).length > 1;
+          const rowName = twin ? `${which}, room ${rooms.indexOf(r) + 1}` : which;
           return h('tr', null,
-            h('td', null, h('a', { href: `#/reservations/${r.booking_id}` }, h('strong', null, r.unit_name)), off && h('span', { class: 'badge badge--voided' }, 'Cancelled')),
+            h('td', null, h('a', { href: `#/reservations/${r.booking_id}`, 'aria-label': rowName }, h('strong', null, r.unit_name)), off && h('span', { class: 'badge badge--voided' }, 'Cancelled')),
             h('td', null, `${fmtDate(r.check_in)} – ${fmtDate(r.check_out)}`, h('div', { class: 'muted small' }, `${nightsOf(r.check_in, r.check_out)} nights`)),
             h('td', null, r.num_guests ? String(r.num_guests) : '—'),
             // A cancelled room is not in the group total, so its amount is not shown as owed (the balance column does the same).
             canManage && h('td', { class: 'num' }, off ? ['—', h('span', { class: 'sr-only' }, ' Cancelled')] : peso(r.total_amount)),
             canManage && h('td', { class: 'num' }, peso(r.amount_paid)),
             canManage && h('td', { class: `num${Number(r.balance) > 0 && !off ? ' amount--neg' : ''}` }, off ? '—' : peso(r.balance)),
-            canManage && !cancelled && h('td', null, !off && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Remove ${r.unit_name} from the group`, onclick: () => removeRoom(r) }, 'Remove')));
+            canManage && !cancelled && h('td', null, !off && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Remove ${rowName}, from the group`, onclick: () => removeRoom(r) }, 'Remove')));
         })),
         canManage && h('tfoot', null, h('tr', null, h('td', { colspan: 3 }, 'Group total'),
           h('td', { class: 'num' }, peso(totals.total)), h('td', { class: 'num' }, peso(totals.amount_paid)),

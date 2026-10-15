@@ -31,7 +31,7 @@ test('#47 Cancel on "Record more than the balance?" returns false: nothing is po
 });
 
 test('#42 each check-in date link in the list names its guest, listing and date (staff get the name staff are allowed to see)', () => {
-  assert.ok(resSrc.includes("h('a', { href: `#/reservations/${r.booking_id}`, 'aria-label': `${r.guest_name || r.guest_label || 'Guest'}, ${r.unit_name}, check-in ${fmtDate(r.check_in)}` }, fmtDate(r.check_in))"));
+  assert.ok(resSrc.includes("h('a', { class: 'link-tap', href: `#/reservations/${r.booking_id}`, 'aria-label': `${r.guest_name || r.guest_label || 'Guest'}, ${r.unit_name}, check-in ${fmtDate(r.check_in)}` }, fmtDate(r.check_in))"));
 });
 
 test('#48 a guest count must be a whole number from 1; anything else is "Enter a whole number of guests, 1 or more."', () => {
@@ -42,12 +42,12 @@ test('#48 a guest count must be a whole number from 1; anything else is "Enter a
 
 test('#48 New reservation and Edit check the guest count before anything is posted, and say so at the field', () => {
   const newRes = resSrc.slice(resSrc.indexOf('onSubmit: async (data) => {'), resSrc.indexOf("const res = await post('/reservations', data);"));
-  assert.ok(newRes.includes('const problem = guestsProblem(data.num_guests);'));
+  assert.ok(newRes.includes('const problem = guestsProblem(data.num_guests, listings.find((l) => String(l.unit_id) === String(data.unit_id))?.max_guests);'));
   assert.ok(newRes.includes('if (problem) throw new ApiError(problem, { status: 400, fields: { num_guests: problem } });'));
   const edit = resSrc.slice(resSrc.indexOf('let changes = changedFields(r, d);'), resSrc.indexOf('toast(saved.changed'));
   assert.ok(edit.includes("if ('num_guests' in changes) {"), 'only a changed guest count is checked, so a stored blank is not refused on an unrelated save');
-  assert.ok(edit.includes('const problem = guestsProblem(changes.num_guests);'));
-  const check = edit.indexOf('guestsProblem(changes.num_guests)');
+  assert.ok(edit.includes('const problem = guestsProblem(changes.num_guests, r.max_guests);'));
+  const check = edit.indexOf('guestsProblem(changes.num_guests, r.max_guests)');
   const send = edit.indexOf('await patch(`/reservations/${r.booking_id}`, changes)');
   assert.ok(check > 0 && check < send, 'the guest count is checked before the PATCH');
 });

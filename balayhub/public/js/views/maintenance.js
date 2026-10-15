@@ -32,7 +32,7 @@ export function nextDueWindow(today = todayManila()) {
 
 // "From cleaning task" badge, linking to the job. Inside a list row (already a link) it navigates by click.
 const taskBadge = (m, inRow) => h('a', {
-  class: 'badge badge--ops', href: `#/housekeeping/${m.cleaning_task_id}`,
+  class: 'badge badge--ops link-tap', href: `#/housekeeping/${m.cleaning_task_id}`,
   'aria-label': `From cleaning task, ${m.unit_name ? unitLabel(m.unit_name) : m.property_name}`,
   ...(inRow ? { onclick: (e) => { e.preventDefault(); e.stopPropagation(); navigate(`#/housekeeping/${m.cleaning_task_id}`); } } : {}),
 }, 'From cleaning task');
@@ -202,7 +202,7 @@ export async function maintenanceView(el, { query }) {
         h('div', { class: 'ops-sched__actions' },
           badge(x.priority),
           h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'aria-label': `Edit ${x.title}`, onclick: () => form(x) }, 'Edit'),
-          h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'aria-label': `${x.active ? 'Pause' : 'Resume'} ${x.title}`, onclick: () => pause(x) }, x.active ? 'Pause' : 'Resume')))))
+          h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'data-focus-key': `mt-pause-${x.schedule_id}`, 'aria-label': `${x.active ? 'Pause' : 'Resume'} ${x.title}`, onclick: () => pause(x) }, x.active ? 'Pause' : 'Resume')))))
         : h('p', { class: 'muted' }, 'No recurring jobs yet.')));
   }
   renderBar();

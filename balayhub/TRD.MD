@@ -4,7 +4,7 @@ BalayHub is rental and staycation management software for Filipino hosts. It cov
 
 This document describes what is actually built, as checked against the code. Anything not confirmed in the code is marked **unverified**.
 
-Last updated: 2026-10-13
+Last updated: 2026-10-15 (QA round 14: top bar endpoints, PayMongo key check, `PAYMONGO_KEY_CHECK`)
 
 ---
 
@@ -101,6 +101,7 @@ Jobs run inside the app process. A job never overlaps itself. After 3 failures i
 | `support` | 60 min | 95 s | Closes support tickets 7 days after they were resolved |
 | `account` | 60 min | 90 s | Permanently deletes workspaces whose 14-day deletion grace period has passed |
 | `demo` | 60 min | 50 s | Moves the public demo workspace's sample dates forward |
+| `notifications-cleanup` | 24 h | 150 s | Deletes bell notifications older than 90 days |
 | `auth-cleanup` | 60 min | 100 s | Deletes expired or idle team sessions and old one-time tokens, and the same for owner portal sessions and sign-in links |
 | `owner-statements-reminder` | 60 min | 105 s | From the 3rd of the month (Manila time): drafts last month's owner statements (drafts only) and emails each workspace owner that n are ready to review. Once per workspace per month (an `audit_logs` row, `owner_statements.reminder_sent`, so no new table). Skipped when email is off. Demo and read-only workspaces are skipped |
 
@@ -139,6 +140,17 @@ Note: in `scheduler.js` the comment "Workspaces whose owner asked for deletion" 
 - **Limits:** price preview up to 120 days (default 60). Rule days per kind as in PRD F47. Bulk changes up to 50 listings and 366 nights, with a preview of the first 500 rows. Activity up to 200 lines. Daily close history up to 92 days. Groups 2 to 20 rooms. Daily close date up to tomorrow (Manila). Tags up to 10 per listing, 30 characters each. Room type up to 40 characters. Percentages −90 to 300 for rules and seasons; fortnight discount 0 to 90.
 - **Environment variables:** none added.
 
+### 2.8 Top bar (QA round 14, D-91)
+
+- **New endpoints** (all under `/api`, behind `requireWorkspace`, the session cookie and, on writes, the CSRF header; no new service and no new library):
+  - `GET /api/search?q=` (`src/routes/search.js`, `src/lib/search.js`): grouped results for the signed-in person's workspace and role. Under 2 characters it makes no database call. Limit: **60 per minute per user** (in memory, like the other limiters). Cleaners get 403 from the cleaner guard.
+  - `GET /api/account/bookmarks`, `POST /api/account/bookmarks`, `POST /api/account/bookmarks/:id/remove` (`src/routes/bookmarks.js`): the person's own saved pages, up to 20.
+  - `GET /api/account/notifications`, `GET /api/account/notifications/count`, `POST /api/account/notifications/read` (`src/routes/notifications.js`): the bell's feed, written by `src/lib/notifyfeed.js` from `push.notify`.
+  - The bookmark and notification routes sit under `/account/`, so read-only and lapsed workspaces keep them (the demo still refuses writes). Request and answer shapes are in BACKEND-SCHEMA section 20; access rules in section 6.4.
+- **Tables:** `bookmarks` and `notifications` (migration 033). Notifications are deleted after 90 days by the `notifications-cleanup` job (daily, 150 s after start). The schema guard test requires both in `PURGED_TABLES`.
+- **Front end:** `public/js/topbar.js` (the persistent bar, role rules, the `/` shortcut, the avatar menu), plus `topsearch.js`, `topadd.js`, `topnotify.js`, `tophelp.js` and `topbookmarks.js` (panels), and `public/css/topbar.css`. The bar is built once and kept across page changes (the round 13 kept shell). Stored links are re-checked before they are used as `href`, and everything is drawn as text, so the strict CSP is unchanged (no inline script or style).
+- **Environment variables:** none added for the top bar (see `PAYMONGO_KEY_CHECK` in section 4 for the other round 14 change).
+
 ## 3. External services and integrations
 
 For every variable, see the full list in section 4. Hosts' own PayMongo keys are **not** environment variables (section 3.3).
@@ -174,6 +186,8 @@ For every variable, see the full list in section 4. Hosts' own PayMongo keys are
 | Confirmation | Webhook `POST /api/public/paymongo/webhook` (HMAC-SHA256 signature using `PAYMONGO_WEBHOOK_SECRET`, timestamps older than 3 days rejected). The webhook only triggers a re-check: the payment is trusted only after BalayHub asks PayMongo for the checkout status with the secret key. A 10-minute job catches missed webhooks | No webhook (the webhook handler only looks up `billing_payments`). The guest's return page polls, and the `direct-booking` (2 min) and `balance-pay` (3 min) jobs re-check with the host's key |
 | Test mode | n/a | A host key starting `sk_test_` marks checkouts and payments as TEST MODE |
 | Env vars | `PAYMONGO_SECRET_KEY`, `PAYMONGO_WEBHOOK_SECRET`, `PAYMONGO_METHODS` | `DATA_ENCRYPTION_KEY` (protects the stored host keys) |
+
+**Checking a host's key (QA round 14, D-92).** When an owner saves a PayMongo key, and again when they turn the booking page on with a key that has not been checked, BalayHub asks PayMongo whether the key works: `GET https://api.paymongo.com/v1/payments?limit=1` with the key as the Basic auth user (`src/lib/paymongo.js`, `checkKey`). The call times out after **8 seconds**. The key is never logged. Answers: HTTP 2xx is `ok` (the host reads "Connected" and `organizations.paymongo_key_checked_at` is set); HTTP 401 is `rejected` (a new key is not saved; a saved one cannot be used to turn the page on); any other answer, a network error or a timeout is `unreachable` (the key is saved as "Saved, not checked yet", and turning the page on asks "Turn on anyway?"). A guest checkout that PayMongo refuses as unauthorised clears `paymongo_key_checked_at` again. `PAYMONGO_KEY_CHECK=off` skips the call and always answers `unreachable` (section 4).
 
 Plans and prices live in `src/lib/plans.js`: trial, starter, growth, pro, comped. Each has a listing limit and an AI flag. Paid plans get a 7-day grace period after `paid_until`. Billing periods are 1, 3 or 12 months (12 months are charged as 10).
 
@@ -274,6 +288,7 @@ Production values live in `deploy/.env` on the server. No values are listed here
 | `PAYMONGO_SECRET_KEY` | billing | BalayHub's own PayMongo secret key (plan payments) |
 | `PAYMONGO_WEBHOOK_SECRET` | billing | Signing secret for the PayMongo webhook |
 | `PAYMONGO_METHODS` | billing | Payment methods offered at plan checkout |
+| `PAYMONGO_KEY_CHECK` | direct booking | Whether a host's PayMongo key is checked with PayMongo when saved and when the booking page is turned on. **On by default** (any value other than `off`). `off` disables the check and leaves every saved key "not checked". When `NODE_ENV=test` it defaults to `off`, so tests never make a network call |
 | `GUEST_ID_RETENTION_DAYS` | privacy | Days after check-out before guest ID photos are deleted |
 | `DATA_ENCRYPTION_KEY` | secretbox | Key material for encrypting hosts' PayMongo keys |
 | `VAPID_PUBLIC_KEY` | push | Web Push public key |
@@ -329,6 +344,7 @@ Fixed in code (not configurable): privacy policy version, terms version, time zo
 | Support tickets | 10 new tickets per hour | user |
 | AI drafts | 60 per hour | workspace |
 | Assistant | 40 per hour per user; 300 per day per workspace | user, workspace |
+| Global search (`GET /api/search`) | 60 per minute | user |
 | Guest check-in page | 60 per 15 min; ID uploads 30 per hour | IP; link |
 | Direct booking pages | 300 per 15 min; checkouts 20 per hour; at most 2 open 30-minute holds | IP; IP; visitor or email |
 | Balance payment page | 60 per 15 min; checkouts 10 per hour; status refresh 120 per 15 min | IP; link; link |
@@ -359,6 +375,7 @@ Fixed in code (not configurable): privacy policy version, terms version, time zo
 | Suite | How it runs |
 |---|---|
 | API tests | `npm test` runs `node --test --test-concurrency=1 test/*.test.js`: 27 files, about 169 top-level tests. `test/helpers.js` sets `NODE_ENV=test`, points `DATABASE_URL` at `TEST_DATABASE_URL` or a local `balayhub_test`, **drops and recreates the `public` schema**, runs all migrations, and starts the app on a random port with a temporary `STORAGE_DIR`. Email goes to the in-memory `test://` outbox |
+| Outbound calls in tests | `PAYMONGO_KEY_CHECK` is `off` under `NODE_ENV=test`, so no test calls PayMongo. QA round 14 passed **2640 of 2640** at the merge and **2662 of 2662** after the re-verify follow-ups (round 14 tests: `test/qa-r14-*.test.js` and `test/migration-033.test.js`) |
 | Schema coverage guard | `test/account.test.js` fails if any table (other than `schema_migrations` and `mail_sync_state`) is missing from `PURGED_TABLES` |
 | Browser journeys | Playwright (Chromium) scripts, run by hand against a running, seeded server (`npm run seed`): `test/e2e-browser.js` (long-term), `e2e-stays-browser.js`, `e2e-inbox-browser.js` (server started with `SMTP_URL=test://`), `e2e-selling-browser.js` (with a platform admin email set), `e2e-booking-browser.js`, `e2e-checkin-browser.js`. Phone-sized viewport. Screenshots go to `SHOTS_DIR` |
 | CI | No CI configuration in the repository (**unverified** elsewhere) |

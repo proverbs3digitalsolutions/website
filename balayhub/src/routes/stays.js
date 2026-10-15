@@ -410,7 +410,8 @@ const roomSpec = {
   property_id: { type: 'uuid', label: 'Property' },
   check_in: { type: 'date', required: true, label: 'Check-in' },
   check_out: { type: 'date', required: true, label: 'Check-out' },
-  num_guests: { type: 'int', min: 1, max: 50, label: 'Number of guests' },
+  // No max here: checkStay applies the listing's own limit first, then the general 50 for a listing with none.
+  num_guests: { type: 'int', min: 1, label: 'Number of guests' },
   accommodation_total: { type: 'money', label: 'Accommodation total' },
   cleaning_fee: { type: 'money', label: 'Cleaning fee' },
 };
@@ -445,6 +446,7 @@ function checkStay(body, unit) {
   if (body.num_guests && unit.max_guests && body.num_guests > unit.max_guests) {
     throw validationError({ num_guests: `This listing allows up to ${unit.max_guests} guests.` });
   }
+  if (body.num_guests > 50) throw validationError({ num_guests: 'Number of guests must be at most 50.' });
 }
 
 // The channel keeps a cut of the stay, so its fee can't be more than the stay total.
@@ -1433,3 +1435,5 @@ publicRouter.get('/ical/:token.ics', ah(async (req, res) => {
 
 module.exports = router;
 module.exports.publicRouter = publicRouter;
+
+module.exports.guestScope = guestScope;

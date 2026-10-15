@@ -116,6 +116,13 @@ const emailConfirmed = async (err) => {
   return false;
 };
 
+// An email that is a teammate's login asks too (409 EMAIL_IS_LOGIN), the same way.
+const loginConfirmed = async (err) => {
+  if (await confirmDialog({ title: 'Email is a login', text: `This email is a login for ${err.data.login_name}. Save anyway?`, confirmText: 'Save anyway', cancelText: 'Change it' })) return true;
+  document.querySelector('dialog.modal [name="email"]')?.focus();
+  return false;
+};
+
 export async function ownersView(el, { rerender, query = {} }) {
   const defaults = { q: '', has_units: '', unit_id: '', sort: '' };
   const filters = initFilters('owners', query, defaults);
@@ -130,6 +137,7 @@ export async function ownersView(el, { rerender, query = {} }) {
       for (;;) {
         try { await post('/unit-owners', { ...body, ...extra }); break; } catch (err) {
           if (err.code === 'EMAIL_IN_USE') { if (!await emailConfirmed(err)) return false; extra = { ...extra, confirm_duplicate_email: true }; continue; }
+          if (err.code === 'EMAIL_IS_LOGIN') { if (!await loginConfirmed(err)) return false; extra = { ...extra, confirm_login_email: true }; continue; }
           if (!await moveConfirmed(err, d.full_name)) return false;
           extra = { ...extra, move_units: true };
         }
@@ -145,6 +153,7 @@ export async function ownersView(el, { rerender, query = {} }) {
       for (;;) {
         try { await patch(`/unit-owners/${o.owner_id}`, { ...body, ...extra }); break; } catch (err) {
           if (err.code === 'EMAIL_IN_USE') { if (!await emailConfirmed(err)) return false; extra = { ...extra, confirm_duplicate_email: true }; continue; }
+          if (err.code === 'EMAIL_IS_LOGIN') { if (!await loginConfirmed(err)) return false; extra = { ...extra, confirm_login_email: true }; continue; }
           if (!await moveConfirmed(err, d.full_name)) return false;
           extra = { ...extra, move_units: true };
         }
@@ -234,6 +243,8 @@ export async function ownersView(el, { rerender, query = {} }) {
       actions: [h('a', { class: 'btn btn--secondary', href: `#/owners/statements?month=${lastMonth()}` }, 'Review statements'), h('button', { class: 'btn btn--primary', type: 'button', onclick: add }, '+ Add owner')],
     }),
     showBar ? bar : '', listBox);
+  // Once per visit: rerender() reuses this query, so the flag is dropped before the dialog opens.
+  query.new && (delete query.new, history.replaceState(null, '', '#/owners'), add());
 }
 
 export async function ownerStatementsView(el, { query = {} }) {

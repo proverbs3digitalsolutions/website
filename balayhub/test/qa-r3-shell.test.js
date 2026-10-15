@@ -18,11 +18,14 @@ const { pathToFileURL } = require('node:url');
 const APP_SRC = fs.readFileSync(path.join(__dirname, '../public/js/app.js'), 'utf8');
 const ASSISTANT_SRC = fs.readFileSync(path.join(__dirname, '../public/js/assistant.js'), 'utf8');
 
-test('the top bar leaves an empty slot for the Ask button, before the account link', () => {
-  const header = APP_SRC.slice(APP_SRC.indexOf("h('header', { class: 'topbar' }"), APP_SRC.indexOf("h('div', { class: 'shell__main' }"));
+test('the top bar leaves an empty slot for the Ask button, before the account button', () => {
+  // The bar moved out of app.js into topbar.js (QA r14 F1, D-90); app.js builds it through buildTopbar.
+  assert.match(APP_SRC, /buildTopbar\(topbarCtx\)/);
+  const bar = fs.readFileSync(path.join(__dirname, '../public/js/topbar.js'), 'utf8');
+  const header = bar.slice(bar.indexOf("h('header', { class: 'topbar' }"));
   const slot = header.indexOf("h('span', { class: 'topbar__assist' })");
   assert.ok(slot > 0, 'the slot is in the top bar');
-  assert.ok(slot < header.indexOf("class: 'topbar__me'"), 'the slot comes before the account link');
+  assert.ok(slot < header.indexOf("tb__actions"), 'the slot comes before the account button');
 });
 
 test('the shell moves the Ask button into that slot as soon as the shell is on the page', () => {

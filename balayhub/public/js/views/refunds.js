@@ -34,6 +34,13 @@ export function refundCapProblem(amount, { refundable, paid, refunded }) {
   return Number(refundable) > 0 ? `Only ${m(refundable)} is left to refund ${tail}` : `Nothing is left to refund ${tail}`;
 }
 
+// The server's own sentences (src/lib/validate.js) for a zero or negative amount, shown before any question.
+export function refundAmountProblem(amount) {
+  if (Number(amount) < 0) return 'Amount cannot be negative.';
+  if (Number(amount) === 0) return 'Amount must be greater than zero.';
+  return null;
+}
+
 export async function refundsCard(reservation, rerender) {
   const data = await get(`/reservations/${reservation.booking_id}/refunds`);
   const canManage = state.user.role !== 'staff';
@@ -41,12 +48,14 @@ export async function refundsCard(reservation, rerender) {
 
   const recordRefund = () => formModal({
     title: 'Record refund', submitText: 'Save refund', idempotent: true,
+    // No default method: a one-tap save must not record GCash for money that went back another way.
+    check: (d) => (!d.method ? { method: 'Choose how the money was refunded.' } : null),
     fields: [
       field({ name: 'amount', label: 'Amount refunded', type: 'money', required: true, value: cancelled && Number(data.suggestion?.remaining) > 0 ? data.suggestion.remaining : undefined,
         hint: `Up to ${peso(data.refundable)} is left to refund.` }),
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'refund_date', label: 'Date refunded', type: 'date', required: true, value: todayManila(), max: todayManila() }),
-        field({ name: 'method', label: 'Method', type: 'select', required: true, value: 'gcash', placeholderOption: false, options: Object.entries(METHOD_LABEL) })),
+        field({ name: 'method', label: 'Method', type: 'select', value: '', placeholderOption: 'Choose…', options: Object.entries(METHOD_LABEL) })),
       field({ name: 'reference_number', label: 'Reference number (optional)', maxlength: 100 }),
       field({ name: 'reason', label: 'Reason', type: 'textarea', required: true, maxlength: 300,
         hint: 'Kept in the refund log. For example: cancelled by guest, 6 days before check-in.' }),
@@ -54,6 +63,8 @@ export async function refundsCard(reservation, rerender) {
     onSubmit: async (d, { idempotencyKey }) => {
       // Check the cap first, so no question is asked about a save that cannot succeed. Cancel returns false: nothing is posted and the form stays open with no message.
       const amount = parseAmount(d.amount);
+      const bad = refundAmountProblem(amount);
+      if (bad) throw new ApiError('Please check the highlighted fields.', { status: 400, fields: { amount: bad } });
       const tooMuch = refundCapProblem(amount, data);
       // The sentence shows once, at the field; the banner only points to it.
       if (tooMuch) throw new ApiError('Please check the highlighted fields.', { status: 400, fields: { amount: tooMuch } });

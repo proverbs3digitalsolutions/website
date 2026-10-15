@@ -75,12 +75,12 @@ test('guest fills in the form and uploads IDs without an account', async () => {
   const tooMany = await guest.post(`/api/public/checkin/${token}`, { lead_name: 'R', phone: '09171112222', consent: true, guests: ['a', 'b', 'c', 'd'] });
   assert.equal(tooMany.status, 400);
   // A blank guest row is refused at its field, not dropped (QA round 9 #7).
-  const blankRow = await guest.post(`/api/public/checkin/${token}`, { lead_name: 'Rafael Diaz', phone: '09171112222', consent: true, guests: ['Ana Diaz', '  '] });
+  const blankRow = await guest.post(`/api/public/checkin/${token}`, { lead_name: 'Rafael Diaz', phone: '09171112222', consent: true, id_photos: 1, guests: ['Ana Diaz', '  '] });
   assert.equal(blankRow.status, 400);
   assert.deepEqual(blankRow.data.fields, { guests: 'Enter the name of each guest, or remove the empty row.' });
   const ok = await guest.post(`/api/public/checkin/${token}`, {
     lead_name: 'Rafael Diaz', phone: '09171112222', email: 'rafael@example.com', guests: ['Ana Diaz', 'Leo Diaz'],
-    arrival_time: '15:30', vehicle_plate: 'abc 1234', consent: true,
+    arrival_time: '15:30', vehicle_plate: 'abc 1234', consent: true, id_photos: 1,
   });
   assert.equal(ok.status, 200, JSON.stringify(ok.data));
   const up = await guest.post(`/api/public/checkin/${token}/id`, PNG, { 'Content-Type': 'image/png' });
@@ -128,7 +128,7 @@ test('replacing the link kills the old one; form closes after the stay; IDs are 
   await sql(`UPDATE bookings SET check_in = $2, check_out = $3 WHERE booking_id = $1`, [res.booking_id, d(-40), d(-35)]);
   const closed = await client(srv.base).get(`/api/public/checkin/${newToken}`);
   assert.equal(closed.data.stay.closed, true);
-  assert.equal((await client(srv.base).post(`/api/public/checkin/${newToken}`, { lead_name: 'X', phone: '09171112222', consent: true })).status, 409);
+  assert.equal((await client(srv.base).post(`/api/public/checkin/${newToken}`, { lead_name: 'X', phone: '09171112222', consent: true, id_photos: 1 })).status, 409);
 
   assert.equal(await purgeOldIds(), 1);
   const files = await sql(`SELECT COUNT(*)::int AS n FROM files WHERE related_record_type = 'registration'`);
@@ -148,7 +148,7 @@ test('review fixes: ID photo cap holds under parallel uploads; purge waits for c
   const link2 = (await owner.get(`/api/reservations/${r2.booking_id}/checkin`)).data.link;
   const t2 = link2.split('/checkin/')[1];
   const g = client(srv.base);
-  await g.post(`/api/public/checkin/${t2}`, { lead_name: 'Racer', phone: '09171112222', consent: true });
+  await g.post(`/api/public/checkin/${t2}`, { lead_name: 'Racer', phone: '09171112222', consent: true, id_photos: 1 });
   const results = await Promise.all(Array.from({ length: 25 }, () => g.post(`/api/public/checkin/${t2}/id`, PNG, { 'Content-Type': 'image/png' })));
   const stored = await sql(`SELECT COUNT(*)::int AS n FROM files f JOIN guest_registrations r ON r.registration_id = f.related_record_id WHERE r.booking_id = $1`, [r2.booking_id]);
   assert.equal(stored[0].n, 12);

@@ -34,7 +34,7 @@ const STEPS = [
   { key: 'photos', phase: 'listings', optional: true, title: 'Add photos and a description', minutes: 5, href: '#/listings', action: 'Add photos',
     why: 'Photos are shown on your direct booking page, where guests book you without channel fees.',
     how: ['Go to Listings and click Photos on a listing.', 'Upload up to 12 photos. The first one is the cover.', 'Click Edit to add a short description for guests.'] },
-  { key: 'channels', phase: 'channels', title: 'Connect your Airbnb or Booking.com calendar', minutes: 5, href: '#/listings', action: 'Open Channels',
+  { key: 'channels', phase: 'channels', title: 'Connect your Airbnb or Booking.com calendar', minutes: 5, action: 'Open Channels',
     why: 'Bookings come in automatically and your dates are blocked on every channel, so you never double-book.',
     how: ['On Airbnb, open the listing\'s calendar → Availability → "Connect to another website" and copy the Export link.', 'In BalayHub go to Listings → Channels on the same listing, choose Airbnb, paste the link and click Connect calendar.', 'Copy "Your BalayHub calendar" link from the same window and paste it into Airbnb\'s Import calendar.', 'Do the same for Booking.com and Agoda.'] },
   { key: 'reservation', phase: 'channels', title: 'Add or receive your first reservation', minutes: 2, href: '#/reservations?new=1', action: 'New reservation',
@@ -60,6 +60,9 @@ const STEPS = [
     how: ['Go to Settings → Plan & billing.', 'Pick a plan and 1, 3 or 12 months (12 months gets 2 months free).', 'Pay with GCash, Maya or card.'] },
 ];
 
+// Home's "Connect calendar" card opens this listing's Channels dialog, so the Launchpad step opens the same one.
+const channelsHref = (unitId) => (unitId ? `#/listings?channels=${unitId}` : '#/listings');
+
 router.get('/onboarding', owners, ah(async (req, res) => {
   const s = await one(
     `SELECT o.onboarding_dismissed_at, o.onboarding_skipped, o.booking_enabled,
@@ -78,12 +81,15 @@ router.get('/onboarding', owners, ah(async (req, res) => {
        (EXISTS (SELECT 1 FROM users x WHERE x.organization_id = o.organization_id AND x.user_id <> $2)
          OR EXISTS (SELECT 1 FROM invitations i WHERE i.organization_id = o.organization_id)) AS team,
        (o.cleaning_checklist <> $3::jsonb
-         OR EXISTS (SELECT 1 FROM cleaning_tasks t WHERE t.organization_id = o.organization_id AND (t.assigned_to IS NOT NULL OR t.assignee_name IS NOT NULL))) AS housekeeping
+         OR EXISTS (SELECT 1 FROM cleaning_tasks t WHERE t.organization_id = o.organization_id AND (t.assigned_to IS NOT NULL OR t.assignee_name IS NOT NULL))) AS housekeeping,
+       (SELECT u.unit_id FROM units u JOIN properties p USING (property_id)
+         WHERE p.organization_id = o.organization_id AND u.status = 'active' AND p.status = 'active'
+         ORDER BY p.property_name, u.unit_name LIMIT 1) AS first_unit_id
      FROM organizations o WHERE o.organization_id = $1`, [req.user.organization_id, req.user.user_id, DEFAULT_CHECKLIST]);
   const p = planStatus(req.user);
   const auto = { ...s, listings: s.listings > 0, booking_page: s.booking_enabled, plan: !['trial'].includes(p.plan) };
   const skipped = new Set(s.onboarding_skipped || []);
-  const steps = STEPS.map((x) => ({ ...x, done: Boolean(auto[x.key]), skipped: !auto[x.key] && skipped.has(x.key) }));
+  const steps = STEPS.map((x) => ({ ...x, href: x.key === 'channels' ? channelsHref(s.first_unit_id) : x.href, done: Boolean(auto[x.key]), skipped: !auto[x.key] && skipped.has(x.key) }));
   const required = steps.filter((x) => !x.optional);
   const settled = steps.filter((x) => x.done || x.skipped).length;
   res.json({

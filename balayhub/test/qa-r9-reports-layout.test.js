@@ -36,10 +36,10 @@ const phoneBody = (px) => {
   }
   return out.join('\n');
 };
-// The shared filterBar() call for one tab, from its key to the closing `});`.
+// The shared drawBar() call for one tab, from its key to the closing `});`. drawBar() makes the filterBar() call (QA round 14, #27).
 const barCall = (key) => {
-  const m = src.match(new RegExp(`const bar = filterBar\\(\\{\\s*key: '${esc(key)}',[\\s\\S]*?\\}\\);`));
-  assert.ok(m, `filterBar call for ${key} found`);
+  const m = src.match(new RegExp(`drawBar\\(\\{\\s*key: '${esc(key)}',[\\s\\S]*?\\}\\);`));
+  assert.ok(m, `drawBar call for ${key} found`);
   return m[0];
 };
 
@@ -47,8 +47,8 @@ test('the period controls are the filter bar\'s extra slot, not a wrapping chip 
   assert.match(src, /const periodBox = h\('div', \{ class: 'flt__period' \}\);/);
   assert.doesNotMatch(src, /periodBox = h\('div', \{ class: 'chips' \}\)/);
   const perf = barCall('stay-reports');
-  assert.match(perf, /extra: periodBox,/);
-  assert.match(perf, /quick: scopeFields,/, 'Property, Listing and Channel go into the same filterBar call');
+  assert.match(perf, /extra: periodBox\b/);
+  assert.match(src, /quick: \[\.\.\.\(c\.before \|\| \[\]\), \.\.\.scopeFieldsFor\(c\.values\.property_id\)\]/, 'Property, Listing and Channel go into the same filterBar call');
 });
 
 test('filterBar() puts the extra slot and the quick filters side by side in one toolbar row', () => {
@@ -94,8 +94,8 @@ test('a custom date range keeps its two dates together as one unit (the existing
 
 test('the Income summary (for taxes) year select sits in the same filter row as Property, Listing and Channel', () => {
   const tax = barCall('stay-reports-tax');
-  assert.match(tax, /quick: \[\{ name: 'year', label: 'Year'/);
-  assert.match(tax, /\.\.\.scopeFields\]/);
+  assert.match(tax, /before: \[\{ name: 'year', label: 'Year'/);
+  assert.match(src, /quick: \[\.\.\.\(c\.before \|\| \[\]\), \.\.\.scopeFieldsFor\(c\.values\.property_id\)\]/, 'the year select and the scope fields share one filterBar call');
   assert.doesNotMatch(tax, /extra:/, 'the tax tab has no period wrapper');
   // A select with no type is placed bare in the toolbar (not in a .flt__field wrapper), like the other selects.
   assert.doesNotMatch(tax, /name: 'year'[^}]*type:/);

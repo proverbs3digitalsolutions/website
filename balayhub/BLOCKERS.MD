@@ -2,7 +2,7 @@
 
 Things only the founder can do or decide before related work can go ahead. Automated runs add items here. The founder clears them by doing the item and ticking it, or by writing the decision in DECISIONS.MD.
 
-Last updated: 2026-10-15 (QA round 13 questions added, two founder items answered; earlier rounds unchanged apart from inline notes)
+Last updated: 2026-10-15 (QA round 14 questions added; round 13 and earlier unchanged)
 
 ## Security — do first
 
@@ -326,3 +326,35 @@ Every question has its default already applied in the app; nothing waits on the 
 
 - [x] **Sidebar jumps to the top on every click.** Reported by the founder 2026-10-15. Fixed in round 13: the menu is kept when you change page, its scroll position and the More tools fold stay where they were, and a new page starts at the top once. Confirmed in the re-verify at 1280x900 and 1366x768 (D-89).
 - [x] **A top bar like Guesty's.** Founder decision 2026-10-15: global search in the middle; bookmarks, "+" add new, notifications, help and the profile on the upper right. Recorded as D-90 (overrides D-85's "Guesty features out of scope" for this item only); planned for round 14 (PRD).
+
+## Questions from QA round 14 (2026-10-15)
+
+Every question has its default already built into the app; nothing waits on the answer. The top bar (D-91) is built; its questions are the last group.
+
+### Money and guests
+
+- [ ] **ID photos at check-in.** The check-in page tells guests the building requires a valid ID, and now it really does: each registration needs at least one ID photo (a guest who already sent one can edit without sending another). The other choice is to keep photos optional and change the sentence to "Your building may ask for a valid ID; you can add photos here." Which do you want? *Default: at least one photo required.*
+- [ ] **A PayMongo key BalayHub couldn't check.** When PayMongo can't be reached, the key is saved as "Saved, not checked yet" and you can still turn the booking page on after a clear warning ("Turn on anyway?"). The other choice is to refuse until PayMongo has confirmed the key: safer for guests, but it blocks you whenever PayMongo is briefly down. *Default: allow after the warning.*
+- [ ] **Recording rent from a later month's row while an older month is unpaid.** The form fills in the amount of the month whose row you clicked, but the money goes to the oldest unpaid month first (D-85). Only the wording changed: the form now says "This payment goes to September 2026 first (the oldest unpaid month), then to October 2026." The other choice is to fill in the oldest month's amount instead, so the amount and the month always agree. *Default: only the wording changed.*
+- [ ] **A unit owner's email that is also a teammate's login.** BalayHub asks "This email is a login for <name>. Save anyway?". Should it refuse instead? *Default: ask.*
+- [ ] **Tagalog add-on descriptions.** Add-on descriptions show as you typed them, in English and in Taglish, and the form now says so. Add a second "Description in Tagalog" box (a small schema change)? *Default: unchanged.*
+- [ ] **Listings with none active.** The Listings filter bar now scales with the number of listings: none until there is a listing, search only for 1 to 3. With 0 active listings (all archived) the bar is hidden, so the Archived listings view can be reached only by a link. Is that OK, or should a small "Show archived" link stay on the page? *Default: as built (link only).*
+
+### Top bar (D-91)
+
+- [ ] **Bell in long-term-only workspaces.** No alert type covers rent yet, so the bell would always be empty and is hidden there. Rent-due and overdue alerts can be added later. *Default: hidden for long-term workspaces.*
+- [ ] **Do the alert settings in My account also hide items from the bell?** A type you turned off, and properties you filtered out, are not shown in the bell either. The alternative is that the bell shows everything and the settings affect only phone and email alerts. *Default: hidden from the bell too.*
+- [ ] **New alert, "Unit owner activity".** When a unit owner blocks or unblocks dates in the owner portal, owners get it in the bell (Owners filter) and on the phone. *Default: on for owners; it can be turned off in My account.*
+- [ ] **"Property" in the + menu for short-term-only hosts.** They add buildings through Add listing. *Default: hidden for them (shown for long-term and Both).*
+- [ ] **Search covers active records only.** Archived listings, properties, tenants and unit owners are left out; cancelled reservations are included and marked "Cancelled". *Default: as stated.*
+- [ ] **Search does not match guest phone numbers or emails.** This protects privacy and keeps one rule for every role. *Default: names and confirmation codes only.*
+- [ ] **Recent searches stay on this device only,** not synced like bookmarks. *Default: this device.*
+- [ ] **The sidebar's account box (name, theme, Log out) stays** although the avatar menu repeats it (D-85: group, never cut). *Default: keep; revisit after the alpha.*
+- [ ] **Notifications are kept for 90 days.** *Default: 90.*
+- [ ] **The Ask (assistant) button stays at the bottom right on desktop,** not in the top bar. *Default: unchanged.*
+- [ ] **Menu wording.** "Unit owner" (BalayHub's existing name) instead of "Owner", and "Invite a teammate". *Default: as stated.*
+
+### Added after the round 14 re-verify
+
+- [ ] **Staff on a long-term workspace and tenant money.** Staff can see tenant rent amounts, the due day and the outstanding balance, because they need them to record rent payments. Should staff see less (for example only the amount to record)? *Default: yes, staff see them.*
+- [ ] **Read-only workspace top bar (live stage).** The check that a read-only workspace shows no "+" menu but keeps bookmarks needs a platform admin to put a test workspace into read-only. It was not run locally and is carried to the live stage.

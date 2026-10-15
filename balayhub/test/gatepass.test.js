@@ -26,7 +26,7 @@ const newStay = async (inDays, name = 'Rafael Diaz', nights = 2) => (await host.
 const fillForm = async (booking, ids = 1) => {
   const token = (await host.get(`/api/reservations/${booking.booking_id}/checkin`)).data.link.split('/checkin/')[1];
   const g = client(srv.base);
-  await g.post(`/api/public/checkin/${token}`, { lead_name: 'Rafael Diaz', phone: '09171112222', guests: ['Ana Diaz'], arrival_time: '15:30', vehicle_plate: 'ABC 1234', consent: true });
+  await g.post(`/api/public/checkin/${token}`, { lead_name: 'Rafael Diaz', phone: '09171112222', guests: ['Ana Diaz'], arrival_time: '15:30', vehicle_plate: 'ABC 1234', consent: true, id_photos: 1 });
   for (let i = 0; i < ids; i += 1) await g.post(`/api/public/checkin/${token}/id`, PNG, { 'Content-Type': 'image/png' });
 };
 

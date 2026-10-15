@@ -88,7 +88,7 @@ test.before(async () => {
   fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}');
   for (const f of ['api.js', 'ui.js', 'filters.js']) fs.copyFileSync(path.join(__dirname, '../public/js', f), path.join(dir, f));
   fs.copyFileSync(path.join(__dirname, '../public/js/views/reports.js'), path.join(dir, 'views', 'reports.js'));
-  fs.writeFileSync(path.join(dir, 'app.js'), 'export const state = { user: { user_id: 1 } };\n');
+  fs.writeFileSync(path.join(dir, 'app.js'), 'export const state = { user: { user_id: 1 } };\nexport function navigate() {}\n');
   filters = await import(pathToFileURL(path.join(dir, 'filters.js')));
   ({ reportsView } = await import(pathToFileURL(path.join(dir, 'views', 'reports.js'))));
 });

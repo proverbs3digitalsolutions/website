@@ -18,7 +18,16 @@ export function newIdempotencyKey() {
   return (crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/[^A-Za-z0-9_-]/g, '');
 }
 
-export async function api(method, url, body, { idempotencyKey, rawBody, headers = {} } = {}) {
+// How many api() calls have not settled yet (the scroll keeper in ui.js waits for them before it lets go).
+let pending = 0;
+export const inFlight = () => pending;
+
+export async function api(method, url, body, opts) {
+  pending += 1;
+  try { return await request(method, url, body, opts); } finally { pending -= 1; }
+}
+
+async function request(method, url, body, { idempotencyKey, rawBody, headers = {} } = {}) {
   let res;
   try {
     res = await fetch(`/api${url}`, {

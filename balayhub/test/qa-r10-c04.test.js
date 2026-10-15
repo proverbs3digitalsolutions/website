@@ -43,7 +43,7 @@ test('#10: the redrawn composer still has a Save note button', () => {
 
 test('#37: banner has no developer wording', () => {
   assert.doesNotMatch(INBOX, /whoever set up BalayHub/);
-  assert.match(INBOX, /Guest replies go to your email inbox for now\. Reply from there, or send a new message here\./);
+  assert.match(INBOX, /Guest replies arrive in your email for now\./);
 });
 
 test('#13: tracker steps', () => {

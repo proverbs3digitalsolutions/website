@@ -19,6 +19,9 @@ function tenantFields(t = {}) {
   ];
 }
 
+// A lease card's button, named for a screen reader with its unit and start date (D-81): two leases share the same button names.
+const leaseLabel = (l, action) => `${action}, ${unitLabel(l.unit_name)}, from ${fmtDate(l.start_date)}`;
+
 export function newTenantModal({ onSaved } = {}) {
   let confirmDuplicate = false;
   const modal = formModal({
@@ -202,6 +205,8 @@ export async function tenantsView(el, { query }) {
     }),
     tabs, barBox,
     listCard);
+  // The top bar's Add new (?new=1) opens the tenant dialog once: the flag leaves the route's query, and load() has already written the address without it. Saving reloads the list.
+  if (query?.new && canManage) { delete query.new; newTenantModal({ onSaved: () => load() }); }
 }
 
 // ---------------------------------------------------------------- detail
@@ -286,12 +291,12 @@ export async function tenantDetailView(el, { params, query, rerender }) {
       h('dt', null, 'Balance'), h('dd', { class: Number(l.outstanding) > 0 ? 'amount--neg' : '' }, peso(l.outstanding), Number(l.overdue) > 0 ? ` (${peso(l.overdue)} overdue)` : ''),
       Number(l.credit) > 0 && [h('dt', null, 'Advance / credit'), h('dd', null, peso(l.credit))]),
     h('div', { class: 'chips', style: { marginTop: '14px' } },
-      (l.lease_status === 'active' || Number(l.outstanding) > 0) && h('button', { class: 'btn btn--primary', onclick: () => recordPaymentModal({ leaseId: l.lease_id, onSaved: rerender }) }, 'Record payment'),
-      canManage && h('button', { class: 'btn btn--secondary btn--sm', onclick: () => leaseDocs(l) }, 'Documents'),
+      (l.lease_status === 'active' || Number(l.outstanding) > 0) && h('button', { class: 'btn btn--primary', 'aria-label': leaseLabel(l, 'Record payment'), onclick: () => recordPaymentModal({ leaseId: l.lease_id, onSaved: rerender }) }, 'Record payment'),
+      canManage && h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': leaseLabel(l, 'Documents'), onclick: () => leaseDocs(l) }, 'Documents'),
       canManage && l.lease_status === 'active' && [
-        h('button', { class: 'btn btn--ghost btn--sm', onclick: () => editTerms(l) }, 'Change terms'),
-        h('button', { class: 'btn btn--ghost btn--sm', onclick: () => endLease(l) }, 'End lease'),
-        Number(l.total_paid) === 0 && h('button', { class: 'btn btn--ghost btn--sm', onclick: () => cancelLease(l) }, 'Cancel (entered by mistake)')]));
+        h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': leaseLabel(l, 'Change terms'), onclick: () => editTerms(l) }, 'Change terms'),
+        h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': leaseLabel(l, 'End lease'), onclick: () => endLease(l) }, 'End lease'),
+        Number(l.total_paid) === 0 && h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': leaseLabel(l, 'Cancel (entered by mistake)'), onclick: () => cancelLease(l) }, 'Cancel (entered by mistake)')]));
 
   const chargeRows = charges.slice(0, 24).map((c) => h('tr', null,
     h('td', { style: { whiteSpace: 'nowrap' } }, fmtDate(c.due_date)),
@@ -332,8 +337,8 @@ export async function tenantDetailView(el, { params, query, rerender }) {
           h('div', { class: 'card__head' }, h('h2', null, 'Contact')),
           tenant.limited ? h('p', { class: 'muted small' }, 'Contact details are limited to owners and property managers.')
             : h('dl', { class: 'dl' },
-              h('dt', null, 'Mobile'), h('dd', null, tenant.phone ? h('a', { href: `tel:${tenant.phone.replace(/[^\d+]/g, '')}` }, tenant.phone) : '—'),
-              h('dt', null, 'Email'), h('dd', null, tenant.email ? h('a', { href: `mailto:${tenant.email}` }, tenant.email) : '—'),
+              h('dt', null, 'Mobile'), h('dd', null, tenant.phone ? h('a', { class: 'link-tap', href: `tel:${tenant.phone.replace(/[^\d+]/g, '')}` }, tenant.phone) : '—'),
+              h('dt', null, 'Email'), h('dd', null, tenant.email ? h('a', { class: 'link-tap', href: `mailto:${tenant.email}` }, tenant.email) : '—'),
               h('dt', null, 'Emergency contact'), h('dd', null, tenant.emergency_contact || '—'),
               tenant.notes && [h('dt', null, 'Notes'), h('dd', { style: { whiteSpace: 'pre-wrap' } }, tenant.notes)])),
         leases.length ? leases.map(leaseCard) : h('div', { class: 'card' }, emptyState({ title: 'No lease yet', text: 'Assign this tenant to a vacant unit to start tracking rent.', action: canManage && !archived && h('button', { class: 'btn btn--primary', onclick: () => assignTenantModal({ tenant, onSaved: rerender }) }, 'Assign Unit') }))),

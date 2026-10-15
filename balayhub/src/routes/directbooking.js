@@ -91,7 +91,7 @@ function withHostState(o) {
 
 // ---------------------------------------------------------------- host settings
 router.get('/direct-booking', owners, ah(async (req, res) => {
-  const o = await one('SELECT name, booking_slug, booking_enabled, booking_intro, paymongo_key_hint FROM organizations WHERE organization_id = $1', [req.user.organization_id]);
+  const o = await one('SELECT name, booking_slug, booking_enabled, booking_intro, paymongo_key_hint, paymongo_key_checked_at FROM organizations WHERE organization_id = $1', [req.user.organization_id]);
   const { rows: listings } = await query(
     `SELECT u.unit_id, u.unit_name, p.property_name, u.bookable_online, u.nightly_rate,
             (SELECT COUNT(*)::int FROM files f WHERE f.related_record_type = 'listing' AND f.related_record_id = u.unit_id) AS photo_count
@@ -104,6 +104,7 @@ router.get('/direct-booking', owners, ah(async (req, res) => {
     enabled: o.booking_enabled,
     intro: o.booking_intro,
     paymongo_connected: Boolean(o.paymongo_key_hint),
+    paymongo_checked: Boolean(o.paymongo_key_checked_at),
     paymongo_key_hint: o.paymongo_key_hint,
     url: o.booking_slug ? bookingUrl(o.booking_slug) : null,
     listings,
@@ -118,7 +119,7 @@ router.patch('/direct-booking', owners, ah(async (req, res) => {
     paymongo_secret_key: { type: 'string', max: 200, label: 'PayMongo secret key' },
   }, { partial: true });
   // The row as it is now, so the activity log names only what really changes.
-  const cur = await one('SELECT booking_enabled, booking_slug, booking_intro, paymongo_key_hint FROM organizations WHERE organization_id = $1', [req.user.organization_id]);
+  const cur = await one('SELECT booking_enabled, booking_slug, booking_intro, paymongo_key_hint, paymongo_key_enc, paymongo_key_checked_at FROM organizations WHERE organization_id = $1', [req.user.organization_id]);
   const sets = []; const params = [req.user.organization_id];
   const next = {}; // the value each named setting is saved as, keyed by its activity-log name
   const set = (col, v, name) => { params.push(v); sets.push(`${col} = $${params.length}`); if (name) next[name] = v; };
@@ -131,17 +132,31 @@ router.patch('/direct-booking', owners, ah(async (req, res) => {
     set('booking_slug', slug, 'slug');
   }
   if ('intro' in body) set('booking_intro', body.intro, 'intro');
+  let keyCheck = null;
   if (body.paymongo_secret_key) {
     const key = body.paymongo_secret_key.trim();
     if (!/^sk_(test|live)_[A-Za-z0-9]{10,}$/.test(key)) throw validationError({ paymongo_secret_key: 'Paste the Secret key from PayMongo (it starts with sk_live_ or sk_test_).' });
+    // Connected only after PayMongo accepts the key; a refused key is not saved, an unreachable PayMongo leaves it unchecked.
+    keyCheck = await paymongo.checkKey(key);
+    if (keyCheck === 'rejected') throw validationError({ paymongo_secret_key: "PayMongo didn't accept this key. Copy the Secret key again from your PayMongo dashboard (Developers, API keys)." });
     set('paymongo_key_enc', secretbox.encrypt(key));
     set('paymongo_key_hint', `${key.slice(0, 8)}…${key.slice(-4)}`);
+    set('paymongo_key_checked_at', keyCheck === 'ok' ? new Date() : null);
   }
-  if (req.body?.disconnect_paymongo === true) { set('paymongo_key_enc', null); set('paymongo_key_hint', null); }
+  if (req.body?.disconnect_paymongo === true) { set('paymongo_key_enc', null); set('paymongo_key_hint', null); set('paymongo_key_checked_at', null); }
   if ('enabled' in body) {
     if (body.enabled) {
       const willHaveKey = Boolean(cur.paymongo_key_hint || body.paymongo_secret_key) && req.body?.disconnect_paymongo !== true;
       if (!willHaveKey) throw new HttpError(409, 'Connect your PayMongo account first, so guests can pay you.', { code: 'NO_PAYMONGO' });
+      // A key not yet checked is checked now: refused keys can't turn the page on; if PayMongo can't be reached, ask first.
+      if (config.paymongoKeyCheck !== 'off' && !body.paymongo_secret_key && !cur.paymongo_key_checked_at) {
+        keyCheck = await paymongo.checkKey(secretbox.decrypt(cur.paymongo_key_enc));
+        if (keyCheck === 'ok') set('paymongo_key_checked_at', new Date());
+      }
+      if (keyCheck === 'rejected') throw new HttpError(409, "PayMongo didn't accept your saved key. Change the key before turning on your booking page.", { code: 'PAYMONGO_REJECTED' });
+      if (keyCheck === 'unreachable' && config.paymongoKeyCheck !== 'off' && req.body?.confirm_unchecked_key !== true) {
+        throw new HttpError(409, "We couldn't check your PayMongo key yet. If the key is wrong, guests won't be able to pay. Turn on your booking page anyway?", { code: 'PAYMONGO_UNCHECKED' });
+      }
       // The same listings the public page shows (PUBLIC_UNIT), so the page is never on with nothing to book.
       const bookable = await one(
         `SELECT 1 FROM units u JOIN properties p USING (property_id)
@@ -161,14 +176,14 @@ router.patch('/direct-booking', owners, ah(async (req, res) => {
   const keyChanged = Boolean(body.paymongo_secret_key) || (req.body?.disconnect_paymongo === true && Boolean(cur.paymongo_key_hint));
   const fields = changedKeys({ enabled: cur.booking_enabled, slug: cur.booking_slug, intro: cur.booking_intro }, next);
   if (keyChanged) fields.push('paymongo_key');
-  if (fields.length) {
+  if (sets.length) {
     try {
       await query(`UPDATE organizations SET ${sets.join(', ')} WHERE organization_id = $1`, params);
     } catch (err) {
       if (err.code === '23505') throw validationError({ slug: 'That address is already taken. Try another.' });
       throw err;
     }
-    await audit(null, req.user, 'direct_booking.settings_changed', 'organization', req.user.organization_id, { fields });
+    if (fields.length) await audit(null, req.user, 'direct_booking.settings_changed', 'organization', req.user.organization_id, { fields });
   }
   const o = await one('SELECT booking_slug FROM organizations WHERE organization_id = $1', [req.user.organization_id]);
   res.json({ ok: true, url: o.booking_slug ? bookingUrl(o.booking_slug) : null });
@@ -500,6 +515,8 @@ async function startCheckout({ host, token, ip, label, returnUrls, row: r, befor
     return url;
   } catch (err) {
     await query(`UPDATE direct_checkouts SET status = 'failed', hold_until = now() WHERE checkout_ref = $1`, [hold.checkout_ref]);
+    // A key PayMongo refuses is no longer "Connected": the host is asked to check it again.
+    if (err.unauthorized) await query('UPDATE organizations SET paymongo_key_checked_at = NULL WHERE organization_id = $1', [host.organization_id]);
     // The host reads the real reason in the server log; the guest only sees a neutral sentence.
     console.error(`[direct] checkout ${hold.checkout_ref} could not start online payment: ${err.message}`);
     throw new HttpError(502, "Online payment isn't available right now. Please try again in a few minutes, or contact the host.", { code: 'PAYMENT_FAILED' });

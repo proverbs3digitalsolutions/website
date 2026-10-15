@@ -294,7 +294,7 @@ test('check-in form: house rules are shown, agreed once, and the time and exact 
   assert.equal(info.data.stay.house_rules, 'No pets. Quiet after 10pm.');
   assert.equal(info.data.stay.rules_accepted_at, null);
 
-  const form = { lead_name: 'Rafa Lim', phone: '09171113333', consent: true };
+  const form = { lead_name: 'Rafa Lim', phone: '09171113333', consent: true, id_photos: 1 };
   const refused = await g.post(`/api/public/checkin/${token}`, form);
   assert.equal(refused.status, 400);
   assert.deepEqual(Object.keys(refused.data.fields), ['accept_rules']);
@@ -320,7 +320,7 @@ test('check-in form: a listing without house rules asks for nothing', async () =
   const g = client(srv.base);
   const info = await g.get(`/api/public/checkin/${token}`);
   assert.equal(info.data.stay.house_rules, null);
-  assert.equal((await g.post(`/api/public/checkin/${token}`, { lead_name: 'Gil', phone: '09171114444', consent: true })).status, 200);
+  assert.equal((await g.post(`/api/public/checkin/${token}`, { lead_name: 'Gil', phone: '09171114444', consent: true, id_photos: 1 })).status, 200);
   assert.equal((await sql(`SELECT rules_accepted_at FROM bookings WHERE booking_id = $1`, [k2.booking_id]))[0].rules_accepted_at, null);
 });
 

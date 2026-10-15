@@ -8,6 +8,7 @@ import { navigate } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed, outOfWindow, OUT_OF_WINDOW } from '../filters.js';
 import { depositsPanel } from './deposits.js';
 import { CHANNEL_LABEL, SOURCE_LABEL } from './reservations.js';
+import { exportHint } from './reports.js';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const pct = (n) => (n === null || n === undefined ? '—' : `${n}%`);
@@ -29,6 +30,12 @@ export function periodPatch(period) {
   if (period === 'year') return { period, month: '', from: '', to: '' };
   if (period === 'range') return { period, month: '', year: '' };
   return { period: '', year: '', from: '', to: '' };
+}
+
+// The listings a Listing choice can name: the chosen property's, or all of them when no property is chosen (#27). Pure.
+export function listingsFor(listings, propertyId) {
+  if (!propertyId) return listings;
+  return listings.filter((l) => String(l.property_id) === String(propertyId));
 }
 
 function stat(label, value, sub) {
@@ -57,16 +64,32 @@ export async function stayReportsView(el, { query = {} }) {
     return;
   }
 
-  // Property / listing / channel filters shared by both report tabs.
+  // Property / listing / channel filters shared by both report tabs. The Listing choices are the chosen property's (#27).
   const { listings } = await get('/listings');
   const properties = [...new Map(listings.map((l) => [l.property_id, l.property_name])).entries()];
-  const scopeFields = [
+  const scopeFieldsFor = (propertyId) => [
     properties.length > 1 && { name: 'property_id', label: 'Property', all: 'All properties', options: properties },
-    listings.length > 1 && { name: 'unit_id', label: 'Listing', all: 'All listings', options: listings.map((l) => [l.unit_id, `${l.unit_name}${properties.length > 1 ? ` · ${l.property_name}` : ''}`]) },
+    listings.length > 1 && { name: 'unit_id', label: 'Listing', all: 'All listings', options: listingsFor(listings, propertyId).map((l) => [l.unit_id, `${l.unit_name}${properties.length > 1 ? ` · ${l.property_name}` : ''}`]) },
     { name: 'channel', label: 'Channel', all: 'All channels', options: Object.entries(CHANNEL_LABEL) },
   ].filter(Boolean);
+  // filterBar() reads its choices once, so the bar is drawn again when the property changes: the Listing choices then follow it,
+  // and filterBar drops a listing that is not among them (#27).
+  const barBox = h('div');
+  function drawBar(c) {
+    const shownFor = c.values.property_id;
+    barBox.replaceChildren(filterBar({ key: c.key, values: c.values, defaults: c.defaults, extra: c.extra,
+      quick: [...(c.before || []), ...scopeFieldsFor(c.values.property_id)],
+      onChange: () => { if (c.values.property_id !== shownFor) drawBar(c); c.load(); } }));
+  }
   const scopeOf = (f) => ({ property_id: f.property_id, unit_id: f.unit_id, channel: f.channel });
   const exportLink = h('a', { class: 'btn btn--secondary', download: '' }, 'Download CSV');
+  // Export has no address while a custom range is incomplete or runs backwards: the hint says why, as /#/reports does (#28).
+  const exportNote = h('span', { class: 'muted small', id: 'stay-report-export-note' });
+  const exportReady = (ready, hint) => {
+    exportNote.hidden = ready;
+    exportNote.textContent = ready ? '' : hint;
+    if (ready) exportLink.removeAttribute('aria-disabled'); else { exportLink.removeAttribute('href'); exportLink.setAttribute('aria-disabled', 'true'); }
+  };
   const box = h('div');
   const fail = (err) => { toast(err.message, 'error'); box.replaceChildren(h('div', { class: 'card' }, emptyState({ iconName: 'chart', title: 'Couldn\'t load this report', text: err.message }))); };
 
@@ -107,12 +130,9 @@ export async function stayReportsView(el, { query = {} }) {
             h('li', null, 'Most small hosts registered with BIR report gross receipts quarterly. Your accountant decides which figure and tax option apply to you. BalayHub receipts are acknowledgement receipts, not BIR official receipts.'),
             h('li', null, 'Enter channel fees on each reservation and record expenses so the net figures are complete.'))));
     }
-    const bar = filterBar({
-      key: 'stay-reports-tax', values: filters, defaults, onChange: load,
-      quick: [{ name: 'year', label: 'Year', all: String(thisYear), options: years }, ...scopeFields],
-    });
+    drawBar({ key: 'stay-reports-tax', values: filters, defaults, load, before: [{ name: 'year', label: 'Year', all: String(thisYear), options: years }] });
     await load();
-    el.replaceChildren(pageHead({ title: 'Reports', sub: 'Short-term rentals', actions: exportLink }), tabs, bar, box);
+    el.replaceChildren(pageHead({ title: 'Reports', sub: 'Short-term rentals', actions: exportLink }), tabs, barBox, box);
     return;
   }
 
@@ -175,7 +195,10 @@ export async function stayReportsView(el, { query = {} }) {
       : backwards ? 'The end date must be after the start date. Showing this month for now.'
       : filters.period === 'range' && !(filters.from && filters.to) ? 'Choose both dates. Showing this month for now.' : '';
     const apiQ = qs({ ...periodQ, ...scopeOf(filters) });
-    exportLink.href = `/api/stay-reports/export${apiQ}`;
+    // A custom range is exported only once both dates are set and run forwards (#28).
+    const exportOk = filters.period !== 'range' || Boolean(filters.from && filters.to && !backwards);
+    exportReady(exportOk, exportHint({ from: filters.from, to: filters.to }));
+    if (exportOk) exportLink.href = `/api/stay-reports/export${apiQ}`;
     let r;
     try { r = await get(`/stay-reports${apiQ}`); } catch (err) { fail(err); return; }
     // A month that isn't valid is replaced by the month used, here and in the month box, and the page says so.
@@ -212,7 +235,7 @@ export async function stayReportsView(el, { query = {} }) {
           r.expenses_excluded ? h('p', { class: 'muted' }, 'Expenses aren\'t split by channel, so they are left out while a channel is chosen.')
             : r.expenses_by_category.length ? h('dl', { class: 'dl' }, r.expenses_by_category.map((e) => [h('dt', null, label(e.category)), h('dd', null, peso(e.amount))]))
               : h('p', { class: 'muted' }, 'No expenses recorded for this period.'),
-          h('p', { class: 'small' }, h('a', { href: '#/rent?tab=expenses' }, 'Record an expense')))),
+          h('p', { class: 'small' }, h('a', { href: '#/rent?tab=expenses', class: 'link-tap' }, 'Record an expense')))),
       Array.isArray(r.by_source) && r.by_source.length > 0 && h('div', { class: 'card' }, h('h2', null, 'Direct bookings by source'),
         h('p', { class: 'muted small' }, 'Booked total counts the whole booking from its check-in date. Revenue by channel counts only the nights in this month.'),
         h('div', { class: 'table-wrap' }, h('table', { class: 'table table--compact' },
@@ -228,13 +251,10 @@ export async function stayReportsView(el, { query = {} }) {
             h('td', null, u.unit_name, h('div', { class: 'muted small' }, u.property_name)),
             h('td', { class: 'num' }, String(u.nights)), h('td', { class: 'num' }, pct(u.occupancy)), h('td', { class: 'num' }, peso(u.adr)),
             h('td', { class: 'num' }, peso(u.revenue)), h('td', { class: 'num' }, peso(u.fees)), h('td', { class: 'num' }, peso(u.channel_fees)), h('td', { class: 'num' }, peso(u.expenses)), h('td', { class: 'num' }, peso(u.net)))),
-          Number(r.building_expenses) > 0 && h('tr', null, h('td', { colspan: 7 }, 'Whole-property expenses (dues etc.)'), h('td', { class: 'num' }, peso(r.building_expenses)), h('td', null, '')))))));
+          Number(r.building_expenses) > 0 && h('tr', null, h('td', { colspan: 7 }, 'Whole-property expenses'), h('td', { class: 'num' }, peso(r.building_expenses)), h('td', null, '')))))));
   }
-  const bar = filterBar({
-    key: 'stay-reports', values: filters, defaults, onChange: load,
-    extra: periodBox,
-    quick: scopeFields,
-  });
+  drawBar({ key: 'stay-reports', values: filters, defaults, load, extra: periodBox });
   await load();
-  el.replaceChildren(pageHead({ title: 'Reports', sub: 'Short-term rentals', actions: exportLink }), tabs, bar, status, notice, box);
+  exportLink.setAttribute('aria-describedby', 'stay-report-export-note');
+  el.replaceChildren(pageHead({ title: 'Reports', sub: 'Short-term rentals', actions: h('div', { class: 'chips' }, exportLink, exportNote) }), tabs, barBox, status, notice, box);
 }

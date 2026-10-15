@@ -124,16 +124,14 @@ test('(a2) Publish becomes "Unpublish to correct": the shared data-focus-key fin
   assert.equal(w.activeElement, fresh);
 });
 
-test('(b) nothing matches: at 800 ms the page heading gets focus (tabindex -1, no scroll); a match at 3 s takes over', (t) => {
+test('(b) nothing matches: the page heading gets focus at once (tabindex -1, no scroll); a match at 3 s takes over', (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const w = world();
   const g = ui.installFocusGuard(w, { observe: false });
   const old = btn(w, w.main, 'Void payment'); old.focus(); g.note(old);
   w.remove(old);
   g.check(0);
-  assert.equal(w.activeElement, w.body, 'the heading waits for a redraw first');
-  t.mock.timers.tick(800);
-  assert.equal(w.activeElement, w.h1);
+  assert.equal(w.activeElement, w.h1, 'r14: the heading does not wait');
   assert.equal(w.h1.getAttribute('tabindex'), '-1');
   assert.deepEqual(w.focusCalls.at(-1).opts, { preventScroll: true });
   const fresh = btn(w, w.main, 'Void payment');
@@ -324,7 +322,7 @@ test('confirmDialog without a reason box focuses its Cancel button; with one it 
 // ------------------------------------------------------------------ source scans
 test('ui.js exports the guard and no longer exports the old watchers', () => {
   for (const n of ['focusKeyOf', 'pickFocusMatch', 'installFocusGuard', 'formErrorText']) assert.equal(typeof ui[n], 'function', n);
-  assert.equal(ui.HEADING_AFTER_MS, 800);
+  assert.equal(ui.HEADING_AFTER_MS, 0); // r14: the heading gets focus at once
   assert.equal(ui.FOCUS_WATCH_MS, 10000);
   for (const n of ['keepFocus', 'sameControl', 'snapshotControl', 'findReplacement', 'FOCUS_CHECKS']) assert.equal(ui[n], undefined, n);
   assert.doesNotMatch(uiSrc, /document\.addEventListener\('click'/);
@@ -384,15 +382,15 @@ test('app.js: the phone More button reads the current page when pressed, not the
   assert.doesNotMatch(b, /onclick: \(\) => [^\n]*\bpath\b/);
 });
 
-test('daily close: after Reopen day is removed, the labelled group hands focus to Close the day', () => {
+test('daily close: after Reopen day is removed, a button in the group is no match (r14: groups match tabs and radios only), so the heading gets focus', () => {
   const w = world();
   const g = ui.installFocusGuard(w, { observe: false });
   const mk = (label) => { const grp = w.main.add(w.make('div', { role: 'group', 'aria-label': 'Daily close actions' })); return [grp, btn(w, grp, label)]; };
   const [oldGrp, reopen] = mk('Reopen day'); reopen.focus(); g.note(reopen);
   w.remove(oldGrp);
-  const [, close] = mk('Close the day');
+  mk('Close the day');
   g.check(0);
-  assert.equal(w.activeElement, close);
+  assert.equal(w.activeElement, w.h1);
 });
 
 test('a control in the header outside #main (guest language toggle) is found before the heading', () => {

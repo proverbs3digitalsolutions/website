@@ -3,11 +3,15 @@
 import { get, qs } from '../api.js';
 import { h, icon, peso, fmtDate, fmtMonth, label, emptyState, pageHead, todayManila } from '../ui.js';
 import { initFilters, filterBar, rememberFilters, changed, dateOutsideWindow } from '../filters.js';
+import { state, navigate } from '../app.js';
 
 // An archived tenant reads "(archived)"; one who has moved out reads "(former)".
 const tenantTag = (x) => (x.tenant_status === 'archived' ? ' (archived)' : x.lease_status !== 'active' ? ' (former)' : '');
 
 const PROPERTY_TYPES = ['apartment', 'boarding_house', 'condominium', 'house', 'commercial', 'dormitory', 'other'];
+
+// A day without its year, for the Billed line that names the period it covers ("Oct 1").
+const shortDate = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 
 function presets(today) {
   const [y, m] = today.split('-').map(Number);
@@ -35,6 +39,8 @@ function boxByLabel(root, label) {
 }
 
 export async function reportsView(el, { query }) {
+  // Short-term workspaces read their money on Stay reports; this long-term page is one address away.
+  if (state.user.business_type === 'short_term') { navigate('#/stay-reports', { replace: true }); return; }
   const today = todayManila();
   const P = presets(today);
   // The period is remembered by name ("This month" stays current); dates only for a custom range.
@@ -144,7 +150,7 @@ export async function reportsView(el, { query }) {
 
     body.replaceChildren(
       h('div', { class: 'stats' },
-        metric('Rent collected', t.collected, scoped('payments'), 'good', `Billed ${peso(t.billed)}`),
+        metric('Rent collected', t.collected, scoped('payments'), 'good', `Billed ${peso(t.billed)} (due ${shortDate(from)} – ${shortDate(to)})`),
         metric('Expenses', t.expenses, scoped('expenses')),
         metric('Net operating result', t.net, scoped('payments'), Number(t.net) < 0 ? 'alert' : null, 'Collected − expenses'),
         metric('Outstanding rent', t.outstanding, `#/rent${qs({ status: 'outstanding', property_id: filters.property_id })}`, Number(t.overdue) > 0 ? 'alert' : null, `As of today · ${peso(t.overdue)} overdue`)),
@@ -153,7 +159,7 @@ export async function reportsView(el, { query }) {
         h('div', { class: 'table-wrap' }, h('table', { class: 'table' },
           h('thead', null, h('tr', null, h('th', null, 'Property'), h('th', { class: 'num' }, 'Occupied'), h('th', { class: 'num' }, 'Collected'), h('th', { class: 'num' }, 'Expenses'), h('th', { class: 'num' }, 'Net'), h('th', { class: 'num' }, 'Outstanding'))),
           h('tbody', null, r.by_property.map((p) => h('tr', null,
-            h('td', null, h('a', { href: `#/properties/${p.property_id}` }, p.property_name)),
+            h('td', null, h('a', { class: 'link-tap', href: `#/properties/${p.property_id}` }, p.property_name)),
             h('td', { class: 'num' }, `${p.occupied}/${p.units}`),
             h('td', { class: 'num' }, peso(p.collected)),
             h('td', { class: 'num' }, peso(p.expenses)),
@@ -185,7 +191,7 @@ export async function reportsView(el, { query }) {
         r.outstanding.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'table' },
           h('thead', null, h('tr', null, h('th', null, 'Tenant'), h('th', null, 'Unit'), h('th', { class: 'num' }, 'Outstanding'), h('th', { class: 'num' }, 'Overdue'), h('th', null, 'Overdue since'))),
           h('tbody', null, r.outstanding.map((o) => h('tr', null,
-            h('td', null, h('a', { href: `#/tenants/${o.tenant_id}` }, o.tenant_name), tenantTag(o) && h('span', { class: 'muted small' }, tenantTag(o))),
+            h('td', null, h('a', { class: 'link-tap', href: `#/tenants/${o.tenant_id}` }, o.tenant_name), tenantTag(o) && h('span', { class: 'muted small' }, tenantTag(o))),
             h('td', null, `${o.property_name}, ${o.unit_name}`),
             h('td', { class: 'num' }, peso(o.outstanding)),
             h('td', { class: `num${Number(o.overdue) > 0 ? ' amount--neg' : ''}` }, peso(o.overdue)),

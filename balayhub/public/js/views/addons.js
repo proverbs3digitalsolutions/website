@@ -29,7 +29,8 @@ function addonModal(a, listings, onSaved) {
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'name', label: 'Name', required: true, value: x.name, maxlength: 80, placeholder: 'e.g. Airport pickup' }),
         field({ name: 'name_tl', label: 'Name in Taglish (optional)', value: x.name_tl, maxlength: 80 })),
-      field({ name: 'description', label: 'Description', type: 'textarea', value: x.description, maxlength: 300, placeholder: 'e.g. We meet you at NAIA with a sign. Up to 4 people.' }),
+      field({ name: 'description', label: 'Description', type: 'textarea', value: x.description, maxlength: 300, placeholder: 'e.g. We meet you at NAIA with a sign. Up to 4 people.',
+        hint: 'Guests see this description exactly as you type it, on English and Tagalog pages.' }),
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'price', label: 'Price', type: 'money', required: true, value: x.price, placeholder: '800' }),
         field({ name: 'pricing', label: 'Charged', type: 'select', required: true, value: x.pricing || 'per_stay', placeholderOption: false, options: Object.entries(PRICING) })),
@@ -84,7 +85,7 @@ export async function addonsView(el, { query = {}, rerender }) {
       : addons.length ? emptyState({ iconName: 'inbox', title: 'No results found', text: 'Try another search or status.' })
         : emptyState({ iconName: 'plus', title: 'No add-ons yet', text: 'Offer airport pickup, early check-in, an extra bed or breakfast, and get paid with the booking.',
           action: isOwner && h('button', { class: 'btn btn--primary', onclick: () => addonModal(null, listings, rerender) }, 'Add your first add-on') });
-    const note = hidden && h('p', { class: 'muted small' }, `${hidden} archived add-on${hidden === 1 ? '' : 's'} not shown. `, h('a', { href: '#/addons?status=archived' }, 'See Archived'), '.');
+    const note = hidden && h('p', { class: 'muted small' }, `${hidden} archived add-on${hidden === 1 ? '' : 's'} not shown. `, h('a', { href: '#/addons?status=archived', class: 'link-tap' }, 'See Archived'), '.');
     box.replaceChildren(...[content, note].filter(Boolean));
   }
   const bar = filterBar({ key: 'addons', values: filters, defaults, onChange: load, search: { placeholder: 'Search add-ons' },

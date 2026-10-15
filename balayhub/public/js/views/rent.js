@@ -26,6 +26,12 @@ async function attachReceipt(form, type, id) {
 }
 
 // ---------------------------------------------------------------- record payment
+// The hint under the balance line (D-85): the oldest unpaid month takes the money first, then the month the host clicked.
+export function goesFirstLine(oldest, row) {
+  if (row && row !== oldest) return `This payment goes to ${oldest} first (the oldest unpaid month), then to ${row}.`;
+  return `This payment goes to ${oldest} first (the oldest unpaid month).`;
+}
+
 // period: the month of the rent row the host clicked Record on (absent on a tenant's own Record).
 export async function recordPaymentModal({ leaseId, amount, period, onSaved } = {}) {
   let leases;
@@ -42,7 +48,7 @@ export async function recordPaymentModal({ leaseId, amount, period, onSaved } = 
     balanceInfo.replaceChildren(l ? h('div', { class: `alert ${Number(l.overdue) > 0 ? 'alert--warn' : 'alert--info'}` },
       `Current balance: ${peso(l.outstanding)}`, Number(l.overdue) > 0 ? ` · ${peso(l.overdue)} overdue` : '', Number(l.credit) > 0 ? ` · ${peso(l.credit)} advance credit` : '',
       ` · Monthly rent ${peso(l.monthly_rent)}`) : '',
-    goesFirst ? h('p', { class: 'hint' }, `This payment goes to ${fmtMonth(l.oldest_unpaid_period)} first (the oldest unpaid month).`) : '');
+    goesFirst ? h('p', { class: 'hint' }, goesFirstLine(fmtMonth(l.oldest_unpaid_period), row && fmtMonth(row))) : '');
   };
   const leaseField = field({
     name: 'lease_id', label: 'Tenant', type: 'select', required: true, value: leaseId,
@@ -401,6 +407,9 @@ export async function rentView(el, { query }) {
     !stayOnly && mainTabs,
     barBox,
     statusTabs, summary, body);
+  // The top bar's Add new (?new=expense, ?new=payment) opens its dialog once: the flag leaves the route's query, and load() has already written the address (tab kept).
+  if (query.new === 'expense') { delete query.new; addExpenseModal({ onSaved: reload }); }
+  if (query.new === 'payment' && !stayOnly) { delete query.new; recordPaymentModal({ onSaved: reload }); }
 }
 
 // ---------------------------------------------------------------- details
@@ -495,7 +504,7 @@ export async function expenseDetailView(el, { params, rerender }) {
           h('dt', null, 'Category'), h('dd', null, label(x.category)),
           h('dt', null, 'Description'), h('dd', null, x.description || '—'),
           h('dt', null, 'Paid to'), h('dd', null, x.vendor_name || '—'),
-          x.maintenance_request_id && [h('dt', null, 'Repair request'), h('dd', null, h('a', { href: `#/maintenance/${x.maintenance_request_id}` }, 'View request'))],
+          x.maintenance_request_id && [h('dt', null, 'Repair request'), h('dd', null, h('a', { class: 'link-tap', href: `#/maintenance/${x.maintenance_request_id}` }, 'View request'))],
           h('dt', null, 'Recorded by'), h('dd', null, `${x.recorded_by_name}, ${fmtDateTime(x.created_at)}`))),
       h('div', { class: 'card' },
         h('h2', { style: { marginBottom: '12px' } }, 'Receipts'),

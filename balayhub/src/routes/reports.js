@@ -268,7 +268,7 @@ router.get('/reports/export', ah(async (req, res) => {
   const r = await buildReport(req.user, from, to, propertyId, propertyType);
   const lines = [
     ['BalayHub financial report'], ['Workspace', req.user.organization_name], ['Period', `${from} to ${to}`],
-    ['Generated', new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' })], ['Currency', 'PHP'], [],
+    ['Generated', new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })], ['Currency', 'PHP'], [],
     ['Summary'], ['Rent billed', r.totals.billed], ['Rent collected', r.totals.collected], ['Expenses', r.totals.expenses],
     ['Net operating result (collected - expenses)', r.totals.net], ['Outstanding rent (as of today)', r.totals.outstanding],
     ['Overdue rent (as of today)', r.totals.overdue], [],

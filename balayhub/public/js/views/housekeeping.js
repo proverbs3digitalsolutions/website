@@ -368,6 +368,8 @@ async function tasksTab(box, query) {
       h('button', { class: 'btn btn--primary', onclick: () => newTaskModal(() => load().catch((e) => toast(e.message, 'error'))) }, icon('plus'), 'Add task')),
     bar,
     list);
+  // The top bar's Add new (?new=1) opens the task dialog once: the flag leaves the route's query, and load() has already written the address without it.
+  if (query?.new && canManage()) { delete query.new; newTaskModal(() => load().catch((e) => toast(e.message, 'error'))); }
 }
 
 // ---------------------------------------------------------------- board
@@ -399,7 +401,7 @@ async function boardTab(box) {
             h('dt', null, T('Next check-in')), h('dd', null, u.next_check_in ? fmtDate(u.next_check_in) : '—'),
             h('dt', null, T('Open task')),
             h('dd', null, u.open_task
-              ? h('a', { href: `#/housekeeping/${u.open_task.task_id}`, 'aria-label': `${openTaskText(u.open_task)}, ${u.unit_name}` }, openTaskText(u.open_task))
+              ? h('a', { class: 'link-tap', href: `#/housekeeping/${u.open_task.task_id}`, 'aria-label': `${openTaskText(u.open_task)}, ${u.unit_name}` }, openTaskText(u.open_task))
               : h('span', { class: 'muted' }, T('No open cleaning task'))),
             // A cleaner is sent no score, so her line is "Passed · date"; the score is printed only when it is there.
             u.last_inspection && [h('dt', null, T('Last inspection')),
@@ -783,7 +785,7 @@ export async function housekeepingDetailView(el, { params, rerender }) {
             (t.notes || isManager) && [h('dt', null, T('Notes')), h('dd', { style: { whiteSpace: 'pre-wrap' } }, t.notes || '—',
               isManager && h('div', null, h('button', { class: 'linkbtn', onclick: () => notesModal(t, rerender) }, 'Edit notes')))],
             t.completed_at && [h('dt', null, T('Finished')), h('dd', null, `${fmtDateTime(t.completed_at)}${t.completed_by_name ? ` · ${t.completed_by_name}` : ''}`)]),
-          t.booking_id && isManager && h('p', { class: 'small', style: { marginTop: '10px' } }, h('a', { href: `#/reservations/${t.booking_id}` }, 'Open the reservation'))),
+          t.booking_id && isManager && h('p', { class: 'small', style: { marginTop: '10px' } }, h('a', { class: 'link-tap', href: `#/reservations/${t.booking_id}` }, 'Open the reservation'))),
         payCard,
         h('div', { class: 'card' },
           h('div', { class: 'card__head' }, h('h2', null, T('Photos'))),

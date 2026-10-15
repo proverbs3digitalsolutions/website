@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-15 (QA round 13, section 26; D-89, D-90)
+Last updated: 2026-10-15 (QA round 14, section 27; D-91, D-92)
 
 ---
 
@@ -101,7 +101,8 @@ Managers and staff only see records in properties assigned to them (`propertySco
 | Check-in form and guest IDs | Yes | Yes | Hidden; ID files refused |
 | Gate pass | Settings and send | Same | Hidden |
 | Security deposit | Record, return, undo a return | Record, return | Record only |
-| Inbox, templates | Yes | Yes | No (403) |
+| Inbox | Yes | Yes | No (403) |
+| Message templates | Create, edit, archive | View only (D-28; the server refuses a manager's change) | No (403) |
 | Automatic messages | Add, edit, turn on/off, delete | View only ("Only the workspace owner can change automatic messages.") | No |
 | Housekeeping | All, plus Edit checklist | Add, assign, cancel, copy for cleaner | View, tick checklist, start, mark done, add photos (no reopen; D-56) |
 | Listings | Add, edit, photos, channels, gate pass | Same, but can't create a new building | View, mark clean/dirty |
@@ -215,7 +216,7 @@ Open to everyone. Linked from sign-up, guest pages and footers.
 
 ## 6. Guest and outside-party pages (private links, no account)
 
-All guest pages have an English / Tagalog toggle (Taglish text). The default is the host's guest language. Server error messages, receipts and the gate pass stay in English.
+All guest pages have an English / Tagalog toggle (Taglish text). The default is the host's guest language. The gate pass has no language toggle and stays in English (QA round 14). Server error messages and receipts stay in English too.
 
 ### 6.1 Booking page `#/book/<slug>`
 - Shows host name, welcome text and listing cards (photo, guests, minimum nights, price per night).
@@ -1042,5 +1043,85 @@ Decision D-89 (and D-90 for the planned top bar). Where this section and an olde
 - **Settings, Connect payments.** The PayMongo dialog says how to get a PayMongo account, with a link (opens in a new tab, `rel="noopener"`).
 - **Lists after a save.** Known: on a long list (Supplies), saving in a dialog moves the page by about 62px because the list is replaced (carried to round 14).
 
-### Planned (not built): top bar (D-90, founder request)
-Global search in the middle ("Type / to search"), then on the right: bookmarks, "+" Add new, notifications, help and the profile avatar. The full flow is written into this file when it is built (QA round 14 / next build sprint).
+### Top bar (D-90, founder request)
+Built in QA round 14. The full flow is in section 27.
+
+---
+
+## 27. QA round 14: the top bar and other changes (F53, D-91, D-92; 2026-10-15)
+
+### 27.1 The top bar (every signed-in page of the host app)
+
+The bar is drawn once and stays when you change page, so it never flickers or loses what you typed. On a desktop (960px wide or more) it sits at the top of the page next to the sidebar: search in the middle, then Bookmarks, **+** Add new, the Notifications bell, Help and your initials on the right. The sidebar keeps the brand and its account box.
+
+**Who sees what**
+
+| Control | Owner | Manager | Staff | Cleaner | Long-term workspace | Read-only or demo workspace |
+|---|---|---|---|---|---|---|
+| Search | Yes | Yes | Yes | Pages and help only | Yes | Yes |
+| Bookmarks | Yes | Yes | Yes | Yes | Yes | Yes (the demo refuses saving, with its usual message) |
+| + Add new | Yes | Yes | Expense, Rent payment only | Hidden | Yes | Hidden |
+| Bell | Yes | Yes | Yes | Yes (cleaning alerts) | Hidden (no rent alerts exist yet) | Yes |
+| Help | Yes | Yes | Yes | Yes | Yes | Yes |
+| Profile menu | Yes | Yes | Yes | Yes | Yes | Yes |
+
+**Search**
+- Press **/** anywhere on the page (not while typing in a field, and not with a dialog open) or click the box. The key cap "/" shows at the right end while the box is empty.
+- Empty box with focus: your last 5 searches (on this device only), with **Clear**. One letter: pages only, with "Type 2 or more letters to search records." Two or more letters: pages and settings first (found in the browser), then the record groups when the server answers: Reservations, Guests, Listings, Properties, Tenants, Unit owners, Quotes, Maintenance, Help articles. Empty groups are not shown.
+- What you can find depends on your role: an owner searches everything; a manager or staff member only records of the properties they are assigned to; staff get no Unit owners or Quotes groups; a cleaner gets pages and help articles only (the app never asks the server). Search matches names, listing names and confirmation codes, never phone numbers, emails, notes or money. Archived listings, properties, tenants and unit owners are left out; cancelled reservations are shown marked "Cancelled".
+- **Arrow Down / Up** move through results (focus stays in the box), **Enter** opens the chosen one (or the first), **Escape** closes the list, a second **Escape** returns you to where you were. Choosing a result clears the box and opens that page; the page heading then gets focus.
+- States: "Searching…" while the server answers; "No results for “zzz”." with a hint for your role ("Try a guest name, a confirmation code or a listing name."; long-term: "Try a tenant, a property or a repair."; cleaners: "Try a page name or a help topic."); "Search isn't working right now. Try again." (pages still work); "Too many searches in a minute. Wait a moment and try again."; offline: "You're offline. Only pages can be searched."
+
+**+ Add new** (hidden for cleaners and read-only or demo workspaces). Each item opens the page's own "new" dialog, then the page heading gets focus when you close it.
+
+| Item | Opens | For |
+|---|---|---|
+| Reservation | `#/reservations?new=1` | Owner, manager (short-term and Both) |
+| Listing | `#/listings?new=1` | Owner, manager (short-term and Both) |
+| Property | `#/properties?new=1` | Owner (long-term and Both) |
+| Unit owner | `#/owners?new=1` | Owner (short-term and Both) |
+| Cleaning task | `#/housekeeping?new=1` | Owner, manager (short-term and Both) |
+| Expense | `#/rent?tab=expenses&new=expense` | Owner, manager, staff |
+| Tenant | `#/tenants?new=1` | Owner, manager (long-term and Both) |
+| Rent payment | `#/rent?new=payment` | Owner, manager, staff (long-term and Both) |
+| Invite a teammate | `#/settings?invite=1` | Owner |
+
+Arrow keys, Home and End move between items; Escape closes and returns focus to the **+** button.
+
+**The `?new=` and `?invite=` openers.** A page that sees `?new=1` (or `?new=expense`, `?new=payment`, `?invite=1`) opens its dialog once, after the page has drawn. The same links work when typed. Bookmarks never keep these openers (the bookmark drops `new`, `invite` and a few other one-time keys).
+
+**Bell.** The badge shows the unread count (99+ above 99) and is refreshed on page change (at most every 15 seconds) and when the window regains focus. The panel has **Mark all as read**, a filter row (All, then only the filters you can have: Reservations, Payments, Cleaning, Messages, Owners) and a list. A row shows a dot while unread, the title, a short line and the time ("Just now", "5 min ago", "Yesterday", "12 Oct"). Clicking a row marks it read and opens the page. **Show older** loads more. The footer link "Choose which alerts you get" goes to My account. Alerts you turned off, and alerts for properties you are no longer assigned to, do not show. States: "You're all caught up." with a line on what shows up here (cleaners: "New cleaning jobs show up here."); "Nothing in Payments yet."; "Couldn't load notifications." with **Try again**. A unit owner blocking or unblocking dates in the owner portal is a new alert, "Unit owner activity", for owners.
+
+**Help.** Opens a panel with a help search, "Suggested for this page" (changes with the page; on pages without a match, the Getting started articles), **Browse all help**, and **Contact us**, which opens a new support ticket that remembers the page you were on. Empty search: "No articles found. Try other words, or contact us."
+
+**Bookmarks.** The panel's first button is **Bookmark this page** (it becomes **Remove this page from bookmarks**, in place, so focus stays on it). The list shows each saved page with its section and a remove button; removing moves focus to the next row, then the previous row, then the button. Up to 20: at the limit the toast says "You can keep up to 20 bookmarks. Remove one to add another." A bookmark to a page your role can no longer open is hidden. Empty: "No bookmarks yet." States: skeleton rows while loading; "Couldn't load your bookmarks." with **Try again**.
+
+**Profile menu.** Your name, workspace and role, then My account, Settings (not for cleaners), the light/dark switch, and Log out.
+
+**On a phone (under 960px).** The bar shows the logo (the word BalayHub too from 560px up), Ask, **Search** (an icon that opens a full-screen search; Escape or the back arrow returns to the icon), **+**, the bell and your initials. **Bookmarks and Help & support move into the profile menu** and open the same panels. Every control and row is at least 44px, panels open full width under the bar and never sit under the bottom bar, and the workspace name moves into the profile menu. The **/** shortcut opens the full-screen search.
+
+### 27.2 Other flow changes from the round 14 sweep
+
+**Smooth screens.** After a save, search, filter or tab change the page stays where you were; only a change of page scrolls to the top (once). One shared piece of code holds the page height during a redraw and undoes any scroll it caused. Home draws all its cards at once instead of one by one. When the control you used disappears, focus goes to the page heading at once and moves to the control if it comes back within 10 seconds. (Completes section 26's focus rule; D-92.)
+
+**Guest booking page, summary.** "Pay in full now" shows one **Pay now** line with the total. "Pay a deposit" shows the deposit line (for example "50% deposit: ₱3,100.00 now"). Changing the choice changes the summary straight away. The amount shown is the amount PayMongo charges. (Taglish: "Bayad ngayon".)
+
+**Reservation, Record refund.** The method starts on "Choose…" and the dialog asks "Choose how the money was refunded." A zero or negative amount is refused at the amount field before any question (such as "Refund more than the overpayment?").
+
+**Guest check-in page.** A guest must add at least one photo of a valid ID. Sending the form without one shows "Add a photo of a valid ID for at least one guest." at the photo box (with the other problems at the same time). A guest who already sent a photo and comes back to edit does not need to send another.
+
+**Settings, Direct booking page, PayMongo.** Saving a key makes BalayHub ask PayMongo whether it works. The status then reads **Connected (…last digits)**, or **Saved, not checked yet (…)** when PayMongo could not be reached. PayMongo refusing the key shows "PayMongo didn't accept this key. Copy the Secret key again from your PayMongo dashboard (Developers, API keys)." under the key box and saves nothing. **Turn on** with a key that is not checked tries the check again: if PayMongo still cannot be reached a dialog "Key not checked yet" asks **Turn on anyway** or **Cancel**; if PayMongo refuses the saved key the page cannot be turned on until the key is changed. A guest checkout that PayMongo refuses as unauthorised puts the status back to "Saved, not checked yet".
+
+**Home and Launchpad.** "Connect your calendar" on Home, and the calendar step on the Launchpad, open the first active listing's Channels dialog (`#/listings?channels=<listing>`); with no listing they go to the Listings page.
+
+**Check-in page.** After a guest has registered, the page heading reads "Your check-in details" (before that it is the form heading).
+
+**Listings.** The filter bar depends on the number of listings: none until there is a listing; 1 to 3 listings show only search, with the rest under **More filters**; 4 or more show the full bar. With 0 active listings the Archived listings view can be reached only by a link (see BLOCKERS).
+
+**Inbox.** The "email needs setup" note is one muted line. The Property and Listing filters show only when there is more than one of each. An error clears when you switch tabs.
+
+**Unit owners.** Saving an owner whose email is a teammate's login asks "This email is a login for <name>. Save anyway?" (**Save anyway** or **Change it**).
+
+**Rent, Record payment.** Recording from a later month's row (while an older month is unpaid) keeps that row's amount and says: "This payment goes to September 2026 first (the oldest unpaid month), then to October 2026."
+
+**Reports.** `#/reports` (long-term Reports) sends a short-term-only workspace to `#/stay-reports`. The Reports screen row reads "Whole-property expenses".

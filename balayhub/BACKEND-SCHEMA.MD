@@ -2,7 +2,7 @@
 
 This document describes BalayHub's PostgreSQL schema as it stands after migrations `001`–`026` in `db/migrations/`, where uploaded files are stored, and who can see or change each kind of data. It was checked against the migrations and the route code in `src/routes/*.js` and `src/lib/*.js`. Anything not confirmed in the code is marked **unverified**.
 
-Last updated: 2026-10-15 (QA round 13, section 19; D-89)
+Last updated: 2026-10-15 (QA round 14: sections 2.17, 6.4 and 20; D-91, D-92)
 
 ---
 
@@ -618,6 +618,31 @@ Related columns: `organizations.plan`, `trial_ends_at`, `paid_until` and `plan_n
 | schema_migrations | Migration file names already applied |
 | mail_sync_state | IMAP poller position (section 2.6) |
 
+### 2.17 Top bar and PayMongo key check (migrations 033 and 034, QA round 14, 2026-10-15)
+
+Decisions D-90, D-91 and D-92.
+
+**New tables (migration 033)**
+
+| Table | Key columns and rules |
+|---|---|
+| `bookmarks` | `bookmark_id` uuid PK, `organization_id` → organizations, `user_id` → users (deleted with the user), `path` (must start `#/`, only letters, digits and `. _ ~ / ? = & % -`, at most 302 characters), `label` (1 to 80 characters), `created_at`. **Unique on (`user_id`, `path`)**: saving the same page again updates its label. Index on (`user_id`, `created_at`). At most 20 per person (checked in the API under a row lock on the user) |
+| `notifications` | `notification_id` bigserial PK, `organization_id` → organizations, `user_id` → users (deleted with the user), `type` (one of `new_booking`, `guest_message`, `checkin_form`, `payment`, `cleaning`, `mention`, `assignment`, `sync_problem`, **`owner_activity`**), `property_id` → properties (set to null if the property is deleted), `title` (1 to 200), `body` (up to 500), `url` (must start `/#/`, same character list, at most 303), `created_at`, `read_at` (null = unread). Indexes on (`user_id`, `notification_id` descending) and, for unread rows only, on `user_id`. One row per person who is meant to get the alert, written where the phone alert is sent (`push.notify` through `src/lib/notifyfeed.js`) |
+
+The two CHECK constraints on `path` and `url` keep a stored link on this site: `javascript:` and other outside links cannot be stored. The screen checks again before it uses either as a link.
+
+**Notification categories** (the bell's filters): Reservations (`new_booking`, `checkin_form`, `sync_problem`), Payments (`payment`), Cleaning (`cleaning`), Messages (`guest_message`, `mention`, `assignment`), Owners (`owner_activity`). **`owner_activity`** is the new alert type: a unit owner blocked or unblocked dates in the owner portal. It goes to owners only, and like the others it can be turned off in My account (`users.notify_prefs` gets an `owner_activity` boolean; a missing key means on).
+
+**Column change (migration 034)**
+
+| Where | Change |
+|---|---|
+| `organizations` | Add `paymongo_key_checked_at` timestamptz (null = the host's PayMongo key is saved but PayMongo has not accepted it yet). Set when PayMongo accepts the key. Cleared when the key is replaced and the new key could not be checked, when the host disconnects PayMongo, and when a guest checkout is refused as unauthorised. The Settings status reads "Connected" only when it is set; otherwise "Saved, not checked yet" |
+
+Rollbacks are forward-only and written in the migration files.
+
+---
+
 ---
 
 ## 3. Relationships at a glance
@@ -697,6 +722,8 @@ organizations ─┬─ users ─┬─ sessions / auth_tokens / consent_records
 ### 4.2 Workspace purge coverage
 
 `PURGED_TABLES` in `src/lib/account.js` lists every table in migrations 001–029 except `mail_sync_state` (global) and `schema_migrations`. The five owner tables from migration 029 are included, and are deleted before `unit_owners`. `test/account.test.js` fails if a new table is missing. No table is missing at the time of writing.
+
+*2026-10-15 (round 14):* `bookmarks` and `notifications` (migration 033) are in `PURGED_TABLES`. Both are left out of the workspace export (personal saved pages and a rolling alert feed). Notifications older than 90 days are deleted by the daily `notifications-cleanup` job (`notifyfeed.purgeOld`); bookmarks stay until the person removes them or the user is deleted.
 
 The workspace export (`exportOrganization`) is not complete. It leaves out `support_messages`, `support_events`, `consent_records`, `automation_runs`, `receipt_counters`, `push_subscriptions` (by design), sessions and auth tokens. It also includes file metadata only, not the file contents.
 
@@ -920,6 +947,41 @@ Cleaners are denied by `cleanerGuard` on every Phase 5 route. "Assigned" means t
 | Daily close: history | All | Whole-workspace closes, and closes that cover any of their properties | No | No | No |
 | Daily close: reopen a day (`POST /daily-close/reopen`) | Yes (any close) | Only a close whose properties are all assigned to them; never a whole-workspace close (409 `ALREADY_CLOSED`) | No | No | No |
 | Sync health (`GET /sync-health`) and Home or Calendar warnings | Yes | Yes (assigned) | No (403) | No | No |
+
+### 6.4 Top bar access matrix (QA round 14, D-91)
+
+All three endpoints sit under `/api` and need a signed-in session. Every query also filters on the person's workspace (`organization_id`).
+
+**Global search (`GET /api/search`)**
+
+| Group | Owner | Manager | Staff | Cleaner | Public |
+|---|---|---|---|---|---|
+| Reservations (guest name, confirmation code; cancelled ones marked) | All | Assigned properties only | Assigned properties only | 403 | No |
+| Guests | All | Guests with a stay in an assigned property, plus guests with no stays yet | Same | 403 | No |
+| Listings, Properties | All | Assigned only | Assigned only | 403 | No |
+| Tenants (long-term workspaces) | All | Assigned properties | Assigned properties | 403 | No |
+| Unit owners | Yes | **No group** | **No group** | 403 | No |
+| Quotes | Yes | Assigned only | **No group** | 403 | No |
+| Maintenance requests | All | Assigned only | Assigned only | 403 | No |
+| Help articles | Yes | Yes | Yes | No server call: the app uses the help list (`/api/help/articles`) | No |
+
+A result carries only `id`, `title`, `sub` and `href`. Search never matches or returns an email, phone number, note, money figure or token, so staff see names, listing names and confirmation codes but no contact details or amounts. Archived listings, properties, tenants and unit owners are left out. Pages and settings are searched in the browser from the menu the role already has and never touch the server.
+
+**Bookmarks (`/api/account/bookmarks`)**
+
+| Action | Owner | Manager | Staff | Cleaner | Public |
+|---|---|---|---|---|---|
+| List, save, remove | Own only | Own only | Own only | Own only | No |
+
+Every role has them, cleaners and read-only workspaces included (they sit under `/account/`, which is exempt from the plan guard). The demo workspace refuses the save with its usual read-only message. Up to 20 per person. Removing another person's id answers 404.
+
+**Bell notifications (`/api/account/notifications`)**
+
+| Action | Owner | Manager | Staff | Cleaner | Public |
+|---|---|---|---|---|---|
+| List, count, mark read | Own only | Own only | Own only | Own only | No |
+
+Rows are re-scoped **at read time**, not only when written: a row shows only if its type is one the role receives, the person has not turned that type off in My account, and (when the row has a property) the person is still assigned to that property and has not filtered it out. A person who loses access to a property stops seeing its alerts. Marking read by id touches only the person's own rows, and an id that is not theirs is ignored without an error. **Non-owners see only rows for properties they are assigned to; a row with no property is owner-only** (so a person who loses a property, or an alert written without one, never shows to a manager or staff member). Cleaners get cleaning alerts only. Long-term-only workspaces have no bell in the app.
 
 ---
 
@@ -1154,3 +1216,34 @@ Decision D-89. No table, column or access-matrix change. The role x data matrix 
 - **Profit and loss (`src/lib/pnl.js`, `src/routes/stayreports.js`):** expenses with no unit are labelled "Whole-property expenses" in the P&L answer, its CSV and the Reports performance CSV (the old "Not linked to a unit" and "Building-level expenses" labels are gone). Still left out of the owner portal. A month sent empty is the client's job: the screen refills it with the current Manila month.
 - **Gate pass (public, by token):** unchanged on the server; one guest is shown without a number in the view.
 - **Client-only rules this round (no server change):** the "Save anyway?" questions for a season's fixed price, an add-on price and a booking total above ₱50,000 a night (`highStayTotalOk`, `highAddonPriceOk` in `rates.js`); the deposit deduction check before the early-return question (`deductionProblem`).
+
+---
+
+## 20. API notes from QA round 14 (2026-10-15)
+
+Decisions D-91 and D-92. Two migrations (033 top bar, 034 PayMongo key check, section 2.17). The access rules for the top bar are in section 6.4; the role x data matrix elsewhere is unchanged.
+
+**Top bar endpoints**
+- **`GET /api/search?q=`:** `q` is trimmed, spaces collapsed and cut to 80 characters. Under 2 characters answers `{ q, groups: [] }` with no database call. Answers `{ q, groups: [{ key, label, items: [{ id, title, sub, href }] }] }`, up to 5 items per group, empty groups left out. Matching is a case-insensitive "contains" with the wildcard characters escaped. Reservations sort exact confirmation code first, then names that start with the text, then nearest check-in date. **60 searches a minute per person (429 `RATE_LIMITED`, counted in memory per process).** A cleaner gets 403 `CLEANER_FORBIDDEN` from the existing cleaner guard.
+- **`GET /api/account/bookmarks`:** `{ bookmarks: [{ bookmark_id, path, label, created_at }] }`, oldest first.
+- **`POST /api/account/bookmarks`** `{ path, label }`: 201 for a new bookmark, 200 when the page was already saved (label updated). 400 `VALIDATION` with `fields.path` ("This page can't be bookmarked.") or `fields.label`. **409 `BOOKMARK_LIMIT`** at 20 ("You can keep up to 20 bookmarks. Remove one to add another."); re-saving a page already in the list is allowed at the limit.
+- **`POST /api/account/bookmarks/:id/remove`:** `{ ok: true }`, or 404 when the id is not the person's own. (No DELETE or PUT is used; every write is a POST.)
+- **`GET /api/account/notifications?category=&before=&limit=`:** `category` is `all` (default) or `reservations`, `payments`, `cleaning`, `messages`, `owners`; `limit` 1 to 50 (default 30); `before` is the `next_before` of the last page. Answers `{ items: [{ id, type, category, title, body, url, read, created_at }], unread, categories, next_before }`, where `categories` lists only the filters this person can have. 400 `VALIDATION` for a bad category or limit.
+- **`GET /api/account/notifications/count`:** `{ unread }`.
+- **`POST /api/account/notifications/read`:** exactly one of `{ ids: [up to 100] }`, `{ all: true }` or `{ category }`; anything else is 400 `VALIDATION`. Answers `{ unread }`.
+- **Where alerts come from:** `push.notify` now also writes a `notifications` row for each person who would get the phone alert (same property scope). Unit owner blocks and cancellations in the owner portal write the new `owner_activity` alert. Rows are deleted after 90 days by the daily `notifications-cleanup` job.
+
+**PayMongo key check (`src/routes/directbooking.js`, `src/lib/paymongo.js`)**
+- **`GET /api/direct-booking`** adds `paymongo_checked` (true when `organizations.paymongo_key_checked_at` is set), next to the existing `paymongo_connected` and `paymongo_key_hint`.
+- **`PATCH /api/direct-booking`, saving a key:** the server asks PayMongo whether the key works. Refused (401 from PayMongo): 400 `VALIDATION` on `paymongo_secret_key` ("PayMongo didn't accept this key…") and **nothing is saved**. Accepted: saved and `paymongo_key_checked_at` set. PayMongo cannot be reached (timeout or any other answer): the key is saved with `paymongo_key_checked_at` empty.
+- **`PATCH /api/direct-booking`, turning the page on:** with a saved key that is not yet checked, the server checks again. Refused: **409 `PAYMONGO_REJECTED`** ("PayMongo didn't accept your saved key. Change the key before turning on your booking page."). Still unreachable: **409 `PAYMONGO_UNCHECKED`** unless the body has `confirm_unchecked_key: true`, in which case it turns on. `disconnect_paymongo: true` clears the check.
+- **Guest checkout:** when PayMongo refuses the host's key as unauthorised while creating a checkout, `paymongo_key_checked_at` is cleared again.
+- With `PAYMONGO_KEY_CHECK=off` (always the case in tests) no call is made: a saved key is "unchecked" and turning the page on needs no confirmation.
+
+**Check-in, owners, bookings**
+- **`POST /api/public/checkin/:token`:** a registration with no stored ID photo must send `id_photos` of at least 1; otherwise the one-pass 400 includes `fields.id_photos` ("Add a photo of a valid ID for at least one guest."). A guest who already has a stored photo can edit without sending another. *Known gap:* the server trusts the count the page sends (the files go up in a second request); it does not yet check that a stored file exists.
+- **`POST /api/unit-owners`, `PATCH /api/unit-owners/:id`:** an email equal to the login of an active member of the same workspace (the owner included) is 409 `EMAIL_IS_LOGIN` with `fields.email` and `login_name`, unless the body has `confirm_login_email: true`. It works like `EMAIL_IN_USE` (section 19); on a PATCH it is checked only when the email changes.
+- **Reservations:** the guest limit of the listing is checked before the overall cap of 50 guests (POST, PATCH, and the stay check); a refund needs a chosen method and an amount above zero (the same sentences the server already used).
+- **Workspace export** leaves out `notifications` and `bookmarks`.
+
+**Client-only rules this round (no server change):** the booking page summary's "Pay now" line (`dueNow` in `book.js`; the server already charged the right amount); the scroll keeper and focus guard changes in `ui.js`; the Listings filter bar sizes; the Reports redirect for short-term workspaces; the 44px phone rules; the `?new=` and `?invite=1` openers.

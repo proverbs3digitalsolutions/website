@@ -134,6 +134,11 @@ publicRouter.post('/public/checkin/:token', express.json({ limit: '50kb' }), ah(
   // A blank guest row is refused at its field rather than dropped silently.
   const raw = Array.isArray(req.body.guests) ? req.body.guests : [];
   if (raw.some((g) => typeof g !== 'string' || !g.trim())) fields.guests = 'Enter the name of each guest, or remove the empty row.';
+  // The page promises the building an ID: at least one photo is on file, or the guest says one is coming (the upload is a second request).
+  const stored = (await one(
+    `SELECT COUNT(*)::int AS n FROM files f JOIN guest_registrations r ON f.related_record_id = r.registration_id
+      WHERE f.related_record_type = 'registration' AND r.booking_id = $1`, [b.booking_id])).n;
+  if (!stored && !(Number(req.body.id_photos) >= 1)) fields.id_photos = 'Add a photo of a valid ID for at least one guest.';
   if (Object.keys(fields).length) throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields });
   const guests = raw.map((g) => g.trim().slice(0, 120));
   if (guests.length + 1 > (b.max_guests || 20)) {

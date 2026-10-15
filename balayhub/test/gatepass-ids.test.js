@@ -28,7 +28,7 @@ async function sentPassWithIds(inDays) {
   const b = (await host.post('/api/reservations', { unit_id: unit.unit_id, check_in: d(inDays), check_out: d(inDays + 2), guest_name: 'Rafael Diaz' })).data.reservation;
   const token = (await host.get(`/api/reservations/${b.booking_id}/checkin`)).data.link.split('/checkin/')[1];
   const g = client(srv.base);
-  await g.post(`/api/public/checkin/${token}`, { lead_name: 'Rafael Diaz', phone: '09171112222', guests: ['Ana Diaz'], consent: true });
+  await g.post(`/api/public/checkin/${token}`, { lead_name: 'Rafael Diaz', phone: '09171112222', guests: ['Ana Diaz'], consent: true, id_photos: 1 });
   await g.post(`/api/public/checkin/${token}/id`, PNG, { 'Content-Type': 'image/png' });
   outbox.length = 0;
   assert.equal((await host.post(`/api/reservations/${b.booking_id}/gatepass/send`)).status, 200);

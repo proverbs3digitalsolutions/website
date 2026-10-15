@@ -76,6 +76,18 @@ async function refuseEmailInUse(db, orgId, ownerId, email, confirmed) {
   throw new HttpError(409, msg, { code: 'EMAIL_IN_USE', fields: { email: msg }, owner_name: other.full_name });
 }
 
+// An email that is the login of an active member of this workspace (the owner included) is asked about too (409 EMAIL_IS_LOGIN)
+// and saved only when the host agrees (confirm_login_email: true): the statement email would go to a teammate, not an owner.
+async function refuseEmailIsLogin(db, orgId, email, confirmed) {
+  if (!email || confirmed) return;
+  const { rows: [member] } = await db.query(
+    `SELECT full_name FROM users WHERE organization_id = $1 AND account_status = 'active' AND lower(btrim(email)) = lower(btrim($2))
+      ORDER BY created_at LIMIT 1`, [orgId, email]);
+  if (!member) return;
+  const msg = `This email is a login for ${member.full_name}.`;
+  throw new HttpError(409, msg, { code: 'EMAIL_IS_LOGIN', fields: { email: msg }, login_name: member.full_name });
+}
+
 // Point the given units at this owner (and only these).
 async function assignUnits(db, orgId, ownerId, unitIds) {
   if (!unitIds) return;
@@ -134,6 +146,7 @@ router.post('/unit-owners', ownersOnly, ah(async (req, res) => {
   if (n >= 100) throw new HttpError(409, 'You can have up to 100 unit owners.', { code: 'LIMIT' });
   const id = await tx(async (db) => {
     await refuseEmailInUse(db, req.user.organization_id, null, body.email, req.body.confirm_duplicate_email === true);
+    await refuseEmailIsLogin(db, req.user.organization_id, body.email, req.body.confirm_login_email === true);
     await refuseUnitsOfOthers(db, req.user.organization_id, null, body.unit_ids, req.body.move_units === true);
     const { rows: [o] } = await db.query(
       `INSERT INTO unit_owners (organization_id, full_name, email, phone, management_fee_pct, cleaning_to_manager, notes,
@@ -161,7 +174,10 @@ router.patch('/unit-owners/:id', ownersOnly, ah(async (req, res) => {
   await tx(async (db) => {
     // Locked first, so the stored row compared below is the one this update replaces.
     const { rows: [before] } = await db.query('SELECT * FROM unit_owners WHERE owner_id = $1 FOR UPDATE', [o.owner_id]);
-    if (cols.includes('email') && normEmail(before.email) !== normEmail(body.email)) await refuseEmailInUse(db, req.user.organization_id, o.owner_id, body.email, req.body.confirm_duplicate_email === true);
+    if (cols.includes('email') && normEmail(before.email) !== normEmail(body.email)) {
+      await refuseEmailInUse(db, req.user.organization_id, o.owner_id, body.email, req.body.confirm_duplicate_email === true);
+      await refuseEmailIsLogin(db, req.user.organization_id, body.email, req.body.confirm_login_email === true);
+    }
     await refuseUnitsOfOthers(db, req.user.organization_id, o.owner_id, body.unit_ids, req.body.move_units === true);
     const { rows: owned } = await db.query(`SELECT unit_id FROM units WHERE owner_id = $1 AND status = 'active'`, [o.owner_id]);
     // Only the fields whose stored value really changes are named (names, never values). A save that changes nothing writes nothing.

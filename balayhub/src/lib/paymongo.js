@@ -3,6 +3,8 @@
 // Minimal PayMongo API client usable with any secret key (BalayHub's own for
 // plans, or a host's for their guests' direct bookings).
 
+const config = require('../config');
+
 const API = 'https://api.paymongo.com/v1';
 const serviceError = (msg) => Object.assign(new Error(msg), { status: 502 });
 
@@ -52,4 +54,20 @@ async function checkoutStatus(secretKey, checkoutId) {
   };
 }
 
-module.exports = { request, checkoutStatus };
+// Ask PayMongo whether a secret key works: 'ok' | 'rejected' (401) | 'unreachable' (anything else).
+// Never logs the key.
+async function checkKey(secretKey) {
+  if (config.paymongoKeyCheck === 'off') return 'unreachable';
+  try {
+    const res = await fetch(`${API}/payments?limit=1`, {
+      headers: { Authorization: `Basic ${Buffer.from(`${secretKey}:`).toString('base64')}`, Accept: 'application/json' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (res.ok) return 'ok';
+    return res.status === 401 ? 'rejected' : 'unreachable';
+  } catch {
+    return 'unreachable';
+  }
+}
+
+module.exports = { request, checkoutStatus, checkKey };

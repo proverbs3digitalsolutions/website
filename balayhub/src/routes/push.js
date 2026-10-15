@@ -171,3 +171,4 @@ router.patch('/account/notify-prefs', ah(async (req, res) => {
 }));
 
 module.exports = router;
+module.exports.typesFor = typesFor;

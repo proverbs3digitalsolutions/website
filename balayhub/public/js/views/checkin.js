@@ -28,6 +28,7 @@ extendTranslations({
   'Please agree so your host can register you with the building.': 'Paki-agree para ma-register ka ng host sa building.',
   'Remove guest {n}': 'Alisin ang guest {n}',
   'Choose the photos again after changing the language.': 'Piliin ulit ang mga litrato pagkatapos magpalit ng wika.',
+  'Add a photo of a valid ID for at least one guest.': 'Mag-upload ng litrato ng valid ID ng kahit isang guest.',
 });
 
 // The heading follows the cause: only a 404 is a bad link.
@@ -70,7 +71,7 @@ export async function guestCheckinView(el, { params }, kept) {
   }
   const { stay: s, registration: r } = data;
   initGuestLang(s.guest_language);
-  const heading = h('h1', null, s.closed ? t('Guest registration') : s.checked_in ? t('Your check-in details') : s.guest_first_name ? t('Hi {name}! Please register before you arrive', { name: s.guest_first_name }) : t('Guest registration'));
+  const heading = h('h1', null, s.closed ? t('Guest registration') : (s.checked_in || r) ? t('Your check-in details') : s.guest_first_name ? t('Hi {name}! Please register before you arrive', { name: s.guest_first_name }) : t('Guest registration'));
   const intro = !s.closed && h('p', { class: 'muted' }, t('The building requires the names and a valid ID of everyone staying. It takes about 2 minutes.'));
   const header = h('div', { class: 'gc__stay card' },
     h('p', { class: 'gc__eyebrow' }, s.workspace_name),
@@ -139,7 +140,7 @@ export async function guestCheckinView(el, { params }, kept) {
     field({ name: 'notes', label: t('Anything we should know?'), type: 'textarea', value: r?.notes || '', maxlength: 1000, placeholder: t('Special requests, late arrival, celebrating something…') }),
     h('h2', null, t('Valid ID')),
     h('div', { class: 'field', dataset: { field: 'id_photos' } },
-      h('p', { class: 'hint' }, `${t("A photo of a valid government ID for each adult (driver's license, passport, UMID, PhilID…). ")}${r?.id_count ? t('Photos you already sent are kept; add more only if needed.') : ''}${kept?.photosChosen ? ` ${t('Choose the photos again after changing the language.')}` : ''}`),
+      h('p', { class: 'hint' }, h('span', { class: 'req', 'aria-hidden': 'true' }, '* '), `${t("A photo of a valid government ID for each adult (driver's license, passport, UMID, PhilID…). ")}${r?.id_count ? t('Photos you already sent are kept; add more only if needed.') : ''}${kept?.photosChosen ? ` ${t('Choose the photos again after changing the language.')}` : ''}`),
       photos, progress, h('div', { class: 'error', role: 'alert' })),
     rules && h('h2', null, t('House rules')),
     rules && h('div', { class: 'gp-rules', tabindex: 0, role: 'region', 'aria-label': t('House rules') }, rules),
@@ -174,6 +175,7 @@ export async function guestCheckinView(el, { params }, kept) {
     blankGuests.forEach((row) => row.classList.add('field--invalid'));
     if (blankGuests.length) problems.guests = t('Enter the name of each guest, or remove the empty row.');
     if (picked.some((f) => !ID_PHOTO_TYPE.test(f.type))) problems.id_photos = t('Your ID must be a JPG, PNG or WEBP photo.');
+    if (!picked.length && !(r?.id_count > 0)) problems.id_photos = t('Add a photo of a valid ID for at least one guest.');
     if (rules && !rulesAt && !form.elements.accept_rules.checked) problems.accept_rules = t('Please accept the house rules to continue.');
     if (!form.elements.consent.checked) problems.consent = t('Please agree so your host can register you with the building.');
     if (Object.keys(problems).length) {
@@ -185,7 +187,7 @@ export async function guestCheckinView(el, { params }, kept) {
     submit.disabled = true;
     const payload = {
       lead_name: d.lead_name, phone: d.phone, email: d.email, arrival_time: d.arrival_time, vehicle_plate: d.vehicle_plate,
-      notes: d.notes, consent: Boolean(form.elements.consent.checked),
+      notes: d.notes, consent: Boolean(form.elements.consent.checked), id_photos: picked.length,
       ...(rules && !rulesAt ? { accept_rules: true } : {}),
       guests: [...others.querySelectorAll('input')].map((i) => i.value.trim()),
     };

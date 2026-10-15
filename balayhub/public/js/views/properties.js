@@ -203,7 +203,7 @@ export async function propertyDetailView(el, { params, query, rerender }) {
       h('div', { class: 'row__main' },
         h('span', { class: 'row__title' }, unitLabel(u.unit_name), ' ', !(stayOnly && ['vacant', 'occupied'].includes(u.occupancy_status)) && badge(u.occupancy_status)),
         h('span', { class: 'row__sub' }, `${label(u.unit_type)}${stayOnly ? '' : u.lease_rent == null ? ` · ${peso(u.monthly_rent)}/month` : ` · ${peso(u.lease_rent)}/month (lease)${Number(u.lease_rent) !== Number(u.monthly_rent) ? ` · listed ${peso(u.monthly_rent)}` : ''}`}${Number(u.security_deposit_amount) ? ` · deposit ${peso(u.security_deposit_amount)}` : ''}`),
-        u.tenant_name && h('span', { class: 'row__sub' }, 'Tenant: ', h('a', { href: `#/tenants/${u.tenant_id}` }, u.tenant_name))),
+        u.tenant_name && h('span', { class: 'row__sub' }, 'Tenant: ', h('a', { class: 'link-tap', href: `#/tenants/${u.tenant_id}` }, u.tenant_name))),
       h('div', { class: 'row__end' }, h('div', { class: 'chips' }, actions))));
   };
 

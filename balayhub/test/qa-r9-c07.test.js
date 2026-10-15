@@ -198,7 +198,7 @@ describe('rent and tenants screens (no database)', () => {
     await october.props.onclick();
     const modal = ui.calls.formModal.at(-1);
     assert.equal(modal.title, 'Record payment');
-    assert.match(modal.fields[1].text, /This payment goes to 2026-09-01 first \(the oldest unpaid month\)\./);
+    assert.match(modal.fields[1].text, /This payment goes to 2026-09-01 first \(the oldest unpaid month\), then to 2026-10-01\./);
 
     ui.calls.formModal.length = 0;
     await september.props.onclick();

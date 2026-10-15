@@ -2,7 +2,7 @@
 
 BalayHub is a web app that helps Filipino hosts run 1 to 10 rental units from one place. It covers condo staycations listed on Airbnb, Booking.com and Agoda, and long-term monthly rentals such as apartments, boarding houses, dorms and bedspaces. Hosts get one calendar for every channel, a direct booking page with GCash, Maya and card payments, a guest inbox, cleaning tasks, condo gate passes, deposits, reports and owner statements. Long-term landlords get properties, tenants, leases, rent, expenses and repairs. This document describes what is **actually built** today, feature by feature, and lists what is planned. It was written from the code (`src/routes`, `src/lib`, `public/js`, `db/migrations`) and the existing docs.
 
-Last updated: 2026-10-15 (QA round 13; D-89, D-90, F53 planned)
+Last updated: 2026-10-15 (QA round 14; D-91, D-92, F53 built)
 
 *2026-10-14 (D-85): the alpha targets owners of 1 to 3 properties; the Guesty-inspired ideas are on hold as reference only. QA puts small-host friction first.*
 
@@ -198,6 +198,8 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - A 50% deposit is offered only when the balance due date is still ahead.
 - If a channel booking takes the dates mid-payment, no double booking is made and the host is told to refund or offer other dates.
 - The page shows "Online booking is paused" when turned off or when the plan is read-only. The demo page has booking turned off.
+- **A PayMongo key is checked before it is called Connected** (QA round 14, D-92). BalayHub asks PayMongo when the key is saved: accepted reads "Connected"; refused is not saved; if PayMongo can't be reached the key reads "Saved, not checked yet" and turning the page on asks "Turn on anyway?".
+- The guest summary shows what is due now for the option picked: one "Pay now" line with the total for "Pay in full now", the deposit line only for "Pay a deposit".
 
 **Out of scope:** Payments to BalayHub's account (money goes to the host's PayMongo). Refunds from inside BalayHub. Multiple currencies.
 
@@ -295,6 +297,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 
 **Done looks like:**
 - Consent is required to submit.
+- **At least one ID photo is required per registration** (QA round 14, D-92; a guest who already sent one can edit without sending another).
 - The form closes after the stay ends or is cancelled.
 - Staff can never open guest ID files.
 
@@ -956,18 +959,30 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 
 ### F53. Top bar: search, bookmarks, add new, notifications, help, profile
 
-**Status:** Planned (founder request 2026-10-15, D-90; QA round 14 / next build sprint). This overrides D-85's "Guesty features out of scope" for this one item only.
+**Status:** MVP (built in QA round 14, 2026-10-15; founder request D-90, built as D-91). This overrides D-85's "Guesty features out of scope" for this one item only.
 
 **For:** Every signed-in role, filtered by what the role may see and do.
 
 **What it does:**
 - **Global search** in the middle of the top bar ("Type / to search"; the `/` key focuses it from anywhere except inside a field). Searches only what the person may see: reservations (guest name, confirmation code), guests, listings, properties, tenants, unit owners, quotes, maintenance requests, pages and settings by name, and help articles. Results are grouped; arrow keys and Enter pick one, Escape closes; recent searches are kept.
 - **Bookmarks:** star the current page and list starred pages. Saved per person on the server, so they follow the person across devices.
-- **"+" Add new:** Reservation, Listing, Property, Owner, Cleaning task, Expense, Invite teammate (and for long-term: Tenant, Rent payment), filtered by role and workspace; each opens the existing "new" dialog.
-- **Notifications bell:** a panel with filters (Reservations, Payments, Cleaning, Messages, Owners), an unread count and mark as read, built on the existing events and activity log and respecting each person's notification settings.
+- **"+" Add new:** Reservation, Listing, Property, Unit owner, Cleaning task, Expense, Tenant, Rent payment and Invite a teammate, filtered by role and workspace; each opens the existing "new" dialog.
+- **Notifications bell:** a panel with filters (Reservations, Payments, Cleaning, Messages, Owners), an unread count and mark as read. It shows the same alerts that go to the phone, kept for 90 days, and respects each person's notification settings and property assignments. A new alert, "Unit owner activity", tells owners when a unit owner blocks or unblocks dates.
 - **Help icon:** help-centre search, suggested articles for the current page, and "Contact us" opening a support ticket.
 - **Profile avatar** (initials): My account, Settings, theme, Log out.
 - **Phones:** the top bar keeps search (an icon that opens a full-screen search), "+" and the bell; bookmarks and help move into the profile menu or the More sheet. 44px targets and the D-89 focus rules apply.
+
+**Who sees what:**
+
+| Control | Owner | Manager | Staff | Cleaner | Long-term workspace | Read-only or demo workspace |
+|---|---|---|---|---|---|---|
+| Search | All records | Assigned properties only; no unit owners | Assigned properties only, names and codes; no quotes or unit owners | Pages and help only | Yes | Yes |
+| Bookmarks | Yes | Yes | Yes | Yes | Yes | Yes (demo refuses saving) |
+| + Add new | Yes | Yes | Expense, Rent payment | Hidden | Yes | Hidden |
+| Bell | Yes | Yes | Yes | Cleaning alerts | Hidden | Yes |
+| Help, profile menu | Yes | Yes | Yes | Yes | Yes | Yes |
+
+Search never matches phone numbers, emails, notes or money. Bookmarks hold up to 20 pages per person. Menu wording is BalayHub's own: "Unit owner" and "Invite a teammate".
 
 **Done looks like:** a small host can find any reservation, guest or setting from one box, add anything from one menu, and see what needs attention in one panel, without leaving the page they are on. Results never include anything the person's role may not see.
 
@@ -989,7 +1004,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 
 | Item | Priority | Notes |
 |---|---|---|
-| **Top bar: search, bookmarks, add new, notifications, help, profile (F53)** | **Next (planned, founder request, D-90)** | Round 14 / next build sprint. Needs a search endpoint, a bookmarks table and a notifications feed (BACKEND-SCHEMA when built). |
+| **Top bar: search, bookmarks, add new, notifications, help, profile (F53)** | **Built 2026-10-15 (QA round 14)** | Founder request D-90, built as D-91. Search endpoint, bookmarks table and notifications feed are in BACKEND-SCHEMA 2.17, 6.4 and 20. Rent alerts for the bell in long-term workspaces are a later alert type. |
 | **SMS reminders to guests** | **Next (planned)** | Listed in README "Not built yet". Today all guest messages are email. |
 | **Facebook Messenger inbox** | **Later** | Listed in README "Not built yet". Today the Inbox is email only. |
 | **Phase 1: Money done right** (itemised stay bill with extras, payment proof uploads and bank transfer, cancellation policies and refund log, deposit % per listing, host net per booking) | **Built 2026-10-13** | Spec: docs/specs/PHASE-1-MONEY.md. Decisions D-31 to D-36. |

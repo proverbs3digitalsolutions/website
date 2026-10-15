@@ -56,13 +56,14 @@ export async function dashboardView(el, { rerender }) {
   const rentRows = d.rent_this_month.map((c) => h('li', null, h('a', { class: 'row', href: `#/tenants/${c.tenant_id}` },
     h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, c.tenant_name), h('span', { class: 'row__sub' }, `${c.property_name} · ${unitLabel(c.unit_name)} · due ${fmtDate(c.due_date)}`)),
     h('div', { class: 'row__end' }, h('span', { class: 'amount' }, peso(c.amount_due)), badge(c.status)))));
+  const rentTitle = `Rent for ${fmtMonth(d.month_start)}`;
   const rentCard = h('div', { class: 'card' },
-    h('div', { class: 'card__head' }, h('h2', null, `Rent for ${fmtMonth(d.month_start)}`), h('a', { href: '#/rent' }, 'View all')),
+    h('div', { class: 'card__head' }, h('h2', null, rentTitle), h('a', { class: 'link-tap', href: '#/rent', 'aria-label': `View all: ${rentTitle}` }, 'View all')),
     rentRows.length ? h('ul', { class: 'list' }, rentRows)
       : emptyState({ title: d.has_tenants ? 'No rent due this month' : 'No tenants yet', text: d.has_tenants ? 'Rent appears here once a lease is active this month.' : 'Add a tenant and assign them to a unit to start tracking rent.', action: canManage && !d.has_tenants && h('button', { class: 'btn btn--primary', onclick: () => newTenantModal() }, 'Add tenant') }));
 
   const recent = h('div', { class: 'card' },
-    h('div', { class: 'card__head' }, h('h2', null, 'Recent payments'), h('a', { href: '#/rent?tab=payments' }, 'View all')),
+    h('div', { class: 'card__head' }, h('h2', null, 'Recent payments'), h('a', { class: 'link-tap', href: '#/rent?tab=payments', 'aria-label': 'View all: Recent payments' }, 'View all')),
     d.recent_payments.length ? h('ul', { class: 'list' }, d.recent_payments.map((pm) => h('li', null, h('a', { class: 'row', href: `#/payments/${pm.payment_id}` },
       h('div', { class: 'row__main' }, h('span', { class: 'row__title' }, pm.tenant_name), h('span', { class: 'row__sub' }, `${unitLabel(pm.unit_name)} · ${fmtDate(pm.payment_date)} · ${label(pm.payment_method)}`)),
       h('div', { class: 'row__end' }, h('span', { class: 'amount' }, peso(pm.amount_paid)))))))
@@ -86,7 +87,7 @@ export async function dashboardView(el, { rerender }) {
   }
   const tasksCard = h('div', { class: 'card' },
     h('div', { class: 'card__head' }, h('h2', null, 'Needs attention'),
-      d.overdue_tenant_count > 5 && h('a', { href: '#/rent?status=overdue' }, `${d.overdue_tenant_count} overdue`)),
+      d.overdue_tenant_count > 5 && h('a', { class: 'link-tap', href: '#/rent?status=overdue' }, `${d.overdue_tenant_count} overdue`)),
     tasks.length ? h('ul', { class: 'list' }, tasks) : emptyState({ title: "You're all caught up", text: 'No overdue rent, upcoming lease endings or open repairs.' }));
 
   const occ = h('div', { class: 'card' },

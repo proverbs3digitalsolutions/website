@@ -21,7 +21,7 @@ push.webpush.sendNotification = async (sub, payload) => {
 };
 const subscription = (name) => ({ endpoint: `https://fcm.googleapis.com/fcm/send/${name}-abcdef`, keys: { p256dh: 'BPublicKeyValue123', auth: 'authsecret' } });
 
-const TYPE_KEYS = ['new_booking', 'guest_message', 'checkin_form', 'payment', 'cleaning', 'mention', 'assignment', 'sync_problem'];
+const TYPE_KEYS = ['new_booking', 'guest_message', 'checkin_form', 'payment', 'cleaning', 'mention', 'assignment', 'sync_problem', 'owner_activity'];
 const day = (n) => new Date(Date.now() + 8 * 3600000 + n * 86400000).toISOString().slice(0, 10);
 const idOf = async (email) => (await sql('SELECT user_id, full_name, email FROM users WHERE lower(email) = $1', [email]))[0];
 const mention = (u) => `@[${u.full_name}](${u.user_id})`;
@@ -164,7 +164,7 @@ test('notification settings show each role its own types and properties', async 
   assert.deepEqual(o.properties.map((p) => p.property_id).sort(), [propA.property_id, propB.property_id].sort());
 
   const m = (await mgrA.get('/api/account/notify-prefs')).data;
-  assert.deepEqual(Object.keys(m.types), TYPE_KEYS);
+  assert.deepEqual(Object.keys(m.types), TYPE_KEYS.filter((k) => k !== 'owner_activity'), 'unit owner activity is for owners only');
   assert.deepEqual(m.properties.map((p) => p.property_id), [propA.property_id]);
 
   const s = (await staff.get('/api/account/notify-prefs')).data;

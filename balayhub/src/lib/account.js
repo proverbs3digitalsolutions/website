@@ -50,7 +50,7 @@ async function exportOrganization(orgId) {
 // Tables purgeOrganization() clears. test/account.test.js fails if a new table
 // is added to the schema without being listed here.
 const PURGED_TABLES = [
-  'ical_conflicts', 'daily_closes', 'booking_groups', 'pricing_rules',
+  'notifications', 'bookmarks', 'ical_conflicts', 'daily_closes', 'booking_groups', 'pricing_rules',
   'unit_guides', 'listing_addons', 'booking_quotes',
   'owner_sessions', 'owner_login_tokens', 'owner_reserve_entries', 'owner_payouts', 'owner_statements',
   'supply_movements', 'supplies', 'cleaning_inspections', 'damage_reports', 'lost_found_items', 'cleaner_rates', 'maintenance_schedules',
@@ -68,6 +68,8 @@ async function purgeOrganization(orgId) {
     const units = 'SELECT u.unit_id FROM units u JOIN properties p USING (property_id) WHERE p.organization_id = $1';
     const users = 'SELECT user_id FROM users WHERE organization_id = $1';
     await run('DELETE FROM support_tickets WHERE organization_id = $1'); // messages and events cascade
+    await run('DELETE FROM notifications WHERE organization_id = $1');
+    await run('DELETE FROM bookmarks WHERE organization_id = $1');
     await run('DELETE FROM push_subscriptions WHERE organization_id = $1');
     await run('DELETE FROM seasons WHERE organization_id = $1');
     await run('DELETE FROM pricing_rules WHERE organization_id = $1'); // points at units and users

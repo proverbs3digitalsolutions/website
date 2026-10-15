@@ -99,6 +99,9 @@ function createApp() {
   api.use(require('./routes/activity'));
   api.use(require('./routes/dailyclose'));
   api.use(require('./routes/synchealth'));
+  api.use(require('./routes/search'));
+  api.use(require('./routes/bookmarks'));
+  api.use(require('./routes/notifications'));
   api.use((req, res, next) => next(new HttpError(404, 'Not found.', { code: 'NOT_FOUND' })));
   // PayMongo webhook: raw body (for its signature), no session or CSRF header.
   app.post('/api/public/paymongo/webhook', express.raw({ type: '*/*', limit: '200kb' }),

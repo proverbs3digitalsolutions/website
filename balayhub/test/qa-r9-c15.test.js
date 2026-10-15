@@ -45,10 +45,13 @@ const assertTokensOnly = (selector, source = css) => {
 
 test('#30 the account link in the top bar can shrink, so its workspace name truncates before the avatar moves', () => {
   assert.ok(blocksFor('.topbar__me').some((b) => /min-width:\s*0\b/.test(b)), '.topbar__me has min-width: 0');
-  const org = blocksFor('.topbar__org').join(' ');
-  assert.match(org, /overflow:\s*hidden/, 'the name box clips');
-  assert.match(org, /text-overflow:\s*ellipsis/, 'the name box shows an ellipsis');
-  assert.match(org, /white-space:\s*nowrap/, 'the name stays on one line');
+  // The workspace name moved into the avatar menu's "Org · Role" line (QA r14 F1); that line must clip, not push the layout.
+  const tb = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'topbar.css'), 'utf8');
+  const who = blocksFor('.tb-profile__who span', tb).join(' ');
+  assert.match(who, /overflow:\s*hidden/, 'the name line clips');
+  assert.match(who, /text-overflow:\s*ellipsis/, 'the name line shows an ellipsis');
+  assert.match(who, /white-space:\s*nowrap/, 'the name line stays on one line');
+  assert.match(blocksFor('.tb-profile__who', tb).join(' '), /min-width:\s*0\b/, 'the name block can shrink');
   assert.match(blocksFor('.acct-avatar').join(' '), /flex:\s*none/, 'the avatar never shrinks');
 });
 

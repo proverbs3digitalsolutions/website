@@ -1,7 +1,7 @@
 // UI helpers. All DOM is built with h() (text nodes, never innerHTML with data),
 // so user-entered names can't inject markup.
 
-import { ApiError, newIdempotencyKey } from './api.js';
+import { ApiError, newIdempotencyKey, inFlight } from './api.js';
 
 // Views pass optional children as `cond && node`; drop false/null/undefined
 // instead of rendering them as the text "false" or "null".
@@ -63,6 +63,11 @@ const ICONS = {
   sparkle: 'M12 3l1.8 4.6L18.5 9l-4.7 1.6L12 15l-1.8-4.4L5.5 9l4.7-1.4L12 3ZM19 15l.8 2 2 .8-2 .7L19 21l-.8-2.5-2-.7 2-.8.8-2ZM5 15l.6 1.4 1.4.6-1.4.5L5 19l-.6-1.5L3 17l1.4-.6L5 15Z',
   help: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM9.5 9.3a2.6 2.6 0 0 1 5 .9c0 1.7-2.5 2.3-2.5 3.8M12 17.2h.01',
   chat: 'M20 12a8 8 0 0 1-11.7 7.1L4 20l1-4.1A8 8 0 1 1 20 12ZM8.5 12h.01M12 12h.01M15.5 12h.01',
+  search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM20 20l-4-4',
+  bookmark: 'M6 4h12v17l-6-4-6 4V4Z',
+  bell: 'M6 16v-5a6 6 0 1 1 12 0v5l2 2H4l2-2ZM10 21h4',
+  star: 'M12 3.5l2.7 5.5 6 .9-4.4 4.2 1 6-5.3-2.8-5.3 2.8 1-6L3.3 9.9l6-.9L12 3.5Z',
+  close: 'M6 6l12 12M18 6 6 18',
   bed: 'M3 18V6M3 14h18v4M21 14v-2a3 3 0 0 0-3-3h-7v5M7 11.5a1.5 1.5 0 1 0 0-.01',
 };
 
@@ -211,7 +216,11 @@ export const skeleton = (n = 2) => h('div', { class: 'stack' }, Array.from({ len
 // place (same data-focus-key, else same role and name, else same place in the same labelled group), else on the page heading. It reacts
 // to the screen change itself (a MutationObserver), so it covers every redraw. Views add only data-focus-key where a label changes.
 export const FOCUS_WATCH_MS = 10000;
-export const HEADING_AFTER_MS = 800;
+export const USER_MOVE_MS = 300; // after a Tab key the browser is still moving focus: the guard must not pull it back
+export const HEADING_AFTER_MS = 0; // nothing took the old control's place: the heading gets focus at once, a real match later still wins
+// Smooth navigation: after a save, search or filter the page stays where the person left it (see the scroll keeper below).
+export const SCROLL_SETTLE_MS = 150; // a scroll this soon after the page changed is a side effect of the redraw
+export const SCROLL_QUIET_MS = 700;  // the page has stopped changing and nothing is loading: let go
 
 const FOCUSABLE = 'a[href], button, summary, input:not([type=hidden]), select, textarea, [tabindex]:not([tabindex="-1"])';
 const NATIVE_FOCUSABLE = new Set(['BUTTON', 'SUMMARY', 'SELECT', 'TEXTAREA']);
@@ -265,7 +274,7 @@ export function pickFocusMatch(snap, candidates, snapNth = 0, snapGroupNth = -1)
     const same = idx((c) => c.tag === snap.tag && c.role === snap.role && c.name === snap.name);
     if (same.length) return same[snapNth] ?? same[same.length - 1];
   }
-  if (snap.group) {
+  if (snap.group && (snap.role === 'tab' || snap.role === 'radio')) { // other buttons repeat per row: a place in the group could be another row's
     const grouped = idx((c) => c.tag === snap.tag && c.role === snap.role && c.group === snap.group);
     if (snapGroupNth >= 0 && grouped[snapGroupNth] !== undefined) return grouped[snapGroupNth];
   }
@@ -274,7 +283,95 @@ export function pickFocusMatch(snap, candidates, snapNth = 0, snapGroupNth = -1)
 
 const hiddenBy = (el) => { for (let p = el; p; p = p.parentElement) if (p.hidden) return true; return false; };
 const inModal = (el) => { for (let p = el; p; p = p.parentElement) if (p.tagName === 'DIALOG' && p.classList?.contains('modal')) return p; return null; };
-const inLayer = (el) => { for (let p = el; p; p = p.parentElement) if (p.classList?.contains('morenav') || p.classList?.contains('assist')) return true; return false; };
+const inLayer = (el) => { for (let p = el; p; p = p.parentElement) if (p.classList?.contains('morenav') || p.classList?.contains('assist') || p.classList?.contains('tb-sheet')) return true; return false; };
+// ---------------------------------------------------------------- scroll after a redraw
+// ONE mechanism (founder priority: smooth navigation). A list that shows a placeholder first makes the page shorter for a moment and the
+// browser clamps the scroll; a list replaced in place lets scroll anchoring shift the page. The keeper notes the scroll position when the
+// person acts, holds the page height while the redraw runs, and undoes a scroll that the redraw caused. Views never touch the scroll.
+// Where the window should go back to, or null to leave it. Pure. `y` is the position when the person acted, `nowY` the position now.
+export function keptScroll({ y, nowY, maxY, sinceChange, sinceAction, sameRoute, focusTop = null, focusBottom = null, viewH = 0 }) {
+  if (!sameRoute || sinceAction > FOCUS_WATCH_MS || sinceChange > SCROLL_SETTLE_MS || Math.abs(nowY - y) <= 2) return null;
+  const target = Math.max(0, Math.min(y, maxY));
+  if (typeof focusTop === 'number') { // never scroll the focused field (or the guard's target) out of view
+    const moved = nowY - target;
+    if (focusTop + moved < 0 || (viewH && (focusBottom ?? focusTop) + moved > viewH)) return null;
+  }
+  return target;
+}
+
+// May the held page height go now? A timer (quiet, hard limit) must not: if the page without the hold is too short for the scroll
+// position, the browser would clamp the scroll and the page would jump. Only the person's own scroll or a route change lets go then. Pure.
+export function shouldRelease(keptY, naturalHeight, viewH, reason) {
+  if (reason === 'person' || reason === 'route') return true;
+  return Math.max(0, naturalHeight - viewH) >= keptY;
+}
+
+const KEEPER_OUTSIDE = '.sidebar, .bottomnav, .morenav, .topbar, .tb-sheet, .assist';
+const SCROLL_KEYS = new Set(['PageUp', 'PageDown', 'Home', 'End', 'ArrowUp', 'ArrowDown', ' ']);
+
+function installScrollKeeper(doc) {
+  const win = globalThis.window || globalThis;
+  let rec = null;        // { y, at, path }
+  let lastChange = 0;    // when the page last changed
+  let held = null;       // the element whose min-height holds the page height
+  let quiet = null; let hard = null;
+  const pathNow = () => String(globalThis.location?.hash || '').split('?')[0];
+  const release = (reason = 'person') => {
+    rec = null; clearTimeout(quiet); clearTimeout(hard);
+    if (!held) return;
+    const keep = held.style.minHeight;
+    const y = win.scrollY;
+    held.style.minHeight = '';
+    if (reason !== 'person' && reason !== 'route' && !shouldRelease(y, doc.documentElement.scrollHeight, win.innerHeight, reason)) {
+      held.style.minHeight = keep; // the clamp would move the page: keep the (invisible) blank space until the person scrolls
+      if (win.scrollY !== y) win.scrollTo(0, y); // measuring may have clamped already; put it back before anything is painted
+      return;
+    }
+    held = null;
+  };
+  const arm = () => {
+    clearTimeout(quiet);
+    quiet = setTimeout(() => { if (inFlight() > 0) arm(); else release('quiet'); }, SCROLL_QUIET_MS);
+  };
+  const person = (e) => { const t = e.target; return !(t instanceof Element && t.closest?.('input, textarea, select, [contenteditable]')); };
+
+  const act = (e) => {
+    const t = e.target instanceof Element ? e.target : null;
+    if (!t || !t.closest('#app, dialog.modal') || t.closest(KEEPER_OUTSIDE)) return;
+    rec = { y: win.scrollY, at: Date.now(), path: pathNow() };
+    const app = doc.getElementById('app');
+    if (app && !held) { held = app; app.style.minHeight = `${app.offsetHeight}px`; }
+    arm(); clearTimeout(hard); hard = setTimeout(() => release('quiet'), FOCUS_WATCH_MS);
+  };
+  for (const ev of ['input', 'change', 'submit', 'click']) doc.addEventListener(ev, act, true);
+  // The person scrolling themselves is never undone.
+  for (const ev of ['wheel', 'touchmove']) win.addEventListener(ev, () => release('person'), { passive: true });
+  doc.addEventListener('keydown', (e) => { if (SCROLL_KEYS.has(e.key) && person(e)) release('person'); }, true);
+  win.addEventListener('hashchange', () => release('route'));
+  win.addEventListener('scroll', () => {
+    if (!rec) return;
+    if (pathNow() !== rec.path) { release('route'); return; }
+    const now = Date.now();
+    const a = doc.activeElement;
+    const r = a && a !== doc.body ? a.getBoundingClientRect() : null;
+    const sinceChange = now - lastChange;
+    const to = keptScroll({
+      y: rec.y, nowY: win.scrollY, maxY: doc.documentElement.scrollHeight - win.innerHeight, sinceChange, sinceAction: now - rec.at,
+      sameRoute: true, focusTop: r ? r.top : null, focusBottom: r ? r.bottom : null, viewH: win.innerHeight,
+    });
+    if (to !== null) win.scrollTo(0, to);
+    else if (sinceChange > SCROLL_SETTLE_MS) rec.y = win.scrollY; // not caused by a redraw: the new place is where the person is
+  }, { passive: true });
+  return {
+    changed(muts) {
+      if (muts.some((m) => m.target instanceof Element && m.target.closest('#app') && !m.target.closest('.sidebar, .topbar, .bottomnav'))) {
+        lastChange = Date.now();
+        if (rec) arm();
+      }
+    },
+  };
+}
+
 let guardInstalled = false;
 
 // Returns { check(now), note(el), state() } (the last three for tests). `observe: false` skips the page listeners and the observer.
@@ -283,6 +380,7 @@ export function installFocusGuard(doc = document, { observe = true } = {}) {
   let dlgRec = null;  // the same, plus dlg
   let lossAt = null;  // when the remembered control left the page and was not found again
   let fallback = null; // the heading the guard itself focused
+  let movedAt = null; // when the person last pressed Tab
 
   const pageRoot = () => doc.getElementById?.('main') || doc.getElementById?.('app') || doc.body;
   const openDialogs = () => [...doc.querySelectorAll('dialog')].filter((d) => d.open && d.classList?.contains('modal'));
@@ -324,6 +422,14 @@ export function installFocusGuard(doc = document, { observe = true } = {}) {
 
   function check(now = Date.now()) {
     if (!pageRec && !dlgRec) return;
+    if (movedAt !== null) {
+      // The person tabbed away (a blur may hide or redraw things mid-move): never undo that. If focus still ends on the page after the
+      // move, the control is forgotten rather than restored (a restore here would trap Tab in a search box).
+      if (now - movedAt < USER_MOVE_MS) return;
+      movedAt = null;
+      const act = doc.activeElement;
+      if (!act || act === doc.body || !act.isConnected) { pageRec = null; dlgRec = null; lossAt = null; fallback = null; return; }
+    }
     const open = openDialogs();
     const top = open[open.length - 1] || null;
     if (dlgRec && (!dlgRec.dlg.isConnected || !dlgRec.dlg.open)) dlgRec = null;
@@ -357,28 +463,27 @@ export function installFocusGuard(doc = document, { observe = true } = {}) {
     }
     if (lossAt === null) {
       const mine = lossAt = now;
-      setTimeout(() => { if (lossAt === mine) check(mine + HEADING_AFTER_MS); }, HEADING_AFTER_MS);
       setTimeout(() => { if (lossAt === mine) check(mine + FOCUS_WATCH_MS + 1); }, FOCUS_WATCH_MS);
     }
     if (now - lossAt > FOCUS_WATCH_MS) { if (top) dlgRec = null; else pageRec = null; lossAt = null; return; }
-    if (now - lossAt >= HEADING_AFTER_MS) {
-      const h = root.querySelector(top ? 'h2' : 'h1');
-      if (h && a !== h) { h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true }); fallback = h; }
-    }
+    const h = root.querySelector(top ? 'h2' : 'h1');
+    if (h && a !== h) { h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true }); fallback = h; }
   }
 
   if (observe) {
+    doc.addEventListener('keydown', (e) => { if (e.key === 'Tab') movedAt = Date.now(); }, true);
     doc.addEventListener('focusin', (e) => { if (e.target instanceof Element) note(e.target); }, true);
     doc.addEventListener('pointerdown', (e) => {
       const t = e.target instanceof Element ? e.target : null;
       const el = t?.closest(FOCUSABLE);
       if (el) { note(el); return; }
-      if (t?.closest('.morenav, .assist')) return;
+      if (t?.closest('.morenav, .assist, .tb-sheet')) return;
       if (t?.closest('dialog.modal')) dlgRec = null; else pageRec = null; // the person moved on to nothing in particular
     }, true);
-    new MutationObserver(() => check()).observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled', 'hidden', 'open'] });
+    const keeper = installScrollKeeper(doc);
+    new MutationObserver((muts) => { keeper.changed(muts); check(); }).observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled', 'hidden', 'open'] });
   }
-  return { check, note, state: () => ({ rec: pageRec, dlgRec, lossAt, fallback }) };
+  return { check, note, moved: (t = Date.now()) => { movedAt = t; }, state: () => ({ rec: pageRec, dlgRec, lossAt, fallback }) };
 }
 
 // Focus the page heading without scrolling (a dialog opened with no opener closes onto it).

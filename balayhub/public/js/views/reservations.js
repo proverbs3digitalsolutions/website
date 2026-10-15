@@ -68,9 +68,11 @@ export function overBalance(amount, balance) {
   return Math.max(0, Math.round((typed - (Math.max(0, Number(balance)) || 0)) * 100) / 100);
 }
 // A guest count is a whole number from 1. Checked before a save, so the message lands at the field and not in the banner.
-export function guestsProblem(value) {
+// max is the listing's limit when it has one; it is checked before the server's general cap of 50.
+export function guestsProblem(value, max) {
   const n = String(value ?? '').trim();
-  return /^\d+$/.test(n) && Number(n) >= 1 ? null : 'Enter a whole number of guests, 1 or more.';
+  if (!(/^\d+$/.test(n) && Number(n) >= 1)) return 'Enter a whole number of guests, 1 or more.';
+  return max && Number(n) > max ? `This listing allows up to ${max} guests.` : null;
 }
 // Only the fields the host actually changed, so the activity log isn't noisy.
 export function changedFields(orig, d) {
@@ -196,19 +198,20 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
         field({ name: 'guest_phone', label: 'Guest mobile', type: 'tel', inputmode: 'tel', placeholder: '0917 123 4567' }),
         field({ name: 'guest_email', label: 'Guest email', type: 'email' })),
       field({ name: 'channel', label: 'Booked through', type: 'select', value: 'direct', placeholderOption: false, options: Object.entries(CHANNEL_LABEL) }),
-      field({ name: 'source', label: 'Where did they book? (optional)', type: 'select', value: '', placeholderOption: false, options: SOURCE_CHOICES, hint: 'For your own records, for example Facebook or a referral.' }),
       quoteBox,
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'accommodation_total', label: 'Accommodation total', type: 'money', hint: 'Filled in from your nightly rates. You can change it.' }),
         field({ name: 'cleaning_fee', label: 'Cleaning fee', type: 'money', hint: "Leave blank to use your rate card's cleaning fee." })),
-      h('div', { class: 'form-row form-row--2' },
-        field({ name: 'other_fees', label: 'Other fees', type: 'money', placeholder: '0' }),
-        field({ name: 'channel_fee', label: 'Channel fee / commission', type: 'money', placeholder: '0', hint: 'What Airbnb, Booking.com, Agoda or another channel keeps.' })),
+      field({ name: 'channel_fee', label: 'Channel fee / commission', type: 'money', placeholder: '0', hint: 'What Airbnb, Booking.com, Agoda or another channel keeps.' }),
+      // Rarely needed for a walk-in: folded, nothing removed. Opens when a box inside has a value or an error.
+      h('details', { class: 'form-section', 'data-more': '' }, h('summary', null, 'More details'),
+        field({ name: 'source', label: 'Where did they book? (optional)', type: 'select', value: '', placeholderOption: false, options: SOURCE_CHOICES, hint: 'For your own records, for example Facebook or a referral.' }),
+        field({ name: 'other_fees', label: 'Other fees', type: 'money', placeholder: '0' })),
       field({ name: 'notes', label: 'Notes', type: 'textarea', maxlength: 1000, placeholder: 'Arrival time, special requests…' }),
       field({ name: 'send_confirmation', label: 'Email a booking confirmation to the guest (needs their email)', type: 'checkbox', value: true }),
     ],
     onSubmit: async (data) => {
-      const problem = guestsProblem(data.num_guests);
+      const problem = guestsProblem(data.num_guests, listings.find((l) => String(l.unit_id) === String(data.unit_id))?.max_guests);
       if (problem) throw new ApiError(problem, { status: 400, fields: { num_guests: problem } });
       if (!data.guest_email) data.send_confirmation = false;
       if (data.channel !== 'direct' || !data.source) delete data.source;
@@ -283,6 +286,9 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
   form.addEventListener('change', (e) => { if (MONEY.includes(e.target.name)) offerNow(); });
   form.addEventListener('change', (e) => { if (e.target.name === 'channel') syncChannelFee(form, true); });
   syncChannelFee(form, false);
+  // A restored draft with something in the fold opens it.
+  const more = form.querySelector('details[data-more]');
+  if (more && [...more.querySelectorAll('input, select')].some((el) => el.value)) more.open = true;
   let seq = 0;
   async function refreshQuote(e) {
     if (e?.target.name === 'pick_mode') syncMode();
@@ -357,7 +363,7 @@ export async function reservationsView(el, { query }) {
           h('th', null, 'Guest'), h('th', null, 'Listing'),
           h('th', { class: 'col-sm-hide' }, 'Channel'), h('th', { class: 'col-sm-hide' }, 'Code'))),
         h('tbody', null, reservations.map((r) => h('tr', { class: 'row-link', onclick: () => navigate(`#/reservations/${r.booking_id}`) },
-          h('td', null, h('a', { href: `#/reservations/${r.booking_id}`, 'aria-label': `${r.guest_name || r.guest_label || 'Guest'}, ${r.unit_name}, check-in ${fmtDate(r.check_in)}` }, fmtDate(r.check_in)), h('div', { class: 'muted small' }, `${r.nights} night${r.nights > 1 ? 's' : ''}`)),
+          h('td', null, h('a', { class: 'link-tap', href: `#/reservations/${r.booking_id}`, 'aria-label': `${r.guest_name || r.guest_label || 'Guest'}, ${r.unit_name}, check-in ${fmtDate(r.check_in)}` }, fmtDate(r.check_in)), h('div', { class: 'muted small' }, `${r.nights} night${r.nights > 1 ? 's' : ''}`)),
           h('td', null, fmtDate(r.check_out)),
           h('td', { class: 'num' }, peso(r.total_amount)),
           h('td', { class: `num${Number(r.balance) > 0 && r.status === 'confirmed' ? ' amount--neg' : ''}` }, r.status === 'confirmed' ? peso(r.balance) : '—'),
@@ -565,7 +571,7 @@ export async function reservationDetailView(el, { params, rerender }) {
           field({ name: 'check_in', label: 'Check-in', type: 'date', required: true, value: r.check_in }),
           field({ name: 'check_out', label: 'Check-out', type: 'date', required: true, value: r.check_out })),
         h('div', { class: 'form-row form-row--2' },
-          field({ name: 'num_guests', label: 'Number of guests', type: 'number', min: 1, max: 50, value: r.num_guests }),
+          field({ name: 'num_guests', label: 'Number of guests', type: 'number', min: 1, max: r.max_guests || 50, value: r.num_guests }),
           field({ name: 'channel', label: 'Booked through', type: 'select', value: r.channel, placeholderOption: false, options: Object.entries(CHANNEL_LABEL) })),
         field({ name: 'source', label: 'Where did they book? (optional)', type: 'select', value: r.source || '', placeholderOption: false, options: SOURCE_CHOICES, hint: 'For your own records, for example Facebook or a referral.' }),
         h('div', { class: 'form-row form-row--2' },
@@ -597,7 +603,7 @@ export async function reservationDetailView(el, { params, rerender }) {
         }
         // A changed guest count must be a whole number from 1; checked here so the message lands at the field.
         if ('num_guests' in changes) {
-          const problem = guestsProblem(changes.num_guests);
+          const problem = guestsProblem(changes.num_guests, r.max_guests);
           if (problem) throw new ApiError(problem, { status: 400, fields: { num_guests: problem } });
         }
         // A changed total or changed dates that work out above the ceiling a night ask first (after the price question above).
@@ -725,12 +731,12 @@ export async function reservationDetailView(el, { params, rerender }) {
               r.rules_text && h('details', { class: 'hp-rules' }, h('summary', null, 'Show the accepted text'), h('p', null, r.rules_text)))],
             r.notes && [h('dt', null, 'Notes'), h('dd', { style: { whiteSpace: 'pre-wrap' } }, r.notes)])),
         h('div', { class: 'card' },
-          h('div', { class: 'card__head' }, h('h2', null, 'Guest'), r.guest_id && h('a', { href: `#/guests/${r.guest_id}` }, 'Guest profile')),
+          h('div', { class: 'card__head' }, h('h2', null, 'Guest'), r.guest_id && h('a', { class: 'link-tap', href: `#/guests/${r.guest_id}` }, 'Guest profile')),
           guestBadges(r).length > 0 && h('div', { class: 'chips', style: { marginBottom: '10px' } }, guestBadges(r)),
           h('dl', { class: 'dl' },
             h('dt', null, 'Name'), h('dd', null, guestName),
-            !r.limited && [h('dt', null, 'Mobile'), h('dd', null, r.guest_phone ? h('a', { href: `tel:${r.guest_phone.replace(/[^\d+]/g, '')}` }, r.guest_phone) : '—'),
-              h('dt', null, 'Email'), h('dd', null, r.guest_email ? h('a', { href: `mailto:${r.guest_email}` }, r.guest_email) : '—')]),
+            !r.limited && [h('dt', null, 'Mobile'), h('dd', null, r.guest_phone ? h('a', { class: 'link-tap', href: `tel:${r.guest_phone.replace(/[^\d+]/g, '')}` }, r.guest_phone) : '—'),
+              h('dt', null, 'Email'), h('dd', null, r.guest_email ? h('a', { class: 'link-tap', href: `mailto:${r.guest_email}` }, r.guest_email) : '—')]),
           canManage && confirmed && r.guest_email && h('button', { class: 'btn btn--secondary btn--sm', style: { marginTop: '12px' }, onclick: emailConfirmation }, 'Email booking confirmation'),
           canManage && confirmed && h('button', { class: 'btn btn--secondary btn--sm', style: { marginTop: '12px' }, onclick: copyGuideLink }, 'Copy guidebook link'),
           r.ical_feed_id && h('p', { class: 'muted small', style: { marginTop: '10px' } }, `Imported from ${CHANNEL_LABEL[r.channel]}. Guest details stay on ${CHANNEL_LABEL[r.channel]}.`)),
