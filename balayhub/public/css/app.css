@@ -867,7 +867,16 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .lp-final { text-align: center; }
 .lp-final .lp-cta { margin-top: 24px; }
 .lp-foot { border-top: 1px solid var(--line); padding: 24px 0 40px; font-size: .9rem; color: var(--muted); }
-.lp-foot__inner { display: flex; flex-wrap: wrap; gap: 18px; }
+.lp-foot__inner { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.lp-foot__links { display: flex; justify-content: center; gap: 0 24px; }
+.lp-foot a { display: inline-flex; align-items: center; min-height: 44px; }
+.lp-foot .themeswitch { margin-top: 8px; }
+@media (min-width: 720px) {
+  .lp-foot__inner { flex-direction: row; justify-content: space-between; gap: 8px 24px; text-align: left; }
+  .lp-foot .themeswitch { margin-top: 0; }
+}
+/* QA round 17: no double gap between two plain sections in a row (any width); two-column stats and tabs on phones. */
+.lp-section:not(.lp-section--alt) + .lp-section:not(.lp-section--alt):not(.lp-final) { padding-top: 0; }
 
 /* ================================================================ plans */
 .shell__main { min-width: 0; }
@@ -1084,6 +1093,15 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .lp-tabs button { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line-2); background: var(--surface); border-radius: 99px; padding: 9px 16px; font-weight: 700; cursor: pointer; color: var(--text); }
 .lp-tabs button svg { width: 18px; height: 18px; }
 .lp-tabs button.is-on { background: var(--forest); border-color: var(--forest); color: #fff; }
+.lp-tabs button { text-align: center; }
+@media (max-width: 640px) {
+  .lp-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .lp-tabs button { width: 100%; min-height: 44px; justify-content: center; border-radius: 14px; padding: 8px 10px; font-size: .92rem; line-height: 1.2; }
+}
+@media (max-width: 640px) {
+  .lp-highlights__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; padding-top: 8px; padding-bottom: 8px; }
+  .lp-highlights__grid > div { padding: 14px 4px; min-width: 0; overflow-wrap: anywhere; }
+}
 .lp-tabpanel { display: grid; gap: 22px; grid-template-columns: 1fr; background: var(--sand-soft); border-radius: 20px; padding: 28px; max-width: 980px; margin: 0 auto; }
 @media (min-width: 820px) { .lp-tabpanel { grid-template-columns: 1fr 1.3fr; align-items: center; } }
 .lp-tabpanel h3 { font-size: 1.4rem; color: var(--navy); margin-bottom: 8px; }

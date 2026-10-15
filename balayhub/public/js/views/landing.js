@@ -592,8 +592,9 @@ export async function landingView(el) {
     h('footer', { class: 'lp-foot' },
       h('div', { class: 'lp-wrap lp-foot__inner' },
         h('span', null, `© ${new Date().getFullYear()} BalayHub`),
-        h('a', { href: '#/terms' }, t('Terms of service')),
-        h('a', { href: '#/privacy' }, t('Privacy notice')),
+        h('div', { class: 'lp-foot__links' },
+          h('a', { href: '#/terms' }, t('Terms of service')),
+          h('a', { href: '#/privacy' }, t('Privacy notice'))),
         pricing.contact_email ? h('a', { href: `mailto:${pricing.contact_email}` }, pricing.contact_email) : h('a', { href: '#/signup' }, t('Create your account')),
         themeSwitch({ compact: true })))));
 }
