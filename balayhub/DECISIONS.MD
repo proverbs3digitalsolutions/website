@@ -2,7 +2,7 @@
 
 Every decision made on BalayHub, with the date and the reason. Newest decisions go at the bottom. When a decision changes, add a new entry and mark the old one **Superseded by D-xx**. Never delete history.
 
-Last updated: 2026-10-15 (D-96, QA round 15 late calls; D-95, QA round 15 calls; D-94, platform plan coupons; D-93, QA round 14 re-verify calls; D-92, QA round 14 calls; D-91, the top bar built; D-90, founder top bar request; D-89, QA round 13 calls)
+Last updated: 2026-10-15 (D-97, QA round 16 calls; D-96, QA round 15 late calls; D-95, QA round 15 calls; D-94, platform plan coupons; D-93, QA round 14 re-verify calls; D-92, QA round 14 calls; D-91, the top bar built; D-90, founder top bar request; D-89, QA round 13 calls)
 
 ---
 
@@ -1044,7 +1044,7 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 > **D-93 · 2026-10-15 · QA round 14 re-verify calls.** Nine browser lanes re-checked round 14. Most fixes held; the new findings were fixed in follow-ups (suite 2662 of 2662; browser check in round 15). The round is not clean, so the clean-round streak stays 0 of 3. This adds to D-92 and D-91 and changes none of their calls except where it says so.
 > - **The booking page's add-on line moves the rows below it, by design.** The summary has to list the add-ons the guest picked; the checkbox and the scroll position do not move. Recorded so it is not filed again.
 > - **The scroll keeper holds a short page's height until the person scrolls or changes page.** The quiet timer no longer lets go (and never clamps the scroll); a search that makes the page shorter no longer leaves the window about 50px out of place. Refines D-92's scroll keeper.
-> - **Bell rows with no property are owner-only.** Managers and staff see only rows for properties they are assigned to, so a person who loses a property stops seeing its alerts. Every alert call site was checked; the housekeeping assignment alert now carries its property. Refines D-91's read-time scoping.
+> - **Bell rows with no property are owner-only.** Managers and staff see only rows for properties they are assigned to, so a person who loses a property stops seeing its alerts. Every alert call site was checked; the housekeeping assignment alert now carries its property. Refines D-91's read-time scoping. *Annotation 2026-10-15 (D-97, S3): owners always get alerts that have no property, whatever their property filter. A type the owner turned off stays off.*
 > - **The theme switch sits below the profile menu list, not inside it.** Arrow keys move through the menu items; Tab reaches the theme buttons (a menu cannot hold a radio group). Refines D-91's profile menu.
 > - **The `?new=` and `?invite=` openers fire once per navigation.** Once a page has opened its dialog it drops the opener from its own state and the address, so saving does not reopen it.
 > - **Tab counts as the person's own move.** For 300 ms after a Tab the focus guard leaves focus alone, so the search list can close without focus being pulled back.
@@ -1115,3 +1115,35 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 > - **The coupon code limit per IP address is 60 per 15 minutes (was 20).** Owners in one office, or on one mobile-carrier address, share an IP address and could lock each other out of applying a code. The limit per workspace stays at 10 failed tries per 15 minutes and is the main guard against guessing. Refines D-94.
 > - **A filter bar with no extra ("more") filters shows a small, non-interactive funnel and a "Filter by" label instead of an empty Filters button.** A button that opens nothing would mislead. Search-only bars are unchanged. *Why:* founder request 3, "filters must look like filters". Refines D-95's Filters button.
 > - **Money display in the owner coupon box:** whole-peso amounts in the Total and the "saved" lines show two decimals (for example ₱499.00), matching every other peso amount in the app (D-85). Offers ("50% off your first 3 months") and the "Pay ₱20 by card" button label stay short.
+
+---
+
+> **D-97 · 2026-10-15 · QA round 16 calls (alpha with small hosts).** The sixteenth QA sweep (8 browser lanes, 41 filed findings plus carried items) was fixed the same day in 20 code lanes and a docs lane. No severe bug: 37 real findings (9 significant, 28 minor); 4 were not bugs. The merge gate, the security pass (PASS) and the browser re-verify are tracked in IMPLEMENTATION-PLAN, so the clean-round streak is unchanged. This adds to D-96, D-95 and D-94 and changes only what it says.
+>
+> *Orchestrator calls (O1 to O10):*
+> - **O1 Do not rebook follows the email.** Any reservation (an owner save or an online direct booking) whose guest email matches a guest flagged Do not rebook in the same workspace gets the warning (owner toast; Inbox note and push for online bookings), even when a separate guest record is made. The merge rule for guest records (same email and first name) is unchanged, and the flag stays on the original guest record. The flag is workspace-wide by email on purpose: a manager limited to some properties may see the flag on a guest because another guest record with the same email was flagged. Only the yes or no reaches them.
+> - **O2 Back restores the list's scroll.** Going back to a page (browser Back, or the page's own `‹` link to the page you came from) returns to where you left it. A new page still starts at the top. Back waits up to 1.5 seconds for the list to load, then restores the place; any scroll, tap or key press cancels it.
+> - **O3 Wordmark contrast** stays the logo exemption (BLOCKERS). The landing hero calendar's Airbnb bar darkens to `#c8344a` (5.19:1 with white text).
+> - **O4 Top bar search** gets one muted line, "Search covers guests, reservations, listings and pages."; search is not widened.
+> - **O5 Launchpad** shows the current group open and folds the later groups under "Later (N more steps)"; the count stays the full count.
+> - **O6 Phone calendar:** Property, Tag and Availability sit behind Filters below 960px.
+> - **O7 Comped workspaces** see no Pay now and no coupon box, only "Your workspace is on a complimentary plan, so there is nothing to pay."
+> - **O8 Check-in headcount:** the host sees registered against booked on the reservation's check-in card and on the gate pass; the guest is told when they register more than booked; nothing is blocked (the listing's maximum stays the hard limit).
+> - **O9 Owner fee and duplicate names:** "Save anyway?" for a percentage fee over 50% and for an exact duplicate owner name; 0% saves without a question. On Edit, the fee question is asked only when the fee model or the value changed.
+> - **O10 Free-with-card coupon wording** states the ₱20.00 card charge in the preview message, the banner and the hint.
+>
+> *Strategist calls (S1 to S6):*
+> - **S1 Quiet redirect.** Opening the other module's home (`#/dashboard` on a stays workspace, `#/home` on a rentals workspace) goes home with no message. Any other refused page still says "That page isn't available for your role or workspace." The Privacy page logo now goes to the workspace's own home.
+> - **S2 The Launchpad fold applies to every owner,** not only owners with 1 to 3 listings. The onboarding answer has no listing count and adding one is a server change for no gain; a bigger host still sees every step one click away. (BLOCKERS asks.)
+> - **S3 Account-wide alerts reach every owner,** whatever their property filter. A type the owner turned off stays off. Annotates D-93's "Bell rows with no property are owner-only".
+> - **S4 Photo picks upload at once** on the cleaning task and on the repair request (one pattern for both pages; the deposits page still has the two-step way, carried).
+> - **S5 Inbox composer:** each mode keeps its own text. Switching to Internal note puts the guest text aside; switching back brings it back.
+> - **S6 Coupon code nudge:** a non-blocking hint under the code box for codes of 3 to 7 characters; a free coupon with no total limit and once per workspace off asks "Unlimited free months?" before saving.
+>
+> *Not bugs (recorded so later sweeps don't file them):* the phone "jumps" when opening Filters on Reservations or a dialog from a scrolled page (#37, #38) were the test tool scrolling an off-screen button into view; a person cannot tap a button that is off screen or under the top bar, and clicking the same buttons without that scroll left the page where it was. Calendar tiles keep their 24px size (D-95, #40). The wordmark stays exempt from the contrast rule (#17, O3).
+>
+> *Focus rules learned:* (1) a Tab followed by an action inside 300 ms no longer loses focus: once focus lands on a control after a Tab, the Tab window ends; (2) a form's Save button is marked busy (`aria-disabled="true"`) rather than disabled while saving, so focus stays on it, and the busy flag is the double-submit guard; (3) a dialog with no fields starts on its first action button. The re-verify must drive these with a real Tab then Enter inside 300 ms, not by script focus.
+>
+> *Server rules added:* a PayMongo 401 on the balance-pay refresh clears the host's key check only when the 401 came from the key currently saved (a stale checkout cannot clear a newer key's check). Owner names: two active owners with the same name (trimmed, case-insensitive) ask first (409 `NAME_IN_USE`). A discount code with both a percent and an amount is refused: "Choose one: a percent off or an amount off, not both."
+>
+> *Why:* a guest or host should never be told something false (a false red error, a flag that did not follow the email, a "free" offer that hid its charge), the focus class that kept returning since round 13 got its two root causes, and small hosts get less on screen at once (Launchpad, phone calendar).

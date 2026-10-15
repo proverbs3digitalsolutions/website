@@ -24,6 +24,17 @@ export const phaseCount = (steps) => `${countDone(steps)}/${steps.length}${skipp
 
 // Steps the person has skipped, un-skipped or opened stay open across the redraw that follows (module level: a redraw rebuilds the view).
 const opened = new Set();
+// Small hosts see the current phase and the ones before it; later phases fold under "Later". The current phase is the first with a step left to do.
+const isOpen = (x) => !x.done && !x.skipped;
+export function splitPhases(phases, steps) {
+  const cur = phases.findIndex((ph) => steps.some((x) => x.phase === ph.key && isOpen(x)));
+  if (cur < 0) return { shown: phases, later: [], laterCount: 0 };
+  const later = phases.slice(cur + 1);
+  const laterCount = steps.filter((x) => isOpen(x) && later.some((ph) => ph.key === x.phase)).length;
+  return { shown: phases.slice(0, cur + 1), later, laterCount };
+}
+// Module level, like opened: a redraw rebuilds the view.
+let laterOpen = false;
 export const stepOpen = ({ key, isNext, isStuck }, set) => isNext || isStuck || set.has(key);
 
 function stepCard(st, isNext, rerender, syncFailing) {
@@ -65,6 +76,27 @@ export async function launchpadView(el, { rerender }) {
   const first = state.user.full_name.split(' ')[0];
   const showReminder = async () => { try { await post('/onboarding/dismiss', { show: true }); rerender(); } catch (err) { toast(err.message, 'error'); } };
 
+  const phaseCard = (ph) => {
+    const i = o.phases.indexOf(ph);
+    const steps = o.steps.filter((x) => x.phase === ph.key);
+    // A phase ticks off once nothing in it is left to do. Its count still shows only the steps that are done.
+    const settled = steps.every((x) => x.done || x.skipped);
+    return h('section', { class: 'lpad-phase card' },
+      h('div', { class: 'lpad-phase__head' },
+        h('span', { class: `lpad-phase__num${settled ? ' is-done' : ''}` }, settled ? '✓' : String(i + 1)),
+        h('div', null, h('h2', null, ph.title), h('p', { class: 'muted small' }, ph.text)),
+        h('span', { class: 'muted small lpad-phase__count' }, phaseCount(steps))),
+      h('div', { class: 'lpad-steps' }, steps.map((st) => stepCard(st, st === next, rerender, o.channels_failing))));
+  };
+  const { shown, later, laterCount } = splitPhases(o.phases, o.steps);
+  // The fold opens by itself when a later step is stuck (calendar not syncing) or the person opened it.
+  const laterKeys = new Set(later.map((ph) => ph.key));
+  const laterNeedsEye = (o.channels_failing && o.steps.some((x) => x.key === 'channels' && laterKeys.has(x.phase))) || o.steps.some((x) => laterKeys.has(x.phase) && opened.has(x.key));
+  const laterFold = h('details', { class: 'lpad-later card', open: laterOpen || laterNeedsEye ? true : null },
+    h('summary', null, `Later (${laterCount} more step${laterCount === 1 ? '' : 's'})`),
+    later.map(phaseCard));
+  laterFold.addEventListener('toggle', () => { laterOpen = laterFold.open; });
+
   el.replaceChildren(
     h('div', { class: 'lpad-hero card' },
       h('div', { class: 'lpad-hero__text' },
@@ -79,17 +111,8 @@ export async function launchpadView(el, { rerender }) {
         next && h('a', { class: 'btn btn--primary', href: next.href }, icon('plus'), `Next: ${next.title}`),
         o.dismissed && !o.complete && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: showReminder }, 'Show the reminder on Home')),
       h('div', { class: 'lpad-hero__art', 'aria-hidden': 'true' }, icon('rocket'))),
-    o.phases.map((ph, i) => {
-      const steps = o.steps.filter((x) => x.phase === ph.key);
-      // A phase ticks off once nothing in it is left to do. Its count still shows only the steps that are done.
-      const settled = steps.every((x) => x.done || x.skipped);
-      return h('section', { class: 'lpad-phase card' },
-        h('div', { class: 'lpad-phase__head' },
-          h('span', { class: `lpad-phase__num${settled ? ' is-done' : ''}` }, settled ? '✓' : String(i + 1)),
-          h('div', null, h('h2', null, ph.title), h('p', { class: 'muted small' }, ph.text)),
-          h('span', { class: 'muted small lpad-phase__count' }, phaseCount(steps))),
-        h('div', { class: 'lpad-steps' }, steps.map((st) => stepCard(st, st === next, rerender, o.channels_failing))));
-    }),
+    shown.map(phaseCard),
+    later.length > 0 && laterCount > 0 && laterFold,
     h('section', { class: 'card' },
       h('div', { class: 'card__head' }, h('h2', null, 'How do I…?')),
       h('div', { class: 'lpad-guides' }, GUIDES.map(([t, lines]) => h('details', { class: 'lpad-guide' },

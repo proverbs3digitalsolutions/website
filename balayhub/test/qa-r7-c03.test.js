@@ -87,7 +87,7 @@ test('#39 Nights and Guests (at least) get a whole-number pattern with the field
   for (const name of ['min_nights', 'min_guests']) {
     const m = resSrc.match(new RegExp(`name: '${name}'[^\\n]*?pattern: (\\/.+?\\/),\\s*patternText: '([^']+)'`));
     assert.ok(m, `${name} has a pattern and patternText`);
-    assert.equal(m[2], 'Enter a whole number, 1 or more.');
+    assert.equal(m[2], 'Enter a number from 1 to 99.');
     const re = new Function(`return ${m[1]};`)();
     for (const bad of ['0', '-1', '1.5', '99999999999', '100', 'abc']) assert.equal(re.test(bad), false, `${name} refuses ${bad}`);
     for (const good of ['1', '2', '12', '99']) assert.equal(re.test(good), true, `${name} accepts ${good}`);

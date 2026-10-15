@@ -391,8 +391,8 @@ export async function reservationsView(el, { query }) {
       { name: 'guest', label: 'Guest', all: 'Any guest', options: [['first', 'First-time guests'], ['repeat', 'Repeat guests'], ['vip', 'VIP guests']] },
       canManage && { name: 'checkin_form', label: 'Check-in form', all: 'Any', options: [['missing', 'Not filled in yet'], ['done', 'Filled in']] },
       // The server reads one or two digits only, so a longer number is refused here rather than shown as a chip the list ignores.
-      { name: 'min_nights', label: 'Nights (at least)', type: 'number', min: 1, pattern: /^[1-9]\d?$/, patternText: 'Enter a whole number, 1 or more.' },
-      { name: 'min_guests', label: 'Guests (at least)', type: 'number', min: 1, pattern: /^[1-9]\d?$/, patternText: 'Enter a whole number, 1 or more.' },
+      { name: 'min_nights', label: 'Nights (at least)', type: 'number', min: 1, pattern: /^[1-9]\d?$/, patternText: 'Enter a number from 1 to 99.' },
+      { name: 'min_guests', label: 'Guests (at least)', type: 'number', min: 1, pattern: /^[1-9]\d?$/, patternText: 'Enter a number from 1 to 99.' },
       { name: 'sort', label: 'Sort by', all: 'Default for this view', options: [['checkin', 'Check-in (soonest first)'], ['checkin_desc', 'Check-in (latest first)'], ['checkout', 'Check-out'], ['created', 'Newest bookings'], ['total', 'Highest total'], ['balance', 'Biggest balance']] },
     ].filter(Boolean),
   });

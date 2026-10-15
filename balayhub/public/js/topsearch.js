@@ -101,6 +101,8 @@ export function mountSearch(slot, ctx, { inSheet = false, onDone } = {}) {
   // The listbox holds only groups of options (axe: aria-required-children). Notes, errors, "no results" and Clear live beside it.
   const list = h('div', { id: 'tb-results', role: 'listbox', 'aria-label': 'Search results', hidden: true });
   const extras = h('div', { class: 'tb-extras' });
+  // One muted line for every panel state (O4). Not an option, so screen readers don't count it as a result.
+  const scope = h('p', { class: 'muted small tb-scope' }, 'Search covers guests, reservations, listings and pages.');
   const results = h('div', { class: 'tb-results', hidden: !open }, list, extras);
   const status = h('div', { class: 'tb-status', role: 'status', 'aria-live': 'polite' });
   const kbd = sheet ? null : h('span', { class: 'tb-kbd', 'aria-hidden': 'true' }, '/');
@@ -160,7 +162,7 @@ export function mountSearch(slot, ctx, { inSheet = false, onDone } = {}) {
     }
     list.replaceChildren(...kids, ...(empty ? [empty] : []));
     list.hidden = kids.length === 0 && !empty;
-    extras.replaceChildren(...extra);
+    extras.replaceChildren(...extra, scope);
     active = -1;
     input.setAttribute('aria-activedescendant', '');
     status.textContent = !q || loading ? '' : count === 0 ? 'No results' : count === 1 ? '1 result' : `${count} results`;

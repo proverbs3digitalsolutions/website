@@ -25,6 +25,12 @@ function presets(today) {
   };
 }
 
+// A 400 that names the from or to date: the page keeps the last report and marks that date box, instead of replacing the report with an error card.
+export function dateFieldError(err) {
+  const field = err?.status === 400 && (err.fields?.to ? 'to' : err.fields?.from ? 'from' : '');
+  return field ? { field, text: String(err.fields[field]) } : null;
+}
+
 // The line under Export while the range is incomplete. A range that runs backwards needs its dates fixed; a missing date needs picking.
 export const exportHint = ({ from, to } = {}) => (from && to && from > to ? 'Fix the dates to export.' : 'Pick both dates to export.');
 
@@ -58,6 +64,7 @@ export async function reportsView(el, { query }) {
   const types = PROPERTY_TYPES.filter((t) => properties.some((p) => p.property_type === t));
   const body = h('div');
   const barBox = h('div', { class: 'no-print' });
+  const dateNote = h('p', { class: 'form-error', role: 'alert' });
   const exportLink = h('a', { class: 'btn btn--primary', download: '' }, 'Export (Excel / CSV)');
   const exportNote = h('span', { class: 'muted small' }, exportHint({}));
   // The Custom dates boxes as the person left them. A backwards pair is cleared in the filter values, but its dates stay on screen.
@@ -110,6 +117,7 @@ export async function reportsView(el, { query }) {
 
   async function load() {
     history.replaceState(null, '', `#/reports${qs(changed(filters, defaults))}`);
+    dateNote.textContent = '';
     // A custom range needs both dates. With neither (filters.js clears both when the pair runs backwards) or only one
     // (a bad date in the link, or one side cleared), there is nothing to report on yet.
     const neither = filters.period === 'custom' && !filters.from && !filters.to;
@@ -127,6 +135,13 @@ export async function reportsView(el, { query }) {
     if (!body.firstChild) body.replaceChildren(h('div', { class: 'skeleton' }));
     let r;
     try { r = await get(`/reports${qs(apiParams())}`); } catch (err) {
+      const fe = dateFieldError(err);
+      if (fe && filters.period === 'custom') {
+        // Keep the last report; the message sits above it and the box is marked.
+        dateNote.textContent = fe.text;
+        boxByLabel(barBox, fe.field === 'to' ? 'Custom dates, to' : 'Custom dates, from')?.setAttribute('aria-invalid', 'true');
+        return;
+      }
       body.replaceChildren(h('div', { class: 'alert alert--error' }, err.message));
       return;
     }
@@ -209,6 +224,7 @@ export async function reportsView(el, { query }) {
       actions: [exportLink, exportNote, h('button', { class: 'btn btn--secondary', onclick: () => window.print() }, 'Print / PDF'), h('a', { class: 'btn btn--ghost', href: '#/dashboard' }, icon('home'), 'Dashboard')],
     }),
     barBox,
+    dateNote,
     body);
   await load();
 }

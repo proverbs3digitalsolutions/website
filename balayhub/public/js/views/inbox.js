@@ -233,7 +233,7 @@ async function renderThread(pane, id, { status, back, rerender }) {
       h('div', { class: 'inbox__head-actions' },
         // A host who works alone has no one to assign to, so the select only shows with a second person or an existing assignment.
         (assignees.length > 1 || c.assigned_to) && h('select', {
-          class: 'input input--sm', 'aria-label': 'Assigned to',
+          class: 'input input--sm', 'aria-label': 'Assigned to', 'data-focus-key': 'conv-assign',
           onchange: assign,
         }, h('option', { value: '' }, 'Unassigned'), c.assigned_to && !assignees.some((a) => a.user_id === c.assigned_to) && h('option', { value: c.assigned_to, selected: true }, c.assigned_name), assignees.map((a) => h('option', { value: a.user_id, selected: a.user_id === c.assigned_to }, a.full_name))),
         c.snoozed_until && new Date(c.snoozed_until) > new Date()
@@ -305,6 +305,14 @@ function messageBody(m) {
 // The chosen composer mode for each conversation, kept across the re-render after every save
 // (otherwise the next internal note would go to the guest).
 const composerModes = new Map();
+// The text of the mode that is NOT showing, per conversation, so each mode keeps its own words across a switch and a re-render.
+const composerStash = new Map();
+
+// Switching mode puts the box aside under the old mode and fills it from the new one (a note starts empty).
+export function swapMode({ mode, box, guestText = '', noteText = '' }, next) {
+  const saved = mode === 'note' ? { guestText, noteText: box } : { guestText: box, noteText };
+  return { mode: next, box: next === 'note' ? saved.noteText : saved.guestText, ...saved };
+}
 
 // A draft saved before the mode was kept opens as an Internal note, so sending to the guest is always a deliberate switch.
 export function restoredMode(savedMode, draftText) {
@@ -481,6 +489,14 @@ function composer(c, templates, status, rerender, assignees = []) {
       onclick: () => { setMode(k); body.focus(); },
     }, t)));
   const setMode = (k) => {
+    if (k !== mode) {
+      const st = composerStash.get(c.conversation_id) || {};
+      const r = swapMode({ mode, box: body.value, ...st }, k);
+      composerStash.set(c.conversation_id, { guestText: r.guestText, noteText: r.noteText });
+      body.value = r.box;
+      mode = k;
+      body.dispatchEvent(new Event('input'));
+    }
     mode = k;
     err.textContent = '';
     composerModes.set(c.conversation_id, k);

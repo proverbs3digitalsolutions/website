@@ -111,7 +111,9 @@ test('page: not found for non-admins, copy, filters, form fields in order, no br
   for (const l of tokens) { const i = view.indexOf(l, at); assert.ok(i >= at, `${l} out of order`); at = i; }
   for (const l of ["label: 'Coupon code'", "'Plans'", "label: 'Limit total uses'", "label: 'Total uses'"]) assert.ok(view.includes(l), l);
   assert.doesNotMatch(view, /window\.(alert|confirm|prompt)|\bconfirm\(|\balert\(/);
-  assert.doesNotMatch(view, /style="|innerHTML|window\.scroll|\.focus\(\)/);
+  assert.doesNotMatch(view, /style="|innerHTML|window\.scroll/);
+  // round 16: the one allowed focus is "Change it" returning to the box the question is about
+  assert.equal((view.match(/\.focus\(\)/g) || []).length, 1);
   assert.ok(view.includes('getRandomValues'));
 });
 

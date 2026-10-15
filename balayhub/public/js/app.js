@@ -297,8 +297,71 @@ function match(path) {
   return null;
 }
 
+// ---- Back keeps a list's place (D-97). The router owns the scroll: each history entry has a key in history.state and its scroll is
+// remembered in memory, so Back (or a page's own ‹ link to the page you came from) returns to the same place. Views never touch the scroll.
+// nav-helpers:start
+const RESTORE_MS = 1500; // lists fetch their rows after the view returns, so the restore waits this long for the page to grow
+const hashPath = (hash) => String(hash || '').replace(/^#/, '').split('?')[0] || '/';
+// The other module's home is not an error: /dashboard on a stays workspace, /home on a rentals one.
+export const otherHome = (path, user) => (path === '/dashboard' && user?.business_type === 'short_term') || (path === '/home' && user?.business_type === 'long_term');
+// from: { fromHash, toKey }, the page this entry was opened from. True when a ‹ link points back at it.
+export const backTarget = (linkHref, from, currentKey) => Boolean(from?.fromHash) && from.toKey === currentKey && hashPath(linkHref) === hashPath(from.fromHash);
+export const restoreY = (saved, maxY) => Math.max(0, Math.min(saved, maxY));
+// One step of a pending restore: 'stop' once the person acted, 'scroll' when the page is tall enough (or time is up), else 'wait'.
+export const shouldRestore = (savedY, pageHeight, viewport, elapsed, userActed) => (userActed ? 'stop' : pageHeight - viewport >= savedY || elapsed >= RESTORE_MS ? 'scroll' : 'wait');
+// nav-helpers:end
+const SCROLL_KEEP = 50;
+const positions = new Map(); // entry key -> scrollY
+let entrySeq = 0;
+let lastForward = null; // { fromHash, toKey }
+let lastKey = null;
+let lastHash = null;
+const newKey = () => `${Date.now()}-${++entrySeq}`;
+const entryKey = () => history.state?.bhEntry || null;
+try { history.scrollRestoration = 'manual'; } catch { /* ignore */ }
+// Views call history.replaceState(null, ...) for filter URLs; that must not wipe the entry's key.
+const replaceState = history.replaceState.bind(history);
+history.replaceState = (st, title, url) => replaceState(st ?? (entryKey() ? { bhEntry: entryKey() } : null), title, url);
+window.addEventListener('scroll', () => {
+  const k = entryKey();
+  if (!k) return;
+  positions.delete(k);
+  positions.set(k, window.scrollY);
+  if (positions.size > SCROLL_KEEP) positions.delete(positions.keys().next().value);
+}, { passive: true });
+document.addEventListener('click', (e) => {
+  const a = e.target instanceof Element ? e.target.closest('a.back') : null;
+  if (!a || e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  if (backTarget(a.getAttribute('href'), lastForward, entryKey())) { e.preventDefault(); history.back(); }
+}, true);
+
+// A Back to a remembered page arms this before the view loads, so a scroll the person makes while rows are still arriving is noticed
+// and the restore then does nothing. It waits (without moving focus) for the page to be tall enough, scrolls once, and gives up if the
+// person scrolls, types, taps or navigates.
+let stopRestore = () => {};
+let restoreActed = false;
+let restoreRaf = 0;
+function armRestore() {
+  stopRestore();
+  restoreActed = false;
+  const EV = ['wheel', 'touchstart', 'keydown', 'pointerdown'];
+  const act = () => { restoreActed = true; };
+  EV.forEach((n) => window.addEventListener(n, act, { capture: true, passive: true }));
+  stopRestore = () => { cancelAnimationFrame(restoreRaf); EV.forEach((n) => window.removeEventListener(n, act, true)); stopRestore = () => {}; };
+}
+function restoreScroll(savedY) {
+  const t0 = performance.now();
+  const step = () => {
+    const todo = shouldRestore(savedY, document.documentElement.scrollHeight, window.innerHeight, performance.now() - t0, restoreActed);
+    if (todo === 'wait') { restoreRaf = requestAnimationFrame(step); return; }
+    if (todo === 'scroll') window.scrollTo(0, restoreY(savedY, document.documentElement.scrollHeight - window.innerHeight));
+    stopRestore();
+  };
+  step();
+}
+
 export function navigate(hash, { replace = false } = {}) {
-  if (replace) history.replaceState(null, '', hash); else history.pushState(null, '', hash);
+  if (replace) history.replaceState({ bhEntry: newKey() }, '', hash); else history.pushState(null, '', hash);
   render();
 }
 
@@ -491,6 +554,7 @@ function focusPageHeading(root) {
 }
 export async function render() {
   const seq = ++renderSeq;
+  stopRestore();
   const { path, query } = parseHash();
   const app = document.getElementById('app');
   const route = match(path);
@@ -508,7 +572,7 @@ export async function render() {
   if (route.access === APP && state.user?.role === 'cleaner' && !isCleanerPath(path)) { navigate('#/housekeeping', { replace: true }); return; }
 
   // Pages this role or workspace module can't use go home instead of opening by URL.
-  if (route.access === APP && !routeAllowed(path, state.user)) { toast("That page isn't available for your role or workspace.", 'error'); navigate(homeRoute(), { replace: true }); return; }
+  if (route.access === APP && !routeAllowed(path, state.user)) { if (!otherHome(path, state.user)) toast("That page isn't available for your role or workspace.", 'error'); navigate(homeRoute(), { replace: true }); return; }
 
   document.querySelectorAll('dialog.modal, .morenav, .tb-sheet').forEach((d) => d.remove());
   delete document.documentElement.dataset.h1title; // set below when a guest page's tab title is taken from its heading
@@ -522,7 +586,15 @@ export async function render() {
     if (!path.startsWith('/help')) state.lastPage = location.hash;
     i18n.useHostLang?.(); // a guest page may have left the in-memory language on Taglish
     // Same page again (rerender, report tab): the old page stays on screen, busy, until the new one is drawn.
-    const prev = shell?.content?.isConnected && lastDrawing === path ? shell.content : null;
+    // A Back or Forward to a page whose scroll was remembered keeps the old page on screen the same way, then restores the place.
+    let entry = entryKey();
+    if (!entry) { entry = newKey(); history.replaceState({ bhEntry: entry }, ''); }
+    const restoreTo = positions.has(entry) && lastDrawing !== path ? positions.get(entry) : null;
+    if (restoreTo === null && entry !== lastKey) lastForward = { fromHash: lastHash, toKey: entry };
+    if (restoreTo !== null) armRestore();
+    lastKey = entry;
+    lastHash = location.hash;
+    const prev = shell?.content?.isConnected && (lastDrawing === path || restoreTo !== null) ? shell.content : null;
     const key = shellKey(state.user);
     if (shell?.el.isConnected && shellSig === key) updateShell(shell, path);
     else {
@@ -559,6 +631,7 @@ export async function render() {
     if (seq !== renderSeq) return;
     shell.content.replaceWith(mount);
     shell.content = mount;
+    if (restoreTo !== null) restoreScroll(restoreTo);
     const title = mount.querySelector('h1')?.textContent;
     document.title = title ? `${title} — BalayHub` : 'BalayHub';
     if (drawnPath !== null && drawnPath !== path) focusPageHeading(mount);

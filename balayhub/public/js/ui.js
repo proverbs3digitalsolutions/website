@@ -413,6 +413,7 @@ export function installFocusGuard(doc = document, { observe = true } = {}) {
     const groupNth = snap.group ? keys.filter((k, i) => i < at && k.tag === snap.tag && k.role === snap.role && k.group === snap.group).length : -1;
     const rec = { el, snap, nth, groupNth, wide, visible: onScreen(el) };
     if (dlg) dlgRec = { ...rec, dlg }; else pageRec = rec;
+    movedAt = null; // focus landed on a control: the Tab move is over (an action inside the 300 ms window must not make the guard forget it)
   }
 
   // `reveal`: the person had the control on screen when they acted. A control that was off screen is focused where it is, never scrolled to.
@@ -521,7 +522,8 @@ export function openModal({ title, body, onClose, wide }) {
   dlg.addEventListener('click', (e) => { if (e.target === dlg) close(); });
   document.body.append(dlg);
   dlg.showModal();
-  dlg.querySelector('input:not([type=hidden]), select, textarea')?.focus();
+  // A dialog with no field starts on its first action (a night's menu: New reservation), the × only when the body has none.
+  (dlg.querySelector('input:not([type=hidden]), select, textarea') || dlg.querySelector('.modal__body button:not(:disabled), .modal__body a[href]'))?.focus();
   return { close, el: dlg };
 }
 
@@ -755,7 +757,7 @@ export function makeForm({ fields, submitText = 'Save', onSubmit, cancel, draftK
       return;
     }
     const focusedBefore = document.activeElement;
-    submitBtn.disabled = true;
+    submitBtn.setAttribute('aria-disabled', 'true'); // not .disabled: a disabled button drops focus to the page; `busy` blocks a second submit
     const original = submitBtn.textContent;
     submitBtn.textContent = 'Saving…';
     submitBtn.dataset.ownLabel = original;
@@ -783,7 +785,7 @@ export function makeForm({ fields, submitText = 'Save', onSubmit, cancel, draftK
       formError.scrollIntoView?.({ block: 'nearest' });
     } finally {
       busy = false;
-      submitBtn.disabled = false;
+      submitBtn.removeAttribute('aria-disabled');
       submitBtn.textContent = original;
       delete submitBtn.dataset.ownLabel;
       // The disabled button lost focus: put it on the first invalid field, else where it was, else the button.

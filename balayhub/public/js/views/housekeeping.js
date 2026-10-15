@@ -32,7 +32,7 @@ extendTranslations({
   'Assigned to': 'Naka-assign kay', 'Due': 'Due', 'Next guest': 'Susunod na guest', 'After stay of': 'Pagkatapos ng stay ni',
   'Notes': 'Mga tala', 'Finished': 'Natapos',
   'Add photos of the finished unit or any damage found.': 'Maglagay ng litrato ng natapos na unit o ng anumang sira.',
-  'Choose a photo first.': 'Pumili muna ng litrato.', 'Upload photo': 'I-upload ang litrato', 'Photo uploaded.': 'Na-upload na ang litrato.',
+  'Add photo': 'Magdagdag ng litrato', 'Photo uploaded.': 'Na-upload na ang litrato.',
   'Choose a photo': 'Pumili ng litrato', 'No photos yet.': 'Wala pang litrato.', 'Upload a JPG, PNG or WEBP photo up to 10 MB.': 'Mag-upload ng JPG, PNG o WEBP na litrato, hanggang 10 MB.',
   'Report damage': 'I-report ang sira', 'Found an item': 'May nakitang gamit', 'Supplies used': 'Mga gamit na nagamit', 'Something broken?': 'May sira ba?',
   'Description': 'Paglalarawan', 'What happened?': 'Ano ang nangyari?', 'Send report': 'Ipadala ang report',
@@ -707,7 +707,15 @@ export async function housekeepingDetailView(el, { params, rerender }) {
   const progress = h('span', { class: 'muted small' }, T('{n} of {total} done', { n: t.done_count, total: t.item_count }));
   const statusSlot = h('span', null, statusBadge(t.status));
   const startBtn = t.status === 'todo' ? h('button', { class: 'btn btn--secondary', 'data-focus-key': 'hk-status', onclick: () => setStatus('in_progress', T('Started.')) }, T('Start')) : null;
-  const upload = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', class: 'input', capture: 'environment', 'aria-label': T('Choose a photo') });
+  // Picking a photo uploads it at once (no second step); the input is off while the upload runs.
+  const upload = h('input', {
+    type: 'file', accept: 'image/jpeg,image/png,image/webp', class: 'input', capture: 'environment', 'aria-label': T('Add photo'),
+    onchange: async () => {
+      if (!upload.files[0]) return;
+      upload.disabled = true;
+      try { await uploadFile('cleaning', t.task_id, upload.files[0]); upload.value = ''; toast(T('Photo uploaded.')); rerender(); } catch (err) { toast(err.code === 'UNSUPPORTED_FILE' || err.status === 413 ? T('Upload a JPG, PNG or WEBP photo up to 10 MB.') : err.message, 'error'); upload.disabled = false; upload.value = ''; }
+    },
+  });
   const actionBtn = (text, fn) => h('button', { class: 'btn btn--secondary hk-action', type: 'button', onclick: () => fn(t, rerender) }, text);
 
   // The link to Cleaner pay only where the route is open to this role; staff get the same words as plain text.
@@ -791,12 +799,5 @@ export async function housekeepingDetailView(el, { params, rerender }) {
           h('div', { class: 'card__head' }, h('h2', null, T('Photos'))),
           h('p', { class: 'muted small' }, T('Add photos of the finished unit or any damage found.')),
           files?.length ? filesList(files) : h('p', { class: 'muted small' }, T('No photos yet.')),
-          h('div', { class: 'form', style: { marginTop: '12px' } }, upload,
-            h('button', {
-              class: 'btn btn--secondary', onclick: async (e) => {
-                if (!upload.files[0]) { toast(T('Choose a photo first.'), 'error'); return; }
-                e.target.disabled = true;
-                try { await uploadFile('cleaning', t.task_id, upload.files[0]); toast(T('Photo uploaded.')); rerender(); } catch (err) { toast(err.code === 'UNSUPPORTED_FILE' || err.status === 413 ? T('Upload a JPG, PNG or WEBP photo up to 10 MB.') : err.message, 'error'); e.target.disabled = false; }
-              },
-            }, T('Upload photo')))))));
+          h('div', { class: 'form', style: { marginTop: '12px' } }, upload)))));
 }

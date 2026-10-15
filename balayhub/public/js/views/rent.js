@@ -172,6 +172,9 @@ export const compactRentFilters = (unitCount) => unitCount <= 3;
 // The line above a "Voided only" list. Those rows are left out of the totals, so the line says so.
 export const voidedOnlyLine = (n) => `Voided only: ${n} entr${n === 1 ? 'y' : 'ies'}, not counted in totals.`;
 
+// Where the expenses Vendor filter reads its names: voided entries only while the voided filter shows them.
+export const vendorSource = (values = {}) => (values.include_voided ? '/expenses?include_voided=1' : '/expenses');
+
 // The last 24 months, newest first, for the rent roll's month filter.
 function recentMonths(today) {
   const [y, m] = today.split('-').map(Number);
@@ -360,11 +363,13 @@ export async function rentView(el, { query }) {
 
   // Vendor names already used, for the expenses vendor filter.
   let vendors = [];
+  let vendorsFrom = '';
   async function renderBar() {
     const f = valuesFor(tab);
     if (tab === 'payments' && !tenants) tenants = (await get('/tenants').catch(() => ({ tenants: [] }))).tenants;
-    if (tab === 'expenses' && !vendors.length) {
-      const { expenses } = await get('/expenses?include_voided=1').catch(() => ({ expenses: [] }));
+    if (tab === 'expenses' && vendorSource(f) !== vendorsFrom) {
+      vendorsFrom = vendorSource(f);
+      const { expenses } = await get(vendorSource(f)).catch(() => ({ expenses: [] }));
       vendors = [...new Map(expenses.filter((x) => x.vendor_name?.trim()).map((x) => [x.vendor_name.trim().toLowerCase(), x.vendor_name.trim()])).values()].sort((a, b) => a.localeCompare(b));
     }
     let lastProperty = f.property_id;
@@ -373,7 +378,7 @@ export async function rentView(el, { query }) {
       ...barConfig(f),
       onChange: () => {
         // A new property changes the unit choices; drop a unit from another property.
-        if (f.property_id !== lastProperty) {
+        if (f.property_id !== lastProperty || (tab === 'expenses' && vendorSource(f) !== vendorsFrom)) {
           if (f.unit_id && f.unit_id !== 'none' && !units.some((u) => u.unit_id === f.unit_id && (!f.property_id || u.property_id === f.property_id))) f.unit_id = '';
           rememberFilters(TABS[tab].key, f);
           renderBar();

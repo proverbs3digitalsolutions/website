@@ -2,7 +2,7 @@
 
 This document describes BalayHub's PostgreSQL schema as it stands after migrations `001`–`026` in `db/migrations/`, where uploaded files are stored, and who can see or change each kind of data. It was checked against the migrations and the route code in `src/routes/*.js` and `src/lib/*.js`. Anything not confirmed in the code is marked **unverified**.
 
-Last updated: 2026-10-15 (QA round 14: sections 2.17, 6.4 and 20; D-91, D-92)
+Last updated: 2026-10-15 (QA round 16: section 22 and a footnote to the section 6 matrix; D-97)
 
 ---
 
@@ -840,6 +840,8 @@ The workspace export (`exportOrganization`) is not complete. It leaves out `supp
 | Workspace export and deletion | Export JSON; request and cancel deletion | None | None | None | None |
 | Files (generic) | Follows the parent record's rule | Same, assigned | Same, assigned, except lease and guest ID files | Support attachments only | Guest IDs: upload only. Building admin: view guest IDs. Public listing photos |
 
+*2026-10-15 (D-97): the Do not rebook flag is workspace-wide by email. A manager limited to some properties may see `guest_do_not_rebook` on a guest because another guest record with the same email, in a property they cannot open, was flagged. Only the yes or no reaches them, never the other record. Staff still get no flag at all (D-82). This is intended.*
+
 *2026-10-14 (D-82): staff get `{ guest_id, full_name, limited }` only, on `/guests`, `/guests/:id` (with empty stays and reviews) and a group's lead guest. Reservation rows for staff carry no `guest_vip` or `guest_do_not_rebook`, no review card and no Returning badge. Staff can still read full reviews on `GET /reviews` (the Reviews page; the matrix allows it; BLOCKERS round 6, question 2). Correction 2026-10-14: cleaners are not names only. Cleaners get 403 on guests, guest profiles, reservations, booking groups and reviews (matches 6.2); only staff get names only.*
 
 *2026-10-14 (D-83): managers, staff and cleaners receive plan status (`plan`, `name`, `ai`, `read_only`, `reason`, `is_demo`) and the dates `trial_ends_at`, `trial_days_left`, `paid_until` and `deletion_scheduled_at`, never `price` or `listing_limit`. Staff and cleaners get `document_file_id: null` on a lease. Every team member also receives the workspace owner's name and email (the "Workspace owner" line on the account page).*
@@ -1306,3 +1308,15 @@ Decisions D-94 (plan coupons) and D-95 (round 15 calls). Two migrations (035 cou
 - **`push.notify` with no property and no user** goes to owners only (bell row and phone alert), the same rule the bell applies when reading (section 6.4).
 - **Review page (`GET /api/public/review/:token`)** returns the share links for 4 and 5 star reviewed stays; the quote page checks the phone number format. Settings → Direct booking: a key that is too long gets its own sentence, and a balance-payment checkout answered 401 by PayMongo clears `paymongo_key_checked_at` (the balance **refresh** route still swallows a 401; carried).
 - **Payout and add-on rules** are client-side only (the Method starts on "Choose…"; an add-on quantity over its limit keeps the typed value and blocks Save).
+
+## 22. API notes from QA round 16 (2026-10-15)
+
+Decision D-97. No table or column changes and no migration.
+
+- **Do not rebook by email.** `guest_do_not_rebook` on reservation reads (`BOOKING_SELECT` in `src/routes/stays.js`) is true when the guest's own record is flagged, or when another guest in the same workspace with the same email (trimmed, case-insensitive) is flagged. Online direct bookings (`src/routes/directbooking.js`) use the same rule for the Inbox note and the push. Staff are still redacted (no flag). Group bookings (`POST /booking-groups`) do not use the rule yet (carried). The flag is workspace-wide, see the footnote under the section 6 matrix.
+- **`GET /api/reservations/:id/checkin`** adds `num_guests` (the booked count). The public gate-pass answer adds `registered` (the count the guest registered).
+- **`POST /api/unit-owners` and `PATCH /api/unit-owners/:id`:** 409 `NAME_IN_USE` (with `owner_name`) when an active owner has the same name (trimmed, case-insensitive); resend with `confirm_duplicate_name: true` to save. A management fee percentage over 50% asks first in the screen. There is no database guard on the name, so two saves at the same instant could both pass (carried).
+- **Discount codes (guest-care discount routes):** a code with both a percent and an amount filled is refused with 400 and "Choose one: a percent off or an amount off, not both." on `percent_off`.
+- **Push:** `push.notify` with no property reaches owners whatever their property filter. Managers and staff still get only rows for their properties.
+- **`POST /api/public/pay/:token/refresh`:** a PayMongo 401 clears `organizations.paymongo_key_checked_at` only when the 401 came from the key currently saved (`paymongo_key_enc` matches the key the checkout used). The checkout-expire helper in `src/routes/balancepay.js` still swallows a 401 (carried).
+- **Coupons:** the preview `message` for a free coupon with `require_card` ends " You pay ₱20.00 once by card." when the ₱20 floor applied. The banner in the owner coupon box builds from the coupon text plus its own card note, so the sentence is not shown twice. See `docs/contracts/platform-coupons.md`.

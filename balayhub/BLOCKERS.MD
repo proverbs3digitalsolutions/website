@@ -2,7 +2,7 @@
 
 Things only the founder can do or decide before related work can go ahead. Automated runs add items here. The founder clears them by doing the item and ticking it, or by writing the decision in DECISIONS.MD.
 
-Last updated: 2026-10-15 (QA round 15 questions added; round 14 and earlier unchanged)
+Last updated: 2026-10-15 (QA round 16 questions added; round 15 and earlier unchanged)
 
 ## Security — do first
 
@@ -397,3 +397,12 @@ Every question has its default already built into the app; nothing waits on the 
 - [ ] **Unlimited free coupons.** A free coupon with no total limit and "once per workspace" off gives unlimited free months, and the admin form does not warn about it yet. *Default: allowed; a warning is on the carry list.*
 - [ ] **Staff on a long-term workspace and tenant money.** Already asked in round 14 ("Added after the round 14 re-verify"): staff can see tenant rent amounts, due day and the outstanding balance because they need them to record payments. *Default: yes, staff see them.* Not repeated here; one answer covers both.
 - [ ] **Live stage (nothing local can answer):** a real card-only PayMongo checkout, the ₱20 floor, and PayMongo's actual minimum on BalayHub's account. The browser lanes used a local fake PayMongo.
+
+## Questions from QA round 16 (2026-10-15)
+
+Each one has the default already built.
+
+- [ ] **Launchpad fold for every owner (S2).** *Default:* every owner sees the current group open and later groups folded under "Later (N more steps)". *The other choice:* small hosts only (1 to 3 listings); that needs a listing count added to `GET /api/onboarding`.
+- [ ] **Alerts with no property reach every owner (S3).** *Default:* owners always get them, whatever their property filter; a type they turned off stays off. *The other choice:* respect the filter.
+- [ ] **Photo picks upload at once (S4).** *Default:* picking a photo on a cleaning task or repair request uploads it with no confirm button. *The other choice:* keep a confirm button.
+- [ ] **Do not rebook follows the email, workspace-wide.** *Default:* a manager limited to some properties may see the flag on a guest because another record with the same email was flagged (only the yes or no). *The other choice:* show the flag only from records the person can open.

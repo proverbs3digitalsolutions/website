@@ -123,6 +123,25 @@ const loginConfirmed = async (err) => {
   return false;
 };
 
+// A percentage fee over 50 asks first (0 is allowed, a flat fee has no percentage). Change it puts focus in the fee box and
+// returns false, so the form stays open and nothing is posted.
+export const feeNeedsAsk = (model, fee) => model !== 'flat' && Number(fee) > 50;
+// On edit (o = the stored owner) it asks only when the model or the fee changed.
+export const feeChanged = (d, o) => !o || (d.fee_model || 'net_pct') !== (o.fee_model || 'net_pct') || Number(d.management_fee_pct) !== Number(o.management_fee_pct);
+const feeConfirmed = async (d, o) => {
+  if (!feeNeedsAsk(d.fee_model, d.management_fee_pct) || !feeChanged(d, o)) return true;
+  if (await confirmDialog({ title: 'Check the management fee', text: `This is a ${Number(d.management_fee_pct)}% management fee. Save anyway?`, confirmText: 'Save anyway', cancelText: 'Change it' })) return true;
+  document.querySelector('dialog.modal [name="management_fee_pct"]')?.focus();
+  return false;
+};
+
+// A name another active owner already uses asks first (409 NAME_IN_USE), the same way as the email.
+const nameConfirmed = async (err) => {
+  if (await confirmDialog({ title: 'Name already used', text: `An owner named ${err.data.owner_name} already exists. Save anyway?`, confirmText: 'Save anyway', cancelText: 'Change it' })) return true;
+  document.querySelector('dialog.modal [name="full_name"]')?.focus();
+  return false;
+};
+
 export async function ownersView(el, { rerender, query = {} }) {
   const defaults = { q: '', has_units: '', unit_id: '', sort: '' };
   const filters = initFilters('owners', query, defaults);
@@ -131,11 +150,13 @@ export async function ownersView(el, { rerender, query = {} }) {
   const add = () => formModal({
     title: 'Add a unit owner', submitText: 'Save owner', fields: ownerForm(units),
     onSubmit: async (d) => {
+      if (!await feeConfirmed(d)) return false;
       const body = { ...d, unit_ids: d.unit_ids || [] };
       // Each 409 is asked in turn; a yes adds its flag and the save is sent again.
       let extra = {};
       for (;;) {
         try { await post('/unit-owners', { ...body, ...extra }); break; } catch (err) {
+          if (err.code === 'NAME_IN_USE') { if (!await nameConfirmed(err)) return false; extra = { ...extra, confirm_duplicate_name: true }; continue; }
           if (err.code === 'EMAIL_IN_USE') { if (!await emailConfirmed(err)) return false; extra = { ...extra, confirm_duplicate_email: true }; continue; }
           if (err.code === 'EMAIL_IS_LOGIN') { if (!await loginConfirmed(err)) return false; extra = { ...extra, confirm_login_email: true }; continue; }
           if (!await moveConfirmed(err, d.full_name)) return false;
@@ -148,10 +169,12 @@ export async function ownersView(el, { rerender, query = {} }) {
   const edit = (o) => formModal({
     title: `Edit ${o.full_name}`, submitText: 'Save', fields: ownerForm(units, o),
     onSubmit: async (d) => {
+      if (!await feeConfirmed(d, o)) return false;
       const body = { ...d, unit_ids: d.unit_ids || [] };
       let extra = {};
       for (;;) {
         try { await patch(`/unit-owners/${o.owner_id}`, { ...body, ...extra }); break; } catch (err) {
+          if (err.code === 'NAME_IN_USE') { if (!await nameConfirmed(err)) return false; extra = { ...extra, confirm_duplicate_name: true }; continue; }
           if (err.code === 'EMAIL_IN_USE') { if (!await emailConfirmed(err)) return false; extra = { ...extra, confirm_duplicate_email: true }; continue; }
           if (err.code === 'EMAIL_IS_LOGIN') { if (!await loginConfirmed(err)) return false; extra = { ...extra, confirm_login_email: true }; continue; }
           if (!await moveConfirmed(err, d.full_name)) return false;

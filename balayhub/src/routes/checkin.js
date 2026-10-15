@@ -50,7 +50,7 @@ router.get('/reservations/:id/checkin', managers, ah(async (req, res) => {
   const files = registration ? (await query(
     `SELECT file_id, file_name, mime_type, uploaded_at FROM files WHERE related_record_type = 'registration' AND related_record_id = $1 ORDER BY uploaded_at`,
     [registration.registration_id])).rows : [];
-  res.json({ link: checkinLink(token), registration, files });
+  res.json({ link: checkinLink(token), registration, files, num_guests: b.num_guests });
 }));
 
 router.post('/reservations/:id/checkin/new-link', managers, ah(async (req, res) => {
@@ -198,7 +198,7 @@ async function finished(b, r) {
     title: 'Guest check-in form received', body: `${r.lead_name} · ${b.unit_name}, ${b.check_in}`,
     url: `/#/reservations/${b.booking_id}`, propertyId: await propertyOfBooking(b.booking_id),
   }).catch(() => {});
-  const booked = r.guests.length + 1 < b.num_guests ? `, booked for ${b.num_guests}` : '';
+  const booked = b.num_guests && r.guests.length + 1 !== b.num_guests ? `, booked for ${b.num_guests}` : '';
   await noteToHost(b.booking_id, `The guest completed the check-in form (${r.guests.length + 1} guest${r.guests.length ? 's' : ''}${r.plate ? `, car ${r.plate}` : ''}${r.arrival_time ? `, arriving ${r.arrival_time}` : ''}${booked}).`);
 }
 

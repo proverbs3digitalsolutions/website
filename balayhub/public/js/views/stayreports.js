@@ -8,7 +8,7 @@ import { navigate } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed, outOfWindow, OUT_OF_WINDOW } from '../filters.js';
 import { depositsPanel } from './deposits.js';
 import { CHANNEL_LABEL, SOURCE_LABEL } from './reservations.js';
-import { exportHint } from './reports.js';
+import { exportHint, dateFieldError } from './reports.js';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const pct = (n) => (n === null || n === undefined ? '—' : `${n}%`);
@@ -214,7 +214,15 @@ export async function stayReportsView(el, { query = {} }) {
     exportReady(exportOk, exportHint({ from: filters.from, to: filters.to }));
     if (exportOk) exportLink.href = `/api/stay-reports/export${apiQ}`;
     let r;
-    try { r = await get(`/stay-reports${apiQ}`); } catch (err) { fail(err); return; }
+    try { r = await get(`/stay-reports${apiQ}`); } catch (err) {
+      const fe = dateFieldError(err);
+      if (fe) { // keep the last report, say why under the bar and mark the box (#22)
+        status.textContent = fe.text;
+        periodBox.querySelector(`[aria-label="${fe.field === 'to' ? 'To' : 'From'}"]`)?.setAttribute('aria-invalid', 'true');
+        return;
+      }
+      fail(err); return;
+    }
     // A month that isn't valid is replaced by the month used, here and in the month box, and the page says so.
     if (r.month_invalid) { filters.month = r.period; drawPeriod(); setUrl(changed(filters, defaults)); }
     notice.replaceChildren(r.month_invalid ? h('div', { class: 'alert alert--warn', role: 'alert' }, `That month isn't valid. Showing ${monthName(r.period)}.`) : '');

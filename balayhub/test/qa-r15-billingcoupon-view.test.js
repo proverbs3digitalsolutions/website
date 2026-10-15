@@ -13,6 +13,7 @@ const { pathToFileURL } = require('node:url');
 class El {
   constructor(tag) { this.tag = tag; this.tagName = tag.toUpperCase(); this.attrs = {}; this.children = []; this.l = {}; this.hidden = false; this.value = ''; this.open = false; this.disabled = false; this._t = ''; }
   setAttribute(k, v) { this.attrs[k] = String(v); }
+  removeAttribute(k) { delete this.attrs[k]; }
   addEventListener(t, f) { this.l[t] = f; }
   append(...c) { this.children.push(...c); }
   replaceChildren(...c) { this.children = c; }
@@ -154,10 +155,10 @@ test('with a live coupon the box shows the applied line and no input', () => {
   assert.deepEqual(calls[0], ['/billing/coupon/preview', { plan: 'growth', months: '1' }], 'previewed with no code typed');
 });
 
-test('a forever coupon reads "Applies every month."', () => {
+test('a forever coupon says "every month" once', () => {
   stubPost.fn = async () => quote();
   const root = mount({ coupon: { code: 'VIP', kind: 'percent', percent_off: 20, duration: 'forever', duration_months: null, months_left: null, status: 'active' } });
-  assert.match(root.textContent, /Coupon VIP: 20% off every month\. Applies every month\./);
+  assert.match(root.textContent, /Coupon VIP: 20% off every month\.(?! Applies)/);
 });
 
 test('a used-up coupon shows a muted line and the input', () => {

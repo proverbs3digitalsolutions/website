@@ -401,7 +401,8 @@ async function planCard(u, rerender) {
       h('dt', null, 'Short-term listings'), h('dd', null, `${shortTermCount(listings)} of ${p.listing_limit >= 1000 ? 'unlimited' : p.listing_limit}`,
         monthlyNote(listings) && h('div', { class: 'muted small' }, 'Monthly units are not counted.')),
       p.paid_until && [h('dt', null, 'Paid until'), h('dd', null, p.paid_until)]),
-    bill.online ? payOnline(p, bill, rerender, bc) : [
+    p.plan === 'comped' ? h('p', { class: 'muted' }, 'Your workspace is on a complimentary plan, so there is nothing to pay.')
+      : bill.online ? payOnline(p, bill, rerender, bc) : [
       pub.plans.length > 0 && h('div', { class: 'plan-mini' }, pub.plans.map((x) => h('div', { class: `plan-mini__item${x.key === p.plan ? ' is-current' : ''}` },
         h('strong', null, x.name), h('span', null, `₱${x.price.toLocaleString('en-PH')}/mo`), h('span', { class: 'muted small' }, `Up to ${x.listings} listings${x.ai ? ' · AI drafts' : ''}`)))),
       h('p', { class: 'small', style: { marginTop: '12px' } },

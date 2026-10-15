@@ -123,6 +123,6 @@ test('#2 night cells and booking tiles carry their focus keys; the filters and l
   assert.match(calendar, /'data-focus-key': `cal-night-\$\{l\.unit_id\}-\$\{d\}`/);
   assert.match(calendar, /'data-focus-key': `cal-booking-\$\{b\.booking_id\}`/);
   assert.doesNotMatch(calendar, /fold\('Filter'/); // r15 F2: the bare "Filter" fold is gone
-  assert.match(calendar, /quick: compact \? \[\] : quick/); // small hosts get the compact bar instead
+  assert.match(calendar, /quick: folded \? \[\] : quick/); // small hosts get the compact bar instead
   assert.match(calendar, /fold\('What the colours mean', legend, false\)/);
 });

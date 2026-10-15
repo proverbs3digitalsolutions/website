@@ -3,7 +3,7 @@
 
 import { get } from '../api.js';
 import { h, brand } from '../ui.js';
-import { state } from '../app.js';
+import { state, homeRoute } from '../app.js';
 import { t, extendTranslations } from '../i18n.js';
 
 // Taglish for the contact line only; the notice itself is the English legal text.
@@ -18,7 +18,7 @@ export async function privacyView(el) {
   try { contact = (await get('/public/plans')).contact_email || ''; } catch { /* ignore */ }
   const section = (title, ...paras) => [h('h2', null, title), ...paras.map((p) => (Array.isArray(p) ? h('ul', null, p.map((li) => h('li', null, li))) : typeof p === 'string' ? h('p', null, p) : p))];
   el.append(h('div', { class: 'public' },
-    h('header', { class: 'public__top' }, brand(state.user ? '#/dashboard' : '#/'), h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => (history.length > 1 ? history.back() : (location.hash = state.user ? '#/settings' : '#/')) }, 'Back')),
+    h('header', { class: 'public__top' }, brand(state.user ? homeRoute() : '#/'), h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => (history.length > 1 ? history.back() : (location.hash = state.user ? '#/settings' : '#/')) }, 'Back')),
     h('main', { class: 'content', id: 'main' }, h('article', { class: 'card prose' },
       h('h1', null, 'BalayHub Privacy Notice'),
       h('p', { class: 'muted' }, 'Version 2026-10-13 · Draft pending review by a Philippine data privacy professional.'),

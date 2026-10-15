@@ -640,6 +640,11 @@ async function finalize(ref, method) {
           `INSERT INTO guests (organization_id, full_name, email, phone, notes) VALUES ($1,$2,$3,$4,$5) RETURNING guest_id, do_not_rebook, vip`,
           [c.organization_id, c.guest_name, c.guest_email, c.guest_phone, 'Booked online']));
       }
+      // The flag follows the email (D-97): a flagged guest with this address counts, whatever first name the guest booked under.
+      const { rows: [byEmail] } = await db.query(
+        `SELECT EXISTS (SELECT 1 FROM guests WHERE organization_id = $1 AND do_not_rebook AND lower(btrim(email)) = lower(btrim($2))) AS flagged`,
+        [c.organization_id, c.guest_email]);
+      const flagged = Boolean(g.do_not_rebook || byEmail.flagged);
       const { rows: [promo] } = c.discount_code_id ? await db.query('SELECT code FROM discount_codes WHERE code_id = $1', [c.discount_code_id]) : { rows: [] };
       const code = `BH-${crypto.randomBytes(5).toString('base64url').replace(/[^A-Za-z0-9]/g, 'X').slice(0, 7).toUpperCase()}`;
       const { rows: [b] } = await db.query(
@@ -650,7 +655,7 @@ async function finalize(ref, method) {
           [c.test_mode ? 'TEST MODE booking (PayMongo test key, no real payment).' : null,
             `Booked online (${c.pay_type === 'deposit' ? `${depositPctOf(c)}% deposit paid` : 'paid in full'}).`,
             promo ? `Discount code ${promo.code}: −${fmtPeso(c.discount_amount)} (already taken off the accommodation).` : null,
-            g.do_not_rebook ? '⚠ This guest is marked "Do not rebook" in Guests.' : null,
+            flagged ? '⚠ This guest is marked "Do not rebook" in Guests.' : null,
             c.notes ? `Guest's message: ${c.notes}` : null].filter(Boolean).join('\n'), c.source, c.rules_accepted_at, c.rules_text]);
       // Add-ons become stay charges in this same transaction, so the booking total includes them.
       if (c.addons.length) await addonsLib().createAddonCharges(db, b.booking_id, c.addons, null);
@@ -672,7 +677,7 @@ async function finalize(ref, method) {
       await db.query(
         `INSERT INTO audit_logs (organization_id, action, record_type, record_id, details) VALUES ($1,'reservation.booked_online','booking',$2,$3)`,
         [c.organization_id, b.booking_id, JSON.stringify({ amount: c.amount_due_now, pay_type: c.pay_type })]);
-      return { status: 'confirmed', bookingId: b.booking_id, ownerId: recorder, c, flagged: g.do_not_rebook, quoteCancelled };
+      return { status: 'confirmed', bookingId: b.booking_id, ownerId: recorder, c, flagged, quoteCancelled };
     } catch (err) {
       if (err.constraint !== 'bookings_no_overlap') throw err;
       // Paid, but the dates were taken meanwhile (e.g. an Airbnb booking synced in).

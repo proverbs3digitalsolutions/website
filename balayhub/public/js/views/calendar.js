@@ -52,6 +52,8 @@ export function nightTaken(bookings, unitId, date) {
 
 // A host with 3 or fewer listings gets the filters and the colour legend folded away (QA round 13, #43, D-85).
 export const compactCalendarFilters = (listingCount) => listingCount <= 3;
+// Small hosts and phones (under 960px) fold the filters and the colour key.
+export const calendarFolded = (compact, phone) => compact || phone;
 
 export async function calendarView(el, { query }) {
   const canManage = state.user.role !== 'staff';
@@ -302,9 +304,10 @@ export async function calendarView(el, { query }) {
     h('span', { class: 'cal-legend__item' }, h('span', { class: 'cal-swatch cal-swatch--holiday' }), 'Holiday rate'),
     h('span', { class: 'cal-legend__item' }, h('span', { class: 'cal-swatch cal-swatch--season' }), 'Season rate'));
 
-  const compact = compactCalendarFilters(meta.length);
+  const phone = typeof matchMedia === 'function' && matchMedia('(max-width: 959px)').matches;
+  const folded = calendarFolded(compactCalendarFilters(meta.length), phone);
   // Folded: the legend sits in "What the colours mean".
-  const fold = (text, content, open) => (compact ? h('details', { class: 'form-section', open: open ? true : null }, h('summary', null, text), content) : content);
+  const fold = (text, content, open) => (folded ? h('details', { class: 'form-section', open: open ? true : null }, h('summary', null, text), content) : content);
   const quick = [
     properties.length > 1 && { name: 'property_id', label: 'Property', all: 'All properties', options: properties },
     tags.length > 0 && { name: 'tag', label: 'Tag', all: 'All tags', options: tags.map((t) => [t.tag, `${t.tag} (${t.count})`]) },
@@ -318,7 +321,7 @@ export async function calendarView(el, { query }) {
   const bar = filterBar({
     key: 'calendar', values: filters, defaults, onChange: async () => { await loadTagUnits(); if (lastData) render(lastData); },
     search: { placeholder: 'Search listings' },
-    quick: compact ? [] : quick, more: compact ? [...quick, ...more] : more,
+    quick: folded ? [] : quick, more: folded ? [...quick, ...more] : more,
   });
   el.replaceChildren(
     h('div', { class: 'page-head' },
@@ -328,7 +331,7 @@ export async function calendarView(el, { query }) {
         h('button', { class: 'btn btn--primary', onclick: () => newReservationModal({ onSaved: load }) }, icon('plus'), 'New reservation'))),
     bar,
     h('div', { class: 'toolbar' },
-      h('div', { class: 'chips' },
+      h('div', { class: 'chips cal-nav' },
         h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': 'Earlier', onclick: () => { view.start = addDays(view.start, -7); load(); } }, '‹'),
         title,
         h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': 'Later', onclick: () => { view.start = addDays(view.start, 7); load(); } }, '›'),

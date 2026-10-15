@@ -67,11 +67,10 @@ test('Inspect is not offered on a paid clean, the same rule as Reopen', () => {
   assert.equal(isPaidClean({ is_paid: false, pay_status: null }), false);
 });
 
-// N2: the file input and the Upload photo button both read "Upload photo" to a screen reader; the input is named for what it does.
-test('the photo file input is named Choose a photo, and the Upload photo button keeps its name', () => {
-  assert.match(src, /const upload = h\('input', \{ type: 'file'[^\n]*'aria-label': T\('Choose a photo'\) \}\);/);
-  assert.doesNotMatch(src, /const upload = h\('input'[^\n]*'aria-label': T\('Upload photo'\)/);
-  assert.match(src, /\}, T\('Upload photo'\)/);
+// N2 (R16 #36): picking a photo uploads it at once, so the input is named "Add photo" and there is no Upload photo button.
+test('the photo file input is named Add photo and uploads on change; no Upload photo button', () => {
+  assert.match(src, /const upload = h\('input', \{\s*type: 'file'[^\n]*'aria-label': T\('Add photo'\)/);
+  assert.doesNotMatch(src, /T\('Upload photo'\)/);
 });
 
 // #19: the shared filesList() prints "No attachments yet."; the Photos card words its own empty state instead.
@@ -97,7 +96,7 @@ test('the new cleaner-facing strings have Taglish wording, and t() returns it fo
     'No photos yet.': 'Wala pang litrato.',
     'Upload a JPG, PNG or WEBP photo up to 10 MB.': 'Mag-upload ng JPG, PNG o WEBP na litrato, hanggang 10 MB.',
     'Photo uploaded.': 'Na-upload na ang litrato.',
-    'Choose a photo first.': 'Pumili muna ng litrato.',
+    'Add photo': 'Magdagdag ng litrato',
   };
   for (const [en, tl] of Object.entries(expected)) assert.equal(i18n.t(en), tl, en);
 });

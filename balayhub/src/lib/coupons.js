@@ -169,6 +169,8 @@ async function resolve(db, { org, code, plan, months }) {
     message = eligible ? usedUpMsg(live.months_total) : `Your coupon covers ${planList(coupon.plans)}, so this payment is the full price.`;
   } else {
     message = describe(coupon) + (coupon.duration === 'months' ? ` This payment covers ${covered} of them.` : '');
+    // A free coupon that needs a card still charges the minimum; say the amount (D-97 O10).
+    if (coupon.kind === 'free' && priced.cardOnly && priced.minChargeApplied) message += ` You pay ₱${toPesos(priced.amountC)} once by card.`;
   }
   return { coupon, redemption: source === 'redeemed' ? live : null, source, monthsLeft, covered, ...priced, message };
 }

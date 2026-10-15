@@ -31,14 +31,19 @@ export function couponBox({ current, getSelection, onQuote }) {
   let refused = null;
   let seq = 0; // only the newest answer counts, so a quick change never shows a stale total
 
-  const msg = h('div', { class: 'error', role: 'alert' });
+  const msg = h('div', { class: 'error', role: 'alert', id: 'coupon-code-err' });
   const ok = h('div', { class: 'alert alert--ok', hidden: true });
   const okText = h('span');
   const remove = h('button', { class: 'link-btn', type: 'button', onclick: () => {
     seq += 1; code = ''; input.value = ''; setMsg(''); ok.hidden = true; onQuote(null); input.focus();
   } }, 'Remove');
   ok.append(okText, ' ', remove);
-  const setMsg = (text) => { msg.textContent = text; };
+  // The refusal is tied to the code box so a screen reader hears it with the field.
+  const setMsg = (text) => {
+    msg.textContent = text;
+    if (text) { input.setAttribute('aria-invalid', 'true'); input.setAttribute('aria-describedby', 'coupon-code-err'); }
+    else { input.removeAttribute('aria-invalid'); input.removeAttribute('aria-describedby'); }
+  };
 
   const refresh = async (asked = false) => {
     const my = ++seq;
@@ -59,7 +64,11 @@ export function couponBox({ current, getSelection, onQuote }) {
     setMsg(''); refused = null;
     if (!live) {
       ok.hidden = !q.coupon;
-      if (q.coupon) okText.textContent = `${q.coupon.code} applied: ${couponText(q.coupon)}.`;
+      if (q.coupon) {
+        // A free coupon that still needs a card says what the card is charged.
+        const cardNote = q.card_only && q.min_charge_applied && q.coupon.kind === 'free' ? ` You pay ${money(q.amount)} once by card.` : '';
+        okText.textContent = `${q.coupon.code} applied: ${couponText(q.coupon)}.${cardNote}`;
+      }
     }
     onQuote(q);
   };
@@ -72,13 +81,16 @@ export function couponBox({ current, getSelection, onQuote }) {
   const input = h('input', { class: 'input', type: 'text', name: 'coupon_code', autocomplete: 'off', autocapitalize: 'characters', maxlength: 64, 'aria-label': 'Coupon code',
     onkeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); apply(); } } });
   const form = h('div', null,
-    h('div', { class: 'chips' }, input, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: apply }, 'Apply')),
+    h('div', { class: 'coupon-row' }, input, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: apply }, 'Apply')),
     h('div', { class: 'field' }, msg), ok);
 
   let box;
   if (live) {
-    box = h('div', null, h('div', { class: 'alert alert--ok' }, `Coupon ${current.code}: ${couponText(current)}. ${current.duration === 'forever' || current.months_left == null
-      ? 'Applies every month.' : `${current.months_left} month${current.months_left === 1 ? '' : 's'} left.`}`),
+    const offer = couponText(current);
+    // "every month" already says it all; otherwise count the months left.
+    const left = offer.includes('every month') || current.months_left == null ? ''
+      : ` ${current.months_left} month${current.months_left === 1 ? '' : 's'} left.`;
+    box = h('div', null, h('div', { class: 'alert alert--ok' }, `Coupon ${current.code}: ${offer}.${left}`),
       h('div', { class: 'field' }, msg));
   } else {
     box = h('details', { class: 'form-section' }, h('summary', null, 'Have a coupon code?'),

@@ -91,12 +91,21 @@ export async function guestCheckinView(el, { params }, kept) {
 
   // Other guests: one input each, add/remove.
   const others = h('div', { class: 'gc__guests' });
+  // Told, not blocked: more people than booked is fine (the listing max is the hard limit); the host sees the new number.
+  const headcount = h('p', { class: 'muted small', 'aria-live': 'polite' });
+  const showHeadcount = () => {
+    const n = s.num_guests;
+    headcount.textContent = n && others.children.length + 1 > n
+      ? (n === 1 ? t('This booking is for 1 guest. If more people are coming, your host will see the new number.') : t('This booking is for {n} guests. If more people are coming, your host will see the new number.', { n }))
+      : '';
+  };
   const addGuest = (value = '') => {
     if (others.children.length + 1 >= s.guests_allowed) { toast(t('This unit allows up to {n} guests.', { n: s.guests_allowed }), 'error'); return; }
     const row = h('div', { class: 'gc__guest' },
       h('input', { class: 'input', name: 'guest', value, maxlength: 120, placeholder: t('Full name'), 'aria-label': t('Guest {n} full name', { n: others.children.length + 2 }) }),
       h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': t('Remove guest {n}', { n: others.children.length + 2 }), onclick: () => { row.remove(); renumber(); } }, '✕'));
     others.append(row);
+    showHeadcount();
   };
   // Keep "Guest 2, Guest 3…" labels in order after removing someone.
   function renumber() {
@@ -104,6 +113,7 @@ export async function guestCheckinView(el, { params }, kept) {
       row.querySelector('input').setAttribute('aria-label', t('Guest {n} full name', { n: i + 2 }));
       row.querySelector('button').setAttribute('aria-label', t('Remove guest {n}', { n: i + 2 }));
     });
+    showHeadcount();
   }
   // House rules: shown when the listing has some; the box is required until they were accepted once.
   const rules = String(s.house_rules || '').trim();
@@ -136,6 +146,7 @@ export async function guestCheckinView(el, { params }, kept) {
       h('p', { class: 'hint' }, t('Everyone else staying, including children.')),
       others,
       h('div', null, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => addGuest() }, t('+ Add guest'))),
+      headcount,
       h('div', { class: 'error', role: 'alert' })),
     h('h2', null, t('Arrival')),
     h('div', { class: 'form-row form-row--2' },
@@ -224,7 +235,7 @@ export async function guestCheckinView(el, { params }, kept) {
         : unplaced.length ? unplaced.join(' ')
         : Object.keys(err.fields || {}).length ? t('Please check the highlighted fields.')
         : tServer(err.message);
-      formError.append(h('div', { class: 'alert alert--error', role: 'alert' }, err.offline ? t("You're offline. Your answers are still here; try again when you're connected.") : msg));
+      formError.append(h('div', { class: 'alert alert--error', role: 'alert' }, err.offline ? (navigator.onLine === false ? t("You're offline. Your answers are still here; try again when you're connected.") : t("That didn't go through. Your answers are still here; please try again.")) : msg));
       formError.scrollIntoView?.({ block: 'nearest' });
     } finally {
       busy = false;
@@ -253,6 +264,8 @@ export async function checkinCard(bookingId, rerender) {
     if (!await confirmDialog({ title: 'Replace the check-in link?', text: 'The old link stops working. Use this if the link was shared with the wrong person.', confirmText: 'Replace link' })) return;
     try { await post(`/reservations/${bookingId}/checkin/new-link`); toast('New link created.'); rerender(); } catch (err) { toast(err.message, 'error'); }
   };
+  const reg = r ? 1 + (r.guests?.length || 0) : 0;
+  const registered = d.num_guests && reg !== d.num_guests ? `${reg} registered · booked for ${d.num_guests}` : String(reg);
   return h('div', { class: 'card' },
     h('div', { class: 'card__head' }, h('h2', null, 'Guest check-in form'),
       r?.submitted_at ? h('span', { class: 'badge badge--paid' }, 'Submitted') : h('span', { class: 'badge badge--unpaid' }, r ? 'Waiting' : 'Not yet')),
@@ -263,6 +276,7 @@ export async function checkinCard(bookingId, rerender) {
       h('button', { class: 'btn btn--ghost btn--sm', onclick: newLink }, 'New link')),
     r && h('dl', { class: 'dl', style: { marginTop: '12px' } },
       h('dt', null, 'Main guest'), h('dd', null, r.lead_name),
+      h('dt', null, 'Guests'), h('dd', null, registered),
       h('dt', null, 'Mobile'), h('dd', null, r.phone),
       r.email && [h('dt', null, 'Email'), h('dd', null, r.email)],
       h('dt', null, 'Other guests'), h('dd', null, r.guests?.length ? r.guests.join(', ') : '—'),

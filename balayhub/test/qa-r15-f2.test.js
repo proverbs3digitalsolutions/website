@@ -13,8 +13,8 @@ test('calendar no longer wraps the filter bar in a "Filter" fold', () => {
 });
 
 test('compact hosts move every quick filter into the "Filters" panel', () => {
-  assert.match(calendar, /quick: compact \? \[\] : quick/);
-  assert.match(calendar, /more: compact \? \[\.\.\.quick, \.\.\.more\] : more/);
+  assert.match(calendar, /quick: folded \? \[\] : quick/);
+  assert.match(calendar, /more: folded \? \[\.\.\.quick, \.\.\.more\] : more/);
 });
 
 test('the legend fold is unchanged', () => {

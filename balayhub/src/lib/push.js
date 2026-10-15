@@ -32,6 +32,8 @@ function allowed(user, type, propertyId) {
   if (!t || !t.roles.includes(user.role)) return false;
   const prefs = user.notify_prefs || {};
   if (prefs[type] === false) return false;
+  // No property (an owner-only alert, D-93): the property filter does not apply.
+  if (propertyId === null || propertyId === undefined) return true;
   return !Array.isArray(prefs.property_ids) || prefs.property_ids.includes(propertyId);
 }
 

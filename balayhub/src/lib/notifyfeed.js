@@ -48,7 +48,8 @@ function scopeSql(user, prefs, params) {
   }
   if (Array.isArray(prefs.property_ids)) {
     params.push(prefs.property_ids);
-    sql += ` AND n.property_id = ANY($${params.length}::uuid[])`;
+    // A row with no property is an owner's account-wide alert: the filter does not apply (as push.allowed).
+    sql += ` AND (n.property_id IS NULL OR n.property_id = ANY($${params.length}::uuid[]))`;
   }
   return sql;
 }

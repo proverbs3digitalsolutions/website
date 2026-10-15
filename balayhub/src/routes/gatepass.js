@@ -101,10 +101,17 @@ function guestNames(b) {
   return r ? [r.lead_name, ...(Array.isArray(r.guests) ? r.guests : [])].filter(Boolean) : [b.guest_name || 'Guest'];
 }
 
+// Registered people (main guest plus the others) next to what the booking says; null until the form is in.
+function guestCount(b) {
+  const r = b.registration;
+  return { registered: r ? 1 + (Array.isArray(r.guests) ? r.guests.length : 0) : null, booked: b.num_guests || null };
+}
+
 function passText(b, token) {
   const r = b.registration;
   const names = guestNames(b);
   const host = b.gatepass_authorized_by || b.owner?.name || b.workspace_name;
+  const { registered, booked } = guestCount(b);
   return [
     'Good day!',
     '',
@@ -114,7 +121,7 @@ function passText(b, token) {
     '',
     `Check-in:  ${fmtDate(b.check_in)}${b.checkin_time ? `, ${fmtTime(b.checkin_time)}` : ''}${r?.arrival_time ? ` (expected arrival ${fmtTime(r.arrival_time)})` : ''}`,
     `Check-out: ${fmtDate(b.check_out)}${b.checkout_time ? `, ${fmtTime(b.checkout_time)}` : ''}`,
-    `Number of guests: ${names.length > 1 ? names.length : (b.num_guests || names.length)}`,
+    `Number of guests: ${names.length > 1 ? names.length : (b.num_guests || names.length)}${registered && booked && registered !== booked ? ` (booked for ${booked})` : ''}`,
     r?.vehicle_plate ? `Vehicle plate: ${r.vehicle_plate}` : null,
     r?.phone ? `Guest mobile: ${r.phone}` : null,
     `Booking reference: ${b.confirmation_code}`,
@@ -277,7 +284,7 @@ publicRouter.get('/public/gatepass/:token', ah(async (req, res) => {
   res.json({
     workspace: b.workspace_name, property: b.property_name, address: headerAddress(b), unit: b.unit_name,
     check_in: b.check_in, check_out: b.check_out, checkin_time: fmtTime(b.checkin_time), checkout_time: fmtTime(b.checkout_time),
-    guests: guestNames(b), num_guests: b.num_guests, arrival_time: r?.arrival_time ? fmtTime(r.arrival_time) : null, vehicle_plate: r?.vehicle_plate || null,
+    guests: guestNames(b), num_guests: b.num_guests, registered: guestCount(b).registered, arrival_time: r?.arrival_time ? fmtTime(r.arrival_time) : null, vehicle_plate: r?.vehicle_plate || null,
     guest_phone: r?.phone || null, code: b.confirmation_code, notes: b.gatepass_notes,
     authorized_by: b.gatepass_authorized_by || b.owner?.name || b.workspace_name, contact: b.owner?.email || null,
     ids: b.ids.map((f, i) => ({ n: i + 1, url: `/api/public/gatepass/${req.params.token}/id/${f.file_id}` })),

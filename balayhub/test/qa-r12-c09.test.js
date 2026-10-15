@@ -34,7 +34,7 @@ test.before(async () => {
   for (const f of ['api.js', 'ui.js', 'filters.js']) fs.copyFileSync(path.join(__dirname, '../public/js', f), path.join(dir, f));
   fs.copyFileSync(path.join(__dirname, '../public/js/views/stayreports.js'), path.join(dir, 'views', 'stayreports.js'));
   fs.writeFileSync(path.join(dir, 'views', 'deposits.js'), 'export const depositsPanel = () => null;\n');
-  fs.writeFileSync(path.join(dir, 'views', 'reports.js'), 'export const exportHint = () => \'\';\n');
+  fs.writeFileSync(path.join(dir, 'views', 'reports.js'), 'export const exportHint = () => \'\'; export const dateFieldError = () => null;\n');
   fs.writeFileSync(path.join(dir, 'views', 'reservations.js'), 'export const CHANNEL_LABEL = {}; export const SOURCE_LABEL = {};\n');
   fs.writeFileSync(path.join(dir, 'app.js'), 'export const state = { user: { user_id: 1 } };\nexport function navigate() {}\n');
   sr = await import(pathToFileURL(path.join(dir, 'views', 'stayreports.js')));

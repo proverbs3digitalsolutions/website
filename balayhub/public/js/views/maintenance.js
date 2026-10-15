@@ -257,7 +257,14 @@ export async function maintenanceDetailView(el, { params, rerender }) {
     onSubmit: async (data, { idempotencyKey }) => { await post(`/maintenance/${m.request_id}/costs`, data, { idempotencyKey }); toast('Cost recorded.'); rerender(); },
   });
 
-  const upload = h('input', { type: 'file', class: 'input', accept: 'image/jpeg,image/png,image/webp,application/pdf', 'aria-label': 'Upload photo or document' });
+  const upload = h('input', { type: 'file', class: 'input', accept: 'image/jpeg,image/png,image/webp,application/pdf', 'aria-label': 'Upload photo or document',
+    // Picking a file uploads it at once (no second step); the input is off while the upload runs.
+    onchange: async () => {
+      if (!upload.files[0]) return;
+      upload.disabled = true;
+      try { await uploadFile('maintenance', m.request_id, upload.files[0]); upload.value = ''; toast('Uploaded.'); rerender(); } catch (err) { toast(err.message, 'error'); upload.disabled = false; upload.value = ''; }
+    },
+  });
 
   el.replaceChildren(
     pageHead({
@@ -289,13 +296,6 @@ export async function maintenanceDetailView(el, { params, rerender }) {
         h('div', { class: 'card' },
           h('div', { class: 'card__head' }, h('h2', null, 'Photos & documents')),
           filesList(files),
-          h('div', { class: 'form', style: { marginTop: '12px' } }, upload,
-            h('button', {
-              class: 'btn btn--secondary', onclick: async (e) => {
-                if (!upload.files[0]) { toast('Choose a photo or file first.', 'error'); return; }
-                e.target.disabled = true;
-                try { await uploadFile('maintenance', m.request_id, upload.files[0]); toast('Uploaded.'); rerender(); } catch (err) { toast(err.message, 'error'); e.target.disabled = false; }
-              },
-            }, 'Upload photo'))))),
+          h('div', { class: 'form', style: { marginTop: '12px' } }, upload)))),
   );
 }

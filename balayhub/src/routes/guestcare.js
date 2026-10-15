@@ -207,7 +207,12 @@ router.post('/discount-codes', owners, ah(async (req, res) => {
   if (/\s/.test(body.code)) throw validationError({ code: `Codes can't contain spaces. Try ${body.code.toUpperCase().replace(/\s+/g, '-')}.` });
   const code = normalize(body.code);
   if (!/^[A-Z0-9-]{3,20}$/.test(code)) throw validationError({ code: 'Use 3–20 letters, numbers or dashes, e.g. BALIK10.' });
-  if ((body.percent_off === null) === (body.amount_off === null || Number(body.amount_off) === 0)) {
+  // One of a percent or an amount, never both; an amount of 0 counts as no amount.
+  const amountSet = body.amount_off !== null && Number(body.amount_off) !== 0;
+  if (body.percent_off !== null && amountSet) {
+    throw validationError({ percent_off: 'Choose one: a percent off or an amount off, not both.' });
+  }
+  if (body.percent_off === null && !amountSet) {
     throw validationError({ percent_off: 'Set either a percent off or an amount off.' });
   }
   if (body.valid_from && body.valid_until && body.valid_until < body.valid_from) throw validationError({ valid_until: 'The end date must be after the start date.' });

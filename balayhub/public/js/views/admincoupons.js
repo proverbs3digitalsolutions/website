@@ -2,7 +2,7 @@
 // Not the hosts' guest discount codes.
 
 import { get, post, patch, qs } from '../api.js';
-import { h, fmtDateTime, badge, field, makeForm, openModal, emptyState, toast, parseAmount } from '../ui.js';
+import { h, fmtDateTime, badge, field, makeForm, openModal, emptyState, toast, parseAmount, confirmDialog } from '../ui.js';
 import { state } from '../app.js';
 import { initFilters, filterBar, changed, apiFilters } from '../filters.js';
 
@@ -30,6 +30,10 @@ function manilaParts(ts) {
 // Once a coupon has been used these inputs are disabled. A save still sends them unchanged: the server accepts a same-value edit
 // and answers 409 COUPON_LOCKED for a real change, so a slipped change shows the server's message, never a fake "saved".
 const LOCKED = ['code', 'kind', 'percent_off', 'amount_off', 'duration', 'duration_months', 'plans', 'starts_on', 'starts_time'];
+// A free coupon with no once-per-workspace rule and no total limit can be used again and again: asked about before saving.
+const unlimitedFree = (v) => v.kind === 'free' && !v.once_per_workspace && !v.limit_on;
+// 3 to 32 characters is allowed, but a short code is easy to guess: a hint, never a block.
+const shortCode = (code) => { const n = String(code ?? '').trim().length; return n >= 3 && n <= 7; };
 const num = (s) => { const t = String(s ?? '').trim(); if (t === '') return null; const n = Number(t); return Number.isNaN(n) ? t : n; };
 function couponBody(v) {
   const body = {
@@ -86,13 +90,26 @@ export async function adminCouponsView(el, { query = {} }) {
     const monthsField = field({ name: 'duration_months', label: 'Months', type: 'number', min: 2, max: 36, step: 1, value: c?.duration_months ?? '' });
     const totalField = field({ name: 'max_redemptions', label: 'Total uses', type: 'number', min: 1, step: 1, value: c?.max_redemptions ?? '' });
     const limitBox = field({ name: 'limit_on', label: 'Limit total uses', type: 'checkbox', value: Boolean(c?.max_redemptions) });
+    const setReq = (f, on) => {
+      f.querySelector('input').required = on;
+      const label = f.querySelector('label');
+      label.querySelector('.req')?.remove();
+      if (on) label.append(h('span', { class: 'req', 'aria-hidden': 'true' }, ' *'));
+    };
     const sync = () => {
       percentField.hidden = kind !== 'percent'; amountField.hidden = kind !== 'fixed'; monthsField.hidden = duration !== 'months';
       totalField.hidden = !limitBox.querySelector('input').checked;
+      // Only the box that shows is required, so one pass of the form lists it with the others.
+      setReq(percentField, kind === 'percent'); setReq(amountField, kind === 'fixed');
     };
     limitBox.querySelector('input').addEventListener('change', sync);
     const codeField = field({ name: 'code', label: 'Coupon code', required: true, value: c?.code ?? '', maxlength: 32, hint: 'Not case-sensitive. Letters, numbers and dashes.' });
     const codeInput = codeField.querySelector('input');
+    const nudge = h('div', { class: 'hint', hidden: true }, 'Short codes are easy to guess. Use 8 or more characters, or press Generate.');
+    codeField.querySelector('.hint').after(nudge);
+    const syncNudge = () => { nudge.hidden = locked || !shortCode(codeInput.value); };
+    codeInput.addEventListener('input', syncNudge);
+    syncNudge();
     const generate = h('button', { type: 'button', class: 'btn btn--secondary btn--sm', disabled: locked, onclick: () => { codeInput.value = genCode(); codeInput.dispatchEvent(new Event('input', { bubbles: true })); } }, 'Generate');
     codeInput.after(generate);
     const planChecks = h('div', { class: 'field', dataset: { field: 'plans' } },
@@ -137,6 +154,8 @@ export async function adminCouponsView(el, { query = {} }) {
       fields,
       onSubmit: async (d, { form: f }) => {
         const body = couponBody({ ...d, kind: checked(f, 'kind'), duration: checked(f, 'duration') });
+        // "Change it" keeps the form open with focus on the box the question is about.
+        if (unlimitedFree({ ...d, kind: body.kind }) && !await confirmDialog({ title: 'Unlimited free months?', text: 'Once per workspace is off and there is no total limit, so this free coupon could be used again and again. Save anyway?', confirmText: 'Save anyway', cancelText: 'Change it' })) { f.elements.once_per_workspace.focus(); return false; }
         if (c) await patch(`/admin/coupons/${c.coupon_id}`, body); else await post('/admin/coupons', body);
         toast(c ? 'Coupon saved.' : 'Coupon created.');
         modal.close();

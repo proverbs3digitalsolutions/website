@@ -78,7 +78,7 @@ test('#27 stay reports: the Listing choices follow the chosen property, and the 
 });
 
 test('#28 stay reports: Download CSV uses reports.js exportHint and is disabled while the range is incomplete', () => {
-  assert.match(stayreports, /import \{ exportHint \} from '\.\/reports\.js';/);
+  assert.match(stayreports, /import \{ exportHint, dateFieldError \} from '\.\/reports\.js';/);
   assert.doesNotMatch(stayreports, /(const|function) exportHint\b/);
   assert.match(stayreports, /exportHint\(\{ from: filters\.from, to: filters\.to \}\)/);
   assert.match(stayreports, /aria-disabled/);

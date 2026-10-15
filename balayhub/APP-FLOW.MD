@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-15 (QA round 15, section 28; D-94, D-95)
+Last updated: 2026-10-15 (QA round 16, section 29; D-97)
 
 ---
 
@@ -990,7 +990,7 @@ Decision D-88. Still for owners of 1 to 3 properties: less friction, true money 
 - **Housekeeping:** the task page of an owner's own finished clean reads "Done by you, no pay"; a quantity reads "1 pc". **Copy for cleaner** shows only on open cleans (not done, not cancelled) and copies the due date.
 - **Supplies:** each row shows **Add stock** and **Record use**, and a **More** button ("More for <name>") that opens Count, History, Edit and Archive.
 - **Daily close:** a date outside 2000 to 2100 shows "That date isn't valid." with today's checklist. A close a manager may not change shows a line saying who can (a whole-workspace close, or one that covers properties that are not theirs), and no Reopen or Update. The owner always sees both. The line is English (the host app is English).
-- **Automatic messages (Inbox):** the page says when the four starter messages are ready but off, with a link to the guest language setting. A template used by an automatic message can't be deleted ("Choose another template for it, or remove it, first."); an automatic message with a deleted template can't be turned on. They list in a fixed order. Snoozed conversations disappear from Mine, Upcoming and Hosting until they wake.
+- **Automatic messages (Inbox):** the page says when the four starter messages are ready but off, with a link to the guest language setting. A template used by an automatic message can't be deleted ("Choose another template for it, or remove it, first."); an automatic message with a deleted template can't be turned on. They list in a fixed order. Snoozed conversations disappear from every working list (All open, Unread, Mine, Upcoming and Hosting) until they wake. *(Corrected in round 16, #12: the line used to name three lists.)*
 - **Guest pages:** the booking summary names the price rule ("Includes: Booked-early price."); the door code card reads "Door code" (Taglish "Code ng pinto"); the check-in thank-you screen says "Thank you! You're registered." under its own heading; the review page's star message goes away when a star is picked; the guest-limit message has a Taglish line.
 - **Language:** the **verify screens** (Check your email, "I've verified, continue", Resend) follow the chosen language, including Taglish; after sign-in the app resets to the host language. **Setup and the owner portal are English throughout** for now (founder question in BLOCKERS).
 - **Focus:** after any route change focus goes to the new page's h1. A page that reloads in place stays on screen (marked `aria-busy`) until the new one is ready, then swaps; a button that was disabled during its own request gets focus back; a refused form focuses the field that needs fixing (the stars, a blank guest row, the reason box). A page-level error has a heading. *Closed in round 13 by the D-89 focus guard (see section 26).*
@@ -1190,3 +1190,52 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 - **Review page** (4 and 5 star guests): the share links come back when the guest returns. **Quote page:** a phone number in the wrong format is refused. "See all places" and the Privacy link on the account page are easy-to-hit links; links inside a sentence (the consent "privacy notice") keep their text size.
 - **Maintenance:** each row's badge is not a second Tab stop; empty Resolved and Cancelled tabs say so. Statements → **Receipt** and the dashboard repairs count are easy-to-hit links.
 - **"+ Add new" → Property** is shown for long-term and Both workspaces only (short-term hosts add buildings through Add listing); this is the same as 27.1.
+
+## 29. QA round 16 changes (D-97; 2026-10-15)
+
+### 29.1 Navigation
+- **Back keeps your place.** Browser Back, or a page's `‹ Back` link that points at the page you came from, returns to the same scroll place. The page waits up to 1.5 seconds for the list to load, then restores the place; any scroll, tap or key press cancels it. A new page starts at the top.
+- **The other module's home goes home quietly.** Opening `#/dashboard` on a stays workspace, or `#/home` on a rentals workspace, goes to the workspace's own home with no message. Any other refused page still says "That page isn't available for your role or workspace." The Privacy page logo goes to the workspace's own home.
+
+### 29.2 Reservations
+- The Nights and Guests filters say "Enter a number from 1 to 99."
+- **Do not rebook** warns for any booking whose email belongs to a flagged guest (the owner's save toast; the Inbox note and push for an online booking). The flag stays on the original guest record. Group bookings do not warn yet (carried).
+
+### 29.3 Calendar
+- On phones, Property, Tag and Availability sit under Filters and the colour key is folded. A night's menu starts on New reservation. The month bar (previous, month, next, Today) stays on one row.
+
+### 29.4 Guest booking page
+- A payment error shows just above "Continue to payment". Once both dates are picked, the calendar heading says "Dates chosen. Tap a date to change them." (before that: "Choose your check-in date", then "Now choose your check-out date").
+
+### 29.5 Check-in and gate pass
+- When a guest registers more people than booked, they see "This booking is for N guests…". The host's check-in card reads "6 registered · booked for 4"; the gate pass and its email read "6 (booked for 4)". Nothing is blocked. An upload that fails while online says "That didn't go through. Your answers are still here; please try again."
+
+### 29.6 Inbox
+- Assigned to, Snooze/Unsnooze and Archive/Unarchive keep keyboard focus. Switching between Guest message and Internal note keeps each one's own text (in memory only).
+
+### 29.7 Top bar search
+- The panel says "Search covers guests, reservations, listings and pages."
+
+### 29.8 Plan & billing
+- A comped workspace sees "Your workspace is on a complimentary plan, so there is nothing to pay." and no Pay now or coupon box. A free-with-card coupon says "You pay ₱20.00 once by card." in the preview message, the hint and the banner. A forever coupon reads "Coupon CODE: ₱100 off every month." with no months-left count. Apply sits beside the code box; a code error is tied to the box.
+
+### 29.9 Platform admin coupons (`#/admin/coupons`)
+- The required mark follows the kind (percent or amount). A free coupon with no total limit and once per workspace off asks "Unlimited free months?" before saving. Codes of 3 to 7 characters get a short hint under the box.
+
+### 29.10 Unit owners
+- A percentage fee over 50% asks "Check the management fee" (Save anyway / Change it); 0% saves without a question. An exact duplicate name asks "Name already used" (Save anyway / Change it). On Edit, the fee question is asked only when the fee model or the value changed.
+
+### 29.11 Reports
+- A custom range longer than two years keeps the last report and marks the To box "Choose up to two years."
+
+### 29.12 Rent & Expenses
+- The Vendor list hides vendors seen only on voided expenses unless voided expenses are shown.
+
+### 29.13 Launchpad
+- The current group is open; later groups fold under "Later (N more steps)". The count at the top is still the full count. This applies to every owner (S2).
+
+### 29.14 Cleaning task and repair request
+- Picking a photo uploads it at once. There is no Upload photo button. (The deposits page still uses pick, then button.)
+
+### 29.15 Forms in dialogs
+- While saving, the Save button shows "Saving…", is marked busy and keeps focus. A dialog with no fields starts on its first action button.

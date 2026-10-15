@@ -294,9 +294,16 @@ async function startSession(key, b, c, token, db) {
 // The guest's return: confirm any pending checkout for this booking with PayMongo.
 publicRouter.post('/public/pay/:token/refresh', refreshLimiter, ah(async (req, res) => {
   const b = await loadByToken(req.params.token);
-  const { rows } = await query(`SELECT checkout_ref FROM balance_checkouts WHERE booking_id = $1 AND status = 'pending' AND provider_checkout_id IS NOT NULL`, [b.booking_id]);
+  const { rows } = await query(`SELECT checkout_ref, key_enc FROM balance_checkouts WHERE booking_id = $1 AND status = 'pending' AND provider_checkout_id IS NOT NULL`, [b.booking_id]);
   let paid = false;
-  for (const r of rows) { if (await refresh(r.checkout_ref).catch(() => null) === 'paid') paid = true; }
+  for (const r of rows) {
+    // A key PayMongo refuses (401) clears the host's connected check, but only when it is still the saved key: an old checkout's refusal says nothing about the new key. The guest still sees "not paid yet".
+    const st = await refresh(r.checkout_ref).catch(async (err) => {
+      if (err.unauthorized) await query('UPDATE organizations SET paymongo_key_checked_at = NULL WHERE organization_id = $1 AND paymongo_key_enc = $2', [b.organization_id, r.key_enc]);
+      return null;
+    });
+    if (st === 'paid') paid = true;
+  }
   const after = await one(`SELECT ${BALANCE} AS balance FROM bookings b WHERE b.booking_id = $1`, [b.booking_id]);
   res.json({ paid, balance: Number(after.balance) > 0 ? after.balance : '0.00', pending: rows.length > 0 && !paid });
 }));

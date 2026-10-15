@@ -8,6 +8,7 @@ import { t, tServer, tFields, locale, initGuestLang, langToggle, guestLang, exte
 // Taglish for the wording this page adds (the policy text itself comes from the server).
 extendTranslations({
   'Cancellation policy': 'Patakaran sa pagkansela',
+  'Dates chosen. Tap a date to change them.': 'Napili na ang dates. I-tap ang ibang date para palitan.',
   'Pay a {pct}% deposit now, the rest before check-in': '{pct}% deposit ngayon, ang natitira bago mag-check-in',
   'Add-ons': 'Mga add-on',
   'Pay now': 'Bayad ngayon',
@@ -92,6 +93,8 @@ export function dueNow(q, choice) {
   }
   return { kind: 'full', now: Number(q.total) };
 }
+// The heading above the calendar months: asks for the next date still missing.
+export const calHeading = (checkIn, checkOut) => (checkIn && checkOut ? t('Dates chosen. Tap a date to change them.') : checkIn ? t('Now choose your check-out date') : t('Choose your check-in date'));
 export const priceRulesLine = (rules) => (rules?.length ? t('Includes: {list}.', { list: rules.map((r) => t(r)).join(', ') }) : null);
 
 export async function bookHostView(el, { params, query }) {
@@ -204,7 +207,7 @@ export async function bookListingView(el, { params, query }) {
     calBox.replaceChildren(
       h('div', { class: 'bk-cal__nav' },
         h('button', { type: 'button', class: 'btn btn--ghost btn--sm', disabled: monthStart <= todayManila().slice(0, 7), onclick: async () => { monthStart = prevMonth(monthStart); await loadDays(monthStart); drawCal(); } }, t('‹ Earlier')),
-        h('span', { class: 'muted small' }, checkIn && !checkOut ? t('Now choose your check-out date') : t('Choose your check-in date')),
+        h('span', { class: 'muted small' }, calHeading(checkIn, checkOut)),
         h('button', { type: 'button', class: 'btn btn--ghost btn--sm', onclick: async () => { monthStart = nextMonth(monthStart); await loadDays(monthStart); drawCal(); } }, t('Later ›'))),
       h('div', { class: 'bk-cal__months' }, month(monthStart), month(nextMonth(monthStart))));
   }
@@ -227,6 +230,8 @@ export async function bookListingView(el, { params, query }) {
   // Changing the choice redraws the summary from the quote already held.
   payChoice.addEventListener('change', () => { if (current) drawSummary(); });
   const formError = h('div');
+  // Checkout failures land here, right above the Pay button the guest pressed (formError is off screen by then).
+  const payError = h('div');
   // Discount code
   let promoCode = '';
   const codeMsg = h('div', { class: 'muted small', role: 'status' });
@@ -386,6 +391,7 @@ export async function bookListingView(el, { params, query }) {
       h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'consent' }),
         h('span', null, t('I agree that my details are shared with {host} to manage my booking (see the ', { host: host.name }), h('a', { href: '#/privacy', target: '_blank' }, t('privacy notice')), ').')),
       h('div', { class: 'error', role: 'alert' })),
+    payError,
     submit,
     !host.accepting && h('p', { class: 'muted small' }, host.demo ? t('This is a demo, so booking is turned off.') : t('Online booking is paused. Please contact the host.')));
 
@@ -406,6 +412,7 @@ export async function bookListingView(el, { params, query }) {
     if (busy || !current) return;
     clearErrors(form);
     formError.replaceChildren();
+    payError.replaceChildren();
     // Check every field in one pass, so the guest sees all the gaps at once. Keys follow the form's order (the first one gets focus).
     const d = readForm(form);
     const guests = Number(d.num_guests);
@@ -448,7 +455,7 @@ export async function bookListingView(el, { params, query }) {
         : unplaced.length ? unplaced.join(' ')
         : Object.keys(err.fields || {}).length ? t('Please check the highlighted fields.')
         : tServer(err.message);
-      formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, banner));
+      payError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, banner));
       if (err.code === 'DATES_TAKEN') { days = new Map(); await loadDays(monthStart); drawCal(); }
       submit.disabled = false;
       submit.textContent = t('Continue to payment');

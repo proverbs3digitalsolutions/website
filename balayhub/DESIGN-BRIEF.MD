@@ -1,6 +1,6 @@
 # BalayHub design brief
 
-Last updated: 2026-10-15 (QA round 15: section 24; D-94, D-95)
+Last updated: 2026-10-15 (QA round 16: section 25; D-97)
 
 **Summary.** BalayHub is a phone-first web app (also an installable PWA) for Filipino rental and staycation hosts. It is built with plain CSS, one stylesheet (`public/css/app.css`), and small JavaScript helpers (`public/js/ui.js`). There is no framework and no CSS preprocessor. The look is calm and practical: Forest Green on soft off-white, Sand and Sun as warm accents, Poppins for headings, Inter for text, rounded cards, and large touch targets. Colours come from CSS custom properties on `:root`. A dark theme redefines the same tokens, so any component that uses tokens gets dark mode automatically. This brief records what is **actually built**. Every value below comes from the code. Where the code doesn't define a token (spacing, type sizes), the brief lists the values in use and says so.
 
@@ -652,3 +652,17 @@ Decisions D-94 and D-95. All new rules are in one block at the end of `public/cs
 - **Labels on the phone bottom bar:** "Groups" and "Help" for the long names (`BOTTOM_LABELS` in `app.js`: "Rent & Expenses" is "Rent"); the sidebar keeps the full names.
 - **Page title of My account:** the h1 reads "My account"; the person's name is `.acct-hero__name`, an h2.
 - **The scroll keeper never reveals an off-screen control.** When focus is put back after a redraw (`focusIt`), the control is scrolled into view only if it was visible before the redraw; error toasts are `role="alert"`.
+
+## 25. Patterns added in QA round 16 (2026-10-15)
+
+Decision D-97. All CSS changes are in `public/css/app.css`.
+
+- **Landing hero calendar, Airbnb bar:** `#c8344a` (white text 5.19:1, WCAG AA). The wordmark stays the logo exemption.
+- **`.flt` grid:** one `minmax(0, 1fr)` column, so a long select cannot push the bar wider than the screen; chips wrap.
+- **Quick selects** (the filter bar's selects) size to their content above 480px.
+- **`.coupon-row`:** the code box and its Apply button sit on one row.
+- **`.cal-name`:** a block-level element, so the calendar's guest names do not run into the next tile.
+- **`.toolbar > .cal-nav`:** the calendar's month bar (previous, month, next, Today) stays on one row.
+- **Short-screen desktop sidebar:** smaller vertical padding on short screens so the whole menu fits.
+- **`.lpad-later`:** the Launchpad's "Later (N more steps)" fold uses a styled `summary` (same look as the other folds).
+- **Busy Save button:** `.btn[aria-disabled="true"]` (the existing grey look). A form's Save is marked busy, not `disabled`, while saving, so keyboard focus stays on it.

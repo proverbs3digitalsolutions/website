@@ -329,6 +329,12 @@ dialog.morenav::backdrop { background: var(--scrim); }
   /* Round 14 (#19): 96px, so the Ask button never covers the last Record button at 1280 by 900. */
   .content { padding-bottom: 96px; }
 }
+/* Short desktop screens (QA round 16, #30): tighter sidebar links so Settings and Help fit at 1280 by 900. Links stay 24px or taller. */
+@media (min-width: 960px) and (max-height: 960px) {
+  .sidebar nav a { padding: 7px 12px; }
+  .nav__group + .nav__group { margin-top: 8px; }
+  .nav__group-title { padding-bottom: 2px; }
+}
 
 /* ---------------------------------------------------------------- page structure */
 .page-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
@@ -427,6 +433,11 @@ table.table { width: 100%; border-collapse: collapse; font-size: .92rem; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; align-items: center; }
 .toolbar .search { flex: 1 1 220px; }
 .toolbar > * { min-width: 0; }
+/* The calendar month bar takes the free room so "14 days" stays on the first row (QA round 16, #29). */
+.toolbar > .cal-nav { flex: 1 1 auto; min-width: 0; }
+/* Coupon code box with Apply beside it (QA round 16, #18). */
+.coupon-row { display: flex; gap: 8px; align-items: center; }
+.coupon-row .input { flex: 1 1 auto; width: auto; min-width: 0; }
 .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; padding-bottom: 2px; }
 .tabs a, .tabs button {
   padding: 8px 14px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line-2);
@@ -591,7 +602,7 @@ img.file-thumb { display: block; flex: none; width: 96px; max-width: 96px; aspec
   border-right: 1px solid var(--line); padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; justify-content: center; font-size: .82rem; color: var(--muted);
 }
 .cal-row--head .cal-side { z-index: 5; font-weight: 700; }
-.cal-name { font-weight: 750; color: var(--text); text-decoration: none; font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-name { display: block; max-width: 100%; font-weight: 750; color: var(--text); text-decoration: none; font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cal-prop { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cal-side .badge { align-self: flex-start; }
 .cal-days { display: flex; position: relative; }
@@ -654,6 +665,17 @@ img.file-thumb { display: block; flex: none; width: 96px; max-width: 96px; aspec
 }
 .toolbar select.input { width: auto; flex: 0 1 200px; }
 @media (max-width: 480px) { .toolbar select.input, .flt__bar select.input { flex: 1 1 100%; width: 100%; } }
+/* Quick selects size to their content so a property name is not cut off (QA round 16, #15). */
+@media (min-width: 481px) {
+  /* Beats `.toolbar select.input { flex: 0 1 200px }`, which pinned the width at 200px (re-verify V5). */
+  .flt__bar select.input { width: auto; flex: 0 1 auto; field-sizing: content; min-width: min(100%, 16rem); max-width: min(100%, 18rem); }
+}
+/* Phone calendar month bar (re-verify V5, #41): row 1 is arrows, month and Today; row 2 is the date box and the days select. */
+@media (max-width: 480px) {
+  .toolbar > .cal-nav { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; }
+  .toolbar > .cal-nav > :nth-child(5) { grid-column: 1 / 3; width: 100%; min-width: 0; }
+  .toolbar > .cal-nav > :nth-child(6) { grid-column: 3 / 5; width: 100%; min-width: 0; }
+}
 
 /* listings */
 .listing-grid { display: grid; gap: 16px; }
@@ -805,7 +827,7 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .lp-cal__track { position: relative; height: 34px; border-radius: 8px; background: repeating-linear-gradient(90deg, var(--surface-2) 0, var(--surface-2) calc(100% / 7 - 2px), var(--surface) calc(100% / 7 - 2px), var(--surface) calc(100% / 7)); }
 .lp-cal__bar { position: absolute; top: 4px; bottom: 4px; left: calc(var(--s) * 100% / 7 + 2px); width: calc((var(--e) - var(--s)) * 100% / 7 - 4px);
   border-radius: 6px; color: #fff; font-weight: 700; font-size: .72rem; padding: 0 8px; display: flex; align-items: center; overflow: hidden; white-space: nowrap; }
-.lp-cal__bar--airbnb { background: #d93a50; }
+.lp-cal__bar--airbnb { background: #c8344a; } /* 5.19:1 with white text (QA round 16, #31) */
 .lp-cal__bar--booking { background: #1e4fa3; }
 .lp-cal__bar--agoda { background: #6a35b5; }
 .lp-cal__bar--direct { background: var(--teal); }
@@ -974,6 +996,10 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .lpad-phase__num.is-done { background: var(--forest); color: #fff; }
 .lpad-phase__count { flex: none; }
 .lpad-steps { display: grid; gap: 8px; }
+/* Later steps fold (QA round 16, #34): a tappable summary, 44px tall on phones. */
+.lpad-later { margin-top: 16px; }
+.lpad-later > summary { cursor: pointer; font-weight: 600; }
+@media (max-width: 959px) { .lpad-later > summary { display: flex; align-items: center; min-height: 44px; } }
 .lpad-step { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .lpad-step.is-next { border-color: var(--forest); box-shadow: 0 0 0 3px var(--teal-soft); }
 .lpad-step summary { display: flex; align-items: center; gap: 12px; padding: 12px 14px; cursor: pointer; list-style: none; }
@@ -1216,7 +1242,7 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .assist__foot { margin: 0; padding: 0 12px 10px; font-size: .74rem; color: var(--muted); background: var(--surface); }
 
 /* ---------------------------------------------------------------- filter bar */
-.flt { margin-bottom: 14px; display: grid; gap: 10px; }
+.flt { margin-bottom: 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; } /* minmax: one wide chip cannot widen the bar (QA round 16, #10) */
 .flt__bar { margin-bottom: 0; }
 .flt__bar > * { min-width: 0; }
 .flt__bar .tabs { flex: 1 1 100%; flex-wrap: wrap; overflow-x: visible; margin-bottom: 0; }
@@ -1720,7 +1746,7 @@ select.input { appearance: none; -webkit-appearance: none; padding-right: 36px;
   background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
   background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
 .flt select.input.is-set { border-color: var(--forest); background-color: var(--teal-soft); color: var(--teal-ink); font-weight: 650; }
-.flt__chip { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; border: 1px solid var(--forest); background: var(--teal-soft); color: var(--teal-ink); }
+.flt__chip { max-width: 100%; min-width: 0; overflow-wrap: anywhere; text-align: left; display: inline-flex; align-items: center; gap: 6px; min-height: 32px; border: 1px solid var(--forest); background: var(--teal-soft); color: var(--teal-ink); }
 .flt__chip::before { content: ""; width: 10px; height: 6px; border-left: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg) translateY(-2px); flex: none; }
 .flt__chip > span[aria-hidden] { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--surface); color: var(--teal-ink); font-weight: 700; line-height: 1; }
 .flt__chip:hover { background: var(--teal-soft-hover); border-color: var(--forest); }

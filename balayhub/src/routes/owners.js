@@ -64,6 +64,18 @@ async function refuseUnitsOfOthers(db, orgId, ownerId, unitIds, moveUnits) {
   throw new HttpError(409, rows.map((u) => `${u.unit_name} belongs to ${u.owner_name}.`).join(' '), { code: 'UNIT_HAS_OWNER', units: rows });
 }
 
+// A name another active owner in the workspace already uses is asked about (409 NAME_IN_USE) and saved only when the host
+// agrees (confirm_duplicate_name: true). Letter case and spaces at the ends don't matter; archived owners and the owner's own row never count.
+async function refuseNameInUse(db, orgId, ownerId, name, confirmed) {
+  if (confirmed) return;
+  const { rows: [other] } = await db.query(
+    `SELECT full_name FROM unit_owners WHERE organization_id = $1 AND archived_at IS NULL AND lower(btrim(full_name)) = lower(btrim($2))
+        AND owner_id IS DISTINCT FROM $3 ORDER BY created_at LIMIT 1`, [orgId, name, ownerId]);
+  if (!other) return;
+  const msg = `An owner named ${other.full_name} already exists.`;
+  throw new HttpError(409, msg, { code: 'NAME_IN_USE', fields: { full_name: msg }, owner_name: other.full_name });
+}
+
 // An email another active owner in the workspace already uses is asked about (409 EMAIL_IN_USE) and saved only when the host
 // agrees (confirm_duplicate_email: true). Archived owners and the owner's own row never count.
 async function refuseEmailInUse(db, orgId, ownerId, email, confirmed) {
@@ -145,6 +157,7 @@ router.post('/unit-owners', ownersOnly, ah(async (req, res) => {
   const { n } = await one('SELECT COUNT(*)::int AS n FROM unit_owners WHERE organization_id = $1 AND archived_at IS NULL', [req.user.organization_id]);
   if (n >= 100) throw new HttpError(409, 'You can have up to 100 unit owners.', { code: 'LIMIT' });
   const id = await tx(async (db) => {
+    await refuseNameInUse(db, req.user.organization_id, null, body.full_name, req.body.confirm_duplicate_name === true);
     await refuseEmailInUse(db, req.user.organization_id, null, body.email, req.body.confirm_duplicate_email === true);
     await refuseEmailIsLogin(db, req.user.organization_id, body.email, req.body.confirm_login_email === true);
     await refuseUnitsOfOthers(db, req.user.organization_id, null, body.unit_ids, req.body.move_units === true);
@@ -174,6 +187,9 @@ router.patch('/unit-owners/:id', ownersOnly, ah(async (req, res) => {
   await tx(async (db) => {
     // Locked first, so the stored row compared below is the one this update replaces.
     const { rows: [before] } = await db.query('SELECT * FROM unit_owners WHERE owner_id = $1 FOR UPDATE', [o.owner_id]);
+    if (cols.includes('full_name') && before.full_name !== body.full_name) {
+      await refuseNameInUse(db, req.user.organization_id, o.owner_id, body.full_name, req.body.confirm_duplicate_name === true);
+    }
     if (cols.includes('email') && normEmail(before.email) !== normEmail(body.email)) {
       await refuseEmailInUse(db, req.user.organization_id, o.owner_id, body.email, req.body.confirm_duplicate_email === true);
       await refuseEmailIsLogin(db, req.user.organization_id, body.email, req.body.confirm_login_email === true);
