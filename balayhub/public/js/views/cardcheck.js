@@ -78,7 +78,27 @@ function waitingForOwner() {
 export async function cardCheckView(el, { query = {} } = {}) {
   if (state.user?.role !== 'owner') { el.append(waitingForOwner()); return; }
   const info = await get('/billing/card-check');
-  if (info.status !== 'required') { navigate(homeRoute(), { replace: true }); return; }
+  if (info.status !== 'required') {
+    // The card is already confirmed. Refresh the user BEFORE leaving: with a stale card_check_due the route rule sends
+    // the owner straight back here and the two pages ping-pong. Never navigate while the user still looks card-due.
+    let fresh = true;
+    try { await refreshUser(); } catch { fresh = false; }
+    const stale = !fresh || state.user?.plan?.card_check_due;
+    if ((info.status === 'passed' && query.check) || stale) {
+      if (query.check) history.replaceState(history.state, '', '#/confirm-card');
+      const done = h('h2', { tabindex: '-1' }, 'Your card is confirmed');
+      const next = state.user?.business_type === 'long_term' ? '#/properties?new=1' : '#/launchpad';
+      el.append(h('div', { class: 'card cc-card' }, h('h1', null, 'Confirm your payment card'),
+        h('div', { class: 'cc-success', role: 'status' }, done,
+          h('p', null, `Your free trial has started. It ends on ${fmtDate(info.trial_would_end)}.`),
+          h('a', { class: 'btn btn--primary', href: query.check ? next : '#/' }, query.check ? 'Set up my workspace' : 'Continue')),
+        footer()));
+      done.focus();
+      return;
+    }
+    if (!stale) navigate(homeRoute(), { replace: true });
+    return;
+  }
 
   const stage2 = Boolean(info.subscriptions);
   const plans = info.plans || [];

@@ -326,6 +326,33 @@ test('team member sees the waiting page with the owner name and no API call', as
   assert.match(root.textContent, /Ana Reyes needs to confirm a payment card before your team can use BalayHub\. Ask them to log in and finish setup\./);
 });
 
+test('bank return when the server says passed but the user is still card-due: refresh first, show success, never loop', async () => {
+  globalThis.history = { state: null, replaceState() {} };
+  const order = [];
+  st.user.plan = { card_check_due: true };
+  const root = await mount({ status: 'passed', required: false }, { check: 'b5' });
+  order.push(globalThis.__refreshed);
+  assert.equal(globalThis.__refreshed, 1, 'refreshUser awaited');
+  assert.ok(globalThis.__nav.length <= 1, 'navigate at most once');
+  assert.equal(globalThis.__nav.length, 0, 'stale card_check_due: no navigate, so no loop');
+  const h2 = find(root, (e) => e.tag === 'h2' && e.textContent === 'Your card is confirmed');
+  assert.ok(h2, 'success panel shown');
+  assert.equal(document.activeElement, h2);
+  assert.match(root.textContent, /Your free trial has started\. It ends on Oct 29, 2026\./);
+  assert.ok(find(root, (e) => e.tag === 'a' && e.textContent === 'Set up my workspace'));
+});
+
+test('passed without ?check= and the user refreshed clean: one navigate home; still due: Continue link, no navigate', async () => {
+  st.user.plan = { card_check_due: false };
+  await mount({ status: 'passed', required: false });
+  assert.equal(globalThis.__refreshed, 1);
+  assert.equal(globalThis.__nav.length, 1);
+  globalThis.__nav.length = 0; st.user.plan = { card_check_due: true };
+  const root = await mount({ status: 'passed', required: false });
+  assert.equal(globalThis.__nav.length, 0);
+  assert.ok(find(root, (e) => e.tag === 'a' && e.textContent === 'Continue'));
+});
+
 test('routeAllowed while the card is due', () => {
   const due = { role: 'owner', business_type: 'short_term', plan: { card_check_due: true } };
   const ok = { role: 'owner', business_type: 'short_term', plan: { card_check_due: false } };
