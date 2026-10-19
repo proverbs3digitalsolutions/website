@@ -17,7 +17,7 @@ test('tenants Owes at least has the Rent amount pattern and message', () => {
 });
 
 test('search placeholders are short enough for 1280px', () => {
-  assert.ok(v('rent.js').includes("placeholder: 'Tenant, unit, reference, notes'"));
+  assert.ok(v('rent.js').includes("placeholder: 'Tenant, unit, ref, notes'"));
   assert.ok(v('tenants.js').includes("'Name, phone, unit, property'"));
   assert.ok(!/Search tenant, unit, reference or notes|Search name, phone, unit or property/.test(v('rent.js') + v('tenants.js')));
 });

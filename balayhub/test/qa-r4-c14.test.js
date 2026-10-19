@@ -60,7 +60,7 @@ test('short-term and both-type workspaces keep every type their role can receive
   for (const owner of [shortOwner, bothOwner]) {
     assert.deepEqual(Object.keys((await owner.get('/api/account/notify-prefs')).data.types), TYPE_KEYS);
   }
-  assert.equal((await shortOwner.get('/api/push/settings')).data.types.length, 5);
+  assert.equal((await shortOwner.get('/api/push/settings')).data.types.length, 9);
   assert.equal((await shortOwner.patch('/api/account/notify-prefs', { types: { new_booking: false } })).status, 200);
 });
 

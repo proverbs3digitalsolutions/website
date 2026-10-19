@@ -197,6 +197,21 @@ async function reserve(db, { org, userId, coupon, redemption }) {
   }
 }
 
+// A payment landed for a checkout whose reservation was already released (it was given up as abandoned, then paid late).
+// The coupon must not end up both paid for and free to use again: take the reservation back, or, when the workspace has
+// since reserved the same coupon again, count the months on that one. Returns the redemption id the payment should count on.
+async function reclaim(db, b) {
+  if (!b.coupon_redemption_id) return null;
+  const { rows: [r] } = await db.query('SELECT coupon_id, status FROM platform_coupon_redemptions WHERE redemption_id = $1 FOR UPDATE', [b.coupon_redemption_id]);
+  if (!r || r.status !== 'released') return b.coupon_redemption_id;
+  const { rows: [live] } = await db.query(
+    `SELECT redemption_id FROM platform_coupon_redemptions WHERE coupon_id = $1 AND organization_id = $2 AND status IN ('pending', 'active')`,
+    [r.coupon_id, b.organization_id]);
+  if (live) return live.redemption_id;
+  await db.query(`UPDATE platform_coupon_redemptions SET status = 'pending', released_at = NULL WHERE redemption_id = $1`, [b.coupon_redemption_id]);
+  return b.coupon_redemption_id;
+}
+
 // A paid checkout uses up its covered months. Called by markPaid inside its transaction.
 // A released redemption stays released: a payment that lands late still gets its period from markPaid, but no coupon months.
 async function applyPaid(db, b) {
@@ -226,5 +241,5 @@ async function releaseIfUnused(db, redemptionId) {
 
 module.exports = {
   normalizeCode, CODE_RE, MIN_CHARGE_C, toCentavos, toPesos, coveredMonths, priceWithCoupon, couponState, monthsTotal, describe,
-  usedCount, liveRedemption, lastRedemption, resolve, reserve, applyPaid, releaseIfUnused,
+  usedCount, liveRedemption, lastRedemption, resolve, reserve, reclaim, applyPaid, releaseIfUnused,
 };

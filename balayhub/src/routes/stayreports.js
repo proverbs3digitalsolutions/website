@@ -184,7 +184,7 @@ async function missingFees(user, { from, to }, f = {}, basis = 'checkin') {
   const col = basis === 'checkout' ? 'b.check_out' : 'b.check_in';
   params.push(from); where.push(`${col} >= $${params.length}`);
   params.push(to); where.push(`${col} < $${params.length}`);
-  if (basis === 'checkout') { params.push(manilaToday()); where.push(`b.check_out <= $${params.length}`); }
+  if (basis === 'checkout') { params.push(manilaToday()); where.push(`b.check_out < $${params.length}`); }
   if (f.property_id) { params.push(f.property_id); where.push(`p.property_id = $${params.length}`); }
   if (f.unit_id) { params.push(f.unit_id); where.push(`u.unit_id = $${params.length}`); }
   if (f.channel) { params.push(f.channel); where.push(`b.channel = $${params.length}`); }

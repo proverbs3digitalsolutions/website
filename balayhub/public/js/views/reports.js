@@ -66,7 +66,7 @@ export async function reportsView(el, { query }) {
   const barBox = h('div', { class: 'no-print' });
   const dateNote = h('p', { class: 'form-error', role: 'alert' });
   const exportLink = h('a', { class: 'btn btn--primary', download: '' }, 'Export (Excel / CSV)');
-  const exportNote = h('span', { class: 'muted small' }, exportHint({}));
+  const exportNote = h('span', { class: 'muted small', id: 'report-export-note' }, exportHint({}));
   // The Custom dates boxes as the person left them. A backwards pair is cleared in the filter values, but its dates stay on screen.
   const boxDates = () => ({
     from: boxByLabel(barBox, 'Custom dates, from')?.value || '',
@@ -77,6 +77,13 @@ export async function reportsView(el, { query }) {
     exportLink.className = ready ? 'btn btn--primary' : 'btn btn--secondary';
     exportNote.hidden = ready;
     if (!ready) exportNote.textContent = exportHint(boxDates());
+    // The boxes that block the export are marked and tied to the line that says so (same as the stay reports).
+    const d = boxDates();
+    for (const k of ['from', 'to']) {
+      const box = boxByLabel(barBox, `Custom dates, ${k}`);
+      if (!box) continue;
+      if (!ready && (!d[k] || (d.from && d.to && d.from > d.to))) { box.setAttribute('aria-invalid', 'true'); box.setAttribute('aria-describedby', exportNote.id); } else { box.removeAttribute('aria-invalid'); box.removeAttribute('aria-describedby'); }
+    }
     if (ready) exportLink.removeAttribute('aria-disabled'); else { exportLink.removeAttribute('href'); exportLink.setAttribute('aria-disabled', 'true'); }
   };
 

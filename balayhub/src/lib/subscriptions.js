@@ -72,6 +72,8 @@ async function startOne(orgId) {
   return tx(async (db) => {
     const { rows: [o] } = await db.query('SELECT * FROM organizations WHERE organization_id = $1 FOR UPDATE', [orgId]);
     if (o.paymongo_subscription_id && o.subscription_status !== 'cancelled') return false; // another run got here first
+    // Settings may have changed since the unlocked read: automatic payment off, card removed, deletion scheduled.
+    if (!o.auto_renew || !o.card_payment_method_id || !o.paymongo_customer_id || o.deletion_scheduled_at) return false;
     const planId = await ensurePlan(o.renewal_plan, amountC);
     const data = await call('POST', '/subscriptions', { data: { attributes: { customer_id: o.paymongo_customer_id, plan_id: planId, payment_method_id: o.card_payment_method_id } } });
     const id = data?.data?.id;
@@ -164,4 +166,4 @@ async function handleEvent(event) {
   }
 }
 
-module.exports = { enabled, ensurePlan, startDue, handleEvent, cancelForOrg };
+module.exports = { enabled, ensurePlan, startOne, startDue, handleEvent, cancelForOrg };

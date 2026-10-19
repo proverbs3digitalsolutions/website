@@ -8,6 +8,10 @@ import { highRateOk } from '../rates.js';
 import { state, navigate } from '../app.js';
 import { addDays, newReservationModal, CHANNEL_LABEL } from './reservations.js';
 
+// On a phone the name column is ~13 characters wide and the end of "QA Onb A Unit 1" is what tells units apart,
+// so a long name keeps its start and its end with the middle cut (the full name stays in aria-label and title).
+const sideName = (n) => (window.matchMedia?.('(max-width: 640px)').matches && n.length > 14 ? `${n.slice(0, 6)}…${n.slice(-7)}` : n);
+
 const dayName = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { weekday: 'short', timeZone: 'UTC' });
 const dayNum = (d) => Number(d.slice(8, 10));
 // The 1st of a month reads "Nov 1", so a month change shows in the day header.
@@ -186,7 +190,7 @@ export async function calendarView(el, { query }) {
       const lines = [...new Set(warn.map(problemLine))];
       const row = h('div', { class: 'cal-row' },
         h('div', { class: 'cal-side' },
-          h('a', { href: `#/listings?focus=${l.unit_id}`, class: 'cal-name link-tap' }, l.unit_name),
+          h('a', { href: `#/listings?focus=${l.unit_id}`, class: 'cal-name link-tap', 'aria-label': l.unit_name, title: l.unit_name }, sideName(l.unit_name)),
           h('span', { class: 'cal-prop' }, l.property_name),
           h('span', { class: `badge badge--${l.cleaning_status === 'dirty' ? 'overdue' : 'paid'}` }, l.cleaning_status === 'dirty' ? 'Dirty' : 'Clean'),
           lines.length > 0 && h('a', { class: 'badge badge--partial cal-warn', href: `#/listings?focus=${l.unit_id}`, title: lines.join(' '), 'aria-label': `Sync problem on ${l.unit_name}: ${lines.join(' ')}` }, `⚠ ${lines.length > 1 ? `${lines.length} sync problems` : 'Sync problem'}`)),

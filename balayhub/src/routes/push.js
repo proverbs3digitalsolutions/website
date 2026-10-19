@@ -11,10 +11,6 @@ const push = require('../lib/push');
 
 const router = express.Router();
 
-// The device settings list keeps the types it always had. Mentions and assignments are set in
-// My account (/account/notify-prefs) and are not shown here.
-const DEVICE_TYPES = ['new_booking', 'guest_message', 'checkin_form', 'payment', 'cleaning'];
-
 // Only browser push services, so the server never posts to arbitrary URLs.
 const PUSH_HOSTS = [/^fcm\.googleapis\.com$/, /^updates\.push\.services\.mozilla\.com$/, /^web\.push\.apple\.com$/, /\.notify\.windows\.com$/, /^android\.googleapis\.com$/];
 function isPushService(url) {
@@ -35,9 +31,8 @@ const onStates = (stored, keys) => Object.fromEntries(keys.map((key) => [key, st
 router.get('/push/settings', ah(async (req, res) => {
   const u = await one('SELECT notify_prefs FROM users WHERE user_id = $1', [req.user.user_id]);
   const { rows } = await query('SELECT device, created_at FROM push_subscriptions WHERE user_id = $1 ORDER BY created_at', [req.user.user_id]);
-  const shown = typesFor(req.user.role, req.user.business_type);
-  const types = Object.entries(push.TYPES).filter(([key]) => DEVICE_TYPES.includes(key) && shown.includes(key))
-    .map(([key, t]) => ({ key, label: t.label, on: u.notify_prefs[key] !== false }));
+  const types = typesFor(req.user.role, req.user.business_type)
+    .map((key) => ({ key, label: push.TYPES[key].label, on: u.notify_prefs[key] !== false }));
   res.json({ public_key: push.vapid().publicKey, devices: rows, types });
 }));
 

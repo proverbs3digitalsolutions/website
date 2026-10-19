@@ -224,6 +224,7 @@ export async function guestCheckinView(el, { params }, kept) {
       progress.textContent = '';
       // The page heading becomes the thank-you, so the screen no longer says "Please register".
       heading.textContent = t("Thank you! You're registered.");
+      document.title = `${heading.textContent} — BalayHub`; // the tab follows the heading, like app.js titles the other guest pages
       if (intro) intro.hidden = true;
       el.replaceChildren(page(header, h('div', { class: 'card gc__done' },
         h('div', { class: 'gc__tick', 'aria-hidden': 'true' }, '✓'),

@@ -76,10 +76,14 @@ test('pay-saved: a second call while a payment is pending is 409 and only one in
   const second = await C.post('/api/billing/pay-saved', { plan: 'starter', months: '1' });
   assert.equal(second.status, 409, JSON.stringify(second.data));
   assert.equal(second.data.code, 'PAYMENT_IN_PROGRESS');
-  assert.equal(second.data.error ?? second.data.message, 'A payment is already in progress. Wait a minute, then check Plan & billing.');
+  assert.match(second.data.error ?? second.data.message, /^A payment is already in progress\. Try again in \d+ minutes?\.$/);
   assert.equal(intents().length - before, 1);
-  // an old pending row no longer blocks
+  // R19: an old pending row blocks while PayMongo still shows its intent as open (the bank step may yet finish) ...
   await sql(`UPDATE billing_payments SET created_at = now() - interval '16 minutes' WHERE organization_id = $1 AND kind = 'plan'`, [orgC]);
+  const old = (await sql(`SELECT payment_intent_id FROM billing_payments WHERE organization_id = $1 AND kind = 'plan'`, [orgC]))[0].payment_intent_id;
+  assert.equal((await C.post('/api/billing/pay-saved', { plan: 'starter', months: '1' })).status, 409);
+  // ... and stops blocking once the intent is dead
+  fake.markIntent(old, 'failed');
   assert.equal((await C.post('/api/billing/pay-saved', { plan: 'starter', months: '1' })).status, 200);
 });
 

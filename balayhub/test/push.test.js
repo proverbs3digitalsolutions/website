@@ -28,7 +28,7 @@ test.after(async () => { await srv.close(); });
 test('devices subscribe; settings list only the types for that role', async () => {
   const s = (await owner.get('/api/push/settings')).data;
   assert.ok(s.public_key.length > 40);
-  assert.equal(s.types.length, 5);
+  assert.equal(s.types.length, 9);
   assert.deepEqual((await staff.get('/api/push/settings')).data.types.map((t) => t.key), ['cleaning']);
   assert.equal((await owner.post('/api/push/subscribe', { subscription: { endpoint: 'http://insecure', keys: {} } })).status, 400);
   assert.equal((await owner.post('/api/push/subscribe', { subscription: { endpoint: 'https://internal.example.com/hook-123456', keys: { p256dh: 'x', auth: 'y' } } })).status, 400, 'only real push services');

@@ -174,6 +174,17 @@ const panelOpen = new Map();
 const pathNow = () => (typeof location === 'undefined' ? '' : location.hash || '').split('?')[0];
 const FOCUS_TRIES = 10;
 
+// Screen-size listeners of live bars. A bar that has left the page lets go of its listener at the next route change or
+// the next bar built, even if the screen never resized. A bar not yet in the page gets a few sweeps before it is dropped.
+const liveBars = new Set();
+function sweepBars() {
+  for (const b of liveBars) {
+    if (b.root.isConnected) b.seen = true;
+    else if (b.seen || ++b.misses >= 3) { b.off(); liveBars.delete(b); }
+  }
+}
+if (typeof window !== 'undefined') window.addEventListener?.('hashchange', () => setTimeout(sweepBars, 0));
+
 function control(f, values, emit, defaults = {}) {
   const id = `flt-${f.name}-${Math.random().toString(36).slice(2, 6)}`;
   if (f.type === 'daterange') {
@@ -286,7 +297,8 @@ function control(f, values, emit, defaults = {}) {
   const mark = () => sel.classList?.toggle('is-set', String(values[f.name] ?? '') !== String(defaults[f.name] ?? ''));
   sel.addEventListener('change', () => { values[f.name] = sel.value; mark(); emit(); });
   mark();
-  return { el: f.inline ? sel : h('div', { class: 'flt__field' }, h('label', { for: id }, f.label), sel), sync: () => { sel.value = values[f.name] ?? ''; mark(); } };
+  // An inline (quick) select also carries a labelled wrapper, used when the bar moves it into the phone Filters panel.
+  return { el: f.inline ? sel : h('div', { class: 'flt__field' }, h('label', { for: id }, f.label), sel), field: f.inline ? h('div', { class: 'flt__field' }, h('label', { for: id }, f.label)) : null, sync: () => { sel.value = values[f.name] ?? ''; mark(); } };
 }
 
 function chipText(f, values) {
@@ -327,8 +339,10 @@ export function filterBar({ key, values, defaults, search, quick = [], more = []
   }
   dropFromAddress(dropped);
   const chips = h('div', { class: 'flt__chips', 'aria-live': 'polite' });
-  const moreBtn = more.length ? h('button', { type: 'button', class: 'btn btn--secondary flt__more', 'aria-expanded': 'false' }) : null;
-  const panel = more.length ? h('div', { class: 'flt__panel card card--soft', hidden: true }) : null;
+  // A bar with only quick filters gets the same panel on phones (the button is hidden on wider screens).
+  const hasPanel = more.length > 0 || quick.length > 0;
+  const moreBtn = hasPanel ? h('button', { type: 'button', class: 'btn btn--secondary flt__more', 'aria-expanded': 'false' }) : null;
+  const panel = hasPanel ? h('div', { class: 'flt__panel card card--soft', hidden: true }) : null;
   const controls = [];
   let searchInput;
 
@@ -364,7 +378,8 @@ export function filterBar({ key, values, defaults, search, quick = [], more = []
     searchInput.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { values[search.name || 'q'] = searchInput.value.trim(); emit(); }, 300); });
     searchEl = h('div', { class: 'search' }, searchInput);
   }
-  const quickEls = quick.map((f) => { const c = control({ ...f, inline: f.type === 'select' || !f.type }, values, emit, defaults); controls.push(c); return c.el; });
+  const quickCtrls = quick.map((f) => { const c = control({ ...f, inline: f.type === 'select' || !f.type }, values, emit, defaults); controls.push(c); return c; });
+  const quickEls = quickCtrls.map((c) => c.el);
   if (panel) {
     const moreCtrls = more.map((f) => { const c = control({ type: 'select', ...f }, values, emit, defaults); controls.push(c); return c; });
     panel.append(h('div', { class: 'flt__grid' }, moreCtrls.map((c) => c.el)),
@@ -384,18 +399,24 @@ export function filterBar({ key, values, defaults, search, quick = [], more = []
   // A selected control of the bar being replaced: once this bar is in the page, focus goes to the control with the same name.
   const old = typeof document !== 'undefined' && document.activeElement?.closest?.('.flt');
   const focusName = old ? document.activeElement.getAttribute?.('data-flt') : null;
-  const byLabel = !moreBtn && quick.some((f) => !f.type || f.type === 'select');
+  const byLabel = !more.length && quick.some((f) => !f.type || f.type === 'select');
   const root = h('div', { class: 'flt' }, h('div', { class: 'toolbar flt__bar' }, extra, searchEl, byLabel && h('span', { class: 'flt__by muted small' }, filterIcon(), 'Filter by'), quickEls, moreBtn), panel, chips);
   // Phones: the quick filters sit in the Filters panel, so the search box and the button share one row and the list starts near the top.
+  const byEl = root.querySelector?.('.flt__by');
   const grid = panel?.firstChild;
   if (grid && quickEls.length && typeof matchMedia === 'function') {
     const mq = matchMedia('(max-width: 559px)');
-    const place = () => { if (mq.matches) grid.prepend(...quickEls); else moreBtn.before(...quickEls); };
+    const place = () => {
+      // On phones each quick select gets its visible label in the panel; a quick-only bar shows the Filters button instead of "Filter by".
+      if (mq.matches) { grid.prepend(...quickEls); for (const c of quickCtrls) if (c.field) { c.el.before(c.field); c.field.append(c.el); } }
+      else { moreBtn.before(...quickEls); for (const c of quickCtrls) c.field?.remove(); }
+      if (!more.length) { moreBtn.style.display = mq.matches ? '' : 'none'; if (byEl) byEl.style.display = mq.matches ? 'none' : ''; }
+    };
     place();
-    // A bar that was replaced (the page redrew it) stops listening once it has left the page.
-    let seen = false;
-    const onMq = () => { if (root.isConnected) { seen = true; place(); } else if (seen) mq.removeEventListener('change', onMq); };
+    const onMq = () => { if (root.isConnected) place(); };
     mq.addEventListener?.('change', onMq);
+    sweepBars();
+    liveBars.add({ root, seen: false, misses: 0, off: () => mq.removeEventListener?.('change', onMq) });
   }
   if (old) {
     let tries = 0;

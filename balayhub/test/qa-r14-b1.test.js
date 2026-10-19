@@ -67,7 +67,7 @@ test('#5 .link-tap on the date, Guest profile, phone links and calendar listing 
   assert.match(res, /h\('a', \{ class: 'link-tap', href: `#\/reservations\/\$\{r\.booking_id\}`/);
   assert.match(res, /h\('a', \{ class: 'link-tap', href: `#\/guests\//);
   assert.match(res, /h\('a', \{ class: 'link-tap', href: `tel:/);
-  assert.match(cal, /h\('a', \{ href: `#\/listings\?focus=\$\{l\.unit_id\}`, class: 'cal-name link-tap' \}/);
+  assert.match(cal, /h\('a', \{ href: `#\/listings\?focus=\$\{l\.unit_id\}`, class: 'cal-name link-tap'[,} ]/);
 });
 
 // ---- server: the listing's guest limit is checked before the general cap of 50 (needs TEST_DATABASE_URL)

@@ -78,12 +78,14 @@ export async function recordPaymentModal({ leaseId, amount, period, onSaved } = 
       leaseField, balanceInfo, amountField,
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'payment_date', label: 'Date received', type: 'date', required: true, value: todayManila(), max: todayManila() }),
-        field({ name: 'payment_method', label: 'Method', type: 'select', required: true, value: 'cash', placeholderOption: false, options: options(METHODS) })),
+        field({ name: 'payment_method', label: 'Method', type: 'select', placeholderOption: 'Choose…', options: options(METHODS) })),
       field({ name: 'reference_number', label: 'Reference no. (GCash, Maya, bank)', maxlength: 100 }),
       field({ name: 'notes', label: 'Notes', type: 'textarea', maxlength: 500 }),
       receiptField(),
       h('p', { class: 'hint muted small' }, 'Recording a payment does not verify it with the bank or e-wallet. Check the transfer before saving.'),
     ],
+    // No default method: a payment saved without a choice must never become cash by accident (D-92).
+    check: (d) => (!d.payment_method ? { payment_method: 'Choose how the money was received.' } : null),
     onSubmit: async (data, { idempotencyKey, form }) => {
       delete data.__receipt;
       let res;
@@ -324,7 +326,7 @@ export async function rentView(el, { query }) {
       const monthProp = [{ name: 'month', label: 'Month', all: 'All months', options: recentMonths(todayManila()) }, propertyField()].filter(Boolean);
       const compact = compactRentFilters(units.length);
       return {
-        search: { placeholder: 'Search tenant, unit or property' },
+        search: { placeholder: 'Tenant, unit or property', label: 'Search tenant, unit or property' },
         quick: compact ? [] : monthProp,
         more: [
           ...(compact ? monthProp : []),
@@ -338,7 +340,7 @@ export async function rentView(el, { query }) {
     }
     if (tab === 'payments') {
       return {
-        search: { placeholder: 'Tenant, unit, reference, notes' },
+        search: { placeholder: 'Tenant, unit, ref, notes', label: 'Search tenant, unit, reference number or notes' },
         quick: [
           { name: 'method', label: 'Method', all: 'All methods', options: METHODS.map((m) => [m, label(m)]) },
           propertyField(),
@@ -353,7 +355,7 @@ export async function rentView(el, { query }) {
       };
     }
     return {
-      search: { placeholder: 'Description, vendor, property', label: 'Search description, vendor or property' },
+      search: { placeholder: 'Description or vendor', label: 'Search description, vendor or property' },
       quick: [
         { name: 'category', label: 'Category', all: 'All categories', options: CATEGORIES.map((c) => [c, label(c)]) },
         propertyField(),
@@ -478,7 +480,7 @@ export async function paymentDetailView(el, { params, rerender }) {
     h('div', { class: 'card print-only' },
       h('h2', null, state.user.organization_name),
       p.voided_at && h('p', { class: 'alert alert--error' }, `VOID: this payment was voided on ${fmtDate(p.voided_at)}. It is not a receipt.`),
-      h('p', { class: 'muted' }, 'Acknowledgement receipt (not a BIR official receipt)'),
+      h('p', { class: 'muted' }, p.voided_at ? 'Voided payment record' : 'Acknowledgement receipt (not a BIR official receipt)'),
       h('dl', { class: 'dl' },
         h('dt', null, 'Tenant'), h('dd', null, p.tenant_name),
         h('dt', null, 'Property'), h('dd', null, p.property_name),

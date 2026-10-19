@@ -46,13 +46,30 @@ export const inviteProblems = (data) => {
   return fields;
 };
 
+// The pay picker starts on the plan chosen under "Plan after your trial", else the current paid plan, else Growth.
+// The sentence shown while a payment waits at the bank (GET /billing pending_payment); money is the file's peso formatter.
+export const pendingText = (pp, money) => (pp.minutes_left > 0
+  ? `A payment of ${money(pp.amount)} is waiting for your bank. Finish it in the bank window, or try again in ${pp.minutes_left} minutes.`
+  : `A payment of ${money(pp.amount)} is still waiting for your bank. Pay another way, or try again later.`);
+
+export const payDefaultPlan = (p, bill) => [bill.renewal_plan, p.plan, 'growth'].find((k) => k && bill.options.some((o) => o.key === k));
+
+// The router attaches the page after the view returns, so focus() on a detached node does nothing: focus once it is attached.
+async function focusWhenAttached(el, node) {
+  node.focus();
+  for (const t = Date.now(); el.isConnected === false && Date.now() - t < 10000;) await new Promise((ok) => setTimeout(ok, 50));
+  if (el.isConnected !== false) node.focus();
+}
+
 export async function settingsView(el, { rerender, query = {} }) {
+  let billingNotice = null;
   // Back from PayMongo checkout: confirm the payment with the server.
   if (query.billing) {
     history.replaceState(null, '', '#/settings');
     try {
       const r = await post(`/billing/${encodeURIComponent(query.billing)}/refresh`);
-      if (r.status === 'paid') { await refreshUser(); toast('Payment received. Thank you! Your plan is active.'); }
+      if (r.status === 'paid') { await refreshUser(); billingNotice = h('div', { class: 'alert', role: 'status', tabindex: '-1' }, 'Payment received. Thank you! Your plan is active.'); }
+      else if (r.status === 'failed') billingNotice = h('div', { class: 'alert alert--error', role: 'alert', tabindex: '-1' }, "Your saved card couldn't be charged. Pay another way, or use a different card.");
       else toast('We are still waiting for the payment confirmation. This page updates within a few minutes.');
     } catch (err) { toast(err.message, 'error'); }
   } else if (query.billing_cancelled) {
@@ -187,7 +204,8 @@ export async function settingsView(el, { rerender, query = {} }) {
       : 'BalayHub stores guest, booking and property records to help you run your stays. Collect only what you need: guest ID photos are deleted automatically after the stay, and the owner can export or delete the workspace data under the Data Privacy Act.'),
     h('p', { style: { marginTop: '10px' } }, h('a', { class: 'link-tap', href: '#/privacy' }, 'Read the Privacy Notice'))));
 
-  el.replaceChildren(pageHead({ title: 'Settings', sub: u.organization_name }), h('div', { class: 'stack' }, sections));
+  el.replaceChildren(pageHead({ title: 'Settings', sub: u.organization_name }), h('div', { class: 'stack' }, billingNotice, sections));
+  if (billingNotice) focusWhenAttached(el, billingNotice);
   // The top bar's "Invite a teammate" link (#/settings?invite=1) opens the dialog once the page is drawn.
   query.invite && invite && (delete query.invite, history.replaceState(null, '', '#/settings'), invite());
 }
@@ -483,8 +501,7 @@ export function cardBlock(p, bill, rerender) {
 
 // Choose a plan and length, then pay on PayMongo's secure page.
 export function payOnline(p, bill, rerender, bc) {
-  const current = bill.options.some((o) => o.key === p.plan) ? p.plan : 'growth';
-  let plan = current;
+  let plan = payDefaultPlan(p, bill);
   let months = 1;
   let quote = null; // the server's preview with the coupon applied, or null for the list price
   const amountEl = h('strong');
@@ -503,7 +520,8 @@ export function payOnline(p, bill, rerender, bc) {
   const autoOn = !!(bill.subscriptions && bill.auto_renew?.on);
   const couponNote = h('span', { hidden: true }, autoOn ? ' Your coupon is applied automatically to the months it covers.' : ' BalayHub never charges your card on its own; you renew here.');
   const saved = !!(bill.saved_card_pay && bill.card);
-  const savedBtn = h('button', { class: 'btn btn--primary', type: 'button' });
+  const pending = bill.pending_payment || null; // a payment is waiting at the bank: no second one-tap pay, no coupon box
+  const savedBtn = saved && !pending ? h('button', { class: 'btn btn--primary', type: 'button' }) : null; // no saved card, no pay button
   const label = () => (quote?.free ? 'Activate free plan' : saved ? 'Pay another way' : quote?.card_only ? `Pay ${bc.plain(quote.amount)} by card` : 'Pay now');
   const update = () => {
     const o = bill.options.find((x) => x.key === plan);
@@ -515,13 +533,13 @@ export function payOnline(p, bill, rerender, bc) {
     couponNote.hidden = !(quote?.coupon || bill.coupon?.status === 'active' || bill.coupon?.status === 'pending');
     if (!btn.disabled) btn.textContent = label();
     // A saved card makes one tap the main way to pay; a free coupon needs no card, so the plain Activate button stays.
-    const showSaved = saved && !quote?.free;
-    savedBtn.hidden = !showSaved;
+    const showSaved = saved && !pending && !quote?.free;
+    if (savedBtn) savedBtn.hidden = !showSaved;
     btn.className = showSaved ? 'btn btn--secondary' : 'btn btn--primary';
-    if (!savedBtn.disabled) savedBtn.textContent = `Pay ${bc.money(quote ? quote.amount : bill.options.find((x) => x.key === plan).prices.find((x) => x.months === months).amount)} with ${cardText(bill.card || {})}`;
+    if (savedBtn && !savedBtn.disabled) savedBtn.textContent = `Pay ${bc.money(quote ? quote.amount : bill.options.find((x) => x.key === plan).prices.find((x) => x.months === months).amount)} with ${cardText(bill.card || {})}`;
   };
   // A new plan or length makes the old preview wrong at once; ask the server again.
-  const selectionChanged = () => { quote = null; update(); box.refresh(); };
+  const selectionChanged = () => { quote = null; update(); if (!pending) box.refresh(); };
   btn.addEventListener('click', async () => {
     btn.disabled = true;
     btn.textContent = quote?.free ? 'Activating…' : 'Opening secure checkout…';
@@ -541,7 +559,7 @@ export function payOnline(p, bill, rerender, bc) {
       update();
     }
   });
-  savedBtn.addEventListener('click', async () => {
+  savedBtn?.addEventListener('click', async () => {
     savedBtn.disabled = true; btn.disabled = true;
     savedBtn.textContent = 'Charging your card…';
     try {
@@ -566,14 +584,15 @@ export function payOnline(p, bill, rerender, bc) {
   });
   drawCards();
   update();
-  box.refresh();
+  if (!pending) box.refresh();
   return h('div', { class: 'payonline' },
     cardBlock(p, bill, rerender),
     h('h3', { class: 'subhead', style: { marginTop: '16px' } }, p.plan === 'trial' || p.read_only ? 'Choose your plan' : 'Renew or change plan'),
     cards,
     h('div', { class: 'payonline__row' }, monthSel, h('span', null, 'Total: ', strikeEl, ' ', amountEl), savedBtn, btn),
+    pending && h('div', { class: 'alert alert--info', role: 'status' }, pendingText(pending, bc.money)),
     msgEl,
-    box,
+    !pending && box,
     h('p', { class: 'muted small' }, 'Pay securely with GCash, Maya, card or GrabPay through PayMongo. Your plan activates as soon as the payment goes through. Renewing the same plan early adds the time on top; switching plans converts your unused days to the new plan; paying during the free trial keeps your remaining trial days.', couponNote));
 }
 

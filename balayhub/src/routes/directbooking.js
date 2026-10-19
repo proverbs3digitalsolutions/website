@@ -140,7 +140,11 @@ router.patch('/direct-booking', owners, ah(async (req, res) => {
   let keyCheck = null;
   if (body.paymongo_secret_key) {
     const key = body.paymongo_secret_key.trim();
-    if (!/^sk_(test|live)_[A-Za-z0-9]{10,}$/.test(key)) throw validationError({ paymongo_secret_key: 'Paste the Secret key from PayMongo (it starts with sk_live_ or sk_test_).' });
+    if (!/^sk_(test|live)_[A-Za-z0-9]{10,}$/.test(key)) {
+      // Right start but fewer than 10 letters or digits after it: the key is cut short, so say that instead of blaming the start.
+      const cutShort = /^sk_(test|live)_[A-Za-z0-9]{0,9}$/.test(key);
+      throw validationError({ paymongo_secret_key: cutShort ? 'This key is too short. Paste the full Secret key from PayMongo.' : 'Paste the Secret key from PayMongo (it starts with sk_live_ or sk_test_).' });
+    }
     // Connected only after PayMongo accepts the key; a refused key is not saved, an unreachable PayMongo leaves it unchecked.
     keyCheck = await paymongo.checkKey(key);
     if (keyCheck === 'rejected') throw validationError({ paymongo_secret_key: "PayMongo didn't accept this key. Copy the Secret key again from your PayMongo dashboard (Developers, API keys)." });

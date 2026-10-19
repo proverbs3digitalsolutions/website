@@ -2,7 +2,7 @@
 
 Things only the founder can do or decide before related work can go ahead. Automated runs add items here. The founder clears them by doing the item and ticking it, or by writing the decision in DECISIONS.MD.
 
-Last updated: 2026-10-19 (QA round 18 questions added: the commission option and the coupon wording). Before that: 2026-10-15 (card on file and automatic payment, D-98, and QA round 17 questions added; round 16 and earlier unchanged except two answered lines)
+Last updated: 2026-10-20 (QA round 19: trial workspaces with no saved end date). Before that: 2026-10-19 (QA round 18 questions added: the commission option and the coupon wording). Before that: 2026-10-15 (card on file and automatic payment, D-98, and QA round 17 questions added; round 16 and earlier unchanged except two answered lines)
 
 ## Security — do first
 
@@ -443,3 +443,13 @@ Each one has the default already built.
 - [ ] **A "free plan plus 2% on paid direct bookings" option (founder question, 2026-10-19).** Advice was given; **nothing is built.** *Decision needed from the founder:* build it or not. *What it needs:* either PayMongo split payments (BalayHub takes 2% as each guest pays the host directly; this needs PayMongo to approve the split-payment feature for the BalayHub account and a way for hosts to link their own PayMongo account), or a monthly invoice to each host for 2% of the paid direct bookings they took that month (simpler, but BalayHub has to chase payment and hosts can stop paying). *Default:* do not build; keep the three paid plans and the 14-day trial.
 - [ ] **Coupon wording: total months or months left (R18-CPN).** The line under the total on Plan & billing now reads "This payment covers 1 of your 3 coupon months." The 3 is the coupon's **total** months. *Default (built):* total months, the same words every time the host pays. *The other choice:* months left, for example "This payment covers 1 of your remaining 2 coupon months.", which changes as the coupon is used.
 - [ ] **Supplies filters on desktop (round 18).** The Property and Stock filters on Supplies now sit behind the Filters button on desktop as well as phones. *Default (built):* keep. *The other choice:* move them back beside the search box on desktop.
+
+## Questions from QA round 19 (2026-10-20)
+
+- [ ] **Older trial workspaces with no saved trial end date (D-101).** Round 19 made the trial end rule one thing: the saved end date, else the day the workspace was created plus 14 days. A workspace that was created before the end date was stored, and is still on the trial plan, may now show **"0 days left"** (or fewer than it used to). It is **not locked out**: view-only needs a saved end date, so those owners can still work and can still pay. *What to do:* check how many live workspaces are in that state, then decide whether to give them a saved end date (and which). *Default (built):* leave them alone; the page shows the honest count from the created date. *The other choice:* set an end date for each (for example 14 days from today) so the owner gets a fresh, fair trial.
+  Read-only check, run on the Hostinger server from the BalayHub folder (it changes nothing):
+  ```
+  docker compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT count(*) AS no_end_date FROM organizations WHERE plan = 'trial' AND trial_ends_at IS NULL AND deletion_scheduled_at IS NULL;"
+  ```
+  To see which ones: `SELECT organization_id, name, created_at FROM organizations WHERE plan = 'trial' AND trial_ends_at IS NULL ORDER BY created_at;` (use the same `docker compose exec db psql ... -c "..."` form). If the table or column names differ on the server, ask and we will adjust; never paste database passwords in chat.
+- [ ] The earlier open questions stay as they are: the "free plan plus 2% on paid direct bookings" option, the coupon wording (total months or months left), and the Supplies filters on desktop (all under "Questions from QA round 18").

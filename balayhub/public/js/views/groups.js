@@ -262,7 +262,7 @@ export async function newGroupModal({ onSaved } = {}) {
       try {
         const res = await post('/booking-groups', { name: d.name.trim(), guest, rooms: list, ...(d.notes && { notes: d.notes }) });
         toast('Group booking created.');
-        if (res.guest_do_not_rebook) toast(`Heads up: ${res.guest_name || 'this guest'} is marked "Do not rebook" in Guests.`, 'error');
+        if (res.guest_do_not_rebook) toast(`Heads up: ${res.guest_do_not_rebook_name || res.guest_name || 'this guest'} is marked "Do not rebook" in Guests.`, 'error');
         modal.close();
         if (onSaved) onSaved(res); else navigate(`#/groups/${res.group.group_id}`);
       } catch (err) {
@@ -414,7 +414,7 @@ export async function groupDetailView(el, { params, rerender }) {
           const rowName = twin ? `${which}, room ${rooms.indexOf(r) + 1}` : which;
           return h('tr', null,
             h('td', null, h('a', { class: 'link-tap', href: `#/reservations/${r.booking_id}`, 'aria-label': rowName }, h('strong', null, r.unit_name)), off && h('span', { class: 'badge badge--voided' }, 'Cancelled')),
-            h('td', null, `${fmtDate(r.check_in)} – ${fmtDate(r.check_out)}`, h('div', { class: 'muted small' }, `${nightsOf(r.check_in, r.check_out)} nights`)),
+            h('td', null, `${fmtDate(r.check_in)} – ${fmtDate(r.check_out)}`, h('div', { class: 'muted small' }, (n => `${n} night${n === 1 ? '' : 's'}`)(nightsOf(r.check_in, r.check_out)))),
             h('td', null, r.num_guests ? String(r.num_guests) : '—'),
             // A cancelled room is not in the group total, so its amount is not shown as owed (the balance column does the same).
             canManage && h('td', { class: 'num' }, off ? ['—', h('span', { class: 'sr-only' }, ' Cancelled')] : peso(r.total_amount)),

@@ -62,7 +62,7 @@ test('composer errors clear when the message or the send-later time changes', ()
 });
 
 test('a send-later time that has already passed asks before sending now', () => {
-  assert.match(src, /let scheduleFor = mode === 'message' && sendAt\.value \? new Date\(sendAt\.value\) : null;\s*if \(scheduleFor && scheduleFor <= new Date\(\)\) \{\s*if \(!await confirmDialog\(\{ title: 'That time has passed\. Send it now\?'[^\n]*confirmText: 'Send now' \}\)\) return;\s*scheduleFor = null;/);
+  assert.match(src, /let scheduleFor = mode === 'message' \? manilaDateTime\(sendAt\.value\) : null;\s*if \(scheduleFor && scheduleFor <= new Date\(\)\) \{\s*if \(!await confirmDialog\(\{ title: 'That time has passed\. Send it now\?'[^\n]*confirmText: 'Send now' \}\)\) return;\s*scheduleFor = null;/);
   assert.match(src, /if \(scheduleFor\) payload\.send_at = scheduleFor\.toISOString\(\);/);
 });
 

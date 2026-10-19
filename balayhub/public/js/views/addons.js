@@ -40,10 +40,11 @@ function addonModal(a, listings, onSaved) {
       field({ name: 'before_arrival', label: 'Let guests add it before arrival (on their payment page)', type: 'checkbox', value: x.before_arrival ?? true }),
       a && field({ name: 'active', label: 'Active', type: 'checkbox', value: x.active ?? true }),
     ],
-    onSubmit: async (d) => {
+    onSubmit: async (d, { form }) => {
       // The maximum is sent as typed, so a 0 gets the server's message; a blank box means one.
       const body = { ...d, max_quantity: d.max_quantity.trim() || 1, unit_ids: d.unit_ids || [] };
-      if (!await highAddonPriceOk(d.price)) return false;
+      // "Change it" keeps the form open with focus on the price.
+      if (!await highAddonPriceOk(d.price)) { form.elements.price.focus(); return false; }
       if (a) await patch(`/addons/${a.addon_id}`, body); else await post('/addons', body);
       toast(a ? 'Add-on updated.' : 'Add-on added.');
       onSaved();

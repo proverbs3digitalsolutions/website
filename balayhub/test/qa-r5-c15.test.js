@@ -151,15 +151,15 @@ test('Clear filters on the rent tab also resets the status chip, so the button a
 
 // ---------------------------------------------------------------- #20 long-term examples
 test('long-term workspaces get rent examples in the help search, the ask box and the subject box (#20)', () => {
-  assert.match(HELP_SRC, /placeholder: longTerm \? 'Search help, e\.g\. rent reminders, receipts, maintenance' : 'Search help — e\.g\. connect Airbnb, refund, gate pass'/);
-  assert.match(HELP_SRC, /placeholder: longTerm \? 'e\.g\. Paano mag-record ng bayad sa upa\?' : 'e\.g\. Paano i-connect ang Airbnb calendar ko\?'/);
+  assert.match(HELP_SRC, /placeholder: 'Search help'/);
+  assert.match(HELP_SRC, /placeholder: longTerm \? 'e\.g\. Paano mag-record\?' : 'e\.g\. I-connect Airbnb\?'/);
   assert.match(HELP_SRC, /placeholder: longTerm \? 'e\.g\. Rent reminder not sent to my tenant' : 'e\.g\. Airbnb bookings not showing on my calendar'/);
   assert.equal((HELP_SRC.match(/const longTerm = state\.user\.business_type === 'long_term';/g) || []).length, 2);
 });
 
 test('the assistant box gives long-term workspaces a rent example and keeps its text for the others (#20)', () => {
   assert.match(ASSIST_SRC, /const longTerm = state\.user\?\.business_type === 'long_term';/);
-  assert.match(ASSIST_SRC, /placeholder: longTerm \? 'Ask anything about BalayHub, e\.g\. how do I record a rent payment\? \(English or Tagalog\)' : 'Ask anything about BalayHub… \(English or Tagalog\)'/);
+  assert.match(ASSIST_SRC, /placeholder: longTerm \? 'Ask anything, e\.g\. how do I record rent\? \(English or Tagalog\)' : 'Ask anything about BalayHub… \(English or Tagalog\)'/);
 });
 
 // ---------------------------------------------------------------- #53 stars

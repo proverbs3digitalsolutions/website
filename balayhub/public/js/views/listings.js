@@ -663,7 +663,7 @@ export async function listingsView(el, { query }) {
         canManage && h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `Channels, ${l.unit_name}`, onclick: () => channelsModal(l, load) }, 'Channels'),
         canManage && h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `Photos, ${l.unit_name}`, onclick: () => photosModal(l) }, 'Photos'),
         canManage && h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `Guest pages, ${l.unit_name}`, onclick: () => guestPagesModal(l) }, 'Guest pages'),
-        canManage && h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Edit, ${l.unit_name}`, onclick: async () => {
+        canManage && h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `Edit, ${l.unit_name}`, onclick: async () => {
           const { units } = await get(`/properties/${l.property_id}`).then((r) => ({ units: r.units }));
           const unit = units.find((u) => u.unit_id === l.unit_id);
           const roomTypes = await roomTypeNames();
@@ -678,8 +678,8 @@ export async function listingsView(el, { query }) {
               await patch(`/units/${l.unit_id}`, prepUnit(d)); toast('Listing updated.'); load(); modal.close();
             } }) });
         } }, 'Edit'),
-        isOwner && h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Archive ${l.unit_name}`, onclick: () => changeArchive(l, 'archive', load) }, 'Archive'),
-        h('a', { class: 'btn btn--ghost btn--sm', href: `#/reservations?q=${encodeURIComponent(l.unit_name)}&view=all`, 'aria-label': `Bookings for ${l.unit_name}` }, 'Bookings')))))
+        isOwner && h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `Archive ${l.unit_name}`, onclick: () => changeArchive(l, 'archive', load) }, 'Archive'),
+        h('a', { class: 'btn btn--secondary btn--sm', href: `#/reservations?q=${encodeURIComponent(l.unit_name)}&view=all`, 'aria-label': `Bookings for ${l.unit_name}` }, 'Bookings')))))
       : h('div', { class: 'card' }, empty));
   }
   // Built from the first count of listings, then swapped in place when the count outgrows it (same filters object).
@@ -708,7 +708,7 @@ export async function listingsView(el, { query }) {
     const split = m === 'compact' ? compactSplit(quick, more) : { quick, more };
     return filterBar({
       key: 'listings', values: filters, defaults, onChange: load,
-      search: { placeholder: 'Search listing, building or city' },
+      search: { placeholder: 'Listing, building or city', label: 'Search listing, building or city' },
       quick: split.quick, more: split.more,
     });
   };

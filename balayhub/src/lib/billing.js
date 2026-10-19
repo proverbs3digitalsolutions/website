@@ -7,7 +7,7 @@
 const crypto = require('crypto');
 const config = require('../config');
 const { pool, tx, one, query } = require('../db');
-const { PLANS } = require('./plans');
+const { PLANS, trialEndsAt } = require('./plans');
 const { audit } = require('./audit');
 const { HttpError } = require('./http');
 const { fmtPeso } = require('./messaging');
@@ -16,6 +16,9 @@ const cardcheck = require('./cardcheck');
 const { toCentavos, toPesos } = coupons;
 
 const MONTH_OPTIONS = { 1: 1, 3: 3, 12: 10 }; // months → months charged (12 months = 2 free)
+
+// How long a one-tap charge may wait for the bank before a new one is allowed.
+const PENDING_MINUTES = 15;
 
 const enabled = () => Boolean(config.paymongoSecretKey);
 
@@ -34,9 +37,40 @@ async function failCheckout(billingId, redemptionId) {
   await coupons.releaseIfUnused(pool, redemptionId);
 }
 
+// An unfinished charge that PayMongo has given up on: the bank step failed, or the intent was cancelled.
+const intentFailed = (iv) => ['cancelled', 'failed'].includes(iv.status) || (iv.status === 'awaiting_payment_method' && Boolean(iv.errorCode));
+
+// Give up an abandoned one-tap charge (past the in-progress window): cancel it at PayMongo, then read it again. Only an
+// intent PayMongo shows as dead (cancelled, or declined) is expired and gives its coupon slot back; one that is still
+// processing, succeeded, waiting on the bank or unreadable stays pending, so a late payment can never land on a released coupon.
+async function expirePending(b) {
+  try { await paymongo('POST', `/payment_intents/${encodeURIComponent(b.payment_intent_id)}/cancel`); } catch { /* read it again below */ }
+  let iv;
+  try { iv = await paymongoClient.getPaymentIntent(config.paymongoSecretKey, b.payment_intent_id); } catch { return; }
+  if (!intentFailed(iv)) return;
+  await query(`UPDATE billing_payments SET status = 'expired' WHERE billing_id = $1 AND status = 'pending'`, [b.billing_id]);
+  await coupons.releaseIfUnused(pool, b.coupon_redemption_id);
+}
+
+// Settle a workspace's open one-tap charges before anything is priced: ask PayMongo about each (a failed one is released by
+// refresh), then expire the ones still waiting past the 15-minute window. Called before the workspace row is locked, since
+// markPaid locks it too. Errors from PayMongo leave a row as it was.
+async function settlePending(orgId) {
+  if (!enabled()) return;
+  const { rows } = await query(
+    `SELECT * FROM billing_payments WHERE organization_id = $1 AND kind = 'plan' AND status = 'pending' AND provider = 'paymongo_intent'
+        AND payment_intent_id IS NOT NULL`, [orgId]);
+  for (const b of rows) {
+    let st = 'pending';
+    try { st = await refresh(b.billing_id); } catch { /* try again on the next charge */ }
+    if (st === 'pending' && Date.now() - new Date(b.created_at).getTime() > PENDING_MINUTES * 60000) await expirePending(b);
+  }
+}
+
 // The first half of every charge: resolve the coupon, hold its slot and write the pending billing row. The workspace row
 // is locked so two charges can't both take the last slot of a coupon. A free quote is recorded as provider 'coupon'.
 async function prepareCharge(user, plan, months, { couponCode, provider }) {
+  if (provider === 'paymongo_intent') await settlePending(user.organization_id);
   return tx(async (db) => {
     const { rows: [org] } = await db.query(
       'SELECT organization_id, plan, is_demo, trial_ends_at, paid_until FROM organizations WHERE organization_id = $1 FOR UPDATE',
@@ -44,9 +78,14 @@ async function prepareCharge(user, plan, months, { couponCode, provider }) {
     if (provider === 'paymongo_intent') {
       // A pay-saved charge that is still waiting (3-D Secure, processing) must not be followed by a second charge.
       const { rows: [busy] } = await db.query(
-        `SELECT 1 FROM billing_payments WHERE organization_id = $1 AND kind = 'plan' AND status = 'pending' AND provider = 'paymongo_intent'
-            AND created_at > now() - interval '15 minutes' LIMIT 1`, [user.organization_id]);
-      if (busy) throw new HttpError(409, 'A payment is already in progress. Wait a minute, then check Plan & billing.', { code: 'PAYMENT_IN_PROGRESS' });
+        `SELECT CEIL(EXTRACT(EPOCH FROM created_at + make_interval(mins => $2) - now()) / 60)::int AS mins FROM billing_payments
+          WHERE organization_id = $1 AND kind = 'plan' AND status = 'pending' AND provider = 'paymongo_intent'
+          ORDER BY created_at DESC LIMIT 1`, [user.organization_id, PENDING_MINUTES]);
+      if (busy) {
+        // Past the window the row is still open because PayMongo shows it open (or could not be read): no minutes to name.
+        if (busy.mins <= 0) throw new HttpError(409, "We're still waiting for your bank to finish an earlier payment. Pay another way, or try again later.", { code: 'PAYMENT_IN_PROGRESS' });
+        throw new HttpError(409, `A payment is already in progress. Try again in ${busy.mins} minute${busy.mins === 1 ? '' : 's'}.`, { code: 'PAYMENT_IN_PROGRESS' });
+      }
     }
     const q = await coupons.resolve(db, { org, code: couponCode, plan, months });
     const ahead = couponAheadError(org, q);
@@ -194,14 +233,15 @@ async function markPaid(billingId, { method } = {}) {
   return tx(async (db) => {
     const { rows: [b] } = await db.query('SELECT * FROM billing_payments WHERE billing_id = $1 FOR UPDATE', [billingId]);
     if (!b || b.status === 'paid') return false;
-    const { rows: [org] } = await db.query('SELECT plan, paid_until, trial_ends_at FROM organizations WHERE organization_id = $1 FOR UPDATE', [b.organization_id]);
+    const { rows: [org] } = await db.query('SELECT plan, paid_until, trial_ends_at, created_at FROM organizations WHERE organization_id = $1 FOR UPDATE', [b.organization_id]);
     const today = manilaToday();
     const paidUntil = org.paid_until ? String(org.paid_until).slice(0, 10) : null;
     let start = today;
     let bonusDays = 0;
-    if (org.plan === 'trial' && org.trial_ends_at && new Date(org.trial_ends_at) > new Date()) {
+    const trialEnd = org.plan === 'trial' ? trialEndsAt(org) : null;
+    if (trialEnd && trialEnd > new Date()) {
       // Paying during the trial keeps the remaining trial days.
-      start = new Date(new Date(org.trial_ends_at).getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+      start = new Date(trialEnd.getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
     } else if (paidUntil && paidUntil >= today && PLANS[org.plan]?.price) {
       if (org.plan === b.plan) {
         start = dayAfter(paidUntil); // renewing early adds on to the current period
@@ -217,7 +257,9 @@ async function markPaid(billingId, { method } = {}) {
       `UPDATE billing_payments SET status = 'paid', paid_at = now(), period_start = $2, period_end = $3, payment_method = $4 WHERE billing_id = $1`,
       [b.billing_id, start, end, method || null]);
     await db.query(`UPDATE organizations SET plan = $2, paid_until = $3 WHERE organization_id = $1`, [b.organization_id, b.plan, end]);
-    await coupons.applyPaid(db, b);
+    const redemptionId = await coupons.reclaim(db, b);
+    if (redemptionId !== b.coupon_redemption_id) await db.query('UPDATE billing_payments SET coupon_redemption_id = $2 WHERE billing_id = $1', [b.billing_id, redemptionId]);
+    await coupons.applyPaid(db, { ...b, coupon_redemption_id: redemptionId });
     await audit(db, { organization_id: b.organization_id, user_id: b.created_by }, 'billing.paid', 'billing_payment', b.billing_id,
       { plan: b.plan, months: b.months, amount: b.amount, paid_until: end });
     return true;
@@ -234,6 +276,9 @@ async function refreshIntent(b) {
       return 'paid';
     }
     console.error(`[billing] intent mismatch on ${b.billing_id}: expected ${expected}, got ${iv.amountC}`);
+  } else if (b.status !== 'expired' && intentFailed(iv)) {
+    await failCheckout(b.billing_id, b.coupon_redemption_id);
+    return 'failed';
   }
   return b.status === 'expired' ? 'expired' : 'pending';
 }
@@ -296,11 +341,14 @@ async function reconcile() {
   }
   // Give up on checkouts older than 2 days, after one last check each.
   const { rows: old } = await query(
-    `SELECT billing_id FROM billing_payments WHERE status = 'pending' AND kind = 'plan' AND created_at < now() - interval '2 days' LIMIT 20`);
+    `SELECT * FROM billing_payments WHERE status = 'pending' AND kind = 'plan' AND created_at < now() - interval '2 days'
+      ORDER BY last_checked_at NULLS FIRST LIMIT 20`);
   for (const r of old) {
     let st = 'pending';
     try { st = await refresh(r.billing_id); } catch { continue; }
     if (st === 'paid') paid += 1;
+    // A one-tap charge is expired only when PayMongo shows it dead; one still open or unreadable keeps its row and coupon.
+    else if (r.payment_intent_id) { if (st === 'pending') await expirePending(r); }
     else await query(`UPDATE billing_payments SET status = 'expired' WHERE billing_id = $1 AND status = 'pending'`, [r.billing_id]);
   }
   // Coupon slots held for two days by checkouts that never got a payment go back to the coupon.
@@ -319,4 +367,4 @@ function nextChargeOn(org) {
   return last ? dayAfter(last) : null;
 }
 
-module.exports = { SAVED_CARD_PAY, paySaved, nextChargeOn, periodEnd, enabled, price, MONTH_OPTIONS, createCheckout, refresh, markPaid, verifySignature, reconcile, addMonths, couponAheadError };
+module.exports = { SAVED_CARD_PAY, PENDING_MINUTES, paySaved, settlePending, nextChargeOn, periodEnd, enabled, price, MONTH_OPTIONS, createCheckout, refresh, markPaid, verifySignature, reconcile, addMonths, couponAheadError };

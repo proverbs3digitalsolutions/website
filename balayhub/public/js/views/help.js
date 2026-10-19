@@ -72,13 +72,13 @@ export async function helpView(el, { query }) {
   }
 
   const sync = () => history.replaceState(null, '', `#/help${qs({ q: filters.q, ...changed(ticketFilters, TICKET_DEFAULTS) })}`);
-  const articleSearch = searchBox({ value: filters.q, placeholder: longTerm ? 'Search help, e.g. rent reminders, receipts, maintenance' : 'Search help — e.g. connect Airbnb, refund, gate pass', onSearch: (q) => { askError.textContent = ''; filters.q = q; sync(); drawArticles(); } });
+  const articleSearch = searchBox({ value: filters.q, placeholder: 'Search help', onSearch: (q) => { askError.textContent = ''; filters.q = q; sync(); drawArticles(); } });
   articleSearch.classList.add('search--wide');
   // The status tabs ride inside the bar; Clear all resets only the search (same as the rent page).
   const ticketBar = filterBar({ key: TICKETS_KEY, values: ticketFilters, defaults: { tq: '' }, extra: tabs, onChange: () => { askError.textContent = ''; drawTickets(); },
     search: { name: 'tq', placeholder: 'Search ticket subject or number' } });
   const [aiOn] = await Promise.all([assistantEnabled(), drawArticles(), drawTickets()]);
-  const askInput = h('input', { class: 'input', maxlength: 2000, placeholder: longTerm ? 'e.g. Paano mag-record ng bayad sa upa?' : 'e.g. Paano i-connect ang Airbnb calendar ko?', 'aria-label': 'Ask the assistant' });
+  const askInput = h('input', { class: 'input', maxlength: 2000, placeholder: longTerm ? 'e.g. Paano mag-record?' : 'e.g. I-connect Airbnb?', 'aria-label': 'Ask the assistant' });
   const askError = h('div', { class: 'error', role: 'alert' });
   askInput.addEventListener('input', () => { askError.textContent = ''; });
   const askCard = aiOn && h('form', { class: 'card help-ask', onsubmit: (e) => {
@@ -97,6 +97,7 @@ export async function helpView(el, { query }) {
     h('div', { class: 'help-hero card' },
       h('h2', null, 'How can we help?'),
       articleSearch,
+      h('p', { class: 'muted small' }, longTerm ? 'For example: rent reminders, receipts, maintenance.' : 'For example: connect Airbnb, refund, gate pass.'),
       h('p', { class: 'muted small' }, 'Can’t find it? ', h('a', { class: 'link-tap', href: '#/help/new' }, 'Open a support ticket'), ' — we usually reply within 1 business day.')),
     askCard,
     h('div', { class: 'grid grid--help' },

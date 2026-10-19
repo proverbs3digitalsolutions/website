@@ -95,6 +95,8 @@ async function purgeOrganization(orgId, { scheduledOnly = false } = {}) {
   let files = [];
   let cus = null; let pmId = null;
   const skipped = await tx(async (db) => {
+    // Payment rows first, then the workspace: the order markPaid and markPassed use, so a payment landing during a purge can't deadlock.
+    await db.query('SELECT 1 FROM billing_payments WHERE organization_id = $1 ORDER BY billing_id FOR UPDATE', [orgId]);
     // The lock serialises two purges of the same workspace; the second finds the row gone.
     const { rows: [lock] } = await db.query('SELECT deletion_scheduled_at, paymongo_customer_id, card_payment_method_id FROM organizations WHERE organization_id = $1 FOR UPDATE', [orgId]);
     if (!lock) return 'gone';

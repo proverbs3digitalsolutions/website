@@ -68,7 +68,7 @@ function buildPanel() {
   let busy = false;
   const list = h('div', { class: 'assist__list', 'aria-live': 'polite' });
   const longTerm = state.user?.business_type === 'long_term';
-  const input = h('textarea', { class: 'input', rows: 2, maxlength: 2000, placeholder: longTerm ? 'Ask anything about BalayHub, e.g. how do I record a rent payment? (English or Tagalog)' : 'Ask anything about BalayHub… (English or Tagalog)', 'aria-label': 'Your question' });
+  const input = h('textarea', { class: 'input', rows: 2, maxlength: 2000, placeholder: longTerm ? 'Ask anything, e.g. how do I record rent? (English or Tagalog)' : 'Ask anything about BalayHub… (English or Tagalog)', 'aria-label': 'Your question' });
   const sendBtn = h('button', { class: 'btn btn--primary', type: 'submit', 'aria-label': 'Send' }, 'Send');
   // Sits above the box, so an empty Send says what to do where the person is looking.
   const askError = h('div', { class: 'error', role: 'alert' });

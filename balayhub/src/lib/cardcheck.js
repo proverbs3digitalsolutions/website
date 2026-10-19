@@ -191,7 +191,8 @@ async function markPassed(billingId, iv, client) {
     console.error(`[cardcheck] mismatch on ${billingId}: status ${iv.status}, amount ${iv.amountC}`);
     return false;
   }
-  const org0 = await one('SELECT paymongo_customer_id FROM organizations WHERE organization_id = $1', [b.organization_id]);
+  // On attach()'s transaction, read on that same connection: a second pool connection can stall when the pool is busy.
+  const org0 = (await (client || pool).query('SELECT paymongo_customer_id FROM organizations WHERE organization_id = $1', [b.organization_id])).rows[0];
   const card = await savedCard(org0?.paymongo_customer_id, iv);
   const last4 = /^[0-9]{4}$/.test(card.last4 || '') ? card.last4 : null;
   const brand = card.brand ? String(card.brand).slice(0, 20) : null;

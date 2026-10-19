@@ -81,6 +81,17 @@ export async function adminView(el, { rerender, query = {} }) {
       const hd = document.querySelector('#main h1');
       if (hd) { hd.setAttribute('tabindex', '-1'); hd.focus(); }
     };
+    // Redraw the list, then reopen this workspace's panel with its new state and focus its Delete workspace heading.
+    const reopen = async () => {
+      modal.close();
+      await rerender();
+      let fresh = null;
+      try { fresh = (await get(`/admin/workspaces${qs(apiFilters(filters))}`)).workspaces.find((x) => x.organization_id === w.organization_id); } catch { /* the list is already redrawn */ }
+      if (!fresh) return;
+      edit(fresh);
+      const hd = document.getElementById('delete-ws-title');
+      if (hd) { hd.setAttribute('tabindex', '-1'); hd.focus(); }
+    };
     const delErr = h('div', { class: 'alert alert--error', role: 'alert', tabindex: '-1', hidden: true });
     const nameErr = h('div', { class: 'error', id: 'delete-name-err', role: 'alert' });
     const nameBox = h('input', { class: 'input', id: 'delete-confirm-name', name: 'confirm_name', type: 'text', autocomplete: 'off', 'aria-describedby': 'delete-name-err' });
@@ -99,8 +110,7 @@ export async function adminView(el, { rerender, query = {} }) {
           focusHeading();
         } else {
           toast(`Deletion scheduled for ${fmtDate(r.deletion_scheduled_at)}.`);
-          modal.close();
-          await rerender();
+          await reopen();
         }
       } catch (err) {
         sync();
@@ -112,11 +122,10 @@ export async function adminView(el, { rerender, query = {} }) {
       delErr.hidden = true;
       try { await post(`/admin/workspaces/${w.organization_id}/restore`, {}); } catch (err) { delErr.textContent = err.message; delErr.hidden = false; delErr.focus(); return; }
       toast('Deletion cancelled.');
-      modal.close();
-      await rerender();
+      await reopen();
     };
     const delBtn = (mode, label, cls) => { const b = h('button', { type: 'button', class: `btn ${cls}`, disabled: true, onclick: () => runDelete(mode) }, label); delBtns.push(b); return b; };
-    const dangerZone = canDelete ? h('section', { class: 'form', 'aria-labelledby': 'delete-ws-title' },
+    const dangerZone = canDelete ? h('section', { class: 'form admin-danger', 'aria-labelledby': 'delete-ws-title' },
       h('h3', { id: 'delete-ws-title' }, 'Delete workspace'),
       scheduled && h('p', { class: 'alert alert--warn' }, `Scheduled for deletion on ${fmtDate(w.deletion_scheduled_at)}.`),
       scheduled && h('button', { type: 'button', class: 'btn btn--secondary', id: 'cancel-deletion', onclick: cancelDeletion }, 'Cancel deletion'),

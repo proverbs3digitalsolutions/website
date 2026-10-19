@@ -9,7 +9,7 @@ const v = (f) => fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'vie
 test('housekeeping, maintenance and expenses search hints are short and keep the full name', () => {
   assert.ok(v('housekeeping.js').includes("search: { placeholder: 'Listing, cleaner, notes', label: 'Search listing, cleaner or notes' }"));
   assert.ok(v('maintenance.js').includes("search: { placeholder: 'Issue, unit, person', label: 'Search issue, unit, reported by or assigned to' }"));
-  assert.ok(v('rent.js').includes("search: { placeholder: 'Description, vendor, property', label: 'Search description, vendor or property' }"));
+  assert.ok(v('rent.js').includes("search: { placeholder: 'Description or vendor', label: 'Search description, vendor or property' }"));
 });
 
 test('guests list search hint is short and keeps the full name (listings.js guestsView, route /guests)', () => {

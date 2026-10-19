@@ -107,7 +107,7 @@ test('no saved card shows only the existing button', () => {
   const root = mount({ card: null });
   assert.equal(button(root, 'Pay now').className, 'btn btn--primary');
   assert.equal(button(root, 'Pay another way'), undefined);
-  assert.equal(find(root, (e) => /^Pay .* with /.test(e.textContent) && e.tag === 'button').hidden, true);
+  assert.equal(find(root, (e) => /^Pay .* with /.test(e.textContent) && e.tag === 'button'), undefined);
 });
 
 test('Stage 1 coupon note drops the applied-automatically sentence; Stage 2 keeps it', async () => {

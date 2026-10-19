@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
+Last updated: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
 
 ---
 
@@ -217,6 +217,8 @@ Cleaning push notifications do not go to cleaners yet.
 Open to everyone. Linked from sign-up, guest pages and footers.
 
 ### 5.10 Confirm your payment card `#/confirm-card` (owners; D-98)
+
+*2026-10-20 (D-101): a second tab opened after the card already passed goes home with no message. See 32.2.*
 
 *Numbered 5.10 because 5.9 was already Privacy and Terms.* The page appears right after workspace setup (and whenever a gated owner signs in or opens any other page). It is the only app page a gated owner can use besides Help (`#/help`) and Account (`#/account`).
 
@@ -1189,6 +1191,8 @@ The box sits with the online payment choices, so it shows only when online payme
 
 ### 28.3 Guest check-in: a draft until an ID photo is stored (D-95; changes 6.5)
 
+*2026-10-20 (D-101): the form needs a photo picked before it sends; a draft is kept only after a failed upload. See 32.7.*
+
 - The guest sends the form with answers and photos. The server saves the answers at once; the registration is **finished only when an ID photo is stored**. Until then:
   - **Guest page:** "Your answers are saved. Add a photo of your ID to finish registering." (English and Taglish) with the photo box; adding the photo finishes it and shows "Thank you! You're registered."
   - **Host, reservation page, check-in card:** Status **Waiting for the guest's ID photo** instead of "Received". No "check-in form received" alert or inbox note is sent yet.
@@ -1337,6 +1341,7 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 - **Reminder email** (3 days and 1 day before the trial ends): subject "Your BalayHub trial ends on {date}" with a link to Settings. Stage 2 with automatic payment on gets "Your BalayHub plan starts on {date}" 3 days before.
 - After saving the plan after the trial (Change, then Save), focus stays on **Change**.
 - Owners only; managers, staff and cleaners never see or call any of this.
+- *2026-10-20 (D-101): the bank-return notices, the in-progress wait message, the coupon release after a failed payment and the pay picker's plan are in 32.1.*
 
 ---
 
@@ -1384,3 +1389,55 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 - Top bar search: a page keyword matches whole words or word starts only ("Ana" no longer finds "manager"). An expense result's second line drops the category when the title already is the category.
 - The host check-in card reads **5 (booked for 3)** when more are registered than booked; when fewer, only the registered count.
 - Maintenance status buttons and Daily close **Reopen day** stay enabled while saving (the page marks them busy and ignores a second click), so focus never drops to the page body before it moves to the heading.
+
+---
+
+## 32. QA round 19 changes (D-101; 2026-10-20)
+
+### 32.1 Plan & billing: paying, coming back from the bank, coupons (owners; adds to 28.1 and 30.11)
+- **Coming back from the bank** (`#/settings?billing=<id>`): **paid** shows "Payment received. Thank you! Your plan is active."; **failed** shows the alert "Your saved card couldn't be charged. Pay another way, or use a different card." Whichever appears takes keyboard focus.
+- **A payment still at the bank:** pressing pay again says "A payment is already in progress. Try again in N minutes." (N is the time left of the 15 minutes, rounded up; "1 minute"). If the earlier payment has in fact failed (PayMongo says so), it is let go and the new payment goes ahead. **After 15 minutes with the payment still alive at PayMongo** the message is "We're still waiting for your bank to finish an earlier payment. Pay another way, or try again later." and paying stays blocked.
+- **While a payment is waiting for the bank,** Plan & billing shows "A payment of ₱<amount> is waiting for your bank…" and hides the **Pay** button and the coupon box (it no longer shows the full price).
+- **A coupon after a failed or abandoned payment:** the coupon is released (usable again, months used unchanged). **Type the code again**; the amount on the button is the amount charged. A payment left pending is let go (and its coupon released) only when PayMongo shows it dead, when the next payment is started or by the 2-day cleanup. If it later lands, it takes the coupon back (the coupon's use limit can then be passed, because the money was already taken).
+- **The pay picker** starts on the plan chosen under **Plan after your trial**, else the current paid plan, else Growth. A free coupon activates the picker's plan.
+- The saved-card pay button appears only when a card is on file.
+- A workspace with no saved trial end date counts 14 days from the day it was created; a free coupon's covered months start after that.
+
+### 32.2 Confirm your payment card, second tab (changes 5.10)
+- If another tab already passed the card check, this tab goes straight to the owner's home page with no message (it no longer shows a red "already confirmed").
+
+### 32.3 Platform admin: Delete workspace (changes 31.1)
+- **Delete in 14 days** and **Cancel deletion** keep the workspace panel open and redraw it in place: after scheduling, **Cancel deletion** and **Delete now**; after cancelling, the Delete workspace form again. Focus goes to the **Delete workspace** heading. **Delete now** still closes the panel (31.1). On phones the section has a gap and a divider above it.
+- Plan coupons: the **Ended or off** card counts ended and off coupons only. A missing start date says **Choose the day the coupon starts.**
+
+### 32.4 Rent: Record payment and the voided printout (changes 7.18 and the rent rows)
+- **Method** starts on **Choose…** and is required: **Choose how the money was received.** (no pre-chosen Cash).
+- A voided payment's printout is titled **Voided payment record**.
+- Phone search hints: Rent due **Tenant, unit or property**; Payments **Tenant, unit, ref, notes**; Expenses **Description or vendor**.
+
+### 32.5 Inbox: Send later (changes 7.8)
+- The label reads **Send later (Philippine time, optional)**. The chosen time is Philippine time wherever the device is; the scheduled time shown is Philippine time. Search hint **Guest, listing or code**.
+
+### 32.6 Notification settings (changes 14.7)
+- Settings and My account list **every type the person can receive**, each with on or off, saved per person: mentions, assigned conversations, calendar sync problems and unit-owner activity are included. Owners see 9 types, managers 8 (the seven stay alerts plus Cleaning tasks), staff the cleaning alerts only (cleaners the same).
+
+### 32.7 Guest check-in (changes 28.3)
+- The form needs **a photo picked** before it sends (a check-in with no photo is refused; no draft is made). A draft is kept **only after a failed upload**: the answers are saved and the guest sees "Your answers are saved. Add a photo of your ID to finish registering." After a successful registration the browser tab title follows the new heading ("Thank you! You're registered. — BalayHub").
+
+### 32.8 Calendar: block dates and phone names
+- **Block dates** that clash show the same sentence as a reservation: "These dates overlap a block on {dates} on this listing." or the other guest's stay with its code and dates. The message shows in the dialog banner.
+- On phones, long listing names are cut in the middle ("QA r19…Unit 1") so two units never look the same.
+
+### 32.9 Reservations and groups: do not rebook
+- The warning reads: **Heads up: {flagged guest} is marked "Do not rebook" in Guests.** It names the guest who is flagged, which can be a different guest with the same email. A **manager** sees that name only if the flagged guest is in the manager's property scope; otherwise the warning names the booking's own guest. Owners always see the flagged guest. The group room table reads "1 night".
+
+### 32.10 Phone filters and layout
+- **Filters panel:** pages whose bar has only quick filters (Cleaner pay, Plan coupons) get the same **Filters** button and panel below 560px (count, Clear all). Every quick select inside the panel has a visible label.
+- Compact tab bars on phones: a group of 3 tabs shows three equal columns, a group of 4 shows two by two, each tab at least 44px (the group fills the width below 560px); the More sheet's header with **Close** stays pinned while the sheet scrolls (**Log out** still needs a scroll).
+- Landing **Log in** and the language switch are at least 44px tall, and the landing section links are hidden below 768px so Log in stays on screen. Listing cards use one boxed button style for Edit, Archive and Bookings. Lost and found: the guest name is a tap-size link. The pay page has a gap above **Add selected to my bill**. Properties, Help and Listings search hints are shortened (Properties **Name, address or city**, Help **Search help**, Listings **Listing, building or city**).
+
+### 32.11 Other
+- Add-on price question: **Change it** puts focus back on the Price box.
+- Profit and loss: the "no channel fee entered" link opens the stays that checked out before today, so the list count equals the note.
+- Rental Reports: an empty custom date box is marked invalid with **Pick both dates to export.**
+- A PayMongo Secret key with the right start but too short says **This key is too short. Paste the full Secret key from PayMongo.**

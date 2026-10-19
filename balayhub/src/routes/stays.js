@@ -95,6 +95,19 @@ const BOOKING_SELECT = `
     JOIN properties p ON p.property_id = u.property_id
     LEFT JOIN guests g ON g.guest_id = b.guest_id`;
 
+// The name a do-not-rebook warning names for the guest in alias g (D-97, the same flag rule as BOOKING_SELECT): the guest's own
+// record when flagged; else the flagged guest with the same email, but only if this user's guestScope passes that guest. Otherwise
+// the booking's own name, so a manager never learns a name from a property they cannot open (the flag itself still reads true).
+// Null when nothing is flagged. Pushes its parameters onto params, as guestScope does.
+function dnrName(user, params) {
+  const sameEmail = `g.email IS NOT NULL AND btrim(g.email) <> '' AND lower(btrim(f.email)) = lower(btrim(g.email))`;
+  const scoped = guestScope(user, params, 'f');
+  return `CASE WHEN g.do_not_rebook THEN g.full_name
+    WHEN EXISTS (SELECT 1 FROM guests f WHERE f.organization_id = g.organization_id AND f.do_not_rebook AND ${sameEmail})
+      THEN COALESCE((SELECT f.full_name FROM guests f WHERE ${scoped} AND f.do_not_rebook AND ${sameEmail}
+           ORDER BY f.created_at, f.guest_id LIMIT 1), g.full_name) END`;
+}
+
 async function loadBooking(user, id, db) {
   const params = [id];
   const sql = `${BOOKING_SELECT} WHERE b.booking_id = $1 AND ${propertyScope(user, params)}`;
@@ -125,9 +138,10 @@ function overlapMessage(clash) {
 
 const LEASED_MESSAGE = 'This unit has an active monthly lease over these dates, so it can\'t be booked for a short stay.';
 
-async function overlapError(unitId, checkIn, checkOut, exceptId) {
+// The date fields are the form's own names: the reservation form sends check_in and check_out, the block form start_date and end_date.
+async function overlapError(unitId, checkIn, checkOut, exceptId, [startField, endField] = ['check_in', 'check_out']) {
   return new HttpError(409, overlapMessage(await findOverlap(unitId, checkIn, checkOut, exceptId)),
-    { code: 'DATES_TAKEN', fields: { check_in: 'Dates not available', check_out: 'Dates not available' } });
+    { code: 'DATES_TAKEN', fields: { [startField]: 'Dates not available', [endField]: 'Dates not available' } });
 }
 
 // What PATCH /reservations/:id would refuse for these dates on this listing (a monthly lease, else an overlap), ignoring one stay. Null when free.
@@ -621,7 +635,11 @@ router.post('/reservations', managers, ah(async (req, res) => {
       return b.booking_id;
     });
     const confirmation = body.send_confirmation ? await receipts.sendConfirmation(id, req.user) : null;
-    res.status(201).json({ reservation: await loadBooking(req.user, id), confirmation });
+    const reservation = await loadBooking(req.user, id);
+    // The flagged guest the do-not-rebook warning names. This route is managers and owners only, so staff never get it.
+    const dnrParams = [reservation.guest_id, req.user.organization_id];
+    const dnr = await one(`SELECT ${dnrName(req.user, dnrParams)} AS name FROM guests g WHERE g.guest_id = $1 AND g.organization_id = $2`, dnrParams);
+    res.status(201).json({ reservation: { ...reservation, guest_do_not_rebook_name: dnr ? dnr.name : null }, confirmation });
   } catch (err) {
     if (err.constraint === 'bookings_no_overlap') throw await overlapError(unit.unit_id, body.check_in, body.check_out);
     throw err;
@@ -1058,12 +1076,13 @@ router.post('/booking-groups', managers, ah(async (req, res) => {
     await bookRooms(db, req.user, rooms, { guestId, groupId: g.group_id, picks, action: 'booking_group.created' });
     return g.group_id;
   });
-  // The lead guest's do-not-rebook flag, worked out as BOOKING_SELECT does for a single reservation, so the form can warn.
+  // The lead guest's do-not-rebook name (dnrName), so the form can warn and name the flagged guest.
+  const leadParams = [guestId, req.user.organization_id];
   const lead = await one(
-    `SELECT g.full_name, (g.do_not_rebook OR (g.email IS NOT NULL AND btrim(g.email) <> '' AND EXISTS (SELECT 1 FROM guests f WHERE f.organization_id = g.organization_id AND f.do_not_rebook AND lower(btrim(f.email)) = lower(btrim(g.email))))) AS flagged
-       FROM guests g WHERE g.guest_id = $1 AND g.organization_id = $2`, [guestId, req.user.organization_id]);
+    `SELECT g.full_name, ${dnrName(req.user, leadParams)} AS flagged_name
+       FROM guests g WHERE g.guest_id = $1 AND g.organization_id = $2`, leadParams);
   res.status(201).json({
-    group: (await groupRows(['g.group_id = $1'], [groupId]))[0], guest_do_not_rebook: lead.flagged, guest_name: lead.full_name,
+    group: (await groupRows(['g.group_id = $1'], [groupId]))[0], guest_do_not_rebook: lead.flagged_name !== null, guest_do_not_rebook_name: lead.flagged_name, guest_name: lead.full_name,
   });
 }));
 
@@ -1166,7 +1185,7 @@ router.post('/blocks', managers, ah(async (req, res) => {
     await audit(null, req.user, 'calendar.blocked', 'booking', b.booking_id, { start: body.start_date, end: body.end_date });
     res.status(201).json({ block_id: b.booking_id });
   } catch (err) {
-    if (err.constraint === 'bookings_no_overlap') throw await overlapError(unit.unit_id, body.start_date, checkOut);
+    if (err.constraint === 'bookings_no_overlap') throw await overlapError(unit.unit_id, body.start_date, checkOut, null, ['start_date', 'end_date']);
     throw err;
   }
 }));

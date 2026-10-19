@@ -234,7 +234,7 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
       if (res.confirmation && !res.confirmation.sent) toast(`Reservation saved, but the confirmation was not emailed: ${res.confirmation.error}`, 'error');
       else toast(`Reservation ${res.reservation.confirmation_code} saved${res.confirmation?.sent ? ' and confirmation emailed' : ''}.`);
       const note = matchedGuestNote(data.guest_name, res.reservation.guest_name); if (note) toast(note);
-      if (res.reservation.guest_do_not_rebook) toast(`Heads up: ${res.reservation.guest_name || 'this guest'} is marked "Do not rebook" in Guests.`, 'error');
+      if (res.reservation.guest_do_not_rebook) toast(`Heads up: ${res.reservation.guest_do_not_rebook_name || res.reservation.guest_name || 'this guest'} is marked "Do not rebook" in Guests.`, 'error');
       if (onSaved) onSaved(res.reservation); else navigate(`#/reservations/${res.reservation.booking_id}`);
     },
   });

@@ -51,5 +51,5 @@ test('cancel copy says "The 1 room" for one room and "All N rooms" otherwise', (
 });
 
 test('a flagged lead guest gets the Heads up toast', () => {
-  assert.match(src, /if \(res\.guest_do_not_rebook\) toast\(`Heads up: \$\{res\.guest_name \|\| 'this guest'\} is marked "Do not rebook" in Guests\.`, 'error'\)/);
+  assert.match(src, /if \(res\.guest_do_not_rebook\) toast\(`Heads up: \$\{res\.guest_do_not_rebook_name \|\| res\.guest_name \|\| 'this guest'\} is marked "Do not rebook" in Guests\.`, 'error'\)/);
 });

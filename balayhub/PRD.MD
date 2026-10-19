@@ -2,7 +2,7 @@
 
 BalayHub is a web app that helps Filipino hosts run 1 to 10 rental units from one place. It covers condo staycations listed on Airbnb, Booking.com and Agoda, and long-term monthly rentals such as apartments, boarding houses, dorms and bedspaces. Hosts get one calendar for every channel, a direct booking page with GCash, Maya and card payments, a guest inbox, cleaning tasks, condo gate passes, deposits, reports and owner statements. Long-term landlords get properties, tenants, leases, rent, expenses and repairs. This document describes what is **actually built** today, feature by feature, and lists what is planned. It was written from the code (`src/routes`, `src/lib`, `public/js`, `db/migrations`) and the existing docs.
 
-Last updated: 2026-10-19 (QA round 18: F28 admin workspace delete, F5 saved view name, F15 channel-fee note; D-100). Before that: 2026-10-15 (QA round 17; D-98 card on file before the trial, F20 and F2 and F28; D-99 search widened, F53)
+Last updated: 2026-10-20 (QA round 19: F49 notification types; D-101). Before that: 2026-10-19 (QA round 18: F28 admin workspace delete, F5 saved view name, F15 channel-fee note; D-100). Before that: 2026-10-15 (QA round 17; D-98 card on file before the trial, F20 and F2 and F28; D-99 search widened, F53)
 
 *2026-10-14 (D-85): the alpha targets owners of 1 to 3 properties; the Guesty-inspired ideas are on hold as reference only. QA puts small-host friction first.*
 
@@ -918,7 +918,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - **Activity log** on each reservation: the newest 200 lines, in plain English, of what happened to the stay and its payments, charges, refunds, payment proofs, deposits, damage reports, cleaning task, quotes and guest messages, with who and when. Owners and managers only.
 - **Assignment:** assigning a conversation tells the new assignee (push, or email if they have no device). Home shows "Assigned to you (n)".
 - **Mentions:** in an internal note, `@` and a team member's name notifies that person with the note and a link. Only owners and managers who can see the reservation's property can be mentioned. Staff and cleaners can't.
-- **Notification settings** in My account: each person switches each type on or off. Owners can limit alerts to chosen properties. Default: everything on, all properties. Three types were added: mentions, assignments and calendar sync problems.
+- **Notification settings** in My account: each person switches each type on or off. Owners can limit alerts to chosen properties. Default: everything on, all properties. Three types were added: mentions, assignments and calendar sync problems. The list shows every type the person can receive: owners 9 (including unit-owner activity), managers 8 (the seven stay alerts plus Cleaning tasks), staff the cleaning alerts (D-101, 2026-10-20).
 
 **Done looks like:** Nobody is alerted about a reservation they can't open.
 

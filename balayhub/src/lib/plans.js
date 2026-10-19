@@ -19,6 +19,13 @@ const GRACE_DAYS = 7;
 // Today in Manila as YYYY-MM-DD.
 const manilaToday = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
 
+// When a trial ends: the stored end, else the day the workspace was created plus the trial length. null when neither is known
+// (a caller that did not load created_at). `org` needs trial_ends_at and, for the fallback, created_at.
+function trialEndsAt(org) {
+  if (org.trial_ends_at) return new Date(org.trial_ends_at);
+  return org.created_at ? new Date(new Date(org.created_at).getTime() + config.trialDays * 86400000) : null;
+}
+
 // Where a workspace stands. `org` needs plan, trial_ends_at, paid_until, is_demo.
 function planStatus(org) {
   const plan = PLANS[org.plan] ? org.plan : 'trial';
@@ -33,7 +40,9 @@ function planStatus(org) {
   if (plan === 'trial') {
     const ends = org.trial_ends_at ? new Date(org.trial_ends_at) : null;
     out.trial_ends_at = ends;
-    out.trial_days_left = ends ? Math.max(0, Math.ceil((ends - Date.now()) / 86400000)) : config.trialDays;
+    // Days shown follow the fallback end too, but only a stored end makes the workspace read-only.
+    const shown = trialEndsAt(org);
+    out.trial_days_left = shown ? Math.max(0, Math.ceil((shown - Date.now()) / 86400000)) : config.trialDays;
     if (ends && ends < new Date()) { out.read_only = true; out.reason = 'trial_ended'; }
   } else if (plan !== 'comped' && org.paid_until) {
     const paid = String(org.paid_until).slice(0, 10);
@@ -54,4 +63,4 @@ const READ_ONLY_MSG = {
   payment_due: 'Your plan payment is overdue. Your data is safe and you can still view it. Renew in Settings to keep making changes.',
 };
 
-module.exports = { PLANS, PUBLIC_PLANS, GRACE_DAYS, planStatus, READ_ONLY_MSG };
+module.exports = { PLANS, PUBLIC_PLANS, GRACE_DAYS, planStatus, trialEndsAt, READ_ONLY_MSG };

@@ -280,6 +280,12 @@ export async function cardCheckView(el, { query = {} } = {}) {
     } catch (err) {
       fields.number.input.value = ''; fields.cvc.input.value = ''; // also when start itself failed, so nothing typed stays on the page
       setBusy(false);
+      if (err.code === 'CARD_CHECK_NOT_REQUIRED') { // another tab already passed: go home with no message (APP-FLOW 5.10)
+        stopped = true;
+        try { await refreshUser(); } catch { /* the route rule re-checks */ }
+        navigate(homeRoute(), { replace: true });
+        return;
+      }
       showSummary(err.shown || err.code === 'PAYMENT_PROVIDER_UNAVAILABLE' ? err.message : err.status === 429 || err.code === 'RATE_LIMITED' ? MSG.rate
         : err.status >= 500 || err.offline || !err.message ? MSG.network : err.data?.message || (err.status === 402 ? MSG.declined : err.message));
     }

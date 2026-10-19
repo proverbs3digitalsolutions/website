@@ -104,6 +104,8 @@ export async function adminCouponsView(el, { query = {} }) {
       setReq(percentField, kind === 'percent'); setReq(amountField, kind === 'fixed');
     };
     limitBox.querySelector('input').addEventListener('change', sync);
+    // Keeps the star but not the generic "Starts is required." sentence: the form's check below words it.
+    const starOnly = (f) => { f.querySelector('input').required = false; return f; };
     const codeField = field({ name: 'code', label: 'Coupon code', required: true, value: c?.code ?? '', maxlength: 32, hint: 'Not case-sensitive. Letters, numbers and dashes.' });
     const codeInput = codeField.querySelector('input');
     const nudge = h('div', { class: 'hint', hidden: true }, 'Short codes are easy to guess. Use 8 or more characters, or press Generate.');
@@ -129,7 +131,7 @@ export async function adminCouponsView(el, { query = {} }) {
       monthsField,
       planChecks,
       h('div', { class: 'form-row form-row--2' },
-        field({ name: 'starts_on', label: 'Starts', type: 'date', required: true, value: starts.date }),
+        starOnly(field({ name: 'starts_on', label: 'Starts', type: 'date', required: true, value: starts.date })),
         field({ name: 'starts_time', label: 'Start time', type: 'time', value: starts.time || '00:00', hint: 'Manila time.' })),
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'ends_on', label: 'Ends', type: 'date', value: ends.date }),
@@ -153,6 +155,7 @@ export async function adminCouponsView(el, { query = {} }) {
       submitText: c ? 'Save' : 'Create coupon',
       cancel: () => modal.close(),
       fields,
+      check: (d) => (d.starts_on ? null : { starts_on: 'Choose the day the coupon starts.' }),
       onSubmit: async (d, { form: f }) => {
         const body = couponBody({ ...d, kind: checked(f, 'kind'), duration: checked(f, 'duration') });
         // "Change it" keeps the form open with focus on the box the question is about.
@@ -196,7 +199,7 @@ export async function adminCouponsView(el, { query = {} }) {
   const count = h('p', { class: 'muted small' });
   const draw = ({ coupons, total, summary }) => {
     sActive.v.textContent = String(summary.active); sScheduled.v.textContent = String(summary.scheduled);
-    sEnded.v.textContent = String(summary.ended + summary.off + summary.full); sGiven.v.textContent = pesoText(toCentavos(summary.discount_total));
+    sEnded.v.textContent = String(summary.ended + summary.off); sGiven.v.textContent = pesoText(toCentavos(summary.discount_total));
     const filtered = Object.keys(changed(filters, defaults)).some((k) => k !== 'sort');
     count.textContent = filtered ? `Showing ${coupons.length} of ${total} coupons` : `${total} coupon${total === 1 ? '' : 's'}`;
     if (!coupons.length) {

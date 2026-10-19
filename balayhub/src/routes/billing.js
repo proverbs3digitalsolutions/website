@@ -30,6 +30,8 @@ const couponView = (c, monthsLeft) => ({
 
 // Body of GET /billing (also the answer to PATCH /billing/renewal).
 async function billingView(user) {
+  // An unfinished one-tap charge that failed or was abandoned is settled first, so the coupon line is the one the next charge uses.
+  await billing.settlePending(user.organization_id);
   const { rows: history } = await query(
     `SELECT b.billing_id, b.kind, b.plan, b.months, b.amount, b.list_amount, b.discount_amount, b.provider, pc.code AS coupon_code,
             b.status, b.payment_method, b.paid_at, b.period_start, b.period_end, b.created_at,
@@ -43,6 +45,15 @@ async function billingView(user) {
       ORDER BY b.created_at DESC LIMIT 50`,
     [user.organization_id]);
   const last = await coupons.lastRedemption(pool, user.organization_id);
+  // The one-tap charge still open after settling (waiting on the bank), so the page can show what is being charged.
+  const { rows: [open] } = await query(
+    `SELECT b.plan, b.amount, b.created_at, pc.code AS coupon_code,
+            GREATEST(0, CEIL(EXTRACT(EPOCH FROM b.created_at + make_interval(mins => $2) - now()) / 60))::int AS minutes_left
+       FROM billing_payments b
+       LEFT JOIN platform_coupon_redemptions r ON r.redemption_id = b.coupon_redemption_id
+       LEFT JOIN platform_coupons pc ON pc.coupon_id = r.coupon_id
+      WHERE b.organization_id = $1 AND b.kind = 'plan' AND b.status = 'pending' AND b.provider = 'paymongo_intent'
+      ORDER BY b.created_at DESC LIMIT 1`, [user.organization_id, billing.PENDING_MINUTES]);
   const { rows: [org] } = await query(
     `SELECT plan, paid_until, trial_ends_at, card_payment_method_id, card_brand, card_last4, renewal_plan, auto_renew,
             auto_renew_consented_at, subscription_status FROM organizations WHERE organization_id = $1`, [user.organization_id]);
@@ -60,6 +71,9 @@ async function billingView(user) {
       key: k, name: PLANS[k].name, listings: PLANS[k].listings, ai: PLANS[k].ai,
       prices: Object.keys(billing.MONTH_OPTIONS).map((m) => ({ months: Number(m), amount: billing.price(k, Number(m)) })),
     })),
+    pending_payment: open
+      ? { amount: open.amount, plan: open.plan, coupon_code: open.coupon_code || null, started_at: new Date(open.created_at).toISOString(), minutes_left: open.minutes_left }
+      : null,
     coupon: last ? { ...couponView(last, last.months_total == null ? null : Math.max(0, last.months_total - last.months_used)), status: last.status } : null,
     history,
   };
@@ -83,6 +97,7 @@ router.post('/billing/coupon/preview', owners, codeIpLimiter, codeLimiter, ah(as
   });
   // Checked before the code, so while online payment is off the reply never says whether a code exists.
   if (!billing.enabled()) throw billingOff();
+  await billing.settlePending(req.user.organization_id);
   const { rows: [org] } = await query('SELECT organization_id, plan, is_demo, paid_until FROM organizations WHERE organization_id = $1', [req.user.organization_id]);
   const q = await coupons.resolve(pool, { org, code: body.code, plan: body.plan, months: body.months });
   // The same refusal checkout gives, so the preview and the checkout can't disagree.

@@ -135,7 +135,7 @@ export async function propertiesView(el, { query }) {
   function renderBar() {
     barBox.replaceChildren(filterBar({
       key: 'properties', values: filters, defaults, onChange: () => load().catch((e) => toast(e.message, 'error')),
-      search: { placeholder: 'Search name, address, city or province' },
+      search: { placeholder: 'Name, address or city' },
       quick: [
         { name: 'type', label: 'Type', all: 'All types', options: PROPERTY_TYPES.map((t) => [t, label(t)]) },
         ...(stayOnly ? [] : [{ name: 'occupancy', label: 'Occupancy', all: 'Any occupancy', options: [['vacant', 'Has vacant units'], ['full', 'Fully occupied'], ['no_units', 'No units yet']] }]),

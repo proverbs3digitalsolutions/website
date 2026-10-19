@@ -49,7 +49,7 @@ export async function lostFoundView(el, { query = {} } = {}) {
       h('div', { class: 'ops-lf__main' },
         h('span', { class: 'row__title' }, it.description),
         h('span', { class: 'row__sub' }, [it.found_where, it.unit_name && `${unitLabel(it.unit_name)}${it.property_name ? ` · ${it.property_name}` : ''}`, it.found_on && `found ${fmtDate(String(it.found_on).slice(0, 10))}`].filter(Boolean).join(' · ')),
-        it.guest_name && h('span', { class: 'row__sub' }, 'Guest: ', it.booking_id ? h('a', { href: `#/reservations/${it.booking_id}` }, it.guest_name) : it.guest_name),
+        it.guest_name && h('span', { class: 'row__sub' }, 'Guest: ', it.booking_id ? h('a', { class: 'link-tap', href: `#/reservations/${it.booking_id}` }, it.guest_name) : it.guest_name),
         it.status_note && h('span', { class: 'row__sub' }, it.status_note)),
       h('div', { class: 'ops-lf__end' },
         badge(STATUS_BADGE[it.status] || it.status, STATUS_TEXT[it.status] || it.status),

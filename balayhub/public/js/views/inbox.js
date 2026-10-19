@@ -19,6 +19,14 @@ const VIEWS = [
   ['archived', 'Archived'],
 ];
 
+// A datetime-local value (YYYY-MM-DDTHH:mm) is the Philippine wall-clock time the host typed (Manila is UTC+8, no DST),
+// whatever zone the device is set to. Returns a Date, or null when empty or invalid.
+export function manilaDateTime(v) {
+  if (!v) return null;
+  const d = new Date(`${v}+08:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 // Unread badge for the navigation (refreshed on each page load).
 export async function unreadCount() {
   if (!state.user || state.user.role === 'staff') return 0;
@@ -141,7 +149,7 @@ export async function inboxView(el, { params, query, rerender }) {
   const bar = filterBar({
     key: 'inbox', values: filters, defaults, onChange: load,
     extra: viewSelect,
-    search: { placeholder: 'Search guest, listing or code' },
+    search: { placeholder: 'Guest, listing or code' },
     quick: [{ name: 'unread', label: 'Unread only', type: 'check' }],
     more: [
       { name: 'stay', label: 'Stay', all: 'Any stay', options: [['upcoming', 'Upcoming'], ['in_house', 'Staying now'], ['past', 'Checked out'], ['cancelled', 'Cancelled']] },
@@ -534,7 +542,7 @@ function composer(c, templates, status, rerender, assignees = []) {
           confirmText: 'Send anyway',
         })) return;
       // A send-later time that has already passed would go out at once with no warning; ask first.
-      let scheduleFor = mode === 'message' && sendAt.value ? new Date(sendAt.value) : null;
+      let scheduleFor = mode === 'message' ? manilaDateTime(sendAt.value) : null;
       if (scheduleFor && scheduleFor <= new Date()) {
         if (!await confirmDialog({ title: 'That time has passed. Send it now?', text: 'The message goes out straight away instead of at the time you picked.', confirmText: 'Send now' })) return;
         scheduleFor = null;
@@ -567,7 +575,7 @@ function composer(c, templates, status, rerender, assignees = []) {
   modeHint,
   err,
   h('div', { class: 'composer__actions' },
-    h('label', { class: 'composer__later small muted' }, 'Send later (optional) ', sendAt),
+    h('label', { class: 'composer__later small muted' }, 'Send later (Philippine time, optional) ', sendAt),
     sendBtn));
   setMode(mode);
   return form;
