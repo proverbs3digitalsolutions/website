@@ -117,7 +117,7 @@ test('a free quote changes the button, and checkout sends coupon_code', async ()
   const btn = button(root, 'Activate free plan');
   assert.ok(btn);
   btn.fire('click'); await tick(); await tick();
-  assert.deepEqual(calls.find((c) => c[0] === '/billing/checkout')[1], { plan: 'growth', months: '1', coupon_code: 'free1' });
+  assert.deepEqual(calls.find((c) => c[0] === '/billing/checkout')[1], { plan: 'growth', months: '1', seen_paid_until: null, coupon_code: 'free1' });
   assert.equal(globalThis.__refreshed, 1, 'refreshUser ran');
   assert.deepEqual(nav, [], 'no redirect to a checkout page');
   assert.deepEqual(toasts, [['Your Growth plan is active until Nov 28, 2026.', 'info']]);

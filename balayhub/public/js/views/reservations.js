@@ -191,6 +191,15 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
     title: 'New reservation',
     submitText: 'Save reservation',
     draftKey: unitId ? null : 'reservation-new',
+    // Every field problem shows in one pass (guests, dates, email); the server still checks all of it.
+    check: (d) => {
+      const f = {};
+      const g = guestsProblem(d.num_guests, listings.find((l) => String(l.unit_id) === String(d.unit_id))?.max_guests);
+      if (g) f.num_guests = g;
+      if (d.check_in && d.check_out && d.check_out <= d.check_in) f.check_out = 'Check-out must be after check-in.';
+      if (d.guest_email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(d.guest_email)) f.guest_email = 'Enter a valid email address.';
+      return Object.keys(f).length ? f : null;
+    },
     fields: [
       roomTypes.length > 0 && field({ name: 'pick_mode', label: 'Book', type: 'select', value: 'unit', placeholderOption: false, options: [['unit', 'A specific listing'], ['type', 'Any free room of a type']] }),
       field({ name: 'unit_id', label: 'Listing', type: 'select', required: true, value: unitId, options: listings.map((l) => [l.unit_id, `${l.unit_name} — ${l.property_name}`]) }),

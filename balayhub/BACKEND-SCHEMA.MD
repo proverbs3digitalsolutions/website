@@ -2,7 +2,7 @@
 
 This document describes BalayHub's PostgreSQL schema as it stands after migrations `001`–`026` in `db/migrations/`, where uploaded files are stored, and who can see or change each kind of data. It was checked against the migrations and the route code in `src/routes/*.js` and `src/lib/*.js`. Anything not confirmed in the code is marked **unverified**.
 
-Last updated: 2026-10-20 (QA round 19: section 25, section 6 guest_has_email, billing 'attached' and expiry notes; D-101). Before that: 2026-10-19 (QA round 18: section 24, admin delete routes in matrix 6.4, null-workspace platform audit rows; D-100). Before that: 2026-10-15 (QA round 17: migrations 037 and 038, section 2.19, matrix 6.5, section 23; D-98 and D-99)
+Last updated: 2026-10-20 (QA round 20: migration 039, section 26, 2.15 card columns, support tickets row; D-102). Before that: 2026-10-20 (QA round 19: section 25, section 6 guest_has_email, billing 'attached' and expiry notes; D-101). Before that: 2026-10-19 (QA round 18: section 24, admin delete routes in matrix 6.4, null-workspace platform audit rows; D-100). Before that: 2026-10-15 (QA round 17: migrations 037 and 038, section 2.19, matrix 6.5, section 23; D-98 and D-99)
 
 ---
 
@@ -610,6 +610,7 @@ Round 15 actions (D-94): `platform.coupon_created`, `platform.coupon_updated` (f
 | provider | text | `paymongo` (default) or `coupon` (a free activation with no payment). A CHECK allows only these two (migration 035) |
 | checkout_id | text | Unique |
 | checkout_url, payment_method, paid_at, period_start, period_end, last_checked_at, created_by, created_at | | |
+| card_brand, card_last4 | text, nullable | Migration 039 (D-102). The card used, filled when a card payment is paid (card check passed, or one-tap paid). History reads them from the row and falls back to the workspace's card for older rows. **Remove card does not clear them.** |
 
 Round 15 columns (migration 035, D-94): `list_amount` numeric (the price before any coupon, > 0; NULL on older rows), `discount_amount` numeric NOT NULL default 0 (>= 0), `coupon_redemption_id` uuid → `platform_coupon_redemptions` (NULL when no coupon was used; partly indexed) and `coupon_months` smallint NOT NULL default 0 (how many billed months this payment covered). `amount` is what was actually charged: `list_amount - discount_amount`, raised to the ₱20 floor when a discount would leave less (section 2.18).
 
@@ -879,7 +880,7 @@ The workspace export (`exportOrganization`) is not complete. It leaves out `supp
 | Owner payouts and repairs reserve | View, record, void payouts; record and void reserve withdrawals | None | None | None | None |
 | Profit and loss (`/reports/pnl`, CSV) | View all units | View assigned properties | None (403) | None | None |
 | Owner portal (unit owner, `bh_owner` cookie, not a workspace role) | None (invites and turns access off only) | None | None | None | Unit owner, own units only: published statements (never drafts), payouts, own reserve balance, bookings and activity for own units (guests by first name), own blocks (create, cancel before start), P&L for own units, receipts on published statements. Sees history of units now assigned to them (D-46). Never guest contact details, payment proofs, other owners or other workspace data. Blocks: not while the workspace is view-only; 20 per hour (D-46) |
-| Support tickets | All of the workspace's tickets: view, create, reply, resolve, rate, attach files | Own tickets only | Own tickets only | All tickets: view, reply, internal notes, change status, assign, view attachments | None |
+| Support tickets | All of the workspace's tickets: view, create, reply, resolve, rate, attach files | Own tickets only | Own tickets only (cleaners too: they may list their own tickets, D-102) | All tickets: view, reply, internal notes, change status, assign, view attachments | None |
 | Plan and billing payments | View; start and confirm checkout | Plan status only (via session; no price or listing limit, D-83) | Plan status only (same) | Set plan and dates by hand | None |
 | Plan coupons (list, create, edit, switch off, see who redeemed; `/api/admin/coupons*`, D-94) | No (404, not a platform admin) | No (404) | No (404) | **Manages them**: list, create, edit (locked fields after use), switch on or off, redemptions. Audit-logged at platform level | None |
 | Delete or restore a workspace (`POST /api/admin/workspaces/:id/delete` with `mode` `schedule` or `now`, and `POST .../restore`; D-100) | No (404, not a platform admin) | No (404) | No (404) | **Does it**, with the workspace name typed. Refused for the demo, the admin's own workspace and any workspace with a platform admin member. Audit-logged at platform level (workspace id NULL) | None |
@@ -1426,3 +1427,14 @@ Decision D-101. **No migration** this round.
 - **Notification devices (`src/lib/push.js`, `src/routes/push.js`):** the settings list is all 9 types for an owner, 8 for a manager (the seven stay alerts plus Cleaning tasks), the cleaning types for staff.
 - **Purge, auto-renew start and card attach:** `purgeOrganization` locks the workspace's `billing_payments` rows before the workspace row; `startOne` also requires `auto_renew`, a saved card and no deletion scheduled; `markPassed` in client mode reads the workspace on the same client.
 - **PayMongo key check (`src/routes/directbooking.js`):** a key with the right prefix but too short answers "This key is too short. Paste the full Secret key from PayMongo."
+
+## 26. API notes from QA round 20 (2026-10-20)
+
+Decision D-102. **Migration 039:** `billing_payments.card_brand` and `card_last4` (nullable text); no purge change (`billing_payments` is already purged).
+
+- **One open plan payment per workspace (`src/lib/billing.js`, `src/routes/billing.js`).** A hosted checkout or one-tap request is refused while another plan payment is open. A hosted request while a one-tap intent is pending first cancels the intent at PayMongo and re-reads it, and proceeds only if it is dead; otherwise 409 `PAYMENT_IN_PROGRESS` ("A payment is still waiting for your bank. Finish it there, or try again later."). A one-tap request while a hosted row is pending: 409 "A payment is already open in another window. Finish it there, or try again later." A hosted request against an open hosted row expires that checkout session at PayMongo and proceeds only when it is dead. If the older payment turns out paid: 409 `PAYMENT_RECEIVED`. The final check runs under the workspace lock. *Round 21 to confirm:* the PayMongo cancel and checkout-session expire endpoint paths against the live API.
+- **`GET /billing` returns a top-level `paid_until`** (the workspace's stored paid-until date). **`seen_paid_until` contract:** checkout and pay-with-saved-card accept an optional `seen_paid_until` in the body (the page echoes `paid_until`). If present and different from the stored `paid_until`: 409 `PAYMENT_RECEIVED`, no row, no PayMongo call. Absent: no check (API callers unaffected). Paying ahead from a fresh page (value equal) is allowed. `PAYMENT_RECEIVED` is also returned when the earlier payment is found paid during the check.
+- **Declined card attach (`src/lib/cardcheck.js`) answers 402** on purpose (the same status as the card gate; deliberate since the card check work). Not a bug.
+- **`GET /billing` history** returns each paid row's `card_brand` and `card_last4` from the row.
+- **`POST /api/admin/coupons` and update:** when the body carries `limit_on: true`, a missing or blank `max_redemptions` is refused; bodies that omit `limit_on` behave as before. A taken code answers 409 `CODE_TAKEN` with `fields.code`. The code length (up to 32) is checked on save.
+- **`GET /api/support/tickets`:** a cleaner gets their own tickets (the route already allowed it; the matrix now says so).

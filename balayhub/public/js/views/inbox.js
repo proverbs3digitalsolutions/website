@@ -421,7 +421,7 @@ function composer(c, templates, status, rerender, assignees = []) {
   let savedMode = null;
   try { savedDraft = sessionStorage.getItem(draftKey) || ''; savedMode = sessionStorage.getItem(modeKey); } catch { /* ignore */ }
   let mode = composerModes.get(c.conversation_id) || restoredMode(savedMode, savedDraft);
-  const subject = h('input', { class: 'input input--sm', name: 'subject', maxlength: 200, placeholder: `Subject (default: ${c.subject})`, 'aria-label': 'Subject' });
+  const subject = h('input', { class: 'input input--sm', name: 'subject', maxlength: 200, placeholder: 'Subject (optional)', 'aria-label': 'Subject' });
   const body = h('textarea', { class: 'input', name: 'body', maxlength: 10000, placeholder: `Write to ${c.guest_name}…` });
   const counter = h('div', { class: 'small muted', hidden: true });
   const updateCounter = () => {

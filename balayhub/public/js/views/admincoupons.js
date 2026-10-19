@@ -44,7 +44,7 @@ function couponBody(v) {
     duration: v.duration,
     duration_months: v.duration === 'months' ? num(v.duration_months) : null,
     plans: v.plans || [],
-    max_redemptions: v.limit_on ? num(v.max_redemptions) : null,
+    max_redemptions: v.limit_on ? num(v.max_redemptions) : null, limit_on: Boolean(v.limit_on),
     once_per_workspace: v.once_per_workspace, require_card: v.require_card,
     starts_on: v.starts_on, starts_time: v.starts_time || undefined,
     ends_on: v.ends_on || null, ends_time: v.ends_on ? (v.ends_time || undefined) : null,
@@ -106,7 +106,7 @@ export async function adminCouponsView(el, { query = {} }) {
     limitBox.querySelector('input').addEventListener('change', sync);
     // Keeps the star but not the generic "Starts is required." sentence: the form's check below words it.
     const starOnly = (f) => { f.querySelector('input').required = false; return f; };
-    const codeField = field({ name: 'code', label: 'Coupon code', required: true, value: c?.code ?? '', maxlength: 32, hint: 'Not case-sensitive. Letters, numbers and dashes.' });
+    const codeField = field({ name: 'code', label: 'Coupon code', required: true, value: c?.code ?? '', hint: 'Not case-sensitive. Letters, numbers and dashes.' });
     const codeInput = codeField.querySelector('input');
     const nudge = h('div', { class: 'hint', hidden: true }, 'Short codes are easy to guess. Use 8 or more characters, or press Generate.');
     codeField.querySelector('.hint').after(nudge);
@@ -155,7 +155,13 @@ export async function adminCouponsView(el, { query = {} }) {
       submitText: c ? 'Save' : 'Create coupon',
       cancel: () => modal.close(),
       fields,
-      check: (d) => (d.starts_on ? null : { starts_on: 'Choose the day the coupon starts.' }),
+      check: (d) => {
+        const errs = {};
+        if (!d.starts_on) errs.starts_on = 'Choose the day the coupon starts.';
+        if (String(d.code ?? '').trim().length > 32) errs.code = 'Codes can be up to 32 characters.';
+        if (d.limit_on && String(d.max_redemptions ?? '').trim() === '') errs.max_redemptions = 'Enter how many times the coupon can be used.';
+        return Object.keys(errs).length ? errs : null;
+      },
       onSubmit: async (d, { form: f }) => {
         const body = couponBody({ ...d, kind: checked(f, 'kind'), duration: checked(f, 'duration') });
         // "Change it" keeps the form open with focus on the box the question is about.

@@ -241,7 +241,14 @@ export async function calendarView(el, { query }) {
         field({ name: 'reason', label: 'Reason', placeholder: 'e.g. Owner stay, repairs', maxlength: 200 }),
         h('p', { class: 'muted small' }, 'Blocked nights also show as unavailable on Airbnb/Booking.com once they read your BalayHub calendar link.'),
       ],
-      onSubmit: async (d) => { await post('/blocks', { ...d, unit_id: listing.unit_id }); toast('Dates blocked.'); load(); },
+      onSubmit: async (d) => {
+        try { await post('/blocks', { ...d, unit_id: listing.unit_id }); } catch (err) {
+          // The banner names the clash once; the date boxes are only marked, with no repeated sentence.
+          if (err.code === 'DATES_TAKEN') err.fields = { start_date: '', end_date: '' };
+          throw err;
+        }
+        toast('Dates blocked.'); load();
+      },
     });
   }
 

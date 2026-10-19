@@ -165,6 +165,14 @@ function install({ realFetch, threeDsBase = 'https://secure-authentication.paymo
       return s ? ok(sessionView(s)) : notFound('checkout session');
     }
 
+    if ((m = /^\/checkout_sessions\/(cs_\w+)\/expire$/.exec(path)) && method === 'POST') {
+      const s = state.sessions.get(m[1]);
+      if (!s) return notFound('checkout session');
+      if (!s.attributes.payments.length) s.attributes.status = 'expired'; // a session that holds a payment cannot be expired
+      save();
+      return ok(sessionView(s));
+    }
+
     // Stage 2 (shapes unconfirmed, research R4). Specific paths before /subscriptions/:id.
     if (method === 'POST' && path === '/subscriptions/plans') {
       if (!Number.isInteger(a.amount) || a.amount < 100) return bad('amount is invalid', 'amount');

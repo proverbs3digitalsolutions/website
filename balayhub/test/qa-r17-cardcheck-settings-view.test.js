@@ -88,7 +88,7 @@ const OPTIONS = [
 ];
 const CARD = { brand: 'visa', last4: '4242' };
 const PLAN = { plan: 'trial', read_only: false };
-const baseBill = (o = {}) => ({ online: true, options: OPTIONS, history: [], coupon: null, card: CARD, renewal_plan: 'growth', saved_card_pay: true, subscriptions: false, auto_renew: { on: false, status: null, consented_at: null, next_charge_on: null }, ...o });
+const baseBill = (o = {}) => ({ online: true, options: OPTIONS, history: [], coupon: null, card: CARD, renewal_plan: 'growth', paid_until: '2026-10-28', saved_card_pay: true, subscriptions: false, auto_renew: { on: false, status: null, consented_at: null, next_charge_on: null }, ...o });
 let bc;
 test.before(async () => { bc = await import(pathToFileURL(path.join(fs.readdirSync(os.tmpdir()).filter((d) => d.startsWith('bh-r17f2-')).map((d) => path.join(os.tmpdir(), d)).sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0], 'views', 'billingcoupon.js')).href); });
 const mount = (bill = {}, p = PLAN) => mod.payOnline(p, baseBill(bill), () => { calls.push(['rerender']); }, bc);
@@ -134,7 +134,7 @@ test('one tap posts to pay-saved with the checkout body and activates on success
   stub.post = async (u) => (u === '/billing/pay-saved' ? { billing_id: 'b', status: 'paid', paid_until: '2026-11-28' } : {});
   const root = mount();
   button(root, 'Pay ₱999.00 with Visa ending 4242').fire('click'); await tick(); await tick();
-  assert.deepEqual(calls.find((c) => c[1] === '/billing/pay-saved'), ['post', '/billing/pay-saved', { plan: 'growth', months: '1' }]);
+  assert.deepEqual(calls.find((c) => c[1] === '/billing/pay-saved'), ['post', '/billing/pay-saved', { plan: 'growth', months: '1', seen_paid_until: '2026-10-28' }]);
   assert.deepEqual(toasts, [['Your Growth plan is active until Nov 28, 2026.', 'info']]);
   assert.ok(calls.some((c) => c[0] === 'rerender'));
 });

@@ -24,6 +24,8 @@ globalThis.fetch = async (url, opts = {}) => {
     sessions.set(id, { id, attributes: { ...a, checkout_url: `https://checkout.paymongo.com/${id}`, status: 'active', payments: [] } });
     return json({ data: sessions.get(id) });
   }
+  const x = /checkout_sessions\/(cs_\w+)\/expire$/.exec(u);
+  if (opts.method === 'POST' && x && sessions.has(x[1])) { const s = sessions.get(x[1]); s.attributes.status = 'expired'; return json({ data: s }); }
   const m = /checkout_sessions\/(cs_\w+)$/.exec(u);
   if (m && sessions.has(m[1])) return json({ data: sessions.get(m[1]) });
   return json({ errors: [{ detail: 'not found' }] }, 404);

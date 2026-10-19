@@ -254,6 +254,7 @@ async function addListingModal(onSaved) {
   // Not formModal: a cancelled question must leave the form open with what was typed.
   const modal = openModal({ title: 'Add listing', body: makeForm({
     submitText: 'Save listing', draftKey: 'listing-new', cancel: () => modal.close(),
+    check: (d) => (String(d.nightly_rate ?? '').trim() && baseRateError(d.nightly_rate) ? { nightly_rate: baseRateError(d.nightly_rate) } : null), // with the required-field messages, in one pass
     fields: [savedLine, ...listingFields({}, roomTypes, newPropMore, [h('hr', { class: 'divider' }), propSelect, newProp])],
     onSubmit: async (raw, { form }) => {
       const d = prepUnit(raw);
@@ -367,7 +368,7 @@ async function channelsModal(listing, onChange) {
       h('span', { class: 'row__sub', style: { wordBreak: 'break-all' } }, f.url),
       h('span', { class: `row__sub ${f.last_status === 'error' ? 'amount--neg' : ''}` }, f.last_synced_at ? `${fmtDateTime(f.last_synced_at)} — ${f.problem_message || f.last_message || ''}` : 'Not synced yet'),
       // Support still needs the raw text, so it stays under a muted label when a plain message replaced it.
-      f.problem_message && f.last_message && h('span', { class: 'row__sub muted small' }, `Technical details: ${f.last_message}`)),
+      f.problem_message && f.last_message && h('details', { class: 'row__sub muted small' }, h('summary', null, 'Technical details'), f.last_message)),
     h('div', { class: 'row__end' }, h('div', { class: 'chips' },
       h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `Sync now, ${channelName(f)}`, onclick: async (e) => {
         e.target.disabled = true;
@@ -557,11 +558,8 @@ async function changeArchive(listing, action, onDone) {
 
 // How much of the filter bar a workspace needs: none with no listings, just the search box for 1 to 3 (the rest sit
 // in the closed "More filters" fold), everything from 4 up.
-// Compact bar (1 to 3 listings): Occupancy and Sort stay in view, every other filter goes in the panel.
-export const compactSplit = (quick, more) => ({
-  quick: [quick.find((f) => f.name === 'occupancy'), more.find((f) => f.name === 'sort')].filter(Boolean),
-  more: [...quick.filter((f) => f.name !== 'occupancy'), ...more.filter((f) => f.name !== 'sort')],
-});
+// Compact bar (1 to 3 listings): only the search box and the Filters button show; every filter goes in the panel.
+export const compactSplit = (quick, more) => ({ quick: [], more: [...quick, ...more] });
 export const listingFilterMode = (n) => (n === 0 ? 'none' : n <= 3 ? 'compact' : 'full');
 // The bar only grows while the page is open (none, compact, full), and a tag filter, which shrinks the count, never moves it.
 export const nextFilterMode = (cur, n, tagSet) => (tagSet ? cur : ['none', 'compact', 'full'][Math.max(['none', 'compact', 'full'].indexOf(cur), ['none', 'compact', 'full'].indexOf(listingFilterMode(n)))]);
@@ -627,8 +625,11 @@ export async function listingsView(el, { query }) {
     const setCleaning = (v) => { filters.cleaning = v; rememberFilters('listings', filters); load(); };
     tabs.replaceChildren(
       h('button', { role: 'tab', 'aria-selected': String(!filters.cleaning), onclick: () => setCleaning('') }, `All (${base.length})`),
-      h('button', { role: 'tab', 'aria-selected': String(filters.cleaning === 'dirty'), onclick: () => setCleaning('dirty') }, `Needs cleaning (${dirtyCount})`),
-      h('button', { role: 'tab', 'aria-selected': String(filters.cleaning === 'clean'), onclick: () => setCleaning('clean') }, `Clean (${base.length - dirtyCount})`));
+      // A small host (1 to 3 listings) sees no tab with nothing in it, unless it is the one open.
+      mode === 'compact' && !dirtyCount && filters.cleaning !== 'dirty' ? null
+        : h('button', { role: 'tab', 'aria-selected': String(filters.cleaning === 'dirty'), onclick: () => setCleaning('dirty') }, `Needs cleaning (${dirtyCount})`),
+      mode === 'compact' && base.length === dirtyCount && filters.cleaning !== 'clean' ? null
+        : h('button', { role: 'tab', 'aria-selected': String(filters.cleaning === 'clean'), onclick: () => setCleaning('clean') }, `Clean (${base.length - dirtyCount})`));
     bar.hidden = mode === 'none';
     if (!listings.length) {
       box.replaceChildren(h('div', { class: 'card' }, emptyState({ iconName: 'building', title: 'No listings yet', text: 'Add each unit you rent out per night, with its base nightly rate and cleaning fee.', action: canManage && h('button', { class: 'btn btn--primary', onclick: () => addListingModal(load) }, icon('plus'), 'Add listing') })));
@@ -655,7 +656,7 @@ export async function listingsView(el, { query }) {
         h('dt', null, 'Now'), h('dd', null, l.current_booking_id ? h('a', { class: 'link-tap', href: `#/reservations/${l.current_booking_id}` }, `${l.current_guest} until ${fmtDate(l.current_check_out)}`) : 'Vacant'),
         h('dt', null, 'Next arrival'), h('dd', null, l.next_check_in ? `${fmtDate(l.next_check_in)} · ${l.next_guest}` : '—'),
         h('dt', null, 'Channels'), h('dd', null, Number(l.channel_count) ? `${l.channel_count} connected` : 'None')),
-      h('div', { class: 'chips', style: { marginTop: '12px' } },
+      h('div', { class: 'chips listing__actions', style: { marginTop: '12px' } },
         h('button', { class: `btn btn--sm ${l.cleaning_status === 'dirty' ? 'btn--primary' : 'btn--secondary'}`, 'aria-label': `${l.cleaning_status === 'dirty' ? 'Mark clean' : 'Mark dirty'}, ${l.unit_name}`, onclick: async () => {
           await post(`/units/${l.unit_id}/cleaning`, { status: l.cleaning_status === 'dirty' ? 'clean' : 'dirty' });
           toast(l.cleaning_status === 'dirty' ? 'Marked clean.' : 'Marked as needing cleaning.'); load();
@@ -669,6 +670,7 @@ export async function listingsView(el, { query }) {
           const roomTypes = await roomTypeNames();
           // Not formModal: a cancelled question must leave the form open with what was typed.
           const modal = openModal({ title: `Edit ${l.unit_name}`, body: makeForm({ submitText: 'Save changes', fields: listingFields({ ...unit, tags: unit.tags }, roomTypes),
+            check: (d) => (String(d.nightly_rate ?? '').trim() && baseRateError(d.nightly_rate) ? { nightly_rate: baseRateError(d.nightly_rate) } : null), // with the required-field messages, in one pass
             cancel: () => modal.close(),
             onSubmit: async (d, { form }) => {
               checkBaseRate(d);

@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
+Last updated: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
 
 ---
 
@@ -1441,3 +1441,35 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 - Profit and loss: the "no channel fee entered" link opens the stays that checked out before today, so the list count equals the note.
 - Rental Reports: an empty custom date box is marked invalid with **Pick both dates to export.**
 - A PayMongo Secret key with the right start but too short says **This key is too short. Paste the full Secret key from PayMongo.**
+
+## 33. QA round 20 changes (D-102; 2026-10-20)
+
+### 33.1 Plan & billing: one open payment at a time (changes 5.10, 31 and 32)
+- While a plan payment is open, a second one does not start. Under **Pay another way**, while a one-tap payment waits at the bank, the page says "This cancels the payment waiting at your bank."
+- **Pay another way** while a one-tap payment waits: BalayHub ends the older payment at PayMongo first. If the bank payment is dead, the hosted checkout opens. If it is still alive: "A payment is still waiting for your bank. Finish it there, or try again later." If it turns out to have been paid (including during the check): the owner is told the payment was received (no second charge).
+- **Stale page:** if another tab or window already completed a payment, pressing Pay (or Pay with the saved card) on the old page answers "payment received", refreshes the plan summary and history, and moves focus to the notice. No new charge starts. Paying ahead from a freshly loaded page is still allowed.
+- **Pay with the saved card** while a hosted checkout is open: "A payment is already open in another window. Finish it there, or try again later."
+- An applied coupon states its discount once (the green box with the code and **Remove**).
+- **Payment history** rows show the card brand and last four digits of the card used, even after **Remove card**.
+
+### 33.2 Platform admin: plan coupons
+- **Limit total uses** ticked with an empty box: "Enter how many times the coupon can be used." The box is marked.
+- A code that is already taken marks the code box. A code longer than 32 characters says "Codes can be up to 32 characters."
+- The workspace search hint reads **Workspace or owner**.
+
+### 33.3 Listings
+- With **1 to 3 listings** the page is compact: status tabs with a zero count are hidden (All stays), and Occupancy and Sort by sit in the **Filters** panel.
+- An iCal sync problem shows the plain sentence, with the raw error inside a closed **Technical details** box.
+- On phones the card buttons (Edit, Archive, Bookings) sit in two columns; an odd last button spans both.
+
+### 33.4 Keyboard focus and filters
+- After a redirect (for example Reports to Stay reports) focus lands on the **page heading** and stays there; clicking a tab keeps focus on the tab.
+- Removing a filter chip or pressing **Clear all** with the keyboard puts focus on the **Filters** button (else the search box, else the heading). On phones the chips row sits between the bar and the open panel.
+
+### 33.5 Smaller changes
+- **Block dates** that clash: the banner names the clash once; both date boxes are marked, with no text repeated under them.
+- **New reservation** shows all field problems together (guest count, dates, email). **Add listing** does the same (building and nightly rate in one pass).
+- **Inbox** composer Subject reads "Subject (optional)". **Help** new ticket Subject example "e.g. Airbnb not syncing". Tenants search hint "Name, phone or unit".
+- **Gate pass** has a labelled **Notes** row and a Unit row laid out like the others.
+- **Support:** a cleaner opens Help and sees their own tickets only.
+- Phones: the Housekeeping main tabs are two by two under 380px; the theme switch labels fit at 320px (they wrap if needed).

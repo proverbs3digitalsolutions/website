@@ -73,7 +73,7 @@ test('create body follows the contract; locked fields are left out of a save', (
   const { couponBody, LOCKED } = helpers();
   const v = { name: 'Alpha', code: 'alpha50', kind: 'percent', percent_off: '50', amount_off: '', duration: 'months', duration_months: '3', plans: ['growth'], limit_on: true, max_redemptions: '20', once_per_workspace: true, require_card: false, starts_on: '2026-10-16', starts_time: '00:00', ends_on: '2026-12-31', ends_time: '23:59', note: '' };
   const b = couponBody(v, false);
-  assert.deepEqual(b, { name: 'Alpha', code: 'alpha50', kind: 'percent', percent_off: 50, amount_off: null, duration: 'months', duration_months: 3, plans: ['growth'], max_redemptions: 20, once_per_workspace: true, require_card: false, starts_on: '2026-10-16', starts_time: '00:00', ends_on: '2026-12-31', ends_time: '23:59', note: '' });
+  assert.deepEqual(b, { name: 'Alpha', code: 'alpha50', kind: 'percent', percent_off: 50, amount_off: null, duration: 'months', duration_months: 3, plans: ['growth'], max_redemptions: 20, limit_on: true, once_per_workspace: true, require_card: false, starts_on: '2026-10-16', starts_time: '00:00', ends_on: '2026-12-31', ends_time: '23:59', note: '' });
   const free = couponBody({ ...v, kind: 'free', duration: 'once', limit_on: false, ends_on: '' }, false);
   assert.equal(free.percent_off, null); assert.equal(free.amount_off, null); assert.equal(free.duration_months, null);
   assert.equal(free.max_redemptions, null); assert.equal(free.ends_on, null); assert.equal(free.ends_time, null);

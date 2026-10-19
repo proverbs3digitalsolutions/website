@@ -61,8 +61,12 @@ async function focusWhenAttached(el, node) {
   if (el.isConnected !== false) node.focus();
 }
 
+// Set when a Pay press found the plan already paid elsewhere (PAYMENT_RECEIVED); the redrawn page shows it and takes focus.
+let carriedNotice = null;
+
 export async function settingsView(el, { rerender, query = {} }) {
   let billingNotice = null;
+  if (carriedNotice) { billingNotice = h('div', { class: 'alert alert--error', role: 'alert', tabindex: '-1' }, carriedNotice); carriedNotice = null; }
   // Back from PayMongo checkout: confirm the payment with the server.
   if (query.billing) {
     history.replaceState(null, '', '#/settings');
@@ -432,14 +436,16 @@ export async function planCard(u, rerender) {
       h('ul', { class: 'list' }, bill.history.map((b) => h('li', null, h('div', { class: 'row' },
         h('div', { class: 'row__main' },
           h('span', { class: 'row__title' }, b.kind === 'card_check' ? 'Card check' : `${b.plan[0].toUpperCase()}${b.plan.slice(1)} · ${b.months} month${b.months > 1 ? 's' : ''}`),
-          h('span', { class: 'row__sub' }, b.kind === 'card_check' ? (b.status === 'paid' ? `Paid ${fmtDateTime(b.paid_at)}${bill.card ? ` · ${cardText(bill.card)}` : ''}` : `Started ${fmtDateTime(b.created_at)}, waiting for payment`)
+          h('span', { class: 'row__sub' }, b.kind === 'card_check' ? (b.status === 'paid' ? `Paid ${fmtDateTime(b.paid_at)}${rowCard(b) || (bill.card ? ` · ${cardText(bill.card)}` : '')}` : `Started ${fmtDateTime(b.created_at)}, waiting for payment`)
             : b.provider === 'coupon' ? `Free with coupon ${b.coupon_code} · covers ${fmtDate(b.period_start)} to ${fmtDate(b.period_end)}`
-            : b.status === 'paid' ? `Paid ${fmtDateTime(b.paid_at)}${b.payment_method ? ` · ${b.payment_method}` : ''} · covers ${fmtDate(b.period_start)} to ${fmtDate(b.period_end)}${Number(b.discount_amount) > 0 ? ` · coupon ${b.coupon_code} saved ${bc.money(b.discount_amount)}` : ''}`
+            : b.status === 'paid' ? `Paid ${fmtDateTime(b.paid_at)}${b.payment_method ? ` · ${b.payment_method}` : ''}${rowCard(b)} · covers ${fmtDate(b.period_start)} to ${fmtDate(b.period_end)}${Number(b.discount_amount) > 0 ? ` · coupon ${b.coupon_code} saved ${bc.money(b.discount_amount)}` : ''}`
               : `Started ${fmtDateTime(b.created_at)}, waiting for payment`)),
         h('div', { class: 'row__end' }, h('strong', null, bc.money(b.amount)),
           h('span', { class: `badge badge--${b.status === 'paid' ? 'paid' : 'unpaid'}` }, b.provider === 'coupon' ? 'Free' : b.status === 'paid' ? 'Paid' : 'Pending'))))))]);
 }
 
+// A paid row remembers its own card (migration 039); hosted and older rows have none and keep the plain text.
+const rowCard = (b) => (b.card_last4 ? ` · ${cardText({ brand: b.card_brand, last4: b.card_last4 })}` : '');
 const cardText = (c) => `${c.brand ? c.brand[0].toUpperCase() + c.brand.slice(1) : 'Card'} ending ${c.last4}`;
 const planName = (bill, key) => bill.options?.find((o) => o.key === key)?.name || (key ? key[0].toUpperCase() + key.slice(1) : '');
 
@@ -545,7 +551,7 @@ export function payOnline(p, bill, rerender, bc) {
     btn.textContent = quote?.free ? 'Activating…' : 'Opening secure checkout…';
     try {
       const code = box.getCode();
-      const r = await post('/billing/checkout', { plan, months: String(months), ...(code ? { coupon_code: code } : {}) });
+      const r = await post('/billing/checkout', { plan, months: String(months), seen_paid_until: bill.paid_until ?? null, ...(code ? { coupon_code: code } : {}) });
       if (r.activated) {
         await refreshUser();
         toast(`Your ${bill.options.find((x) => x.key === plan).name} plan is active until ${fmtDate(r.paid_until)}.`);
@@ -554,6 +560,7 @@ export function payOnline(p, bill, rerender, bc) {
       }
       location.href = r.checkout_url;
     } catch (err) {
+      if (err.code === 'PAYMENT_RECEIVED') { carriedNotice = err.message; await refreshUser(); rerender(); return; }
       if (/^(COUPON|COMPED|CARD_OFF)/.test(err.code || '')) box.showError(err.message); else toast(err.message, 'error');
       btn.disabled = false;
       update();
@@ -564,7 +571,7 @@ export function payOnline(p, bill, rerender, bc) {
     savedBtn.textContent = 'Charging your card…';
     try {
       const code = box.getCode();
-      const r = await post('/billing/pay-saved', { plan, months: String(months), ...(code ? { coupon_code: code } : {}) });
+      const r = await post('/billing/pay-saved', { plan, months: String(months), seen_paid_until: bill.paid_until ?? null, ...(code ? { coupon_code: code } : {}) });
       if (r.status === 'action_required' && r.redirect_url) { location.assign(r.redirect_url); return; }
       if (r.activated || r.status === 'paid') {
         await refreshUser();
@@ -575,6 +582,7 @@ export function payOnline(p, bill, rerender, bc) {
       savedBtn.disabled = false; btn.disabled = false; update();
       msgEl.textContent = 'Your payment is being confirmed. Check back in a moment.';
     } catch (err) {
+      if (err.code === 'PAYMENT_RECEIVED') { carriedNotice = err.message; await refreshUser(); rerender(); return; }
       savedBtn.disabled = false; btn.disabled = false; update();
       if (err.code === 'SAVED_CARD_FAILED' || err.code === 'SAVED_CARD_NONE') {
         msgEl.textContent = "Your saved card couldn't be charged. Pay another way, or use a different card.";
@@ -590,6 +598,7 @@ export function payOnline(p, bill, rerender, bc) {
     h('h3', { class: 'subhead', style: { marginTop: '16px' } }, p.plan === 'trial' || p.read_only ? 'Choose your plan' : 'Renew or change plan'),
     cards,
     h('div', { class: 'payonline__row' }, monthSel, h('span', null, 'Total: ', strikeEl, ' ', amountEl), savedBtn, btn),
+    pending && h('p', { class: 'muted small', role: 'note' }, 'This cancels the payment waiting at your bank.'), // the hosted route first cancels the waiting one-tap payment (BIL)
     pending && h('div', { class: 'alert alert--info', role: 'status' }, pendingText(pending, bc.money)),
     msgEl,
     !pending && box,

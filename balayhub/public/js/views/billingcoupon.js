@@ -67,7 +67,9 @@ export function couponBox({ current, getSelection, onQuote }) {
       if (q.coupon) {
         // A free coupon that still needs a card says what the card is charged.
         const cardNote = q.card_only && q.min_charge_applied && q.coupon.kind === 'free' ? ` You pay ${money(q.amount)} once by card.` : '';
-        okText.textContent = `${q.coupon.code} applied: ${couponText(q.coupon)}.${cardNote}`;
+        // The line under the plan picker (q.message) already says the discount for a one-month or ongoing coupon: say it once.
+        const offer = couponText(q.coupon);
+        okText.textContent = `${q.coupon.code} applied${q.message && q.message.includes(offer) ? '.' : `: ${offer}.`}${cardNote}`;
       }
     }
     onQuote(q);

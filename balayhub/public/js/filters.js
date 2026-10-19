@@ -358,11 +358,17 @@ export function filterBar({ key, values, defaults, search, quick = [], more = []
     }
     const q = search && values[search.name || 'q'];
     chips.replaceChildren(
-      ...(q ? [h('button', { type: 'button', class: 'flt__chip', 'aria-label': `Remove search ${q}`, onclick: () => { values[search.name || 'q'] = ''; searchInput.value = ''; emit(); } }, `“${q}”`, h('span', { 'aria-hidden': 'true' }, ' ×'))] : []),
-      ...active.map(([f, t]) => h('button', { type: 'button', class: 'flt__chip', 'aria-label': `Remove filter ${t}`, onclick: () => { clearField(f, values, defaults); controls.forEach((c) => c.sync()); emit(); } }, t, h('span', { 'aria-hidden': 'true' }, ' ×'))),
-      (q || active.length > 0) ? h('button', { type: 'button', class: 'flt__clear', onclick: () => clearAll() }, 'Clear all') : '');
+      ...(q ? [h('button', { type: 'button', class: 'flt__chip', 'aria-label': `Remove search ${q}`, onclick: () => { keepPlace(); values[search.name || 'q'] = ''; searchInput.value = ''; emit(); } }, `“${q}”`, h('span', { 'aria-hidden': 'true' }, ' ×'))] : []),
+      ...active.map(([f, t]) => h('button', { type: 'button', class: 'flt__chip', 'aria-label': `Remove filter ${t}`, onclick: () => { keepPlace(); clearField(f, values, defaults); controls.forEach((c) => c.sync()); emit(); } }, t, h('span', { 'aria-hidden': 'true' }, ' ×'))),
+      (q || active.length > 0) ? h('button', { type: 'button', class: 'flt__clear', onclick: () => { keepPlace(); clearAll(); } }, 'Clear all') : '');
   }
   function emit() { rememberFilters(key, values); paint(); onChange(); }
+  // A chip or Clear all is replaced by the redraw, so a keyboard user's focus moves to the Filters button first (else the
+  // search box). It is the point of the action, and a page that rebuilds its bar lands on the same button (see `old` below).
+  function keepPlace() {
+    const el = moreBtn && moreBtn.style.display !== 'none' ? moreBtn : searchInput;
+    el?.focus?.({ preventScroll: true });
+  }
   function clearAll() {
     // The saved view the person picked (`view`, or the keys a page names in `keep`) is not a filter: it stays.
     for (const k of Object.keys(defaults)) if (!keep.includes(k)) values[k] = defaults[k];
@@ -404,9 +410,12 @@ export function filterBar({ key, values, defaults, search, quick = [], more = []
   // Phones: the quick filters sit in the Filters panel, so the search box and the button share one row and the list starts near the top.
   const byEl = root.querySelector?.('.flt__by');
   const grid = panel?.firstChild;
-  if (grid && quickEls.length && typeof matchMedia === 'function') {
+  // Phones also put the chips above the open panel, so a choice shows without scrolling past the panel.
+  if (panel && typeof matchMedia === 'function') {
     const mq = matchMedia('(max-width: 559px)');
     const place = () => {
+      if (mq.matches) panel.before(chips); else panel.after(chips);
+      if (!grid || !quickEls.length) return;
       // On phones each quick select gets its visible label in the panel; a quick-only bar shows the Filters button instead of "Filter by".
       if (mq.matches) { grid.prepend(...quickEls); for (const c of quickCtrls) if (c.field) { c.el.before(c.field); c.field.append(c.el); } }
       else { moreBtn.before(...quickEls); for (const c of quickCtrls) c.field?.remove(); }

@@ -135,7 +135,7 @@ export async function helpNewView(el, { query }) {
   };
 
   const screenshot = h('input', { type: 'file', class: 'input', accept: 'image/jpeg,image/png,image/webp,application/pdf', 'aria-label': 'Screenshot or file' });
-  const subject = field({ name: 'subject', label: 'Subject', required: true, maxlength: 150, placeholder: longTerm ? 'e.g. Rent reminder not sent to my tenant' : 'e.g. Airbnb bookings not showing on my calendar', value: query.subject || '' });
+  const subject = field({ name: 'subject', label: 'Subject', required: true, maxlength: 150, placeholder: longTerm ? 'e.g. Rent reminder not sent to my tenant' : 'e.g. Airbnb not syncing', value: query.subject || '' });
   subject.querySelector('input').addEventListener('input', (e) => suggest(e.target.value));
 
   const form = makeForm({
@@ -149,7 +149,7 @@ export async function helpNewView(el, { query }) {
       subject,
       suggestBox,
       field({ name: 'body', label: 'What happened?', type: 'textarea', required: true, maxlength: 8000,
-        placeholder: 'What were you trying to do, what did you expect, and what happened instead? Include the reservation, listing or guest name if it’s about one.' }),
+        placeholder: 'What were you trying to do, and what happened instead?' }),
       h('div', { class: 'field' }, h('label', null, 'Screenshot (optional)'), screenshot,
         h('div', { class: 'hint' }, 'Please hide passwords and guests’ ID numbers before you send a screenshot.')),
       h('p', { class: 'muted small' }, 'We also send which page you came from, your browser and screen size, so we can see what you see.'),

@@ -1,6 +1,6 @@
 # BalayHub design brief
 
-Last updated: 2026-10-20 (QA round 19: landing links hidden below 768px; D-101). Before that: 2026-10-19 (QA round 18: section 27, phone filter bar, theme switch label; D-100). Before that: 2026-10-15 (QA round 17: section 26, the wordmark logotype exemption, the focus key table; D-98 and D-99)
+Last updated: 2026-10-20 (QA round 20: section 28; D-102). Before that: 2026-10-20 (QA round 19: landing links hidden below 768px; D-101). Before that: 2026-10-19 (QA round 18: section 27, phone filter bar, theme switch label; D-100). Before that: 2026-10-15 (QA round 17: section 26, the wordmark logotype exemption, the focus key table; D-98 and D-99)
 
 **Summary.** BalayHub is a phone-first web app (also an installable PWA) for Filipino rental and staycation hosts. It is built with plain CSS, one stylesheet (`public/css/app.css`), and small JavaScript helpers (`public/js/ui.js`). There is no framework and no CSS preprocessor. The look is calm and practical: Forest Green on soft off-white, Sand and Sun as warm accents, Poppins for headings, Inter for text, rounded cards, and large touch targets. Colours come from CSS custom properties on `:root`. A dark theme redefines the same tokens, so any component that uses tokens gets dark mode automatically. This brief records what is **actually built**. Every value below comes from the code. Where the code doesn't define a token (spacing, type sizes), the brief lists the values in use and says so.
 
@@ -692,3 +692,10 @@ Decision D-100. CSS in `public/css/app.css`, behaviour in `public/js/filters.js`
 - **Date boxes in error.** A date range error marks both boxes `aria-invalid` and ties the message to them with `aria-describedby` (Reports custom dates).
 - **A destructive admin section** (Delete workspace) is its own section at the bottom of the panel: h3, the typed-name box, and `btn--danger` buttons that stay off until the name matches. An error message below the buttons takes focus.
 - **Known gaps (carried):** pages with quick filters but no Filters panel keep stacked rows on phones; the quick selects inside the phone Filters panel have no visible label.
+
+## 28. Patterns added in QA round 20 (2026-10-20)
+
+- **Compact tab grids at 360.** Main tab groups (Housekeeping main tabs) show two by two under 380px so no tab sits alone; tab targets stay 44px.
+- **Listing card actions** use a two-column grid below 560px (class `listing__actions`); an odd last button spans both columns. Collapsed "Technical details" summaries are 44px tall.
+- **Theme switch at 320.** Light, Dark and Match device fit on one line at 320px (smaller font and padding under 360px).
+- **Dark mode divider** above Delete workspace uses the `--muted-2` token (a stronger line); no new token.

@@ -195,7 +195,7 @@ export async function adminView(el, { rerender, query = {} }) {
   }
   const bar = filterBar({
     key: 'admin-workspaces', values: filters, defaults, onChange: load,
-    search: { placeholder: 'Search workspace, owner name or email' },
+    search: { placeholder: 'Workspace or owner', label: 'Search workspace, owner name or email' },
     quick: [
       { name: 'status', label: 'Status', all: 'All statuses', options: [['trial', 'On trial'], ['card_pending', 'Waiting for card'], ['paying', 'Paying'], ['grace', 'Grace period'], ['trial_ended', 'Trial ended'], ['overdue', 'Payment overdue'], ['comped', 'Complimentary'], ['deleting', 'Scheduled for deletion'], ['demo', 'Demo']] },
       { name: 'business_type', label: 'Business type', all: 'All types', options: Object.entries(BUSINESS) },

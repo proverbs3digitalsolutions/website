@@ -181,7 +181,7 @@ export async function tenantsView(el, { query }) {
         }
         load().catch((e) => toast(e.message, 'error'));
       },
-      search: { placeholder: canManage ? 'Name, phone, unit, property' : 'Name, unit, property' },
+      search: { placeholder: canManage ? 'Name, phone or unit' : 'Name or unit', label: canManage ? 'Name, phone, unit, property' : 'Name, unit, property' },
       quick: [
         { name: 'lease', label: 'Lease', all: 'Any lease', options: [['active', 'Has a current lease'], ['ending30', 'Ending within 30 days'], ['ending60', 'Ending within 60 days'], ['no_end', 'No end date (month-to-month)'], ['moved_out', 'Moved out'], ['none', 'No unit assigned']] },
         { name: 'balance', label: 'Balance', all: 'Any balance', options: [['overdue', 'Overdue'], ['owing', 'Has unpaid balance'], ['clear', 'Up to date']] },

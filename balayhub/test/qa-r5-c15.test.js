@@ -153,7 +153,7 @@ test('Clear filters on the rent tab also resets the status chip, so the button a
 test('long-term workspaces get rent examples in the help search, the ask box and the subject box (#20)', () => {
   assert.match(HELP_SRC, /placeholder: 'Search help'/);
   assert.match(HELP_SRC, /placeholder: longTerm \? 'e\.g\. Paano mag-record\?' : 'e\.g\. I-connect Airbnb\?'/);
-  assert.match(HELP_SRC, /placeholder: longTerm \? 'e\.g\. Rent reminder not sent to my tenant' : 'e\.g\. Airbnb bookings not showing on my calendar'/);
+  assert.match(HELP_SRC, /placeholder: longTerm \? 'e\.g\. Rent reminder not sent to my tenant' : 'e\.g\. Airbnb not syncing'/);
   assert.equal((HELP_SRC.match(/const longTerm = state\.user\.business_type === 'long_term';/g) || []).length, 2);
 });
 

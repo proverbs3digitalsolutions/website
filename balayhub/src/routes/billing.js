@@ -35,8 +35,8 @@ async function billingView(user) {
   const { rows: history } = await query(
     `SELECT b.billing_id, b.kind, b.plan, b.months, b.amount, b.list_amount, b.discount_amount, b.provider, pc.code AS coupon_code,
             b.status, b.payment_method, b.paid_at, b.period_start, b.period_end, b.created_at,
-            CASE WHEN b.kind = 'card_check' THEN o.card_brand END AS card_brand,
-            CASE WHEN b.kind = 'card_check' THEN o.card_last4 END AS card_last4
+            CASE WHEN b.kind = 'card_check' OR b.provider = 'paymongo_intent' THEN COALESCE(b.card_brand, o.card_brand) END AS card_brand,
+            CASE WHEN b.kind = 'card_check' OR b.provider = 'paymongo_intent' THEN COALESCE(b.card_last4, o.card_last4) END AS card_last4
        FROM billing_payments b
        JOIN organizations o ON o.organization_id = b.organization_id
        LEFT JOIN platform_coupon_redemptions r ON r.redemption_id = b.coupon_redemption_id
@@ -59,6 +59,7 @@ async function billingView(user) {
             auto_renew_consented_at, subscription_status FROM organizations WHERE organization_id = $1`, [user.organization_id]);
   return {
     online: billing.enabled(),
+    paid_until: org.paid_until ? String(org.paid_until).slice(0, 10) : null, // echoed back as seen_paid_until (same comparison)
     card: org.card_payment_method_id ? { brand: org.card_brand, last4: org.card_last4 } : null,
     renewal_plan: org.renewal_plan || 'growth',
     saved_card_pay: Boolean(billing.enabled() && org.card_payment_method_id && billing.SAVED_CARD_PAY),
@@ -80,6 +81,17 @@ async function billingView(user) {
 }
 
 router.get('/billing', owners, ah(async (req, res) => { res.json(await billingView(req.user)); }));
+
+// The "paid until" the page showed (date text, or null for none); undefined when the caller sent none. See prepareCharge.
+function seenPaidUntil(req) {
+  if (!req.body || !('seen_paid_until' in req.body)) return undefined;
+  const v = req.body.seen_paid_until;
+  if (v === null) return null;
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}/.test(v) || Number.isNaN(Date.parse(v.slice(0, 10)))) {
+    throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { seen_paid_until: 'Paid until must be a date.' } });
+  }
+  return v.slice(0, 10);
+}
 
 const checkoutLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 15, key: (req) => `checkout|${req.user.organization_id}` });
 // Failed coupon codes are limited per workspace and per IP; successful checks don't count.
@@ -128,7 +140,7 @@ router.post('/billing/checkout', owners, checkoutLimiter, onlyWithCode(codeIpLim
     coupon_code: { type: 'string', max: 64, label: 'Coupon code' },
   });
   try {
-    res.json(await billing.createCheckout(req.user, body.plan, Number(body.months), { couponCode: body.coupon_code }));
+    res.json(await billing.createCheckout(req.user, body.plan, Number(body.months), { couponCode: body.coupon_code, seenPaidUntil: seenPaidUntil(req) }));
   } catch (err) {
     if (err.status === 502) throw new HttpError(502, err.message, { code: 'BILLING_FAILED' });
     throw err;
@@ -204,7 +216,7 @@ router.post('/billing/pay-saved', owners, checkoutLimiter, onlyWithCode(codeIpLi
     coupon_code: { type: 'string', max: 64, label: 'Coupon code' },
   });
   try {
-    res.json(await billing.paySaved(req.user, body.plan, Number(body.months), { couponCode: body.coupon_code }));
+    res.json(await billing.paySaved(req.user, body.plan, Number(body.months), { couponCode: body.coupon_code, seenPaidUntil: seenPaidUntil(req) }));
   } catch (err) { throw withBillingFailed(err); }
 }));
 

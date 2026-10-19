@@ -2,7 +2,7 @@
 
 Every decision made on BalayHub, with the date and the reason. Newest decisions go at the bottom. When a decision changes, add a new entry and mark the old one **Superseded by D-xx**. Never delete history.
 
-Last updated: 2026-10-20 (D-101, QA round 19 calls; D-100, QA round 18 calls and admin workspace delete; D-99, QA round 17 calls; D-98, card on file before the free trial; D-97, QA round 16 calls; D-96, QA round 15 late calls; D-95, QA round 15 calls; D-94, platform plan coupons; D-93, QA round 14 re-verify calls; D-92, QA round 14 calls; D-91, the top bar built; D-90, founder top bar request; D-89, QA round 13 calls)
+Last updated: 2026-10-20 (D-102, QA round 20 calls; D-101, QA round 19 calls; D-100, QA round 18 calls and admin workspace delete; D-99, QA round 17 calls; D-98, card on file before the free trial; D-97, QA round 16 calls; D-96, QA round 15 late calls; D-95, QA round 15 calls; D-94, platform plan coupons; D-93, QA round 14 re-verify calls; D-92, QA round 14 calls; D-91, the top bar built; D-90, founder top bar request; D-89, QA round 13 calls)
 
 ---
 
@@ -1299,3 +1299,38 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 > *Not bugs / not changed:* the wordmark (D-99 O2); the Ask button passing over a row (D-95); links inside a sentence (D-95); gated owners seeing the top bar (D-100).
 >
 > *Why:* a coupon must never be lost to a payment that did not happen, a person should be told the real wait and the real reason a payment failed, a money method is never chosen for them, and a warning should name the right person.
+
+---
+
+> **D-102 · 2026-10-20 · QA round 20 calls (alpha with small hosts).** The twentieth QA sweep (9 browser lanes: bookings, guest, inbox, longterm, money, onboarding, ops, phone, card) found one severe bug (SEV1: the hosted "Pay another way" button was not guarded while a one-tap payment was waiting at the bank, so an owner could be charged twice), two significant ones (SEV2: a coupon with "Limit total uses" ticked and no number saved as unlimited; Reports and Stay reports lost keyboard focus after a page change) and the rest minor (SEV3). Fixed in about 15 code lanes; the calls are below. **One migration (039).**
+>
+> *Plan payments (the SEV1).*
+> - **Only one plan payment may be open at a time for a workspace, one-tap or hosted.** A new charge does not start while another plan payment for the workspace is open. *Why:* two open payments meant the owner could pay twice for the same period.
+> - **Hosted "Pay another way" while a one-tap payment is waiting:** the older payment is **ended at PayMongo first** (cancel the intent, then read it again, the same rule as the 15-minute expiry). The hosted checkout goes ahead **only when PayMongo shows the older payment dead**. If it is still alive: 409 `PAYMENT_IN_PROGRESS`, "A payment is still waiting for your bank. Finish it there, or try again later." Plan & billing also says, under "Pay another way" while a payment waits: "This cancels the payment waiting at your bank."
+> - **One-tap while a hosted checkout is open:** 409, "A payment is already open in another window. Finish it there, or try again later." A hosted checkout open against a hosted request is guarded the same way (the older checkout session is expired at PayMongo and the new one goes ahead only when the old one is dead).
+> - **The older payment turns out to have been paid:** 409 `PAYMENT_RECEIVED`, so the owner is told the money already arrived instead of being asked to pay again. This also covers an earlier payment found paid during the check itself. The last check is made under the workspace lock. *A security review's first BLOCK (High) found the paid-just-before path still charged again; fixed and re-reviewed as PASS.*
+> - **A stale page cannot start a second full-price charge.** The page sends `seen_paid_until` (the paid-until date it last saw, echoed from the new top-level `paid_until` in `GET /billing`) with checkout and pay-with-saved-card. If it differs from the stored date, the answer is `PAYMENT_RECEIVED`; if the field is absent, there is no check. After the refusal the page refreshes the plan summary and history and moves focus. **Paying ahead from a fresh page stays allowed.** *Found in the re-verify (SEV1: a second tab started a new full-price checkout after an approved payment).*
+> - **Payment history keeps the card.** Migration 039 adds `billing_payments.card_brand` and `card_last4`, filled when a card payment is paid. The history reads them from the payment row (older rows fall back to the workspace's card), so **Remove card does not wipe the card from past payments.** *Found in the sweep (SEV3).*
+> - **A declined card attach keeps answering 402,** on purpose (it was deliberate in the card check work: the same answer as the card gate, and the page treats both as "card not accepted"). Written down in BACKEND-SCHEMA. *Closes the review question from the card lane.*
+> - **An applied coupon states its discount once** on Plan & billing (the green box with the code and Remove; the second line under the picker is dropped only when it says the same thing).
+>
+> *Plan coupons (admin).*
+> - **A limit needs a number.** With "Limit total uses" ticked, an empty box says "Enter how many times the coupon can be used." (also refused by the server when the form says the limit is on; API callers that leave the field out are not affected). *The SEV2: it saved as unlimited.*
+> - **A taken code marks the code box** (409 `CODE_TAKEN` carries the field). **Codes may be up to 32 characters,** and a longer one says "Codes can be up to 32 characters." instead of being cut silently.
+>
+> *Listings.*
+> - **A host with 1 to 3 listings gets the compact page (D-85):** status tabs with a count of 0 are hidden (All stays), and Occupancy and Sort by move into the Filters panel, like the calendar.
+> - **Technical details are folded.** The iCal row keeps its plain sentence; the raw error sits in a closed "Technical details" box. *The nightly rate of 0 was already refused in the form; not a bug.*
+> - **Card buttons:** Edit, Archive and Bookings sit in a two-column grid on phones (an odd last button spans both), so none stands alone.
+>
+> *Keyboard focus.*
+> - **After a redirect, focus lands on the page heading** (Reports and Stay reports; the page was being redrawn after the heading took focus). A tab click keeps its focus.
+> - **Removing a filter chip or Clear all with the keyboard** moves focus to the **Filters button** (else the search box, else the heading), not the heading while the panel is open. On phones the chips row sits **above** the open panel.
+>
+> *Support.* **Cleaners may list their own support tickets** (the code already allowed it; the documentation follows the code). Own tickets only.
+>
+> *Smaller changes.* Block dates that clash name the clash once in the banner (the two date boxes are marked, no repeated text); New reservation shows every field problem in one pass (guest count, dates, email); Add listing does the same (building and nightly rate together); Inbox Subject placeholder "Subject (optional)"; Help new ticket example "e.g. Airbnb not syncing" and a shorter What happened? hint; Platform admin search hint "Workspace or owner", Tenants "Name, phone or unit"; gate pass has a Notes row and the Unit row matches the others; Housekeeping main tabs show two by two under 380px; theme switch labels wrap if needed at 320px (the rule had been overridden by a later phone block, fixed in the re-verify); the Delete workspace divider uses a stronger line in dark mode (see BLOCKERS, for information).
+>
+> *Not bugs / not changed:* a double-click on **Reopen day** leaving focus on the page body (D-101 stands); an applied **coupon is not kept on reload** (it is checked again when the owner pays); **check-in consent must be ticked again** when a guest edits; **gap-night price tiles**; the **gate pass is English only** (founder questions only, not built); the **bell badge may lag up to 15 seconds** (the check is throttled); Log out below the fold on the phone More sheet for owners with many items (Close stays pinned; accepted).
+>
+> *Why:* one plan can only be paid once at a time, the history should show the card that was really used, a coupon limit should never silently become unlimited, and keyboard users should never lose their place.

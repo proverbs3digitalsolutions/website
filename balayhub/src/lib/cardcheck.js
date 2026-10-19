@@ -205,7 +205,8 @@ async function markPassed(billingId, iv, client) {
     if (!row || row.status === 'paid' || !['required', 'waived'].includes(org.card_check)) return false;
     const wasRequired = org.card_check === 'required';
     await db.query(
-      `UPDATE billing_payments SET status = 'paid', paid_at = now(), payment_method = 'card' WHERE billing_id = $1`, [billingId]);
+      `UPDATE billing_payments SET status = 'paid', paid_at = now(), payment_method = 'card', card_brand = $2, card_last4 = $3 WHERE billing_id = $1`,
+      [billingId, brand, last4]);
     // A workspace waived by an admin that pays anyway keeps 'waived' and its trial; the card is still saved.
     await db.query(
       `UPDATE organizations SET

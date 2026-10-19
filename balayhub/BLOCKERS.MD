@@ -2,7 +2,7 @@
 
 Things only the founder can do or decide before related work can go ahead. Automated runs add items here. The founder clears them by doing the item and ticking it, or by writing the decision in DECISIONS.MD.
 
-Last updated: 2026-10-20 (QA round 19: trial workspaces with no saved end date). Before that: 2026-10-19 (QA round 18 questions added: the commission option and the coupon wording). Before that: 2026-10-15 (card on file and automatic payment, D-98, and QA round 17 questions added; round 16 and earlier unchanged except two answered lines)
+Last updated: 2026-10-20 (QA round 20: delete divider FYI; open questions unchanged). Before that: 2026-10-20 (QA round 19: trial workspaces with no saved end date). Before that: 2026-10-19 (QA round 18 questions added: the commission option and the coupon wording). Before that: 2026-10-15 (card on file and automatic payment, D-98, and QA round 17 questions added; round 16 and earlier unchanged except two answered lines)
 
 ## Security — do first
 
@@ -453,3 +453,7 @@ Each one has the default already built.
   ```
   To see which ones: `SELECT organization_id, name, created_at FROM organizations WHERE plan = 'trial' AND trial_ends_at IS NULL ORDER BY created_at;` (use the same `docker compose exec db psql ... -c "..."` form). If the table or column names differ on the server, ask and we will adjust; never paste database passwords in chat.
 - [ ] The earlier open questions stay as they are: the "free plan plus 2% on paid direct bookings" option, the coupon wording (total months or months left), and the Supplies filters on desktop (all under "Questions from QA round 18").
+
+## For information from QA round 20 (2026-10-20)
+
+- [ ] **FYI: Delete workspace divider strength in dark mode.** Changed to a stronger line (the existing `--muted-2` token); say if it is too strong. No action needed otherwise.

@@ -303,6 +303,8 @@ const couponChecks = (input, used) => (out) => {
   if (out.starts_on && out.ends_on && `${out.ends_on} ${out.ends_time}` <= `${out.starts_on} ${out.starts_time}`) {
     errs.ends_on = 'The end must be after the start.';
   }
+  // A form that ticked "Limit total uses" must say how many; API callers that never send limit_on are not held to this.
+  if (input.limit_on === true && !out.max_redemptions && !errs.max_redemptions) errs.max_redemptions = 'Enter how many times the coupon can be used.';
   if (out.max_redemptions && out.max_redemptions < used) {
     errs.max_redemptions = `The limit can't be below the ${used} ${used === 1 ? 'time' : 'times'} it has been used.`;
   }
@@ -354,7 +356,7 @@ const COUPON_UPDATE = `UPDATE platform_coupons SET code = $1, name = $2, kind = 
 
 // The unique index on code: a code another coupon uses is a 409, not a server error.
 const codeTaken = (err) => (err.code === '23505' && err.constraint === 'platform_coupons_code_uq'
-  ? new HttpError(409, 'Another coupon already uses this code.', { code: 'CODE_TAKEN' }) : err);
+  ? new HttpError(409, 'Another coupon already uses this code.', { code: 'CODE_TAKEN', fields: { code: 'Another coupon already uses this code.' } }) : err);
 
 // Filters: text (code or name), state, kind and plan (a coupon with no plan list covers every paid plan), then sort.
 // `summary` counts every coupon and totals what they took off, whatever the filters.

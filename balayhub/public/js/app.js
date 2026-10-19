@@ -640,7 +640,8 @@ export async function render() {
     if (restoreTo !== null) restoreScroll(restoreTo);
     const title = mount.querySelector('h1')?.textContent;
     document.title = title ? `${title} — BalayHub` : 'BalayHub';
-    if (drawnPath !== null && drawnPath !== path) focusPageHeading(mount);
+    // A page drawn under a skeleton (no old page kept) lost the old heading's focus, even when a redirect landed on the page it left (Reports to Stay reports).
+    if (drawnPath !== null && (!prev || drawnPath !== path)) focusPageHeading(mount);
     drawnPath = path;
   } else {
     lastDrawing = null;

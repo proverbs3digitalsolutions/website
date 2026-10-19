@@ -559,8 +559,23 @@ img.file-thumb { display: block; flex: none; width: 96px; max-width: 96px; aspec
   .tabs--compact > :last-child:nth-child(odd):not(:nth-child(3)) { grid-column: 1 / -1; }
   .tabs--compact button { min-height: 44px; }
 }
+/* Round 20: Housekeeping main tabs (4) form a 2x2 grid under 380px, so Scores is not alone on a row. */
+@media (max-width: 379px) {
+  .hk-main-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* Round 20: listing card actions form an even two-column grid on phones; an odd last button spans the row. */
+@media (max-width: 559px) {
+  .chips.listing__actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .chips.listing__actions > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .chips.listing__actions > .btn { min-height: 44px; justify-content: center; }
+  details.row__sub > summary { min-height: 44px; display: flex; align-items: center; }
+}
+details.row__sub > summary { cursor: pointer; }
 /* Round 19: the Delete workspace section is set apart from the form above it. */
 section[aria-labelledby="delete-ws-title"] { margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--line); }
+/* Round 20: in dark mode --line is near the card colour; use the muted token so the divider reads (3:1). */
+:root[data-theme="dark"] section[aria-labelledby="delete-ws-title"] { border-top-color: var(--muted-2); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) section[aria-labelledby="delete-ws-title"] { border-top-color: var(--muted-2); } }
 .input--sm { min-height: 38px; padding: 6px 10px; font-size: .9rem; width: auto; }
 .card--flush { padding: 0; overflow: hidden; }
 .stat--flat { box-shadow: none; border: 1px solid var(--line); }
@@ -1158,6 +1173,7 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .themeswitch { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; border: 1px solid var(--line-2); border-radius: 99px; padding: 3px; gap: 2px; background: var(--surface); }
 .themeswitch button { white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; background: transparent; color: var(--muted); border-radius: 99px; padding: 6px 12px; font: inherit; font-size: .88rem; font-weight: 650; cursor: pointer; }
 .themeswitch button[aria-checked="true"] { background: var(--forest); color: #fff; }
+}
 .themeswitch button > [aria-hidden] { display: inline-flex; font-size: 1.1rem; line-height: 1; }
 .themeswitch button > [aria-hidden] svg { width: 18px; height: 18px; flex: none; }
 .themeswitch button[aria-checked="false"] > [aria-hidden] { color: var(--text); }
@@ -1765,6 +1781,11 @@ a.op__row:hover { background: var(--surface-2); }
   .stars { gap: 4px; }
   .stars button, .stars--sm button { min-width: 44px; }
   .btn--sm { min-width: 44px; }
+}
+/* Round 20: under 360px the three theme segments are ~80px, narrower than the 84px "Match device" label. This sits after the
+   phone block above and uses its selector (:not() adds specificity) so it wins; the label may wrap, the 44px min-height stays. */
+@media (max-width: 359px) {
+  .themeswitch:not(.themeswitch--compact) button { white-space: normal; font-size: .72rem; padding: 6px 3px; line-height: 1.15; }
 }
 
 /* ===== QA round 15: call-to-action cards and clear filters (D-94) */
