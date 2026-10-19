@@ -45,6 +45,7 @@ import { quoteView } from './views/quote.js';
 import { guideView } from './views/guide.js';
 import { addonsView } from './views/addons.js';
 import { quotesView, quoteDetailView } from './views/quotes.js';
+import { cardCheckView } from './views/cardcheck.js';
 import { routeAllowed } from './routeaccess.js';
 import { registerServiceWorker, forgetThisDevice } from './notifications.js';
 import { themeSwitch } from './themeswitch.js';
@@ -125,6 +126,7 @@ const routes = [
   ['/admin/coupons', adminCouponsView, APP],
   ['/admin/support', adminSupportView, APP],
   ['/admin/support/:id', adminSupportTicketView, APP],
+  ['/confirm-card', cardCheckView, APP],
   ['/account', accountView, APP],
   ['/help', helpView, APP],
   ['/help/new', helpNewView, APP],
@@ -203,7 +205,9 @@ const isCleanerPath = (path) => CLEANER_PATHS.some((p) => path === p || path.sta
 const OPS_NAV = [['/cleaner-pay', 'Cleaner pay', 'wallet'], ['/supplies', 'Supplies', 'wallet'], ['/lost-found', 'Lost and found', 'file']];// Staff see Supplies (assigned properties) but not pay or lost-and-found.
 const STAFF_OPS_NAV = OPS_NAV.filter(([p]) => p === '/supplies');
 // Staff don't see guest conversations; the platform admin gets an Admin link.
-export const navFor = (user = state.user) => user?.role === 'cleaner' ? CLEANER_NAV : [...({ short_term: NAV_SHORT, both: NAV_BOTH }[user?.business_type] || NAV_LONG)
+// Until the card is confirmed (D-98) the menu is only that page and Help; Account and Log out sit in the sidebar foot.
+const CARD_NAV = [['/confirm-card', 'Confirm your card', 'wallet'], ['/help', 'Help & support', 'help']];
+export const navFor = (user = state.user) => user?.plan?.card_check_due ? CARD_NAV : user?.role === 'cleaner' ? CLEANER_NAV : [...({ short_term: NAV_SHORT, both: NAV_BOTH }[user?.business_type] || NAV_LONG)
   .filter(([p]) => (p !== '/inbox' || user?.role !== 'staff') && (!['/launchpad', '/owners'].includes(p) || user?.role === 'owner') && (!['/stay-reports', '/pnl'].includes(p) || user?.role !== 'staff') && (!['/quotes', '/addons', '/daily-close'].includes(p) || ['owner', 'manager'].includes(user?.role))),
 ['/help', 'Help & support', 'help'],
 ...(user?.is_platform_admin ? [['/admin', 'Admin', 'shield']] : [])].flatMap((n) => (n[0] === '/housekeeping' && user?.business_type !== 'long_term' ? [n, ...(user?.role === 'staff' ? STAFF_OPS_NAV : OPS_NAV)] : [n]));
@@ -216,7 +220,7 @@ const NAV_GROUPS = [
   { id: 'setup', title: 'Setup', paths: ['/listings', '/settings', '/help', '/admin'] },
 ];
 export function navGroups(user = state.user, items = navFor(user)) {
-  if (user?.role === 'cleaner' || user?.business_type === 'long_term') return [{ id: 'all', title: null, items }];
+  if (user?.role === 'cleaner' || user?.business_type === 'long_term' || user?.plan?.card_check_due) return [{ id: 'all', title: null, items }];
   const placed = new Set(NAV_GROUPS.flatMap((g) => g.paths));
   return NAV_GROUPS.map((g) => ({ id: g.id, title: g.title,
     items: [...g.paths.map((p) => items.find((n) => n[0] === p)).filter(Boolean), ...(g.id === 'more' ? items.filter((n) => !placed.has(n[0])) : [])] }))
@@ -227,6 +231,7 @@ export function navGroups(user = state.user, items = navFor(user)) {
 function planBanner() {
   const p = state.user?.plan;
   if (!p) return null;
+  if (p.card_check_due) return null; // the Confirm your payment card page says it all
   if (p.is_demo) {
     return h('div', { class: 'planbar planbar--demo' },
       h('span', null, "You're exploring the demo. Changes are turned off."),
@@ -261,7 +266,7 @@ function planBanner() {
 const BOTTOM_LABELS = { 'Rent & Expenses': 'Rent', 'Group bookings': 'Groups', 'Help & support': 'Help' };
 const bottomNav = () => navFor().filter(([p]) => p !== '/launchpad').slice(0, 4);
 const moreNav = () => { const b = bottomNav(); return navFor().filter((n) => !b.includes(n)); };
-export const homeRoute = () => (state.user?.role === 'cleaner' ? '#/housekeeping' : state.user?.business_type === 'long_term' ? '#/dashboard' : '#/home');
+export const homeRoute = () => (state.user?.plan?.card_check_due ? '#/confirm-card' : state.user?.role === 'cleaner' ? '#/housekeeping' : state.user?.business_type === 'long_term' ? '#/dashboard' : '#/home');
 
 function parseHash() {
   const raw = location.hash.replace(/^#/, '') || '/';
@@ -303,7 +308,7 @@ function match(path) {
 const RESTORE_MS = 1500; // lists fetch their rows after the view returns, so the restore waits this long for the page to grow
 const hashPath = (hash) => String(hash || '').replace(/^#/, '').split('?')[0] || '/';
 // The other module's home is not an error: /dashboard on a stays workspace, /home on a rentals one.
-export const otherHome = (path, user) => (path === '/dashboard' && user?.business_type === 'short_term') || (path === '/home' && user?.business_type === 'long_term');
+export const otherHome = (path, user) => Boolean(user?.plan?.card_check_due) || path === '/confirm-card' || (path === '/dashboard' && user?.business_type === 'short_term') || (path === '/home' && user?.business_type === 'long_term');
 // from: { fromHash, toKey }, the page this entry was opened from. True when a ‹ link points back at it.
 export const backTarget = (linkHref, from, currentKey) => Boolean(from?.fromHash) && from.toKey === currentKey && hashPath(linkHref) === hashPath(from.fromHash);
 export const restoreY = (saved, maxY) => Math.max(0, Math.min(saved, maxY));
@@ -491,7 +496,8 @@ function buildShell(path) {
     h('div', { class: 'shell__main' }, banner, content),
     h('nav', { class: 'bottomnav', 'aria-label': 'Main' },
       bottomKeys.map(([p, t, ic]) => h('a', { href: `#${p}`, 'aria-current': isCurrent(p, path) ? 'page' : null }, icon(ic), BOTTOM_LABELS[t] || t)),
-      h('button', { type: 'button', onclick: openMore, 'aria-current': moreNav().some(([p]) => isCurrent(p, path)) ? 'page' : null }, icon('more'), 'More')),
+      // While the card check is due the bar is only Confirm your card and Help: no More (Account and Log out are in the page footer).
+      u.plan?.card_check_due ? null : h('button', { type: 'button', onclick: openMore, 'aria-current': moreNav().some(([p]) => isCurrent(p, path)) ? 'page' : null }, icon('more'), 'More')),
     u.role === 'cleaner' ? null : assistantButton());
   refreshUnread(el);
   return { el, content, banner, main: el.querySelector('.shell__main') };
@@ -569,7 +575,7 @@ export async function render() {
   }
 
   // A cleaner opening anything that isn't theirs goes to their jobs, not an error page.
-  if (route.access === APP && state.user?.role === 'cleaner' && !isCleanerPath(path)) { navigate('#/housekeeping', { replace: true }); return; }
+  if (route.access === APP && state.user?.role === 'cleaner' && !state.user.plan?.card_check_due && !isCleanerPath(path)) { navigate('#/housekeeping', { replace: true }); return; }
 
   // Pages this role or workspace module can't use go home instead of opening by URL.
   if (route.access === APP && !routeAllowed(path, state.user)) { if (!otherHome(path, state.user)) toast("That page isn't available for your role or workspace.", 'error'); navigate(homeRoute(), { replace: true }); return; }
@@ -758,7 +764,7 @@ export async function afterLogin() {
   let next = setupRedirect() || (ret && ret.startsWith('#/') && !/^#\/(login|signup|$)/.test(ret) ? ret : null);
   // Owners still setting up start on the Launchpad (until it's finished or they hide the reminder).
   const u = state.user;
-  if (!next && u?.role === 'owner' && u.business_type !== 'long_term' && !u.plan?.is_demo) {
+  if (!next && u?.role === 'owner' && u.business_type !== 'long_term' && !u.plan?.is_demo && !u.plan?.card_check_due) {
     try {
       const o = await get('/onboarding');
       if (!o.complete && !o.dismissed) next = '#/launchpad';

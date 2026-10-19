@@ -9,9 +9,14 @@ const STAFF_BLOCKED = ['/launchpad', '/owners', '/inbox', '/inbox-settings', '/s
 
 const under = (path, list) => list.some((p) => path === p || path.startsWith(`${p}/`));
 
+// While the owner has not confirmed a card (D-98) only the card page, Help and Account open; once confirmed the card page bounces home.
+const CARD_DUE_OK = ['/confirm-card', '/help', '/account'];
+
 // user: { role, business_type, is_platform_admin }; the workspace's modules are user.business_type.
 export function routeAllowed(path, user) {
   if (!user) return true;
+  if (user.plan?.card_check_due) return under(path, CARD_DUE_OK);
+  if (path === '/confirm-card') return false;
   if (under(path, ['/admin'])) return Boolean(user.is_platform_admin);
   const type = user.business_type;
   // Cleaners keep /housekeeping (their home page) whatever the workspace type, so the redirect can't loop.

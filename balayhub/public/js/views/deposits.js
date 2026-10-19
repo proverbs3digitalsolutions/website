@@ -15,6 +15,7 @@ const STATUS = { held: ['partial', 'Held'], refunded: ['paid', 'Returned'], part
 // The server's sentence for a deduction above the deposit, asked at the field before any question; null when it is fine.
 export function deductionProblem(typedText, held) {
   const typed = parseAmount(String(typedText ?? ''));
+  if (typed < 0) return 'Deduction cannot be negative.';
   return typed > Number(held) ? `The deduction can't be more than the deposit (${peso(held)}).` : null;
 }
 
@@ -69,7 +70,7 @@ export async function depositCard(r, rerender) {
         h('div', { class: 'form-row form-row--2' },
           field({ name: 'refund_method', label: 'Returned by', type: 'select', value: dep.method === 'card' ? 'bank_transfer' : dep.method, placeholderOption: false, options: METHODS }),
           field({ name: 'refund_reference', label: 'Reference (optional)', maxlength: 100 })),
-        h('p', { class: 'muted small' }, 'Damage photos: use "Add photo" on the deposit card (before or after saving).'),
+        h('p', { class: 'muted small' }, 'Damage photos: add them on the deposit card (before or after saving).'),
         (r.guest_email || r.guest_has_email) && field({ name: 'send_receipt', label: r.guest_email ? `Email the summary to ${r.guest_email}` : 'Email the summary to the guest', type: 'checkbox', value: true }),
       ],
       onSubmit: async (v) => {
@@ -84,7 +85,11 @@ export async function depositCard(r, rerender) {
     if (!await confirmDialog({ title: 'Undo the return?', text: 'The deposit goes back to "Held" so you can record the return again. Emails already sent are not recalled.', confirmText: 'Undo' })) return;
     try { await post(`/reservations/${r.booking_id}/deposit/reopen`); toast('Back to held.'); rerender(); } catch (err) { toast(err.message, 'error'); }
   };
-  const upload = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', class: 'input', 'aria-label': 'Damage photo' });
+  const upload = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', class: 'input', 'aria-label': 'Add damage photo', onchange: async () => {
+    if (!upload.files[0]) return;
+    upload.disabled = true;
+    try { await uploadFile('deposit', dep.deposit_id, upload.files[0]); upload.value = ''; toast('Photo added.'); rerender(); } catch (err) { toast(err.message, 'error'); upload.disabled = false; upload.value = ''; }
+  } });
 
   if (!dep) {
     if (r.status !== 'confirmed') return null;
@@ -106,12 +111,7 @@ export async function depositCard(r, rerender) {
       dep.status === 'held' && isManager && h('button', { class: `btn ${due ? 'btn--primary' : 'btn--secondary'} btn--sm`, type: 'button', 'data-focus-key': 'deposit-action', onclick: settle }, 'Return deposit'),
       dep.status !== 'held' && state.user.role === 'owner' && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'data-focus-key': 'deposit-action', onclick: reopen }, 'Undo')),
     h('div', { class: 'form', style: { marginTop: '10px' } },
-      h('label', { class: 'small muted' }, 'Damage / condition photos'), upload,
-      h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: async (e) => {
-        if (!upload.files[0]) { toast('Choose a photo first.', 'error'); return; }
-        e.target.disabled = true;
-        try { await uploadFile('deposit', dep.deposit_id, upload.files[0]); toast('Photo added.'); rerender(); } catch (err) { toast(err.message, 'error'); e.target.disabled = false; }
-      } }, 'Add photo')));
+      h('label', { class: 'small muted' }, 'Damage / condition photos'), upload));
 }
 
 // Home: deposits still held after check-out.

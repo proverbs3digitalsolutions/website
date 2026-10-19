@@ -23,8 +23,13 @@ export const SETTINGS_INDEX = [
 ];
 // module 'stay' hides the entry in a long_term workspace; 'rent' hides it in a short_term workspace.
 
-const GROUP_ORDER = ['pages', 'reservations', 'guests', 'listings', 'properties', 'tenants', 'owners', 'quotes', 'maintenance', 'help'];
+const GROUP_ORDER = ['pages', 'reservations', 'guests', 'listings', 'properties', 'tenants', 'owners', 'quotes', 'maintenance', 'housekeeping', 'supplies', 'expenses', 'discount_codes', 'addons', 'help'];
 const ALL_ROLES = ['owner', 'manager', 'staff'];
+const HOST = ['owner', 'manager'];
+// What the panel says it covers: [word, module, roles]. Mirrors the server's GROUPS (src/lib/search.js) and its inModule rule.
+const SCOPE = [['reservations', 'stay', ALL_ROLES], ['guests', 'stay', ALL_ROLES], ['listings', 'stay', ALL_ROLES], ['properties', null, ALL_ROLES],
+  ['tenants', 'rent', ALL_ROLES], ['unit owners', 'stay', ['owner']], ['quotes', 'stay', HOST], ['repair requests', null, ALL_ROLES],
+  ['cleaning tasks', 'stay', ALL_ROLES], ['supplies', 'stay', ALL_ROLES], ['expenses', null, ALL_ROLES], ['discount codes', 'stay', HOST], ['add-ons', 'stay', HOST]];
 const MAX_PAGES = 5;
 
 export const likeTerms = (q) => { const t = String(q ?? '').trim(); return { q: t, ok: t.length >= 2 }; };
@@ -48,6 +53,12 @@ export function pushRecent(list, q, max = 5) {
   const t = String(q ?? '').trim();
   if (!t) return list;
   return [t, ...list.filter((x) => x.toLowerCase() !== t.toLowerCase())].slice(0, max);
+}
+
+export function scopeLine(user) {
+  const type = user?.business_type;
+  const words = SCOPE.filter(([, m, roles]) => roles.includes(user?.role) && !((m === 'stay' && type === 'long_term') || (m === 'rent' && type === 'short_term'))).map(([w]) => w);
+  return `Search covers ${[...words, 'pages', 'help'].join(', ').replace(/, help$/, ' and help')}.`;
 }
 
 export function emptyHint(user) {
@@ -102,7 +113,7 @@ export function mountSearch(slot, ctx, { inSheet = false, onDone } = {}) {
   const list = h('div', { id: 'tb-results', role: 'listbox', 'aria-label': 'Search results', hidden: true });
   const extras = h('div', { class: 'tb-extras' });
   // One muted line for every panel state (O4). Not an option, so screen readers don't count it as a result.
-  const scope = h('p', { class: 'muted small tb-scope' }, 'Search covers guests, reservations, listings and pages.');
+  const scope = h('p', { class: 'muted small tb-scope' }, scopeLine(user()));
   const results = h('div', { class: 'tb-results', hidden: !open }, list, extras);
   const status = h('div', { class: 'tb-status', role: 'status', 'aria-live': 'polite' });
   const kbd = sheet ? null : h('span', { class: 'tb-kbd', 'aria-hidden': 'true' }, '/');

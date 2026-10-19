@@ -8,6 +8,7 @@ const { one, query } = require('../db');
 const { ah, HttpError } = require('../lib/http');
 const { requireRole } = require('../lib/auth');
 const { planStatus } = require('../lib/plans');
+const PAY_HOW_CARD = 'Pay with your saved card in one tap, or with GCash, Maya or another card.';
 
 const router = express.Router();
 const owners = requireRole('owner');
@@ -65,7 +66,7 @@ const channelsHref = (unitId) => (unitId ? `#/listings?channels=${unitId}` : '#/
 
 router.get('/onboarding', owners, ah(async (req, res) => {
   const s = await one(
-    `SELECT o.onboarding_dismissed_at, o.onboarding_skipped, o.booking_enabled,
+    `SELECT o.onboarding_dismissed_at, o.onboarding_skipped, o.booking_enabled, (o.card_last4 IS NOT NULL) AS has_card,
        (SELECT COUNT(*)::int FROM units u JOIN properties p USING (property_id)
          WHERE p.organization_id = o.organization_id AND u.status = 'active' AND u.nightly_rate IS NOT NULL) AS listings,
        EXISTS (SELECT 1 FROM units u JOIN properties p USING (property_id)
@@ -89,7 +90,7 @@ router.get('/onboarding', owners, ah(async (req, res) => {
   const p = planStatus(req.user);
   const auto = { ...s, listings: s.listings > 0, booking_page: s.booking_enabled, plan: !['trial'].includes(p.plan) };
   const skipped = new Set(s.onboarding_skipped || []);
-  const steps = STEPS.map((x) => ({ ...x, href: x.key === 'channels' ? channelsHref(s.first_unit_id) : x.href, done: Boolean(auto[x.key]), skipped: !auto[x.key] && skipped.has(x.key) }));
+  const steps = STEPS.map((x) => ({ ...x, how: x.key === 'plan' && s.has_card ? [...x.how.slice(0, 2), PAY_HOW_CARD] : x.how, href: x.key === 'channels' ? channelsHref(s.first_unit_id) : x.href, done: Boolean(auto[x.key]), skipped: !auto[x.key] && skipped.has(x.key) }));
   const required = steps.filter((x) => !x.optional);
   const settled = steps.filter((x) => x.done || x.skipped).length;
   res.json({

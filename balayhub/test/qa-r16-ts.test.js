@@ -7,11 +7,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'public/js/topsearch.js'), 'utf8');
-const SENTENCE = 'Search covers guests, reservations, listings and pages.';
+// Round 17 (O1): the fixed sentence became scopeLine(user()); the sentences themselves are tested in qa-r17-ts.test.js.
+const SENTENCE = 'scopeLine(user())';
 
-test('scope sentence appears exactly once, as a muted paragraph', () => {
-  assert.equal(src.split(SENTENCE).length - 1, 1);
-  assert.match(src, /h\('p', \{ class: 'muted small tb-scope' \}, 'Search covers guests, reservations, listings and pages\.'\)/);
+test('scope line appears exactly once, as a muted paragraph', () => {
+  assert.equal(src.split(`'muted small tb-scope' }, ${SENTENCE}`).length - 1, 1);
+  assert.match(src, /h\('p', \{ class: 'muted small tb-scope' \}, scopeLine\(user\(\)\)\)/);
 });
 
 test('scope line is in the results panel, outside the listbox and not an option', () => {

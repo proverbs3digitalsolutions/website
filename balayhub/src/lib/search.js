@@ -6,14 +6,19 @@
 const { query } = require('../db');
 const { propertyScope, tenantScope } = require('./access');
 const { guestScope } = require('../routes/stays');
+const { taskScope } = require('./housekeeping');
 const { searchArticles, CATEGORIES } = require('./helpcenter');
+const { USES } = require('./discounts');
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const LIMIT = 5;
 const ALL = ['owner', 'manager', 'staff'];
 const QUOTE_STATUS = { open: 'Open', paid: 'Paid', expired: 'Expired', cancelled: 'Cancelled' };
 const MAINT_STATUS = { open: 'Open', in_progress: 'In progress', resolved: 'Resolved', cancelled: 'Cancelled' };
+const CODE_STATUS = { off: 'Off', expired: 'Expired', used_up: 'Used up', active: 'Active' };
 const CATEGORY_NAME = Object.fromEntries(CATEGORIES);
+const CLEAN_STATUS = { todo: 'To do', in_progress: 'In progress', done: 'Done', cancelled: 'Cancelled' };
+const EXPENSE_CATEGORY = { repairs: 'Repairs', utilities: 'Utilities', taxes: 'Taxes', insurance: 'Insurance', association_dues: 'Association dues', supplies: 'Supplies', salaries: 'Salaries', cleaning: 'Cleaning', other: 'Other' };
 
 // 'YYYY-MM-DD' to 'Oct 20, 2026', no time-zone maths. Ranges join with a spaced en dash.
 const d = (x) => { const [y, m, day] = String(x).slice(0, 10).split('-'); return `${MONTHS[Number(m) - 1]} ${Number(day)}, ${y}`; };
@@ -72,11 +77,48 @@ const GROUPS = [
        WHERE ${propertyScope(u, p)} AND q.guest_name ILIKE $1 ESCAPE '\\'
        ORDER BY q.guest_name ILIKE $2 ESCAPE '\\' DESC, q.created_at DESC`,
     item: (r) => ({ id: r.id, title: r.title, sub: `${r.unit_name} · ${range(r.check_in, r.check_out)} · ${QUOTE_STATUS[r.status]}`, href: `#/quotes/${r.id}` }) },
-  { key: 'maintenance', label: 'Maintenance', roles: ALL,
+  { key: 'maintenance', label: 'Repair requests', roles: ALL,
     sql: (u, p) => `SELECT m.request_id AS id, m.title, p.property_name, m.status FROM maintenance_requests m JOIN properties p ON p.property_id = m.property_id
        WHERE ${propertyScope(u, p)} AND m.title ILIKE $1 ESCAPE '\\'
        ORDER BY m.status IN ('open', 'in_progress') DESC, m.title ILIKE $2 ESCAPE '\\' DESC, m.created_at DESC`,
     item: (r) => ({ id: r.id, title: r.title, sub: `${r.property_name} · ${MAINT_STATUS[r.status]}`, href: `#/maintenance/${r.id}` }) },
+  { key: 'housekeeping', label: 'Cleaning tasks', roles: ALL, module: 'stay',
+    sql: (u, p) => `SELECT t.task_id AS id, un.unit_name AS title, t.due_date, t.status FROM cleaning_tasks t
+       JOIN units un ON un.unit_id = t.unit_id JOIN properties p ON p.property_id = un.property_id
+       WHERE ${taskScope(u, p)} AND (un.unit_name ILIKE $1 ESCAPE '\\' OR p.property_name ILIKE $1 ESCAPE '\\')
+       ORDER BY t.status IN ('todo', 'in_progress') DESC, un.unit_name ILIKE $2 ESCAPE '\\' DESC, abs(t.due_date - (now() AT TIME ZONE 'Asia/Manila')::date) ASC, t.task_id`,
+    item: (r) => ({ id: r.id, title: `Cleaning: ${r.title}`, sub: `${d(r.due_date)} · ${CLEAN_STATUS[r.status]}`, href: `#/housekeeping/${r.id}` }) },
+  { key: 'supplies', label: 'Supplies', roles: ALL, module: 'stay',
+    sql: (u, p) => `SELECT s.supply_id AS id, s.name AS title, p.property_name AS sub FROM supplies s
+       JOIN properties p ON p.property_id = s.property_id
+       WHERE s.archived_at IS NULL AND ${propertyScope(u, p)} AND s.name ILIKE $1 ESCAPE '\\'
+       ORDER BY s.name ILIKE $2 ESCAPE '\\' DESC, s.name, p.property_name`,
+    item: (r) => ({ id: r.id, title: r.title, sub: r.sub, href: `#/supplies?q=${encodeURIComponent(r.title)}` }) },
+  // Title: the vendor, else the category. Never the description (free text can hold money) or the amount.
+  // The vendor rank is COALESCEd so a missing vendor never ranks first.
+  { key: 'expenses', label: 'Expenses', roles: ALL,
+    sql: (u, p) => `SELECT x.expense_id AS id, COALESCE(NULLIF(btrim(x.vendor_name), ''), x.category) AS title, x.category, x.expense_date, p.property_name
+       FROM expenses x JOIN properties p ON p.property_id = x.property_id
+       WHERE x.voided_at IS NULL AND ${propertyScope(u, p)} AND (x.vendor_name ILIKE $1 ESCAPE '\\' OR x.description ILIKE $1 ESCAPE '\\')
+       ORDER BY COALESCE(x.vendor_name ILIKE $2 ESCAPE '\\', false) DESC, x.expense_date DESC, x.expense_id`,
+    item: (r) => ({ id: r.id, title: EXPENSE_CATEGORY[r.title] ?? r.title, sub: `${EXPENSE_CATEGORY[r.category]} · ${r.property_name} · ${d(r.expense_date)}`, href: `#/expenses/${r.id}` }) },
+  // Sub: the status word the Discount codes page shows on a row, checked in the same order (off, expired, used up, starts, active).
+  // The description is searched but never shown (D-99 O1).
+  { key: 'discount_codes', label: 'Discount codes', roles: ['owner', 'manager'], module: 'stay',
+    sql: (u, p) => { p.push(u.organization_id); return `SELECT d.code_id AS id, d.code AS title, d.valid_from,
+         CASE WHEN NOT d.active THEN 'off' WHEN d.valid_until < (now() AT TIME ZONE 'Asia/Manila')::date THEN 'expired'
+              WHEN d.max_uses IS NOT NULL AND ${USES} >= d.max_uses THEN 'used_up'
+              WHEN d.valid_from > (now() AT TIME ZONE 'Asia/Manila')::date THEN 'scheduled' ELSE 'active' END AS status
+       FROM discount_codes d
+       WHERE d.organization_id = $${p.length} AND (d.code ILIKE $1 ESCAPE '\\' OR d.description ILIKE $1 ESCAPE '\\')
+       ORDER BY d.code ILIKE $2 ESCAPE '\\' DESC, d.active DESC, d.code`; },
+    item: (r) => ({ id: r.id, title: r.title, sub: r.status === 'scheduled' ? `Starts ${d(r.valid_from)}` : CODE_STATUS[r.status], href: `#/discount-codes?q=${encodeURIComponent(r.title)}` }) },
+  { key: 'addons', label: 'Add-ons', roles: ['owner', 'manager'], module: 'stay',
+    // Archived add-ons are hidden on the Add-ons page's default tab, so they are not found here either.
+    sql: (u, p) => { p.push(u.organization_id); return `SELECT a.addon_id AS id, a.name AS title FROM listing_addons a
+       WHERE a.organization_id = $${p.length} AND a.active AND (a.name ILIKE $1 ESCAPE '\\' OR a.name_tl ILIKE $1 ESCAPE '\\')
+       ORDER BY a.name ILIKE $2 ESCAPE '\\' DESC, a.name`; },
+    item: (r) => ({ id: r.id, title: r.title, sub: null, href: `#/addons?q=${encodeURIComponent(r.title)}` }) },
 ];
 
 const inModule = (g, type) => !((g.module === 'stay' && type === 'long_term') || (g.module === 'rent' && type === 'short_term'));

@@ -2,7 +2,7 @@
 
 BalayHub is a web app that helps Filipino hosts run 1 to 10 rental units from one place. It covers condo staycations listed on Airbnb, Booking.com and Agoda, and long-term monthly rentals such as apartments, boarding houses, dorms and bedspaces. Hosts get one calendar for every channel, a direct booking page with GCash, Maya and card payments, a guest inbox, cleaning tasks, condo gate passes, deposits, reports and owner statements. Long-term landlords get properties, tenants, leases, rent, expenses and repairs. This document describes what is **actually built** today, feature by feature, and lists what is planned. It was written from the code (`src/routes`, `src/lib`, `public/js`, `db/migrations`) and the existing docs.
 
-Last updated: 2026-10-15 (QA round 15; D-94, D-95; F54 plan coupons built)
+Last updated: 2026-10-15 (QA round 17; D-98 card on file before the trial, F20 and F2 and F28; D-99 search widened, F53)
 
 *2026-10-14 (D-85): the alpha targets owners of 1 to 3 properties; the Guesty-inspired ideas are on hold as reference only. QA puts small-host friction first.*
 
@@ -81,6 +81,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - Log in with email and password. Errors never reveal whether an account exists. Login is rate-limited.
 - Forgot password sends a 1-hour reset link. Resetting signs out every session.
 - **Continue with Google** (only when the server has Google keys). New Google users get an account with email already verified. Existing accounts with the same email are linked on first use.
+- **After sign-up (D-98):** the sign-up page says "After you sign up, you'll confirm a card with a ₱20 payment to start your 14-day free trial." (only while the card check is on). The card step comes after email verification and workspace setup (see F20).
 - Invitation links (`#/signup?invite=…`) pre-fill the email and join the inviting workspace with the chosen role and properties. Invited users are verified by the link.
 - Session expiry returns the user to the login page and back to the same page after login.
 
@@ -98,7 +99,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 **For:** New owners.
 
 **What it does:**
-- Setup creates the workspace (name, type) and starts a 14-day trial. The owner role is set.
+- Setup creates the workspace (name, type). The owner role is set. The 14-day trial starts at creation, **except** when the card check is on (D-98): then the workspace waits on **Confirm your payment card** and the trial starts when the ₱20 card payment succeeds (see F20).
 - Short-term and Both workspaces go to the **Launchpad**. Long-term workspaces go to Properties with the Add property form open.
 - Launchpad has 5 phases and 11 steps: add listing, guest info (Wi-Fi, check-in, rules), photos (optional), connect a channel calendar, first reservation, automatic messages, check-in form (optional), invite team (optional), cleaning checklist (optional), direct booking page (optional), choose a plan.
 - Steps tick themselves off from real data. Optional steps can be skipped and shown again.
@@ -433,20 +434,25 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 **For:** Owners. Platform admin (manual changes).
 
 **What it does:**
-- New workspaces get a 14-day trial with all features and up to 10 listings.
+- New workspaces get a 14-day trial with all features and up to 10 listings. **Since D-98 the trial starts when the owner confirms a payment card** (see below), not at workspace creation.
 - **Plan & billing** in Settings: current plan, listings used, paid-until date, payment history.
 - With platform PayMongo keys: pick Starter, Growth or Pro and 1, 3 or 12 months (12 months = 2 months free), then pay by GCash, Maya, card or GrabPay. Renewing early adds time. Switching converts unused days. Paying during the trial keeps the remaining trial days.
 - Without keys: pay manually and email; the platform admin sets the plan.
 - After the trial, or 7 days after paid-until, the workspace becomes **read-only**. Nothing is deleted. View and export still work.
 - Listing limits per plan. AI drafts only on plans with AI.
+- **Card check before the trial (D-98, round 17):** a new workspace is gated until the owner pays ₱20 by card on **Confirm your payment card** (`#/confirm-card`) and picks the plan they want after the trial. The card number goes from the browser straight to PayMongo; BalayHub keeps only PayMongo ids, the brand and the last 4 digits. The ₱20 is not refunded and does not count toward a plan. Until then the owner sees only that page, Help, Account and Log out; team members see "Waiting for your workspace owner". Exempt: workspaces that existed before the change, the demo, platform-admin-made and complimentary workspaces, and any workspace while the check is off (`CARD_CHECK=off`, billing off or no public key). A platform admin can **Skip card check** for invited alpha owners.
+- **Stage 1 (on):** emails 3 days and 1 day before the trial ends; in Plan & billing **Pay ₱999 with Visa ending 4242** charges the saved card in one tap (the bank may ask for a code), with **Pay another way** as the fallback. **Remove card** forgets the card. Nothing is charged automatically.
+- **Stage 2 (built, switched off):** PayMongo charges the saved card every month after the trial for the plan chosen, with an explicit tick box, a **Cancel automatic payment** button and a "Turn on automatic payment" offer for hosts who saved a card earlier. Needs PayMongo to approve Subscriptions and `PAYMONGO_SUBSCRIPTIONS=on`.
 - **Plan coupons (D-94, feature F54):** an owner can type a coupon code on Plan & billing to get a percent, fixed or free discount on the months it covers; one coupon at a time; "require card" means a one-time ₱20 card payment; a free coupon activates the plan with no payment.
 
 **Done looks like:**
 - Payments are confirmed with PayMongo directly. A background check every 10 minutes catches missed webhooks.
 - Complimentary workspaces cannot pay.
 - Read-only blocks changes with a clear message (HTTP 402) but still allows billing, support, account, push and cancelling deletion.
+- A new workspace cannot be used until its card check passes; every write except the allowed few answers 402 "Confirm your payment card to start your free trial." Two taps of Start never make two charges or two trials.
+- Reminder emails go out once each at 3 days and 1 day before the trial ends, only for workspaces with a confirmed card still on the trial.
 
-**Out of scope:** Automatic recurring card billing (see Future: it needs PayMongo Subscriptions approval). Invoices with VAT. Coupons at sign-up (codes are entered on Plan & billing). Stopping a coupon for workspaces already using it.
+**Out of scope:** Refunds of the ₱20 card check, and counting it toward a plan. GCash or Maya automatic payment (cards only). Automatic recurring card billing is built as Stage 2 but switched off until PayMongo approves Subscriptions (D-98; see Future). Invoices with VAT. Coupons at sign-up (codes are entered on Plan & billing). Stopping a coupon for workspaces already using it.
 
 ### F21. Privacy, data export and deletion
 **Status:** MVP (built)
@@ -571,6 +577,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - **Platform admin** page: counts for on trial, paying, monthly revenue, ended or overdue. Workspace table with filters (status, business type, plan, signup dates, sort).
 - Click a workspace to set plan, paid until, trial end date and a note. Changes are audit-logged. The demo cannot be changed.
 - **Plan coupons** (round 15, D-94): list, make, edit and switch off coupons for BalayHub's plans, and see who used each one (F54).
+- **Card on file (D-98):** the workspace table has a **Card** column (Waiting, Visa 4242, Skipped, or a dash), a **Waiting for card** status filter, and a **Skip card check** button on a waiting workspace that starts its trial now (audited).
 - **Support queue**: tickets from every workspace, urgent and new first. Ticket page: reply or internal note, assign to me, change status, mark resolved, customer details, attachments.
 
 **Done looks like:**
@@ -967,7 +974,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 **For:** Every signed-in role, filtered by what the role may see and do.
 
 **What it does:**
-- **Global search** in the middle of the top bar ("Type / to search"; the `/` key focuses it from anywhere except inside a field). Searches only what the person may see: reservations (guest name, confirmation code), guests, listings, properties, tenants, unit owners, quotes, maintenance requests, pages and settings by name, and help articles. Results are grouped; arrow keys and Enter pick one, Escape closes; recent searches are kept.
+- **Global search** in the middle of the top bar ("Type / to search"; the `/` key focuses it from anywhere except inside a field). Searches only what the person may see: reservations (guest name, confirmation code), guests, listings, properties, tenants, unit owners, quotes, repair requests, cleaning tasks, supplies, expenses, discount codes, add-ons *(the last five added in round 17, D-99 O1; staff get no discount codes or add-ons)*, pages and settings by name, and help articles. A line under the box names what the person can search. Results are grouped; arrow keys and Enter pick one, Escape closes; recent searches are kept.
 - **Bookmarks:** star the current page and list starred pages. Saved per person on the server, so they follow the person across devices.
 - **"+" Add new:** Reservation, Listing, Property, Unit owner, Cleaning task, Expense, Tenant, Rent payment and Invite a teammate, filtered by role and workspace; each opens the existing "new" dialog.
 - **Notifications bell:** a panel with filters (Reservations, Payments, Cleaning, Messages, Owners), an unread count and mark as read. It shows the same alerts that go to the phone, kept for 90 days, and respects each person's notification settings and property assignments. A new alert, "Unit owner activity", tells owners when a unit owner blocks or unblocks dates.
@@ -1032,7 +1039,7 @@ Search never matches phone numbers, emails, notes or money. Bookmarks hold up to
 | Item | Priority | Notes |
 |---|---|---|
 | **Top bar: search, bookmarks, add new, notifications, help, profile (F53)** | **Built 2026-10-15 (QA round 14)** | Founder request D-90, built as D-91. Search endpoint, bookmarks table and notifications feed are in BACKEND-SCHEMA 2.17, 6.4 and 20. Rent alerts for the bell in long-term workspaces are a later alert type. |
-| **Automatic monthly card charging (true auto-renew)** | **Future; waiting on PayMongo** | Needs PayMongo's Subscriptions feature, which PayMongo must review and approve for BalayHub's account first (cards and Maya; saved cards otherwise work only while the customer is present). Would add a saved card, a monthly charge job, retries and emails. Today owners renew by hand and coupons discount each renewal. BLOCKERS asks whether to request approval. |
+| **Automatic monthly card charging (true auto-renew)** | **Built, switched off (D-98 Stage 2); waiting on PayMongo approval** | Needs PayMongo's Subscriptions feature, which PayMongo must review and approve for BalayHub's account first (cards and Maya; saved cards otherwise work only while the customer is present). Would add a saved card, a monthly charge job, retries and emails. Today owners renew by hand and coupons discount each renewal. BLOCKERS asks whether to request approval. |
 | **SMS reminders to guests** | **Next (planned)** | Listed in README "Not built yet". Today all guest messages are email. |
 | **Facebook Messenger inbox** | **Later** | Listed in README "Not built yet". Today the Inbox is email only. |
 | **Phase 1: Money done right** (itemised stay bill with extras, payment proof uploads and bank transfer, cancellation policies and refund log, deposit % per listing, host net per booking) | **Built 2026-10-13** | Spec: docs/specs/PHASE-1-MONEY.md. Decisions D-31 to D-36. |

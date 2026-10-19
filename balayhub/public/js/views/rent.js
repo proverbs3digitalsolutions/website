@@ -101,6 +101,13 @@ export async function recordPaymentModal({ leaseId, amount, period, onSaved } = 
 }
 
 // ---------------------------------------------------------------- add expense
+// An expense above this asks "Save anyway?" first (same ceiling as rates.js HIGH_NIGHTLY_RATE; not imported, so this view stays standalone).
+const EXPENSE_CEILING = 50000;
+// On a correction, only an amount that changed is asked about: fixing a description on an old big expense is not.
+export const expenseNeedsAsk = (amount, before) => {
+  const n = parseAmount(amount);
+  return Number.isFinite(n) && n > EXPENSE_CEILING && !(before !== undefined && parseAmount(before) === n);
+};
 export async function addExpenseModal({ onSaved, expense } = {}) {
   let properties; let units;
   try {
@@ -141,6 +148,8 @@ export async function addExpenseModal({ onSaved, expense } = {}) {
     ],
     onSubmit: async (data, { idempotencyKey, form }) => {
       delete data.__receipt;
+      // "Change it" keeps the form open with focus on the amount.
+      if (expenseNeedsAsk(data.amount, expense?.amount) && !await confirmDialog({ title: 'Check the amount', text: `This expense is ${peso(parseAmount(data.amount))}. Save anyway?`, confirmText: 'Save anyway', cancelText: 'Change it' })) { form.elements.amount.focus(); return false; }
       if (expense) {
         await patch(`/expenses/${expense.expense_id}`, data);
         toast('Expense corrected.');
@@ -323,7 +332,7 @@ export async function rentView(el, { query }) {
           { name: 'late', label: 'Days late', all: 'Any', options: [['7', 'More than 7 days late'], ['30', 'More than 30 days late'], ['60', 'More than 60 days late'], ['90', 'More than 90 days late']] },
           { name: 'lease', label: 'Tenant', all: 'Current and former', options: [['current', 'Current tenants'], ['former', 'Moved out (still owing)']] },
           { name: 'min_amount', label: 'Amount due at least (₱)', type: 'number', min: 0, step: '0.01', pattern: AMOUNT_PATTERN, patternText: 'Enter an amount of 0 or more (up to 10 digits).' },
-          { name: 'sort', label: 'Sort by', all: 'Overdue first, newest due', options: [['due_asc', 'Oldest due date first'], ['amount', 'Biggest amount due'], ['rent', 'Highest monthly rent'], ['tenant', 'Tenant name'], ['unit', 'Property and unit']] },
+          { name: 'sort', label: 'Sort by', all: 'Overdue first', options: [['due_asc', 'Oldest due date first'], ['amount', 'Biggest amount due'], ['rent', 'Highest monthly rent'], ['tenant', 'Tenant name'], ['unit', 'Property and unit']] },
         ],
       };
     }
@@ -442,7 +451,7 @@ export async function paymentDetailView(el, { params, rerender }) {
   head.classList.add('no-print');
   el.replaceChildren(
     head,
-    p.voided_at && h('div', { class: 'alert alert--error', style: { marginBottom: '16px' } }, `Voided ${fmtDateTime(p.voided_at)} by ${p.voided_by_name}: ${p.void_reason}`),
+    p.voided_at && h('div', { class: 'alert alert--error no-print', style: { marginBottom: '16px' } }, `Voided ${fmtDateTime(p.voided_at)} by ${p.voided_by_name}: ${p.void_reason}`),
     h('div', { class: 'grid grid--2' },
       h('div', { class: 'card no-print' },
         h('h2', { style: { marginBottom: '12px' } }, 'Payment details'),

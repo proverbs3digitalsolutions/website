@@ -105,12 +105,12 @@ test('the photos dialog puts focus back inside the dialog after Make cover, Dele
   const text = photos();
   assert.match(text, /h\('figure', \{ class: 'ph-item', tabindex: '-1' \}/, 'a photo can take focus from script');
   assert.match(text, /async function draw\(focus\) \{/, 'draw takes where focus goes after the redraw');
-  assert.match(text, /focus\?\.\(box, upload\);/, 'the redraw runs the focus step last');
+  assert.match(text, /focus\?\.\(box\);/, 'the redraw runs the focus step last');
   assert.match(text, /await post\(`\/listing-photos\/\$\{p\.file_id\}\/cover`\); draw\(\(root\) => root\.querySelector\('\.ph-item'\)\?\.focus\(\)\);/,
     'Make cover focuses the new cover');
-  assert.match(text, /await post\(`\/listing-photos\/\$\{p\.file_id\}\/remove`\); draw\(\(root, btn\) => \(root\.querySelectorAll\('\.ph-item'\)\[i\]\?\.querySelector\('button\[aria-label\^="Delete,"\]'\) \?\? btn\)\.focus\(\)\);/,
-    'Delete focuses the Delete of the photo now in that place, else Upload');
-  assert.match(text, /\} catch \(err\) \{ toast\(err\.message, 'error'\); \}\s*draw\(\(root, btn\) => btn\.focus\(\)\);/, 'Upload keeps focus on Upload');
+  assert.match(text, /await post\(`\/listing-photos\/\$\{p\.file_id\}\/remove`\); draw\(\(root\) => \(root\.querySelectorAll\('\.ph-item'\)\[i\]\?\.querySelector\('button\[aria-label\^="Delete,"\]'\) \?\? root\.querySelector\('input\[type="file"\]'\)\)\.focus\(\)\);/,
+    'Delete focuses the Delete of the photo now in that place, else the file input');
+  assert.match(text, /\} catch \(err\) \{ toast\(err\.message, 'error'\); \}\s*input\.value = '';\s*draw\(\(root\) => root\.querySelector\('input\[type="file"\]'\)\?\.focus\(\)\);/, 'an upload keeps focus on the file input');
 });
 
 test('every per-row button on the page names its row (D-81 sweep)', () => {

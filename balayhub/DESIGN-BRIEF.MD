@@ -1,6 +1,6 @@
 # BalayHub design brief
 
-Last updated: 2026-10-15 (QA round 16: section 25; D-97)
+Last updated: 2026-10-15 (QA round 17: section 26, the wordmark logotype exemption, the focus key table; D-98 and D-99)
 
 **Summary.** BalayHub is a phone-first web app (also an installable PWA) for Filipino rental and staycation hosts. It is built with plain CSS, one stylesheet (`public/css/app.css`), and small JavaScript helpers (`public/js/ui.js`). There is no framework and no CSS preprocessor. The look is calm and practical: Forest Green on soft off-white, Sand and Sun as warm accents, Poppins for headings, Inter for text, rounded cards, and large touch targets. Colours come from CSS custom properties on `:root`. A dark theme redefines the same tokens, so any component that uses tokens gets dark mode automatically. This brief records what is **actually built**. Every value below comes from the code. Where the code doesn't define a token (spacing, type sizes), the brief lists the values in use and says so.
 
@@ -12,7 +12,7 @@ Source files: `public/css/app.css`, `public/js/ui.js`, `public/js/theme.js`, `pu
 
 | Item | What is built |
 |---|---|
-| Name | **BalayHub**. *Balay* means "house" in several Philippine languages. The wordmark in `brand()` renders `Balay` + `<b>Hub</b>`. CSS sets it in uppercase Poppins 700 (`text-transform: uppercase; letter-spacing: .01em`), "Balay" in `--accent` and "Hub" in `--sage`. Its `aria-label` is "BalayHub". |
+| Name | **BalayHub**. *Balay* means "house" in several Philippine languages. The wordmark in `brand()` renders `Balay` + `<b>Hub</b>`. CSS sets it in uppercase Poppins 700 (`text-transform: uppercase; letter-spacing: .01em`), "Balay" in `--accent` and "Hub" in `--sage`. Its `aria-label` is "BalayHub". **The wordmark is a logotype.** WCAG 1.4.3 exempts it, so "Hub" keeps `--sage` (2.5:1 on white). Sweep lanes do not file it (D-99, O2). |
 | Logo mark | `logo()` in `ui.js` and `favicon.svg`: a square-capped **house outline with a door** (stroke `currentColor`, so it takes the Forest Green brand colour) and a **warm sun** circle top right (`#d6a85c`, the `--sun` value). In plain words, it is a home under the sun. The house stands for hosting and the sun for staycations and warmth. |
 | Brand colours | Forest Green `#0f5132`, Sage Green `#7fb069`, Sand Beige `#dcc9a3`, Soft Off-White `#f8f9f6`, Charcoal Navy `#1f2937` (named in the `:root` comment). Sun `#d6a85c` is the logo accent. |
 | Favicon | `favicon.svg`: the mark on an off-white rounded square (`rx=14`, fill `#f8f9f6`), with the house in `#0f5132`. |
@@ -445,7 +445,7 @@ Printable views are built from `.receipt` (with a 2px `--navy` rule under the he
 | 7 | Hard-coded colours that bypass tokens: chart `SERIES`, the hover band `rgba(22,50,79,.05)` and the grid/axis attribute fallbacks (`charts.js`); expense bar `#c2410c` inline (`views/reports.js`); logo sun `#d6a85c` (instead of `--sun`); the welcome tick SVG `%230f5132`; `.stars` `#e0a526`, `.rating` `#b7791f`, `.lpad-status--skip` `#8a6a2c`, `.bk-cal__day:disabled` `#b8c1cc`; white `#fff` on buttons and active states; modal and backdrop rgba values. | various |
 | 8 | Fallbacks in `var()` don't match the tokens: `var(--sand, #d9b679)` vs `#dcc9a3`, `var(--teal-soft, #d6efe9)` vs `#e7f1e9`, `var(--line, #e5e7eb)` vs `#e4e8e1`, and `var(--green-soft, rgba(15,81,50,.12))`. | `app.css` |
 | 9 | Channel colours drift: the Airbnb calendar bar is `#d93b52` in the app vs `#d93a50` on landing. The Vrbo, Expedia and Trip.com bar colours differ from their badge text colours. Calendar bars and the blocked colour don't change in dark mode. `.lp-plan--pop` uses an old teal `rgba(14,124,102,.15)`. | `app.css` |
-| 10 | Contrast below 4.5:1: white on the Vrbo bar `#0891b2` (3.7:1) and on Airbnb `#d93b52` (4.5:1, borderline); `--muted-2` text (2.2:1 light); chart orange and aqua against white (3.2 and 2.8:1, acceptable for graphics but not for text); review stars `#e0a526` (2.2:1); the sage "Hub" on white (2.5:1, decorative wordmark). | tokens and `app.css` |
+| 10 | Contrast below 4.5:1: white on the Vrbo bar `#0891b2` (3.7:1) and on Airbnb `#d93b52` (4.5:1, borderline); `--muted-2` text (2.2:1 light); chart orange and aqua against white (3.2 and 2.8:1, acceptable for graphics but not for text); review stars `#e0a526` (2.2:1); the sage "Hub" on white (2.5:1, a logotype: WCAG 1.4.3 exempts it; do not file it, D-99 O2). | tokens and `app.css` |
 | 11 | `offline.html` / `offline.css` have no dark mode and use `system-ui` rather than Inter. | `public/offline.html` |
 | 12 | Small tap targets: theme-switch buttons (about 30px), `.langtoggle` buttons (about 26px), `.flt__chip` (about 26px), assistant icon buttons (34px) and `.tabs--compact`. *Round 13: on phones `.flt__chip`, tabs and `.btn--sm` are now 44px (section 22); the theme-switch buttons stay (D-88) *(superseded 2026-10-15 by D-95: they are 44px on phones, section 24)*; `.langtoggle` and the assistant icon buttons: assistant button 44x44.* | `app.css` |
 | 13 | No spacing, type-size or breakpoint tokens. Radius values of 12, 16, 18 and 20px are hard-coded alongside `--radius` and `--radius-sm`. `--navy-2` is unused. `--teal` and `--forest` are duplicate aliases. | `app.css` |
@@ -576,7 +576,7 @@ Decision D-89. These lines replace the older tap-target wording in sections 5 an
 - **`.link-tap`:** a shared class for a standalone text link that must be easy to hit (for example the four links in the inbox). `display: inline-flex; align-items: center; min-height: 24px`, and 44px below 960px. Use it instead of per-component sizes.
 - **Skip link (`.skip-link`):** the first child of the app shell, "Skip to main content". Visually hidden until it has focus, then a visible pill at the top left above the top bar. Tokens only, no hex. Debt row 14 ("no skip to content link") is closed.
 - **Calendar tile at 24px:** the calendar's booking tiles (`.cal-bar`) are at least 24px tall (a dense grid; WCAG 2.5.8 minimum) and carry a `data-focus-key`.
-- **Checkboxes at 24px:** the cleaner pay row checkboxes are 24px on phones. Other `.checks` lists (settings property picker, owner units, add-on listings) are covered by the 44px row rule on phones. The "Not yet done" note in section 21 is closed, except the cleaner pay "select all" box at 20px (its label is 44px high; round 14).
+- **Checkboxes at 24px:** the cleaner pay row checkboxes are 24px on phones. Other `.checks` lists (settings property picker, owner units, add-on listings) are covered by the 44px row rule on phones. The "Not yet done" note in section 21 is closed, except the cleaner pay "select all" box at 20px (its label is 44px high; round 14). *Superseded by D-99 (O3): the label is the 44px tap target and the box may stay 24px (section 26).*
 - **More-sheet fold:** on phones, "More tools" is a fold (a `details` with a summary) inside the More sheet, the same as in the sidebar. Closed when the current page is outside it, open when inside, remembered in the same place as the sidebar's state (`bh-nav-more`). The Tab trap counts the summary and skips links inside a closed fold.
 - **The `data-focus-key` convention.** Put `data-focus-key` on a control whose label or presence changes when it is used (Publish becomes Unpublish to correct; Close the day becomes Update close), so the focus guard can find "the same control" after a redraw. Every control that can take the same place carries the same key. Views never call `.focus()` after a redraw themselves. A scan test (`qa-r13-focus-scan`) checks that every key below is present. Keys:
 
@@ -588,7 +588,7 @@ Decision D-89. These lines replace the older tap-target wording in sections 5 an
   | `stmt-publish`, `stmt-send` | Publish / Unpublish to correct; Send to owner / Send again | `views/owners.js` |
   | `owner-invite-<id>` | Invite to owner portal / Invite again / Send the invite again | `views/owners.js` |
   | `conv-snooze`, `conv-archive` | Snooze / Unsnooze; Archive / Unarchive | `views/inbox.js` |
-  | `mt-status` | every maintenance status button | `views/maintenance.js` |
+  | `mt-status-<status>` | each maintenance status button, keyed by the status it sets (Start work, Mark resolved, Reopen), so focus never matches the button that undoes the change and falls to the page heading (round 17, D-99) | `views/maintenance.js` |
   | `tenant-archive` | tenant Archive / Restore | `views/tenants.js` |
   | `hk-status`, `hk-pay` | Start / Mark done / Reopen; Set pay / Edit pay | `views/housekeeping.js` |
   | `cp-pay-<id>` | a cleaner pay row's Edit pay and Undo paid | `views/cleanerpay.js` |
@@ -599,7 +599,7 @@ Decision D-89. These lines replace the older tap-target wording in sections 5 an
 *Added in round 14 (D-92), completing the lists above:*
 
 - **More 44px classes under 960px.** `.check` (checkbox rows, text centred), `.link-btn`, `.linkbtn`, `.flt__clear`, `.chart-foot .link-btn` (repeated because its own rule is more specific), `.input--sm` (Go to date, Month), `.langtoggle button` (guest language toggle), `.lp-top .btn--sm` (landing page), `.gc__foot a` (guest footer Privacy link, `inline-flex`), `.lpad-guide summary` (10px top and bottom padding) are at least 44px tall, and `.modal__close` is 44x44 (40x40 on desktop). Plain links with no class use `.link-tap`. `.btn--sm` still follows the 44px phone rule from the list above.
-- **24px boxes.** Row checkboxes in the ops and cleaner-pay tables (`.table .ops-check input`) and the select-all box in the ops bar (`.ops-bar .check input`) are 24x24 on phones; their label rows are 44px. Theme buttons and calendar tiles are unchanged (D-88).
+- **24px boxes.** Row checkboxes in the ops and cleaner-pay tables (`.table .ops-check input`) and the select-all box in the ops bar (`.ops-bar .check input`) are 24x24 on phones; their label rows are 44px. Theme buttons and calendar tiles are unchanged (D-88). *Superseded by D-99 (O3): on phones the label is the 44px tap target (`.ops-check__tap`, section 26); the box itself may stay 24px.*
 - **Scroll anchoring off, space under the last row.** `.content` has `overflow-anchor: none`. On desktop (960px and wider) `.content` keeps `padding-bottom: 96px` so the Ask button never covers the last row.
 - **The scroll keeper rule.** `ui.js` holds the page height during a redraw and undoes any scroll the redraw caused (a scroll within `SCROLL_SETTLE_MS` = 150 ms of the change). It releases on a route change, wheel, touch, keys or when things go quiet. **Views never read or set `window.scrollY` or call `scrollTo` themselves;** a scan test enforces it. Only a page change scrolls to the top, once (D-89). A page that draws several cards (Home) draws them in one go.
 - **Heading at once.** `HEADING_AFTER_MS` is 0: when the control the person used is gone and nothing took its place, focus goes to the page heading immediately; if the control (or a match) returns within `FOCUS_WATCH_MS` (10 s), focus moves to it. The "same position in the same labelled group" match is for `tab` and `radio` controls only.
@@ -666,3 +666,17 @@ Decision D-97. All CSS changes are in `public/css/app.css`.
 - **Short-screen desktop sidebar:** smaller vertical padding on short screens so the whole menu fits.
 - **`.lpad-later`:** the Launchpad's "Later (N more steps)" fold uses a styled `summary` (same look as the other folds).
 - **Busy Save button:** `.btn[aria-disabled="true"]` (the existing grey look). A form's Save is marked busy, not `disabled`, while saving, so keyboard focus stays on it.
+
+## 26. Patterns added in QA round 17 (2026-10-15)
+
+Decisions D-98 and D-99. Changes are in `public/css/app.css` except the card step, which has its own file.
+
+- **`.mention-list`** sits in the flow under the note box (`position: static`), so it never covers the composer's mode tabs.
+- **`.hk-day__today`** text uses `--on-forest` (white on teal, about 5.3:1 in dark mode).
+- **`.ops-check__tap`:** a 44x44 label around a row box, on phones, for the cleaner pay rows and the "Select all unpaid" label. The box stays 24px. This replaces the 24px exemption of D-92 and D-95.
+- **`.themeswitch`** is an equal-column grid (`grid-auto-columns: 1fr`) everywhere, so Settings and My account show equal segments (103px each at 390px).
+- **Focus keys:** `mt-status` becomes `mt-status-<target status>` (the table in section 22 is updated).
+- **"Skip to conversation"** in the inbox reuses `.skip-link`.
+- **The wordmark is a logotype** (section 1; D-99 O2).
+- **Card on file (D-98), `public/css/cardcheck.css`** (linked from `index.html`; kept apart from `app.css`): `.cc-card` (the page card), `.cc-what` (the "what happens" list), `.cc-form` and `.cc-row` (fields stack one per row; expiry and CVC share a row from 360px), `.cc-wait` and `.cc-success` (the waiting-for-bank and confirmed states, whose h2 takes focus) and `.cc-footer` (Help, Account, Log out). Colours come from tokens only. Inputs carry no `name` and sit in no submitting form. The error summary is `role="alert"` and takes focus. Phone buttons are at least 44px.
+- **Plan & billing card rows** (`cardBlock` in `settings.js`) use `.payonline__row`, with **Remove card**, **Change**, **Turn on automatic payment** and **Cancel automatic payment** as `btn--secondary btn--sm` buttons (not link-style), which keeps them at 44px on phones.

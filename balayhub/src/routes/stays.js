@@ -694,7 +694,7 @@ router.post('/reservations/:id/cancel', managers, ah(async (req, res) => {
   const booking = await loadBooking(req.user, uuidParam(req.params.id));
   if (booking.kind !== 'reservation') throw notFound();
   assertCancellable(booking);
-  const { reason } = validate(req.body, { reason: { type: 'string', required: true, max: 300, label: 'Reason' } });
+  const { reason } = validate(req.body, { reason: { type: 'string', required: true, max: 500, label: 'Reason' } });
   await cancelBooking(req.user, booking, reason);
   await closeOpenCheckouts(booking.booking_id);
   res.json({ ok: true });
@@ -779,7 +779,7 @@ router.post('/booking-payments/:id/void', managers, ah(async (req, res) => {
   if (!p) throw notFound();
   await loadBooking(req.user, p.booking_id);
   if (p.voided_at) throw new HttpError(409, 'This payment is already voided.', { code: 'ALREADY_VOIDED' });
-  const { reason } = validate(req.body, { reason: { type: 'string', required: true, max: 300, label: 'Reason' } });
+  const { reason } = validate(req.body, { reason: { type: 'string', required: true, max: 500, label: 'Reason' } });
   await tx(async (db) => {
     // Refunds can't exceed what was paid (section 2.5): after this void, the live payments must still cover the live refunds.
     await db.query('SELECT 1 FROM bookings WHERE booking_id = $1 FOR UPDATE', [p.booking_id]);
@@ -979,7 +979,13 @@ async function bookRooms(db, user, rooms, { guestId, groupId, picks, action }) {
       if (!id) throw notEnoughRooms(r, rooms, listingsFor[i], byId, busy);
       unit = byId.get(id);
     }
-    checkStay(r, unit);
+    try {
+      checkStay(r, unit);
+    } catch (err) {
+      // The group form puts this room's field errors on its own row, so the room's place in `rooms` travels with them.
+      if (err.status === 400 && err.extra?.fields) err.extra.room_index = i;
+      throw err;
+    }
     picks.push({ unit_id: unit.unit_id, unit_name: unit.unit_name, check_in: r.check_in, check_out: r.check_out });
     let accommodation = r.accommodation_total;
     if (accommodation === null) {
@@ -1043,15 +1049,22 @@ router.post('/booking-groups', managers, ah(async (req, res) => {
   const rooms = cleanRooms(req.body.rooms);
   const guest = await groupGuest(req.user, req.body.guest);
   const picks = [];
+  let guestId;
   const groupId = await bookInTx(picks, async (db) => {
-    const guestId = await resolveGuest(db, req.user, guest);
+    guestId = await resolveGuest(db, req.user, guest);
     const { rows: [g] } = await db.query(
       `INSERT INTO booking_groups (organization_id, name, guest_id, notes, created_by) VALUES ($1,$2,$3,$4,$5) RETURNING group_id`,
       [req.user.organization_id, body.name, guestId, body.notes, req.user.user_id]);
     await bookRooms(db, req.user, rooms, { guestId, groupId: g.group_id, picks, action: 'booking_group.created' });
     return g.group_id;
   });
-  res.status(201).json({ group: (await groupRows(['g.group_id = $1'], [groupId]))[0] });
+  // The lead guest's do-not-rebook flag, worked out as BOOKING_SELECT does for a single reservation, so the form can warn.
+  const lead = await one(
+    `SELECT g.full_name, (g.do_not_rebook OR (g.email IS NOT NULL AND btrim(g.email) <> '' AND EXISTS (SELECT 1 FROM guests f WHERE f.organization_id = g.organization_id AND f.do_not_rebook AND lower(btrim(f.email)) = lower(btrim(g.email))))) AS flagged
+       FROM guests g WHERE g.guest_id = $1 AND g.organization_id = $2`, [guestId, req.user.organization_id]);
+  res.status(201).json({
+    group: (await groupRows(['g.group_id = $1'], [groupId]))[0], guest_do_not_rebook: lead.flagged, guest_name: lead.full_name,
+  });
 }));
 
 router.patch('/booking-groups/:id', managers, ah(async (req, res) => {
@@ -1099,7 +1112,7 @@ router.post('/booking-groups/:id/rooms/:bookingId/remove', managers, ah(async (r
   const booking = await loadBooking(req.user, uuidParam(req.params.bookingId));
   if (booking.group_id !== group.group_id) throw notFound();
   assertCancellable(booking);
-  const { reason } = validate(req.body, { reason: { type: 'string', required: true, max: 300, label: 'Reason' } });
+  const { reason } = validate(req.body, { reason: { type: 'string', required: true, max: 500, label: 'Reason' } });
   await tx(async (db) => {
     // Locking the group row first means two rooms removed at once can't each see the other one still booked.
     await db.query('SELECT 1 FROM booking_groups WHERE group_id = $1 FOR UPDATE', [group.group_id]);
@@ -1116,7 +1129,7 @@ router.post('/booking-groups/:id/rooms/:bookingId/remove', managers, ah(async (r
 
 router.post('/booking-groups/:id/cancel', managers, ah(async (req, res) => {
   const group = await loadGroup(req.user, uuidParam(req.params.id));
-  const { reason } = validate(req.body, { reason: { type: 'string', max: 300, label: 'Reason' } });
+  const { reason } = validate(req.body, { reason: { type: 'string', max: 500, label: 'Reason' } });
   const cancelled = await tx(async (db) => {
     // Locking the group row means two cancels at once cancel each room only once.
     const { rows: [locked] } = await db.query('SELECT cancelled_at FROM booking_groups WHERE group_id = $1 FOR UPDATE', [group.group_id]);

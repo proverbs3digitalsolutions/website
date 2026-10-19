@@ -177,11 +177,14 @@ export async function signupView(el, { query }) {
     },
   });
   form.querySelector('.form-actions .btn').classList.add('btn--block');
-  const google = await googleButton('Sign up with Google', query.invite);
+  // The ₱20 card line shows only while the card check is on (the public plans answer says so).
+  const [google, cardOn] = await Promise.all([googleButton('Sign up with Google', query.invite),
+    get('/public/plans').then((pl) => pl.card_check === true, () => false)]);
   el.append(splitPage(authCard(
     invite ? `Join ${invite.organization_name}` : 'Create your account',
     invite ? `You were invited as ${{ cleaner: 'a cleaner', manager: 'a property manager', staff: 'staff' }[invite.role] || 'staff'}. Create your login to get started.` : 'Free to start. Set up your first property in a few minutes.',
     form,
+    cardOn && h('p', { class: 'small muted' }, "After you sign up, you'll confirm a card with a ₱20 payment to start your 14-day free trial."),
     google, google && h('p', { class: 'small muted', style: { marginTop: '8px', textAlign: 'center' } },
       'By continuing with Google you agree to the ', h('a', { href: '#/terms', target: '_blank' }, 'Terms of Service'), ' and accept the ', h('a', { href: '#/privacy', target: '_blank' }, 'Privacy Notice'), '.'),
     h('div', { class: 'auth-card__foot' }, 'Already have an account? ', h('a', { href: '#/login' }, 'Log in')))));
@@ -349,6 +352,7 @@ export async function setupView(el) {
       await post('/workspace', { ...data, units_band: saved?.units_band, phone: data.phone || undefined });
       try { localStorage.removeItem('bh-setup'); } catch { /* ignore */ }
       await refreshUser();
+      if (state.user?.plan?.card_check_due) { navigate('#/confirm-card', { replace: true }); return; }
       navigate(data.business_type === 'long_term' ? '#/properties?new=1' : '#/launchpad', { replace: true });
     },
   });

@@ -128,7 +128,7 @@ export async function guestCheckinView(el, { params }, kept) {
   const uploaded = new Set(); // files already sent, so a retry doesn't upload them twice
   const progress = h('div', { class: 'muted small', 'aria-live': 'polite' });
   const formError = h('div');
-  const submit = h('button', { class: 'btn btn--primary btn--block', type: 'submit' }, r ? t('Save changes') : t('Submit registration'));
+  const submit = h('button', { class: 'btn btn--primary btn--block', type: 'submit' }, r?.submitted_at ? t('Save changes') : t('Submit registration'));
   // The answers are saved but no ID photo is stored yet: the registration is not finished.
   const draftNote = t('Your answers are saved. Add a photo of your ID to finish registering.');
 
@@ -240,7 +240,7 @@ export async function guestCheckinView(el, { params }, kept) {
     } finally {
       busy = false;
       submit.disabled = false;
-      submit.textContent = r ? t('Save changes') : t('Submit registration');
+      submit.textContent = r?.submitted_at ? t('Save changes') : t('Submit registration');
     }
   });
 

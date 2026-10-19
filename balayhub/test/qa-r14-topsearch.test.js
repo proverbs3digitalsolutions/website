@@ -100,7 +100,7 @@ test('source: combobox pattern, exact copy, cleaner never calls /search, no app.
 });
 
 test('source: group order is fixed', () => {
-  const order = ['pages', 'reservations', 'guests', 'listings', 'properties', 'tenants', 'owners', 'quotes', 'maintenance', 'help'];
+  const order = ['pages', 'reservations', 'guests', 'listings', 'properties', 'tenants', 'owners', 'quotes', 'maintenance', 'housekeeping', 'supplies', 'expenses', 'discount_codes', 'addons', 'help'];
   const m = src.match(/GROUP_ORDER = \[([^\]]*)\]/);
   assert.ok(m);
   assert.deepEqual([...m[1].matchAll(/'(\w+)'/g)].map((x) => x[1]), order);

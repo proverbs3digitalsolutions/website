@@ -145,7 +145,7 @@ router.post('/payment-proofs/:id/confirm', managers, ah(async (req, res) => {
 // Reject a proof with a reason. The guest gets the reason by email if they have an address.
 router.post('/payment-proofs/:id/reject', managers, ah(async (req, res) => {
   const id = uuidParam(req.params.id);
-  const { reason } = validate(req.body, { reason: { type: 'string', required: true, max: 300, label: 'Reason' } });
+  const { reason } = validate(req.body, { reason: { type: 'string', required: true, max: 500, label: 'Reason' } });
   const p = await tx(async (db) => {
     const row = await lockProof(req.user, id, db);
     if (row.status !== 'pending') throw new HttpError(409, `This payment proof was already ${row.status}.`, { code: 'NOT_PENDING' });

@@ -38,7 +38,7 @@ test('#1 the refund method has no default and asks to choose', () => {
   const m = ref.match(/name: 'method'[^\n]*/)[0];
   assert.doesNotMatch(m, /value: 'gcash'/);
   assert.match(m, /placeholderOption: 'Choose…'/);
-  assert.match(ref, /method: 'Choose how the money was refunded\.'/);
+  assert.match(ref, /f\.method = 'Choose how the money was refunded\.'/);
 });
 
 test('#3 guestsProblem checks the listing limit before the 50 cap', () => {

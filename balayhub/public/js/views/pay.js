@@ -111,15 +111,17 @@ export async function payBalanceView(el, { params, query }, snap) {
     if (Number(d.balance) <= 0) toast(t('Payment received. Thank you!'));
   }
   const paidUp = Number(d.balance) <= 0 && !d.cancelled;
+  const payError = h('div');
   const btn = h('button', { class: 'btn btn--primary btn--block', type: 'button' }, t('Pay {amount} now', { amount: peso(d.balance) }));
   btn.addEventListener('click', async () => {
+    payError.replaceChildren();
     btn.disabled = true;
     btn.textContent = t('Opening secure payment…');
     try {
       const r = await post(`/public/pay/${encodeURIComponent(token)}/checkout`);
       location.href = r.checkout_url;
     } catch (err) {
-      toast(tServer(err.message), 'error');
+      payError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, tServer(err.message)));
       btn.disabled = false;
       btn.textContent = t('Pay {amount} now', { amount: peso(d.balance) });
     }
@@ -137,7 +139,7 @@ export async function payBalanceView(el, { params, query }, snap) {
       billSection(d),
       d.cancelled ? h('div', { class: 'alert alert--info' }, t('This booking was cancelled.'))
         : paidUp ? h('p', { class: 'muted' }, t('Thank you! Nothing more to pay. See you soon.'))
-          : d.accepting ? [btn, h('p', { class: 'muted small' }, t('GCash, Maya, cards and GrabPay. You get an email receipt.'))]
+          : d.accepting ? [payError, btn, h('p', { class: 'muted small' }, t('GCash, Maya, cards and GrabPay. You get an email receipt.'))]
             : d.manual_payments?.accepting ? null
               : h('div', { class: 'alert alert--info' }, t('Online payment is not available for this booking. Please contact your host.'))),
     !d.cancelled && addonsCard(token, () => payBalanceView(el, { params, query: {} }), snap),

@@ -296,7 +296,12 @@ test('refund validation: method, reason, dates, reference, amount, and unknown r
   assert.equal((await owner.post(p, refundBody({ method: 'channel_payout' }))).status, 400, 'channel payouts are not refunds');
   assert.equal((await owner.post(p, refundBody({ method: 'bitcoin' }))).status, 400);
   assert.equal((await owner.post(p, refundBody({ reason: '' }))).status, 400);
-  assert.equal((await owner.post(p, refundBody({ reason: 'x'.repeat(301) }))).status, 400);
+  const over = await owner.post(p, refundBody({ reason: 'x'.repeat(501) }));
+  assert.equal(over.status, 400);
+  assert.equal(over.data.fields.reason, 'Reason must be at most 500 characters.');
+  const atLimit = await owner.post(p, refundBody({ amount: '1.00', reason: 'x'.repeat(500) }));
+  assert.equal(atLimit.status, 201, 'a 500-character reason is saved');
+  assert.equal((await owner.post(`/api/refunds/${atLimit.data.refund.refund_id}/void`, { reason: 'Test cleanup' })).status, 200);
   assert.equal((await owner.post(p, refundBody({ refund_date: d(1) }))).status, 400, 'no future refund date');
   assert.equal((await owner.post(p, refundBody({ refund_date: 'yesterday' }))).status, 400);
   assert.equal((await owner.post(p, refundBody({ reference_number: 'R'.repeat(101) }))).status, 400);

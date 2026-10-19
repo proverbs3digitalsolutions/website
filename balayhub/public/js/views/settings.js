@@ -1,6 +1,6 @@
 // Settings: account, team access (owner), audit history and privacy.
 
-import { get, post, patch, ApiError } from '../api.js';
+import { api, get, post, patch, ApiError } from '../api.js';
 import { h, icon, label, field, formModal, confirmDialog, emptyState, pageHead, toast, peso, fmtDate, fmtMonth, fmtDateTime, openModal, clearErrors, showErrors } from '../ui.js';
 import { state, refreshUser } from '../app.js';
 import { notificationsCard } from '../notifications.js';
@@ -251,7 +251,7 @@ export const ACTIONS = {
   'addon.created': 'Added an add-on', 'addon.updated': 'Edited an add-on', 'addon.archived': 'Archived an add-on',
   'member.invited': 'Invited a team member', 'member.joined': 'Joined the workspace', 'member.updated': 'Changed a team member’s access',
   'member.removed': 'Removed a team member', 'member.invite_revoked': 'Cancelled an invitation', 'gatepass.sent': 'Sent a gate pass',
-  'billing.checkout_started': 'Started a plan payment', 'billing.paid': 'Plan payment received', 'billing.coupon_applied': 'Used a plan coupon', 'platform.coupon_created': 'Plan coupon created', 'platform.coupon_updated': 'Plan coupon changed', 'platform.coupon_switched_on': 'Plan coupon switched on', 'platform.coupon_switched_off': 'Plan coupon switched off', 'platform.plan_changed': 'Changed the workspace plan',
+  'billing.checkout_started': 'Started a plan payment', 'billing.pay_saved_started': 'Started a payment with the saved card', 'billing.paid': 'Plan payment received', 'billing.card_check_started': 'Started the card check', 'billing.card_check_passed': 'Card check passed', 'billing.card_check_failed': 'Card check failed', 'billing.card_removed': 'Removed the saved card', 'billing.renewal_changed': 'Changed the renewal plan', 'billing.subscription_started': 'Automatic payment started', 'billing.subscription_cancelled': 'Automatic payment cancelled', 'billing.subscription_payment_failed': 'Automatic payment failed', 'billing.trial_reminder_sent': 'Trial reminder email sent', 'platform.card_check_waived': 'Skipped the card check', 'billing.coupon_applied': 'Used a plan coupon', 'platform.coupon_created': 'Plan coupon created', 'platform.coupon_updated': 'Plan coupon changed', 'platform.coupon_switched_on': 'Plan coupon switched on', 'platform.coupon_switched_off': 'Plan coupon switched off', 'platform.plan_changed': 'Changed the workspace plan',
   'workspace.created': 'Created the workspace', 'workspace.updated': 'Changed workspace settings', 'workspace.exported': 'Exported all workspace data',
   'workspace.deletion_requested': 'Asked to delete the workspace', 'workspace.deletion_cancelled': 'Cancelled the workspace deletion',
 };
@@ -379,7 +379,7 @@ export const shortTermCount = (listings) => listings.filter((l) => l.nightly_rat
 // A listing with no nightly rate is a monthly unit, which plans do not count. The plan card says so only then.
 export const monthlyNote = (listings) => listings.some((l) => l.nightly_rate == null);
 
-async function planCard(u, rerender) {
+export async function planCard(u, rerender) {
   const p = u.plan;
   // Loaded here, not at the top, so the rest of this file still loads without it.
   const bc = await import('./billingcoupon.js');
@@ -392,7 +392,7 @@ async function planCard(u, rerender) {
   const status = p.read_only
     ? h('div', { class: 'alert alert--error' }, p.reason === 'trial_ended' ? 'Your free trial has ended. Your workspace is view-only until you choose a plan.' : 'Your payment is overdue. Your workspace is view-only until you renew.')
     : p.plan === 'trial' ? h('div', { class: 'alert alert--info' }, `Free trial: ${p.trial_days_left} day${p.trial_days_left === 1 ? '' : 's'} left. All features are included.`)
-      : p.reason === 'grace' ? h('div', { class: 'alert alert--warn' }, `Your plan was paid until ${p.paid_until}. Please renew within 7 days to avoid interruption.`) : null;
+      : p.reason === 'grace' ? h('div', { class: 'alert alert--warn' }, `Your plan was paid until ${fmtDate(p.paid_until)}. Please renew within 7 days to avoid interruption.`) : null;
   return h('div', { class: 'card' },
     h('div', { class: 'card__head' }, h('h2', null, 'Plan & billing'), h('span', { class: 'badge badge--paid' }, p.name)),
     status,
@@ -400,7 +400,7 @@ async function planCard(u, rerender) {
       h('dt', null, 'Current plan'), h('dd', null, p.price ? `${p.name} — ₱${p.price.toLocaleString('en-PH')} / month` : p.name),
       h('dt', null, 'Short-term listings'), h('dd', null, `${shortTermCount(listings)} of ${p.listing_limit >= 1000 ? 'unlimited' : p.listing_limit}`,
         monthlyNote(listings) && h('div', { class: 'muted small' }, 'Monthly units are not counted.')),
-      p.paid_until && [h('dt', null, 'Paid until'), h('dd', null, p.paid_until)]),
+      p.paid_until && [h('dt', null, 'Paid until'), h('dd', null, fmtDate(p.paid_until))]),
     p.plan === 'comped' ? h('p', { class: 'muted' }, 'Your workspace is on a complimentary plan, so there is nothing to pay.')
       : bill.online ? payOnline(p, bill, rerender, bc) : [
       pub.plans.length > 0 && h('div', { class: 'plan-mini' }, pub.plans.map((x) => h('div', { class: `plan-mini__item${x.key === p.plan ? ' is-current' : ''}` },
@@ -413,12 +413,72 @@ async function planCard(u, rerender) {
       h('h3', { class: 'subhead', style: { marginTop: '18px' } }, 'Payments'),
       h('ul', { class: 'list' }, bill.history.map((b) => h('li', null, h('div', { class: 'row' },
         h('div', { class: 'row__main' },
-          h('span', { class: 'row__title' }, `${b.plan[0].toUpperCase()}${b.plan.slice(1)} · ${b.months} month${b.months > 1 ? 's' : ''}`),
-          h('span', { class: 'row__sub' }, b.provider === 'coupon' ? `Free with coupon ${b.coupon_code} · covers ${b.period_start} to ${b.period_end}`
-            : b.status === 'paid' ? `Paid ${fmtDateTime(b.paid_at)}${b.payment_method ? ` · ${b.payment_method}` : ''} · covers ${b.period_start} to ${b.period_end}${Number(b.discount_amount) > 0 ? ` · coupon ${b.coupon_code} saved ${bc.money(b.discount_amount)}` : ''}`
+          h('span', { class: 'row__title' }, b.kind === 'card_check' ? 'Card check' : `${b.plan[0].toUpperCase()}${b.plan.slice(1)} · ${b.months} month${b.months > 1 ? 's' : ''}`),
+          h('span', { class: 'row__sub' }, b.kind === 'card_check' ? (b.status === 'paid' ? `Paid ${fmtDateTime(b.paid_at)}${bill.card ? ` · ${cardText(bill.card)}` : ''}` : `Started ${fmtDateTime(b.created_at)}, waiting for payment`)
+            : b.provider === 'coupon' ? `Free with coupon ${b.coupon_code} · covers ${fmtDate(b.period_start)} to ${fmtDate(b.period_end)}`
+            : b.status === 'paid' ? `Paid ${fmtDateTime(b.paid_at)}${b.payment_method ? ` · ${b.payment_method}` : ''} · covers ${fmtDate(b.period_start)} to ${fmtDate(b.period_end)}${Number(b.discount_amount) > 0 ? ` · coupon ${b.coupon_code} saved ${bc.money(b.discount_amount)}` : ''}`
               : `Started ${fmtDateTime(b.created_at)}, waiting for payment`)),
         h('div', { class: 'row__end' }, h('strong', null, bc.money(b.amount)),
           h('span', { class: `badge badge--${b.status === 'paid' ? 'paid' : 'unpaid'}` }, b.provider === 'coupon' ? 'Free' : b.status === 'paid' ? 'Paid' : 'Pending'))))))]);
+}
+
+const cardText = (c) => `${c.brand ? c.brand[0].toUpperCase() + c.brand.slice(1) : 'Card'} ending ${c.last4}`;
+const planName = (bill, key) => bill.options?.find((o) => o.key === key)?.name || (key ? key[0].toUpperCase() + key.slice(1) : '');
+
+// Card on file, the plan chosen for after the trial, and automatic payment (Stage 2). Owner only; the server sends none of it to others.
+export function cardBlock(p, bill, rerender) {
+  const ar = bill.auto_renew || {};
+  const stage2 = !!bill.subscriptions;
+  const saveBtn = (text, onclick, key) => h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'data-focus-key': key, onclick }, text);
+  const change = async (body, doneText, btn) => {
+    btn.disabled = true;
+    try { await patch('/billing/renewal', body); toast(doneText); rerender(); } catch (err) { toast(err.message, 'error'); btn.disabled = false; }
+  };
+  const rows = [];
+  if (bill.card) {
+    const until = p.paid_until || p.trial_ends_at;
+    rows.push(h('div', { class: 'payonline__row' }, h('span', null, `Card on file: ${cardText(bill.card)}`),
+      saveBtn('Remove card', async (e) => {
+        const ok = await confirmDialog({ title: 'Remove your card?', cancelText: 'Keep card', confirmText: 'Remove card',
+          text: stage2 ? `BalayHub forgets this card and turns off automatic payment.${until ? ` Your plan stays active until ${fmtDate(until)}.` : ''}` : 'BalayHub forgets this card. You can still pay another way.' });
+        if (!ok) return;
+        try { await api('DELETE', '/billing/card'); toast('Card removed.'); rerender(); } catch (err) { toast(err.message, 'error'); e.target?.focus?.(); }
+      })));
+  }
+  if (bill.renewal_plan && bill.options?.length) {
+    const sel = h('select', { class: 'input input--sm', 'aria-label': 'Plan after your trial', hidden: true }, bill.options.map((o) => h('option', { value: o.key, selected: o.key === bill.renewal_plan }, o.name)));
+    const save = saveBtn('Save', (e) => change({ renewal_plan: sel.value }, 'Saved.', e.target), 'card-plan-change'); // after the redraw Save is hidden: focus goes to the new Change (same key)
+    save.hidden = true;
+    const chg = saveBtn('Change', () => { sel.hidden = false; save.hidden = false; chg.hidden = true; sel.focus(); }, 'card-plan-change');
+    rows.push(h('div', { class: 'payonline__row' }, h('span', null, `${p.plan === 'trial' ? 'Plan after your trial' : 'Next plan'}: ${planName(bill, bill.renewal_plan)}`), chg, sel, save));
+  }
+  if (stage2 && bill.card) {
+    if (ar.status === 'past_due' || ar.status === 'unpaid') {
+      rows.push(h('div', { class: 'alert alert--error', role: 'alert' }, `Your card payment on ${fmtDate(ar.next_charge_on || p.paid_until)} didn't go through. Pay now to keep making changes.`));
+    }
+    if (ar.on) {
+      const o = bill.options?.find((x) => x.key === bill.renewal_plan);
+      rows.push(h('div', { class: 'payonline__row' },
+        h('span', null, `Automatic payment is on. Next charge: ${o ? peso(o.prices[0].amount) : 'your plan price'} to ${cardText(bill.card)}${ar.next_charge_on ? ` on ${fmtDate(ar.next_charge_on)}` : ''}.`),
+        saveBtn('Cancel automatic payment', async (e) => {
+          const ok = await confirmDialog({ title: 'Cancel automatic payment?', cancelText: 'Keep it on', confirmText: 'Cancel automatic payment',
+            text: `Your plan stays active${p.paid_until ? ` until ${fmtDate(p.paid_until)}` : ''}. After that, renew here by hand.` });
+          if (ok) await change({ auto_renew: false }, 'Automatic payment is off.', e.target);
+        }, 'card-auto-toggle')));
+    } else {
+      const tick = h('input', { type: 'checkbox', id: 'auto-consent' });
+      const consent = h('label', { class: 'check', hidden: true }, tick, h('span', null, 'I agree that BalayHub may charge my card for the plan above every month after my trial, until I cancel.'));
+      const err = h('div', { class: 'error', role: 'alert' });
+      const go = saveBtn('Turn on automatic payment', async (e) => {
+        if (consent.hidden) { consent.hidden = false; tick.focus(); return; }
+        if (!tick.checked) { err.textContent = 'Tick the box to agree to automatic payment.'; tick.focus(); return; }
+        err.textContent = '';
+        await change({ auto_renew: true, consent: true }, 'Automatic payment is on.', e.target);
+      }, 'card-auto-toggle');
+      rows.push(h('div', null, h('div', { class: 'payonline__row' }, h('span', null, 'Automatic payment is off.'), go), consent, err));
+    }
+  }
+  return rows.length ? h('div', { class: 'cardblock', style: { marginTop: '12px' } }, rows) : null;
 }
 
 // Choose a plan and length, then pay on PayMongo's secure page.
@@ -440,8 +500,11 @@ export function payOnline(p, bill, rerender, bc) {
   const monthSel = h('select', { class: 'input input--sm', 'aria-label': 'Months', onchange: (e) => { months = Number(e.target.value); selectionChanged(); } },
     [[1, '1 month'], [3, '3 months'], [12, '12 months (2 months free)']].map(([m, t]) => h('option', { value: m }, t)));
   const box = bc.couponBox({ current: bill.coupon, getSelection: () => ({ plan, months }), onQuote: (q) => { quote = q; update(); } });
-  const couponNote = h('span', { hidden: true }, ' Your coupon is applied automatically to the months it covers. BalayHub never charges your card on its own; you renew here.');
-  const label = () => (quote?.free ? 'Activate free plan' : quote?.card_only ? `Pay ${bc.plain(quote.amount)} by card` : 'Pay now');
+  const autoOn = !!(bill.subscriptions && bill.auto_renew?.on);
+  const couponNote = h('span', { hidden: true }, autoOn ? ' Your coupon is applied automatically to the months it covers.' : ' Your coupon is applied automatically to the months it covers. BalayHub never charges your card on its own; you renew here.');
+  const saved = !!(bill.saved_card_pay && bill.card);
+  const savedBtn = h('button', { class: 'btn btn--primary', type: 'button' });
+  const label = () => (quote?.free ? 'Activate free plan' : saved ? 'Pay another way' : quote?.card_only ? `Pay ${bc.plain(quote.amount)} by card` : 'Pay now');
   const update = () => {
     const o = bill.options.find((x) => x.key === plan);
     const discounted = quote && Number(quote.discount_amount) > 0;
@@ -451,6 +514,11 @@ export function payOnline(p, bill, rerender, bc) {
     msgEl.textContent = quote?.message || '';
     couponNote.hidden = !(quote?.coupon || bill.coupon?.status === 'active' || bill.coupon?.status === 'pending');
     if (!btn.disabled) btn.textContent = label();
+    // A saved card makes one tap the main way to pay; a free coupon needs no card, so the plain Activate button stays.
+    const showSaved = saved && !quote?.free;
+    savedBtn.hidden = !showSaved;
+    btn.className = showSaved ? 'btn btn--secondary' : 'btn btn--primary';
+    if (!savedBtn.disabled) savedBtn.textContent = `Pay ${bc.money(quote ? quote.amount : bill.options.find((x) => x.key === plan).prices.find((x) => x.months === months).amount)} with ${cardText(bill.card || {})}`;
   };
   // A new plan or length makes the old preview wrong at once; ask the server again.
   const selectionChanged = () => { quote = null; update(); box.refresh(); };
@@ -473,13 +541,37 @@ export function payOnline(p, bill, rerender, bc) {
       update();
     }
   });
+  savedBtn.addEventListener('click', async () => {
+    savedBtn.disabled = true; btn.disabled = true;
+    savedBtn.textContent = 'Charging your card…';
+    try {
+      const code = box.getCode();
+      const r = await post('/billing/pay-saved', { plan, months: String(months), ...(code ? { coupon_code: code } : {}) });
+      if (r.status === 'action_required' && r.redirect_url) { location.assign(r.redirect_url); return; }
+      if (r.activated || r.status === 'paid') {
+        await refreshUser();
+        toast(`Your ${bill.options.find((x) => x.key === plan).name} plan is active until ${fmtDate(r.paid_until)}.`);
+        rerender();
+        return;
+      }
+      savedBtn.disabled = false; btn.disabled = false; update();
+      msgEl.textContent = 'Your payment is being confirmed. Check back in a moment.';
+    } catch (err) {
+      savedBtn.disabled = false; btn.disabled = false; update();
+      if (err.code === 'SAVED_CARD_FAILED' || err.code === 'SAVED_CARD_NONE') {
+        msgEl.textContent = "Your saved card couldn't be charged. Pay another way, or use a different card.";
+        btn.focus();
+      } else if (/^(COUPON|COMPED|CARD_OFF)/.test(err.code || '')) box.showError(err.message); else toast(err.message, 'error');
+    }
+  });
   drawCards();
   update();
   box.refresh();
   return h('div', { class: 'payonline' },
+    cardBlock(p, bill, rerender),
     h('h3', { class: 'subhead', style: { marginTop: '16px' } }, p.plan === 'trial' || p.read_only ? 'Choose your plan' : 'Renew or change plan'),
     cards,
-    h('div', { class: 'payonline__row' }, monthSel, h('span', null, 'Total: ', strikeEl, ' ', amountEl), btn),
+    h('div', { class: 'payonline__row' }, monthSel, h('span', null, 'Total: ', strikeEl, ' ', amountEl), savedBtn, btn),
     msgEl,
     box,
     h('p', { class: 'muted small' }, 'Pay securely with GCash, Maya, card or GrabPay through PayMongo. Your plan activates as soon as the payment goes through. Renewing the same plan early adds the time on top; switching plans converts your unused days to the new plan; paying during the free trial keeps your remaining trial days.', couponNote));

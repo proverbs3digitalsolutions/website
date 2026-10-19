@@ -123,7 +123,8 @@ async function resolve(db, { org, code, plan, months }) {
   const n = Number(months);
   const typed = normalizeCode(code);
   if (typed && !CODE_RE.test(typed)) {
-    throw fail(400, 'VALIDATION', 'Please check the highlighted fields.', { fields: { code: 'Enter the code using letters, numbers and dashes.' } });
+    const code = typed.length > 32 ? 'Codes are up to 32 characters.' : 'Enter the code using letters, numbers and dashes.';
+    throw fail(400, 'VALIDATION', 'Please check the highlighted fields.', { fields: { code } });
   }
   const live = await liveRedemption(db, org.organization_id);
   let coupon = null;
@@ -168,9 +169,11 @@ async function resolve(db, { org, code, plan, months }) {
   } else if (covered === 0) {
     message = eligible ? usedUpMsg(live.months_total) : `Your coupon covers ${planList(coupon.plans)}, so this payment is the full price.`;
   } else {
-    message = describe(coupon) + (coupon.duration === 'months' ? ` This payment covers ${covered} of them.` : '');
+    // A live forever coupon's offer already shows in the live box on Plan & billing, so it is not said twice.
+    message = (source === 'redeemed' && coupon.duration === 'forever' ? '' : describe(coupon)) + (coupon.duration === 'months' ? ` This payment covers ${covered} of them.` : '');
     // A free coupon that needs a card still charges the minimum; say the amount (D-97 O10).
     if (coupon.kind === 'free' && priced.cardOnly && priced.minChargeApplied) message += ` You pay ₱${toPesos(priced.amountC)} once by card.`;
+    message = message.trim() || null;
   }
   return { coupon, redemption: source === 'redeemed' ? live : null, source, monthsLeft, covered, ...priced, message };
 }

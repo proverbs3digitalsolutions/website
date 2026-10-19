@@ -19,7 +19,7 @@ function helpers() {
   const a = view.indexOf('// ---- helpers');
   const b = view.indexOf('// ---- end helpers');
   assert.ok(a !== -1 && b > a, 'helpers block is missing');
-  return new Function(`${view.slice(a, b)}\nreturn { genCode, discountText, appliesText, plansText, STATE_BADGE, usedText, monthsText, REDEMPTION_STATUS, manilaParts, toCentavos, totalDiscount, couponBody, LOCKED };`)();
+  return new Function(`${view.slice(a, b)}\nreturn { genCode, discountText, appliesText, plansText, STATE_BADGE, usedText, monthsText, REDEMPTION_STATUS, manilaParts, toCentavos, pesoText, couponBody, LOCKED };`)();
 }
 
 test('Generate makes an 8 character code without 0, O, 1 or I', () => {
@@ -53,12 +53,12 @@ test('table texts: discount, applies to, used, status', () => {
   assert.equal(h.monthsText({ months_used: 4, months_total: null }), '4 · every month');
 });
 
-test('total discount sums integer centavos, shown in whole pesos', () => {
+test('total discount sums integer centavos, shown with centavos', () => {
   const h = helpers();
   assert.equal(h.toCentavos('123.45'), 12345);
   assert.equal(h.toCentavos('0.1'), 10);
   assert.equal(h.toCentavos(null), 0);
-  assert.equal(h.totalDiscount([{ discount_total: '0.10' }, { discount_total: '0.20' }, { discount_total: '1000.00' }]), '₱1,000');
+  assert.equal(h.pesoText(h.toCentavos('0.10') + h.toCentavos('0.20') + h.toCentavos('1000.00')), '₱1,000.30');
   assert.doesNotMatch(view, /parseFloat/);
 });
 
@@ -113,7 +113,7 @@ test('page: not found for non-admins, copy, filters, form fields in order, no br
   assert.doesNotMatch(view, /window\.(alert|confirm|prompt)|\bconfirm\(|\balert\(/);
   assert.doesNotMatch(view, /style="|innerHTML|window\.scroll/);
   // round 16: the one allowed focus is "Change it" returning to the box the question is about
-  assert.equal((view.match(/\.focus\(\)/g) || []).length, 1);
+  assert.equal((view.match(/\.focus\(\)/g) || []).length, 2); // round 17: the once-per-workspace question and the amount-off question each focus their field
   assert.ok(view.includes('getRandomValues'));
 });
 

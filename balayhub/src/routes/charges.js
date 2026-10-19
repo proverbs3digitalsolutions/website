@@ -88,7 +88,7 @@ router.post('/charges/:id/void', managers, ah(async (req, res) => {
   const c = await one('SELECT charge_id, booking_id FROM booking_charges WHERE charge_id = $1 AND organization_id = $2', [id, req.user.organization_id]);
   if (!c) throw notFound();
   await loadReservation(req.user, c.booking_id);
-  const { reason } = validate(req.body, { reason: { type: 'string', required: true, max: 300, label: 'Reason' } });
+  const { reason } = validate(req.body, { reason: { type: 'string', required: true, max: 500, label: 'Reason' } });
   await tx(async (db) => {
     await lockOpenBooking(db, c.booking_id);
     const { rows: [v] } = await db.query(

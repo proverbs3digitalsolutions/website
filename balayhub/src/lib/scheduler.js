@@ -67,6 +67,10 @@ function startScheduler() {
   every(60 * 60 * 1000, 'demo', require('./demo').refreshDemo, 50 * 1000);
   // From the 3rd of the month: draft last month's owner statements and email the workspace owner to review them.
   every(60 * 60 * 1000, 'owner-statements-reminder', require('./ownerreminder').sendStatementReminders, 105 * 1000);
+  // Trial ends in 3 days or 1 day: email the owner to pay with the saved card (D-98).
+  every(60 * 60 * 1000, 'trial-reminders', require('./trialreminder').sendTrialReminders, 115 * 1000);
+  // Stage 2 (off unless PAYMONGO_SUBSCRIPTIONS=on): start monthly card subscriptions that are due. Lazy require so the job survives a missing file.
+  every(60 * 60 * 1000, 'subscriptions', () => require('./subscriptions').startDue(), 125 * 1000);
 }
 
 module.exports = { startScheduler, every };

@@ -11,7 +11,7 @@ const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const PLAN_NAMES = { starter: 'Starter', growth: 'Growth', pro: 'Pro' };
 // 32 characters, so one random byte masked to 5 bits picks one with no bias.
 const genCode = (c = crypto) => Array.from(c.getRandomValues(new Uint8Array(8)), (n) => CODE_CHARS[n & 31]).join('');
-const discountText = (c) => (c.kind === 'free' ? 'Free' : c.kind === 'fixed' ? `₱${String(c.amount_off).replace(/\.00$/, '')} off` : `${c.percent_off}% off`);
+const discountText = (c) => (c.kind === 'free' ? 'Free' : c.kind === 'fixed' ? `${pesoText(toCentavos(c.amount_off)).replace(/\.00$/, '')} off` : `${c.percent_off}% off`);
 const appliesText = (c) => (c.duration === 'once' ? 'First month' : c.duration === 'months' ? `First ${c.duration_months} months` : 'Every month');
 const plansText = (plans) => (plans?.length ? plans.map((p) => PLAN_NAMES[p] || p).join(', ') : 'All plans');
 const STATE_BADGE = { active: ['paid', 'Active'], scheduled: ['unpaid', 'Scheduled'], ended: ['archived', 'Ended'], off: ['archived', 'Switched off'], full: ['partial', 'Limit reached'] };
@@ -20,7 +20,8 @@ const REDEMPTION_STATUS = { released: 'Not completed (slot freed)', used_up: 'Us
 const monthsText = (r) => (r.months_total == null ? `${r.months_used} · every month` : `${r.months_used} of ${r.months_total}`);
 // Money text ("1234.50") to integer centavos without floats.
 const toCentavos = (s) => { const [w, f = ''] = String(s || '0').split('.'); return Number(w) * 100 + Number(`${f}00`.slice(0, 2)); };
-const totalDiscount = (list) => `₱${Math.floor(list.reduce((n, c) => n + toCentavos(c.discount_total), 0) / 100).toLocaleString('en-PH')}`;
+// Integer centavos to "₱598.90" (integer maths, never floors the centavos).
+const pesoText = (c) => `₱${Math.floor(c / 100).toLocaleString('en-PH')}.${String(c % 100).padStart(2, '0')}`;
 // The Manila date and time of a stored moment, for the date and time boxes.
 function manilaParts(ts) {
   if (!ts) return { date: '', time: '' };
@@ -156,7 +157,14 @@ export async function adminCouponsView(el, { query = {} }) {
         const body = couponBody({ ...d, kind: checked(f, 'kind'), duration: checked(f, 'duration') });
         // "Change it" keeps the form open with focus on the box the question is about.
         if (unlimitedFree({ ...d, kind: body.kind }) && !await confirmDialog({ title: 'Unlimited free months?', text: 'Once per workspace is off and there is no total limit, so this free coupon could be used again and again. Save anyway?', confirmText: 'Save anyway', cancelText: 'Change it' })) { f.elements.once_per_workspace.focus(); return false; }
-        if (c) await patch(`/admin/coupons/${c.coupon_id}`, body); else await post('/admin/coupons', body);
+        const save = (b) => (c ? patch(`/admin/coupons/${c.coupon_id}`, b) : post('/admin/coupons', b));
+        try { await save(body); } catch (err) {
+          if (err.code !== 'AMOUNT_ABOVE_PLAN') throw err;
+          // The server holds the plan prices; it asks, and a yes resends with the flag (never stored).
+          const text = `${pesoText(toCentavos(body.amount_off))} off is more than the highest plan price (${pesoText(toCentavos(err.data?.max_plan_price))}), so the plan would be free. Save anyway?`;
+          if (!await confirmDialog({ title: 'Check the amount off', text, confirmText: 'Save anyway', cancelText: 'Change it' })) { f.elements.amount_off.focus(); return false; }
+          await save({ ...body, confirm_high_amount: true });
+        }
         toast(c ? 'Coupon saved.' : 'Coupon created.');
         modal.close();
         load();
@@ -188,7 +196,7 @@ export async function adminCouponsView(el, { query = {} }) {
   const count = h('p', { class: 'muted small' });
   const draw = ({ coupons, total, summary }) => {
     sActive.v.textContent = String(summary.active); sScheduled.v.textContent = String(summary.scheduled);
-    sEnded.v.textContent = String(summary.ended + summary.off + summary.full); sGiven.v.textContent = totalDiscount(coupons);
+    sEnded.v.textContent = String(summary.ended + summary.off + summary.full); sGiven.v.textContent = pesoText(toCentavos(summary.discount_total));
     const filtered = Object.keys(changed(filters, defaults)).some((k) => k !== 'sort');
     count.textContent = filtered ? `Showing ${coupons.length} of ${total} coupons` : `${total} coupon${total === 1 ? '' : 's'}`;
     if (!coupons.length) {

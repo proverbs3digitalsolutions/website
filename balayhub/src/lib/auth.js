@@ -76,7 +76,8 @@ async function loadSession(req, res, next) {
     const row = await one(
       `SELECT s.token_hash, s.last_seen_at, u.user_id, u.full_name, u.email, u.phone, u.organization_id, u.role,
               u.account_status, u.email_verified_at, o.name AS organization_name, o.business_type, o.guest_language,
-              o.plan, o.trial_ends_at, o.paid_until, o.is_demo, o.deletion_scheduled_at
+              o.plan, o.trial_ends_at, o.paid_until, o.is_demo, o.deletion_scheduled_at,
+              o.card_check, o.card_brand, o.card_last4
          FROM sessions s
          JOIN users u ON u.user_id = s.user_id
          LEFT JOIN organizations o ON o.organization_id = u.organization_id
@@ -117,6 +118,8 @@ function requireWorkspace(req, res, next) {
 
 // Read-only workspaces (the public demo, an ended trial, an overdue plan) can
 // view and export everything but not change anything.
+// Before the card check (D-98) only these writes work: account, support, the card check itself, invitations, deleting the workspace.
+const CARD_CHECK_EXEMPT = /^\/(auth\/|account\/|support\/|admin\/|invitations\/|billing\/card-check(\/|$)|push\/unsubscribe$|workspace\/delete(\/cancel)?$)/;
 const PLAN_EXEMPT = /^\/(auth\/|admin\/|invitations\/|billing\/|push\/|support\/|assistant\/|account\/|workspace\/delete\/cancel$)/;
 function planGuard(req, res, next) {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) || !req.user?.organization_id) return next();
@@ -130,6 +133,11 @@ function planGuard(req, res, next) {
   if (s.reason === 'demo') {
     if (/^\/auth\/(logout|login|signup|demo)$|^\/push\/unsubscribe$/.test(req.path)) return next();
     return next(new HttpError(403, READ_ONLY_MSG.demo, { code: 'DEMO_READ_ONLY' }));
+  }
+  if (s.reason === 'card_check') {
+    // Help & support still works, so a ticket screenshot (and only that record type) may be uploaded.
+    if (req.path === '/files' && req.query.record_type === 'support') return next();
+    return CARD_CHECK_EXEMPT.test(req.path) ? next() : next(new HttpError(402, READ_ONLY_MSG.card_check, { code: 'CARD_CHECK_REQUIRED' }));
   }
   if (PLAN_EXEMPT.test(req.path)) return next();
   // Screenshots on a support ticket, so a lapsed workspace can still get help.

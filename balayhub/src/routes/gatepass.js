@@ -121,7 +121,7 @@ function passText(b, token) {
     '',
     `Check-in:  ${fmtDate(b.check_in)}${b.checkin_time ? `, ${fmtTime(b.checkin_time)}` : ''}${r?.arrival_time ? ` (expected arrival ${fmtTime(r.arrival_time)})` : ''}`,
     `Check-out: ${fmtDate(b.check_out)}${b.checkout_time ? `, ${fmtTime(b.checkout_time)}` : ''}`,
-    `Number of guests: ${names.length > 1 ? names.length : (b.num_guests || names.length)}${registered && booked && registered !== booked ? ` (booked for ${booked})` : ''}`,
+    `Number of guests: ${registered ?? (names.length > 1 ? names.length : (b.num_guests || names.length))}${registered && booked && registered !== booked ? ` (booked for ${booked})` : ''}`,
     r?.vehicle_plate ? `Vehicle plate: ${r.vehicle_plate}` : null,
     r?.phone ? `Guest mobile: ${r.phone}` : null,
     `Booking reference: ${b.confirmation_code}`,

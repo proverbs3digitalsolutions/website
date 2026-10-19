@@ -229,8 +229,16 @@ async function reservationsSeen() {
 // "Connect calendar" opens the first listing's Channels dialog; with no listings it just goes to Listings.
 export const channelsLink = (listings) => (listings?.[0]?.unit_id ? `#/listings?channels=${listings[0].unit_id}` : '#/listings');
 
-export function firstRunCard({ reservations, listings }) {
+export function firstRunCard({ reservations, listings, syncProblem }) {
   if (reservations !== 0) return null;
+  // A calendar is already connected: say so rather than asking again. If its sync is failing, the banner above says that.
+  if ((listings || []).some((l) => Number(l.channel_count) > 0)) {
+    if (syncProblem) return null;
+    return h('div', { class: 'card cta-card' },
+      h('span', { class: 'cta-card__icon', 'aria-hidden': 'true' }, icon('calendar')),
+      h('div', { class: 'cta-card__text' },
+        h('p', null, 'Your calendar is connected. Bookings from it show here after the next sync.')));
+  }
   return h('div', { class: 'card cta-card' },
     h('span', { class: 'cta-card__icon', 'aria-hidden': 'true' }, icon('calendar')),
     h('div', { class: 'cta-card__text' },
@@ -274,7 +282,7 @@ export async function homeView(el, { rerender } = {}) {
     })));
     return;
   }
-  const start = firstRunCard({ reservations: seen, listings });
+  const start = firstRunCard({ reservations: seen, listings, syncProblem: Boolean(sync) });
   const [overview, charts] = await Promise.all([overviewCard(), start ? chartsFold() : Promise.all([trendsCard(), revenueSection()])]);
   el.replaceChildren(head, h('div', { class: 'stack' }, start, assigned, sync, closeAlert, proofAlert, lowAlert, onboard, overview, deposits, charts));
   redrawCharts();

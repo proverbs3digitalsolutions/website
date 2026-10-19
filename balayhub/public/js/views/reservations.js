@@ -129,6 +129,13 @@ export function paymentMethodOptions(channel) {
   return Object.entries(METHOD_LABEL).filter(([k]) => k !== 'channel_payout' || channel !== 'direct');
 }
 
+// The server joins a typed name to an existing guest with the same email and first name; say so (D-99 S1).
+export function matchedGuestNote(typed, saved) {
+  const norm = (v) => String(v ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+  if (!norm(typed) || !norm(saved) || norm(typed) === norm(saved)) return null;
+  return `Saved under the existing guest ${String(saved).trim()} (same email and first name).`;
+}
+
 export function addDays(dateStr, n) {
   const d = new Date(`${dateStr}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);
@@ -226,6 +233,7 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
       const res = await post('/reservations', data);
       if (res.confirmation && !res.confirmation.sent) toast(`Reservation saved, but the confirmation was not emailed: ${res.confirmation.error}`, 'error');
       else toast(`Reservation ${res.reservation.confirmation_code} saved${res.confirmation?.sent ? ' and confirmation emailed' : ''}.`);
+      const note = matchedGuestNote(data.guest_name, res.reservation.guest_name); if (note) toast(note);
       if (res.reservation.guest_do_not_rebook) toast(`Heads up: ${res.reservation.guest_name || 'this guest'} is marked "Do not rebook" in Guests.`, 'error');
       if (onSaved) onSaved(res.reservation); else navigate(`#/reservations/${res.reservation.booking_id}`);
     },
@@ -539,7 +547,7 @@ export async function reservationDetailView(el, { params, rerender }) {
       field({ name: 'amount', label: 'Amount received', type: 'money', required: true, value: Number(r.balance) > 0 ? r.balance : '' }),
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'payment_date', label: 'Date received', type: 'date', required: true, value: today, max: today }),
-        field({ name: 'payment_method', label: 'Method', type: 'select', required: r.channel !== 'direct', value: r.channel === 'direct' ? '' : 'channel_payout', placeholderOption: r.channel === 'direct' ? 'Choose…' : false, options: paymentMethodOptions(r.channel) })),
+        field({ name: 'payment_method', label: 'Method', type: 'select', required: r.channel !== 'direct', value: r.channel === 'direct' ? '' : r.channel === 'airbnb' ? 'cash' : 'channel_payout', placeholderOption: r.channel === 'direct' ? 'Choose…' : false, options: paymentMethodOptions(r.channel) })),
       field({ name: 'reference_number', label: 'Reference no.', maxlength: 100 }),
       // Channel payouts come from Airbnb/Booking.com, not the guest: no guest receipt by default.
       (r.guest_email || r.guest_has_email) && field({ name: 'send_receipt', label: r.guest_email ? `Email a receipt to ${r.guest_email}` : 'Email a receipt to the guest', type: 'checkbox', value: r.channel === 'direct' }),

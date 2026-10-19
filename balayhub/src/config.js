@@ -44,6 +44,12 @@ const config = {
   dataEncryptionKey: env.DATA_ENCRYPTION_KEY || '',
   paymongoSecretKey: env.PAYMONGO_SECRET_KEY || '',
   paymongoWebhookSecret: env.PAYMONGO_WEBHOOK_SECRET || '',
+  // Card on file before the trial (D-98). The public key lets the browser send a card straight to PayMongo.
+  paymongoPublicKey: env.PAYMONGO_PUBLIC_KEY || '',
+  cardCheck: env.CARD_CHECK || 'on',
+  paymongoSubscriptions: env.PAYMONGO_SUBSCRIPTIONS === 'on',
+  // Where the browser sends the card. Only a non-production run may point it elsewhere (the local fake).
+  paymongoBrowserApi: env.NODE_ENV === 'production' ? 'https://api.paymongo.com/v1' : (env.PAYMONGO_BROWSER_API || 'https://api.paymongo.com/v1'),
   // Whether a host's PayMongo key is checked with PayMongo when saved. Off in tests so none make a network call.
   paymongoKeyCheck: env.PAYMONGO_KEY_CHECK || (env.NODE_ENV === 'test' ? 'off' : 'on'),
   paymongoMethods: (env.PAYMONGO_METHODS || 'gcash,paymaya,card,grab_pay').split(',').map((x) => x.trim()).filter(Boolean),

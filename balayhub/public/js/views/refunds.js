@@ -41,6 +41,16 @@ export function refundAmountProblem(amount) {
   return null;
 }
 
+// The form's own checks in one pass, so Amount, Method and Reason all show at once (makeForm runs this before onSubmit).
+export function refundCheck(d, data) {
+  const f = {};
+  const typed = String(d.amount ?? '').trim();
+  if (typed !== '') { const a = parseAmount(typed); const bad = refundAmountProblem(a) || refundCapProblem(a, data); if (bad) f.amount = bad; }
+  if (!d.method) f.method = 'Choose how the money was refunded.';
+  if (String(d.reason ?? '').trim().length > 500) f.reason = 'Reason must be at most 500 characters.';
+  return Object.keys(f).length ? f : null;
+}
+
 export async function refundsCard(reservation, rerender) {
   const data = await get(`/reservations/${reservation.booking_id}/refunds`);
   const canManage = state.user.role !== 'staff';
@@ -49,7 +59,7 @@ export async function refundsCard(reservation, rerender) {
   const recordRefund = () => formModal({
     title: 'Record refund', submitText: 'Save refund', idempotent: true,
     // No default method: a one-tap save must not record GCash for money that went back another way.
-    check: (d) => (!d.method ? { method: 'Choose how the money was refunded.' } : null),
+    check: (d) => refundCheck(d, data),
     fields: [
       field({ name: 'amount', label: 'Amount refunded', type: 'money', required: true, value: cancelled && Number(data.suggestion?.remaining) > 0 ? data.suggestion.remaining : undefined,
         hint: `Up to ${peso(data.refundable)} is left to refund.` }),
@@ -57,7 +67,7 @@ export async function refundsCard(reservation, rerender) {
         field({ name: 'refund_date', label: 'Date refunded', type: 'date', required: true, value: todayManila(), max: todayManila() }),
         field({ name: 'method', label: 'Method', type: 'select', value: '', placeholderOption: 'Choose…', options: Object.entries(METHOD_LABEL) })),
       field({ name: 'reference_number', label: 'Reference number (optional)', maxlength: 100 }),
-      field({ name: 'reason', label: 'Reason', type: 'textarea', required: true, maxlength: 300,
+      field({ name: 'reason', label: 'Reason', type: 'textarea', required: true,
         hint: 'Kept in the refund log. For example: cancelled by guest, 6 days before check-in.' }),
     ],
     onSubmit: async (d, { idempotencyKey }) => {

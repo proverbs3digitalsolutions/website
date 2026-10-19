@@ -78,7 +78,7 @@ export function couponBox({ current, getSelection, onQuote }) {
     refresh(true);
   };
 
-  const input = h('input', { class: 'input', type: 'text', name: 'coupon_code', autocomplete: 'off', autocapitalize: 'characters', maxlength: 64, 'aria-label': 'Coupon code',
+  const input = h('input', { class: 'input', type: 'text', name: 'coupon_code', autocomplete: 'off', autocapitalize: 'characters', maxlength: 32, 'aria-label': 'Coupon code',
     onkeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); apply(); } } });
   const form = h('div', null,
     h('div', { class: 'coupon-row' }, input, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: apply }, 'Apply')),

@@ -379,7 +379,11 @@ async function closeCheckout(ref) {
   if (!c.provider_checkout_id) return 'pending'; // still being started by another request
   const key = secretbox.decrypt(c.key_enc);
   if (key) await paymongo.request(key, 'POST', `/checkout_sessions/${encodeURIComponent(c.provider_checkout_id)}/expire`).catch(() => {});
-  return refresh(ref).catch(() => 'pending');
+  // A key PayMongo refuses (401) clears the host's connected check, but only when this checkout used the key still saved (as the refresh route does).
+  return refresh(ref).catch(async (err) => {
+    if (err.unauthorized) await query('UPDATE organizations SET paymongo_key_checked_at = NULL WHERE organization_id = $1 AND paymongo_key_enc = $2', [c.organization_id, c.key_enc]).catch(() => {});
+    return 'pending';
+  });
 }
 
 // Close the guest's open checkouts after the amount owed changes (a payment
@@ -395,7 +399,7 @@ async function closeOpenCheckouts(bookingId) {
 // payment landed as they closed.
 async function reconcileBalance() {
   const { rows } = await query(
-    `SELECT checkout_ref, status, created_at < now() - interval '1 hour' AS old, created_at < now() - interval '3 days' AS very_old
+    `SELECT checkout_ref, organization_id, key_enc, status, created_at < now() - interval '1 hour' AS old, created_at < now() - interval '3 days' AS very_old
        FROM balance_checkouts
       WHERE provider_checkout_id IS NOT NULL
         AND (status = 'pending' OR (status = 'expired' AND created_at > now() - interval '7 days'
@@ -409,6 +413,8 @@ async function reconcileBalance() {
       if (st === 'paid') paid += 1;
       else if (st === 'pending' && r.very_old) throw new Error('PayMongo has not closed this checkout.');
     } catch (err) {
+      // Same rule as closeCheckout: a refused key clears the connected check only when this checkout used the key still saved.
+      if (err.unauthorized) await query('UPDATE organizations SET paymongo_key_checked_at = NULL WHERE organization_id = $1 AND paymongo_key_enc = $2', [r.organization_id, r.key_enc]).catch(() => {});
       if (r.very_old) {
         // Can't check it: never assume it wasn't paid. Ask the host to look in PayMongo.
         const { rows: [c] } = await query(`UPDATE balance_checkouts SET status = 'failed' WHERE checkout_ref = $1 AND status = 'pending' RETURNING *`, [r.checkout_ref]);
@@ -432,6 +438,6 @@ async function alertHost(c, reason) {
 }
 
 module.exports = {
-  router, publicRouter, ensurePayToken, payLink, reconcileBalance, refresh, closeOpenCheckouts, acceptsOnline,
+  router, publicRouter, ensurePayToken, payLink, reconcileBalance, refresh, closeCheckout, closeOpenCheckouts, acceptsOnline,
   BALANCE, loadByToken, manualRefusal,
 };

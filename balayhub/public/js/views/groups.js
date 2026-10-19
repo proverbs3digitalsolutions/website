@@ -108,6 +108,8 @@ function roomRow({ listings, roomTypes, defaults, onRemove, number = 0 }) {
 
   return {
     el,
+    // The key of this row's box for a server field name, or null when the row has no box for it.
+    fieldKey: (name) => ({ num_guests: guestsKey, unit_id: unitKey, check_out: coKey, room_type: typeKey })[name] ?? null,
     // Renumbers the row after a room above it is removed.
     setNumber(n) { num = n; removeBtn?.setAttribute('aria-label', `Remove this room, room ${n}`); },
     // The check-out message for a stay that runs no night, keyed to this row's check-out box. A blank date is rooms()'s job.
@@ -140,6 +142,15 @@ function roomRow({ listings, roomTypes, defaults, onRemove, number = 0 }) {
       return [{ ...base, unit_id: unit.value }];
     },
   };
+}
+
+// A server 400 names the failing room by its place in the list sent (room_index). Moves its field messages onto that row's own boxes;
+// a key with no box stays as it is (the form's summary shows it). Any other error comes back unchanged.
+export function mapRoomError(err, owners) {
+  const owner = err?.status === 400 && Number.isInteger(err.data?.room_index) ? owners[err.data.room_index] : null;
+  if (!owner || !err.fields) return err;
+  const fields = Object.fromEntries(Object.entries(err.fields).map(([k, v]) => [owner.fieldKey(k) ?? k, v]));
+  return new ApiError('Please check the highlighted fields.', { status: 400, fields });
 }
 
 // A 409 is ROOMS_TAKEN (data.rooms lists the taken listings and nights) or NO_FREE_ROOM (message only).
@@ -245,16 +256,18 @@ export async function newGroupModal({ onSaved } = {}) {
         guest = { full_name: d.guest_name.trim(), ...(d.guest_phone && { phone: d.guest_phone }), ...(d.guest_email && { email: d.guest_email }) };
       }
       let list;
-      try { list = rows.flatMap((r) => r.rooms()); } catch (e) { if (e instanceof ApiError) throw e; fail(e.message); }
+      let owners;
+      try { list = rows.flatMap((r) => r.rooms()); owners = rows.flatMap((r) => r.rooms().map(() => r)); } catch (e) { if (e instanceof ApiError) throw e; fail(e.message); }
       if (list.length < 2 || list.length > 20) fail('A group needs between 2 and 20 rooms.');
       try {
         const res = await post('/booking-groups', { name: d.name.trim(), guest, rooms: list, ...(d.notes && { notes: d.notes }) });
         toast('Group booking created.');
+        if (res.guest_do_not_rebook) toast(`Heads up: ${res.guest_name || 'this guest'} is marked "Do not rebook" in Guests.`, 'error');
         modal.close();
         if (onSaved) onSaved(res); else navigate(`#/groups/${res.group.group_id}`);
       } catch (err) {
         if (err.status === 409) { conflicts.replaceChildren(...conflictList(err)); conflicts.scrollIntoView?.({ block: 'nearest' }); }
-        throw err;
+        throw mapRoomError(err, owners);
       }
     },
   });
@@ -371,7 +384,7 @@ export async function groupDetailView(el, { params, rerender }) {
     run(() => post(`/booking-groups/${g.group_id}/rooms/${r.booking_id}/remove`, { reason }), 'Room removed.');
   };
   const cancelGroup = async () => {
-    const reason = await confirmDialog({ title: 'Cancel the whole group?', text: `All ${active.length} room${active.length === 1 ? '' : 's'} will be cancelled and the dates become available again. Payments stay on record.`, confirmText: 'Cancel group', cancelText: 'Keep group', danger: true, reason: true });
+    const reason = await confirmDialog({ title: 'Cancel the whole group?', text: `${active.length === 1 ? 'The 1 room' : `All ${active.length} rooms`} will be cancelled and the dates become available again. Payments stay on record.`, confirmText: 'Cancel group', cancelText: 'Keep group', danger: true, reason: true });
     if (!reason) return;
     run(() => post(`/booking-groups/${g.group_id}/cancel`, { reason }), 'Group cancelled.');
   };
@@ -400,7 +413,7 @@ export async function groupDetailView(el, { params, rerender }) {
           const twin = rooms.filter((x) => `${x.unit_name}|${x.check_in}|${x.check_out}` === `${r.unit_name}|${r.check_in}|${r.check_out}`).length > 1;
           const rowName = twin ? `${which}, room ${rooms.indexOf(r) + 1}` : which;
           return h('tr', null,
-            h('td', null, h('a', { href: `#/reservations/${r.booking_id}`, 'aria-label': rowName }, h('strong', null, r.unit_name)), off && h('span', { class: 'badge badge--voided' }, 'Cancelled')),
+            h('td', null, h('a', { class: 'link-tap', href: `#/reservations/${r.booking_id}`, 'aria-label': rowName }, h('strong', null, r.unit_name)), off && h('span', { class: 'badge badge--voided' }, 'Cancelled')),
             h('td', null, `${fmtDate(r.check_in)} – ${fmtDate(r.check_out)}`, h('div', { class: 'muted small' }, `${nightsOf(r.check_in, r.check_out)} nights`)),
             h('td', null, r.num_guests ? String(r.num_guests) : '—'),
             // A cancelled room is not in the group total, so its amount is not shown as owed (the balance column does the same).

@@ -30,7 +30,7 @@ const KEYS = [
   ['views/owners.js', "'data-focus-key': 'stmt-send'", 1],
   ['views/inbox.js', "'data-focus-key': 'conv-snooze'", 2],
   ['views/inbox.js', "'data-focus-key': 'conv-archive'", 2],
-  ['views/maintenance.js', "'data-focus-key': 'mt-status'", 1],
+  ['views/maintenance.js', "'data-focus-key': `mt-status-${s}`", 1],
   ['views/tenants.js', "'data-focus-key': 'tenant-archive'", 1],
   ['views/housekeeping.js', "'data-focus-key': 'hk-status'", 2],
   ['views/housekeeping.js', "'data-focus-key': 'hk-pay'", 1],

@@ -316,12 +316,12 @@ async function photosModal(listing) {
   // Each change redraws the dialog, so focus goes back to a control in it: the one the person used, or its replacement.
   async function draw(focus) {
     const { photos } = await get(`/units/${listing.unit_id}/photos`);
-    const input = h('input', { type: 'file', accept: 'image/*', multiple: true, class: 'input', 'aria-label': 'Listing photos' });
     const status = h('span', { class: 'muted small', 'aria-live': 'polite' });
-    const upload = h('button', { class: 'btn btn--primary btn--sm', type: 'button', onclick: async (e) => {
+    // Picking photos uploads them: no second "Upload" step.
+    const input = h('input', { type: 'file', accept: 'image/*', multiple: true, class: 'input', 'aria-label': 'Listing photos', onchange: async () => {
       const files = [...input.files];
-      if (!files.length) { toast('Choose photos first.', 'error'); return; }
-      e.target.disabled = true;
+      if (!files.length) return;
+      input.disabled = true;
       try {
         for (const [i, f] of files.entries()) {
           status.textContent = `Uploading ${i + 1} of ${files.length}…`;
@@ -330,18 +330,19 @@ async function photosModal(listing) {
         }
         toast('Photos uploaded.');
       } catch (err) { toast(err.message, 'error'); }
-      draw((root, btn) => btn.focus());
-    } }, 'Upload');
+      input.value = '';
+      draw((root) => root.querySelector('input[type="file"]')?.focus());
+    } });
     box.replaceChildren(
       h('p', { class: 'muted small' }, 'Shown on your booking page. The first photo is the cover. Up to 12 photos; large photos are resized automatically.'),
       photos.length ? h('div', { class: 'ph-grid' }, photos.map((p, i) => h('figure', { class: 'ph-item', tabindex: '-1' },
         h('img', { src: `/api/files/${p.file_id}`, alt: `${listing.unit_name}, photo ${i + 1} of ${photos.length}`, loading: 'lazy' }),
         h('figcaption', null,
           i === 0 ? h('span', { class: 'badge badge--paid' }, 'Cover') : h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Make cover, photo ${i + 1}`, onclick: async () => { await post(`/listing-photos/${p.file_id}/cover`); draw((root) => root.querySelector('.ph-item')?.focus()); } }, 'Make cover'),
-          h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Delete, photo ${i + 1}`, onclick: async () => { if (!await confirmDialog({ title: 'Delete this photo?', text: 'It is removed from your booking page.', confirmText: 'Delete photo', danger: true })) return; await post(`/listing-photos/${p.file_id}/remove`); draw((root, btn) => (root.querySelectorAll('.ph-item')[i]?.querySelector('button[aria-label^="Delete,"]') ?? btn).focus()); } }, 'Delete')))))
+          h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Delete, photo ${i + 1}`, onclick: async () => { if (!await confirmDialog({ title: 'Delete this photo?', text: 'It is removed from your booking page.', confirmText: 'Delete photo', danger: true })) return; await post(`/listing-photos/${p.file_id}/remove`); draw((root) => (root.querySelectorAll('.ph-item')[i]?.querySelector('button[aria-label^="Delete,"]') ?? root.querySelector('input[type="file"]')).focus()); } }, 'Delete')))))
         : h('p', { class: 'muted' }, 'No photos yet.'),
-      h('div', { class: 'form' }, input, h('div', { class: 'chips' }, upload, status)));
-    focus?.(box, upload);
+      h('div', { class: 'form' }, input, h('div', { class: 'chips' }, status)));
+    focus?.(box);
   }
   try { await draw(); } catch (err) { m.close(); toast(err.message, 'error'); }
 }
@@ -401,7 +402,8 @@ async function channelsModal(listing, onChange) {
         r = await post('/ical-feeds', { ...body, confirm_unusual_link: true });
       }
       const text = await syncToastText(listing.unit_id, r.feed_id, r.sync);
-      toast(r.sync.ok ? `Connected. ${text}` : `Connected, but the first sync failed: ${text}`, r.sync.ok ? 'info' : 'error');
+      // A failed first sync is not toasted: the reopened Channels dialog shows it under the channel.
+      if (r.sync.ok) toast(`Connected. ${text}`);
       m.close(); channelsModal(listing, onChange); onChange();
     } catch (err) {
       // A link problem is written under the link field, which is marked and takes focus; any other problem goes in the alert above.
@@ -551,6 +553,11 @@ async function changeArchive(listing, action, onDone) {
 
 // How much of the filter bar a workspace needs: none with no listings, just the search box for 1 to 3 (the rest sit
 // in the closed "More filters" fold), everything from 4 up.
+// Compact bar (1 to 3 listings): Occupancy and Sort stay in view, every other filter goes in the panel.
+export const compactSplit = (quick, more) => ({
+  quick: [quick.find((f) => f.name === 'occupancy'), more.find((f) => f.name === 'sort')].filter(Boolean),
+  more: [...quick.filter((f) => f.name !== 'occupancy'), ...more.filter((f) => f.name !== 'sort')],
+});
 export const listingFilterMode = (n) => (n === 0 ? 'none' : n <= 3 ? 'compact' : 'full');
 // The bar only grows while the page is open (none, compact, full), and a tag filter, which shrinks the count, never moves it.
 export const nextFilterMode = (cur, n, tagSet) => (tagSet ? cur : ['none', 'compact', 'full'][Math.max(['none', 'compact', 'full'].indexOf(cur), ['none', 'compact', 'full'].indexOf(listingFilterMode(n)))]);
@@ -694,10 +701,11 @@ export async function listingsView(el, { query }) {
       { name: 'min_guests', label: 'Fits guests (at least)', type: 'number', min: 1 },
       { name: 'sort', label: 'Sort by', all: 'Property and name', options: [['rate', 'Highest nightly rate'], ['rate_asc', 'Lowest nightly rate'], ['next', 'Next arrival'], ['guests', 'Most guests']] },
     ].filter(Boolean);
+    const split = m === 'compact' ? compactSplit(quick, more) : { quick, more };
     return filterBar({
       key: 'listings', values: filters, defaults, onChange: load,
       search: { placeholder: 'Search listing, building or city' },
-      quick: m === 'compact' ? [] : quick, more: m === 'compact' ? [...quick, ...more] : more,
+      quick: split.quick, more: split.more,
     });
   };
   await load();

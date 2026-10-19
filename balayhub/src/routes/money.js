@@ -267,7 +267,7 @@ router.post('/payments', ah(async (req, res) => {
 // Payments are never edited or deleted; a mistaken entry is voided with a reason.
 router.post('/payments/:id/void', managers, ah(async (req, res) => {
   const payment = await loadPayment(req.user, uuidParam(req.params.id));
-  const { reason } = validate(req.body, { reason: { type: 'string', required: true, max: 300, label: 'Reason' } });
+  const { reason } = validate(req.body, { reason: { type: 'string', required: true, max: 500, label: 'Reason' } });
   if (payment.voided_at) throw new HttpError(409, 'This payment is already voided.', { code: 'ALREADY_VOIDED' });
   await tx(async (db) => {
     await db.query(`UPDATE payments SET voided_at = now(), voided_by = $2, void_reason = $3 WHERE payment_id = $1`,
@@ -424,7 +424,7 @@ router.patch('/expenses/:id', managers, ah(async (req, res) => {
 
 router.post('/expenses/:id/void', managers, ah(async (req, res) => {
   const expense = await loadExpense(req.user, uuidParam(req.params.id));
-  const { reason } = validate(req.body, { reason: { type: 'string', required: true, max: 300, label: 'Reason' } });
+  const { reason } = validate(req.body, { reason: { type: 'string', required: true, max: 500, label: 'Reason' } });
   if (expense.voided_at) throw new HttpError(409, 'This expense is already voided.', { code: 'ALREADY_VOIDED' });
   await tx(async (db) => {
     await db.query(`UPDATE expenses SET voided_at = now(), voided_by = $2, void_reason = $3 WHERE expense_id = $1`,

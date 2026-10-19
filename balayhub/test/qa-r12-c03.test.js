@@ -38,7 +38,7 @@ test('#3 keepLine is null for a channel booking with no fee, the amount otherwis
 
 test('#38 a direct booking starts with no payment method and must choose one', () => {
   assert.doesNotMatch(res, /'gcash' : 'channel_payout'/);
-  assert.match(res, /value: r\.channel === 'direct' \? '' : 'channel_payout'/);
+  assert.match(res, /value: r\.channel === 'direct' \? '' : r\.channel === 'airbnb' \? 'cash' : 'channel_payout'/);
   assert.match(res, /check: \(d\) => \(r\.channel === 'direct' && !d\.payment_method \? \{ payment_method: 'Choose how the guest paid\.' \}/);
 });
 

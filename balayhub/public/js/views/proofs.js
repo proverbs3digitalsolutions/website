@@ -70,9 +70,10 @@ function rejectProof(p, rerender) {
   formModal({
     title: 'Reject this payment proof',
     submitText: 'Reject',
+    check: (d) => (String(d.reason ?? '').trim().length > 500 ? { reason: 'Reason must be at most 500 characters.' } : null),
     fields: [
       h('p', { class: 'small' }, 'Say why, so the guest knows what to fix. The reason is emailed to the guest if they have an email address.'),
-      field({ name: 'reason', label: 'Reason', type: 'textarea', required: true, maxlength: 300, hint: 'For example: the amount does not match, or the reference number is missing.' }),
+      field({ name: 'reason', label: 'Reason', type: 'textarea', required: true, hint: 'For example: the amount does not match, or the reference number is missing.' }),
     ],
     onSubmit: async (d) => {
       await post(`/payment-proofs/${encodeURIComponent(p.proof_id)}/reject`, { reason: d.reason });

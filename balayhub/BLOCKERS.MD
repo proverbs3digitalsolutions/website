@@ -2,7 +2,7 @@
 
 Things only the founder can do or decide before related work can go ahead. Automated runs add items here. The founder clears them by doing the item and ticking it, or by writing the decision in DECISIONS.MD.
 
-Last updated: 2026-10-15 (QA round 16 questions added; round 15 and earlier unchanged)
+Last updated: 2026-10-15 (card on file and automatic payment, D-98, and QA round 17 questions added; round 16 and earlier unchanged except two answered lines)
 
 ## Security — do first
 
@@ -105,7 +105,7 @@ Each one has the default already applied. None of them stops the work.
 - [ ] **Public contact email.** Publish one so visitors can ask before signing up? *Default: sign-up page says to ask in Help & support after creating an account.*
 - [ ] **Confirmation codes for unit owners.** *Default: no; the owner portal never sends them.*
 - [ ] **Reassigning a finished clean.** Pay and inspection score move to the new person. *Default: yes (D-52).*
-- [ ] **Logo colour.** The light green "HUB" is hard to read on white. *Default: keep it (logos are exempt).*
+- [x] **Logo colour.** The light green "HUB" is hard to read on white. *Default: keep it (logos are exempt).* *Answered 2026-10-15 (D-99 O2): kept. The wordmark is a logotype and sweep lanes no longer file it.*
 - [ ] **Sharing booking links.** `#/book/...` links show the home card; `/stay/...` links show the listing. *Default: no change; recommend sharing the `/stay/` address.*
 - [ ] **Check-in form after arrival.** *Default: editable until check-out; only the heading changes.*
 
@@ -391,7 +391,7 @@ Every question has its default already built into the app; nothing waits on the 
 
 ### Added while writing the docs
 
-- [ ] **Should BalayHub ask PayMongo to enable Subscriptions?** True automatic monthly charging needs PayMongo's Subscriptions feature, which PayMongo reviews and approves per account (cards and Maya). Saved cards without it work only while the customer is present. *Default: no request; prepaid checkouts stay.* If you say yes, ask PayMongo support to enable it (sandbox first), then it becomes its own project: saved card, a monthly charge job, retries and emails.
+- [ ] **Should BalayHub ask PayMongo to enable Subscriptions?** *Superseded 2026-10-15 by D-98: the Stage 2 build exists, switched off; the request to PayMongo is item 1 under "Card on file and automatic payment" below.* True automatic monthly charging needs PayMongo's Subscriptions feature, which PayMongo reviews and approves per account (cards and Maya). Saved cards without it work only while the customer is present. *Default: no request; prepaid checkouts stay.* If you say yes, ask PayMongo support to enable it (sandbox first), then it becomes its own project: saved card, a monthly charge job, retries and emails.
 - [ ] **Is the wrong-guess lock acceptable?** After 10 wrong codes in 15 minutes from one workspace (or 60 from one IP), that workspace or IP cannot apply even a correct code until the window passes. This stops guessing but can lock out an honest owner for up to 15 minutes. *Default: keep the lock for the whole window.* *The other choice:* let a correct code through while locked (weaker against guessing).
 - [ ] **Demo workspace and coupons.** The demo answers 403 "read only" for any coupon action. *Default: as built.*
 - [ ] **Unlimited free coupons.** A free coupon with no total limit and "once per workspace" off gives unlimited free months, and the admin form does not warn about it yet. *Default: allowed; a warning is on the carry list.*
@@ -406,3 +406,34 @@ Each one has the default already built.
 - [ ] **Alerts with no property reach every owner (S3).** *Default:* owners always get them, whatever their property filter; a type they turned off stays off. *The other choice:* respect the filter.
 - [ ] **Photo picks upload at once (S4).** *Default:* picking a photo on a cleaning task or repair request uploads it with no confirm button. *The other choice:* keep a confirm button.
 - [ ] **Do not rebook follows the email, workspace-wide.** *Default:* a manager limited to some properties may see the flag on a guest because another record with the same email was flagged (only the yes or no). *The other choice:* show the flag only from records the person can open.
+
+## Card on file and automatic payment (D-98, 2026-10-15)
+
+Built: the ₱20 card check before the trial (Stage 1) and automatic monthly payment (Stage 2, switched off). Stage 1 needs one setting; Stage 2 needs PayMongo's approval.
+
+**What to put in `deploy/.env`** (never in chat): `PAYMONGO_PUBLIC_KEY` (your public key, starts `pk_live_`). Card checks start for new workspaces after the next deploy. To stop them: `CARD_CHECK=off`.
+
+**What to ask PayMongo (support or your account manager), for both test mode and live:**
+1. Turn on **Subscriptions** (recurring billing: Plans, Subscriptions and Invoices) for the BalayHub account. We read that this needs an account review, even in test mode.
+2. Confirm **card vaulting** is on (Customers and saving a card with `setup_future_usage` on a Payment Intent).
+3. Confirm BalayHub's server may charge a **saved card again with the customer present** by attaching it to a new Payment Intent with the secret key, and whether the bank asks for CVC or 3-D Secure each time.
+4. Ask whether the **hosted checkout page can save a card** for a customer. If yes, BalayHub can stop showing card fields on its own page (simpler security rules for us).
+5. For Subscriptions: which cards and wallets work (cards, Maya?), whether a subscription can start on a future date (the trial end), how failed payments are retried, how to cancel, and the exact webhook event names.
+6. Confirm a **₱20 card payment** with 3-D Secure is allowed, its fee, and set the card statement name to **BALAYHUB**.
+7. Add these events to the existing webhook (`https://balayhub.proverbs3digitalsolutions.com/api/public/paymongo/webhook`): `payment.paid`, `payment.failed`, and after approval `subscription.activated`, `subscription.invoice.paid`, `subscription.invoice.payment_failed`, `subscription.past_due`, `subscription.unpaid`.
+
+**After PayMongo approves Subscriptions:** add `PAYMONGO_SUBSCRIPTIONS=on` to `deploy/.env` and run the deploy. Hosts who saved a card before that are not charged automatically; they see "Turn on automatic payment".
+
+**Defaults built, change any you disagree with:** the ₱20 is not refunded and does not count toward a plan; workspaces created before this change never need the check; long-term-only hosts need it too; a platform admin can skip it for invited alpha owners (Admin, the workspace, Skip card check).
+
+## Questions from QA round 17 (2026-10-15)
+
+Each one has the default already built.
+
+- [ ] **A booking that matches a saved guest (S1).** *Default:* a booking whose email and first name match a saved guest joins that guest and says so ("Saved under the existing guest {name} (same email and first name)."); the typed name is not kept. *The other choice:* keep the typed name on the reservation.
+- [ ] **Expense question above ₱50,000 (S5).** *Default:* an expense above ₱50,000 asks "Check the amount" (Save anyway / Change it). *The other choice:* a higher line, or no question.
+- [ ] **Coupon question above the highest plan price (S6).** *Default:* a fixed coupon above the highest plan price (today ₱1,799.00) asks "Check the amount off" before saving. *The other choice:* refuse instead of ask.
+- [ ] **Deposit deduction reason keeps 1,000 characters (S3).** *Default:* 1,000 (it is a guest-facing explanation); audit reasons are 500. *The other choice:* 500 like the audit reasons.
+- [ ] **Where a calendar sync problem shows (S2).** *Default:* the Channels dialog, the listing card, the bell and the Home banner, with no toast. *The other choice:* keep the "Connected, but the first sync failed" toast too.
+- [ ] **Airbnb payments start on Cash (O4).** *Default:* Cash on Airbnb bookings (Channel payout is one tap away). *The other choice:* start empty like direct bookings, or on Channel payout as before.
+- [ ] **Live stage for card on file (nothing local can answer):** a real ₱20 card payment with 3-D Secure, the saved-card one-tap payment, PayMongo's real answers to research R1 to R6, and the Stage 2 API shapes. The browser lanes used a local fake PayMongo.

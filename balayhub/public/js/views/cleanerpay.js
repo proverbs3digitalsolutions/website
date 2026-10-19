@@ -191,7 +191,7 @@ export async function cleanerPayView(el, { query = {} } = {}) {
               const box1 = h('input', { type: 'checkbox', disabled: !canPick, checked: selected.has(x.task_id), dataset: { task: x.task_id }, 'aria-label': `Select ${unitOf(x)} on ${fmtDate(doneDay(x))}`,
                 onchange: (e) => { if (e.target.checked) selected.add(x.task_id); else selected.delete(x.task_id); refresh(); } });
               return h('tr', null,
-                h('td', { class: 'ops-check' }, box1),
+                h('td', { class: 'ops-check' }, h('label', { class: 'ops-check__tap' }, box1)),
                 h('td', { dataset: { label: 'Date' } }, fmtDate(doneDay(x))),
                 h('td', { dataset: { label: 'Unit' } }, unitOf(x)),
                 h('td', { dataset: { label: 'Cleaner' } }, whoOf(x)),

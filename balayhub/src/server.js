@@ -11,13 +11,19 @@ function createApp() {
   app.disable('x-powered-by');
   app.set('trust proxy', config.trustProxy);
 
+  // The card form sends the card straight to PayMongo with the public key (D-98); nothing else is allowed out.
+  const connectSrc = ["'self'", 'https://api.paymongo.com'];
+  if (config.paymongoBrowserApi) {
+    const origin = new URL(config.paymongoBrowserApi).origin;
+    if (!connectSrc.includes(origin)) connectSrc.push(origin);
+  }
   app.use((req, res, next) => {
     res.set({
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY',
       'Referrer-Policy': 'same-origin',
       'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-      'Content-Security-Policy': "default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+      'Content-Security-Policy': `default-src 'self'; img-src 'self' data: blob:; connect-src ${connectSrc.join(' ')}; style-src 'self'; script-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`,
     });
     if (config.isProd) res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     next();

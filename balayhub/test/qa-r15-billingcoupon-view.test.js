@@ -52,7 +52,7 @@ test.before(async () => {
     export const openModal = () => null; export const clearErrors = () => null; export const showErrors = () => null;`);
   fs.writeFileSync(path.join(dir, 'api.js'), `
     export class ApiError extends Error { constructor(m, o = {}) { super(m); Object.assign(this, o); } }
-    export const post = (...a) => globalThis.__post(...a); export const get = async () => ({}); export const patch = async () => ({});`);
+    export const post = (...a) => globalThis.__post(...a); export const get = async () => ({}); export const patch = async () => ({}); export const api = async () => ({});`);
   fs.writeFileSync(path.join(dir, 'app.js'), 'export const state = {}; export async function refreshUser() { globalThis.__refreshed += 1; }\n');
   fs.writeFileSync(path.join(dir, 'notifications.js'), 'export async function notificationsCard() { return null; }\n');
   fs.writeFileSync(path.join(dir, 'themeswitch.js'), 'export function themeSwitch() { return null; }\n');

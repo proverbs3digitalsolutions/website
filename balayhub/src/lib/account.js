@@ -60,9 +60,34 @@ const PURGED_TABLES = [
   'units', 'unit_owners', 'properties', 'invitations', 'audit_logs', 'sessions', 'auth_tokens', 'consent_records', 'users', 'organizations',
 ];
 
+// Before the rows go: stop any live subscription and remove the saved card and customer at PayMongo.
+// A failed subscription cancel rethrows so the purge skips this workspace and purgeDue retries it (the row holds the only
+// copy of the subscription id). Card detach and customer delete are best effort. Logs ids only, never card data.
+async function releaseCard(orgId) {
+  const config = require('../config');
+  if (!config.paymongoSecretKey) return;
+  const pm = require('./paymongo');
+  const { rows: [o] } = await query('SELECT paymongo_customer_id AS cus, card_payment_method_id AS pm, paymongo_subscription_id AS sid FROM organizations WHERE organization_id = $1', [orgId]);
+  try {
+    await require('./subscriptions').cancelForOrg(orgId, null, 'workspace deleted');
+  } catch (err) {
+    console.error(`[account] cancel subscription ${orgId} (${o?.sid || '-'}, ${o?.cus || '-'}): ${err.message}`);
+    throw err;
+  }
+  try {
+    if (o?.cus && o?.pm && !(await pm.detachPaymentMethod(config.paymongoSecretKey, o.cus, o.pm))) {
+      console.error(`[account] detach card ${orgId}: PayMongo did not confirm`);
+    }
+    if (o?.cus && !(await pm.deleteCustomer(config.paymongoSecretKey, o.cus))) {
+      console.error(`[account] delete customer ${orgId} (${o.cus}): PayMongo did not confirm`);
+    }
+  } catch (err) { console.error(`[account] release card ${orgId}: ${err.message}`); }
+}
+
 // Permanently delete a workspace, its members' accounts and its stored files.
 async function purgeOrganization(orgId) {
   const { rows: files } = await query('SELECT * FROM files WHERE organization_id = $1', [orgId]);
+  await releaseCard(orgId);
   await tx(async (db) => {
     const run = (sql) => db.query(sql, [orgId]);
     const units = 'SELECT u.unit_id FROM units u JOIN properties p USING (property_id) WHERE p.organization_id = $1';

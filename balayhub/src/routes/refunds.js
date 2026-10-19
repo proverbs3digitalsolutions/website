@@ -83,7 +83,7 @@ router.post('/reservations/:id/refunds', managers, ah(async (req, res) => {
     refund_date: { type: 'date', required: true, label: 'Refund date' },
     method: { type: 'enum', values: REFUND_METHODS, required: true, label: 'Method' },
     reference_number: { type: 'string', max: 100, label: 'Reference number' },
-    reason: { type: 'string', required: true, max: 300, label: 'Reason' },
+    reason: { type: 'string', required: true, max: 500, label: 'Reason' },
   });
   if (body.refund_date > manilaToday()) throw validationError({ refund_date: 'Refund date cannot be in the future.' });
   // A retried save (same Idempotency-Key) returns the refund already recorded instead of adding a second.
@@ -136,7 +136,7 @@ router.post('/refunds/:id/void', managers, ah(async (req, res) => {
   const r = await one('SELECT * FROM booking_refunds WHERE refund_id = $1 AND organization_id = $2', [id, req.user.organization_id]);
   if (!r) throw notFound();
   await loadRefundBooking(req.user, r.booking_id);
-  const { reason } = validate(req.body, { reason: { type: 'string', required: true, max: 300, label: 'Reason' } });
+  const { reason } = validate(req.body, { reason: { type: 'string', required: true, max: 500, label: 'Reason' } });
   await tx(async (db) => {
     const { rows: [cur] } = await db.query('SELECT voided_at FROM booking_refunds WHERE refund_id = $1 FOR UPDATE', [id]);
     if (cur.voided_at) throw new HttpError(409, 'This refund is already voided.', { code: 'ALREADY_VOIDED' });

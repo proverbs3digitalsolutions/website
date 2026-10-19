@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-15 (QA round 16, section 29; D-97)
+Last updated: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
 
 ---
 
@@ -48,11 +48,13 @@ The app is a single page with hash routes (`#/…`). Each route has an access le
 | Trial | On the free trial | "Free trial: N days left" + **See plans** (→ Settings) | Text only |
 | Grace (amber) | Paid-until passed, within 7 days | "Your plan was paid until … Please renew soon." + **Renew** | Nothing |
 | Read-only (red) | Trial ended, or 7+ days past paid-until | "Your free trial has ended…" or "Your plan payment is overdue…" + **Choose a plan** | "Ask the workspace owner to renew." |
-| Deleting (red) | Owner asked to delete the workspace | "This workspace will be permanently deleted on … It is view-only until then." + **Cancel deletion** | Text only |
+| Card needed | A new workspace whose owner has not confirmed a card (D-98) | No banner: the **Confirm your payment card** page says it all (5.10) | Same |
+| Deleting (red) | Owner asked to delete the workspace | "This workspace will be permanently deleted on … It is view-only until then." *(D-98: when it is purged, BalayHub also cancels any PayMongo subscription, detaches the saved card and deletes the PayMongo customer record; if the subscription cancel fails the purge waits and retries.)* + **Cancel deletion** | Text only |
 
 ### Read-only, demo and plan-limit behaviour
 
 - **Read-only (trial ended, payment due, deleting):** every page still opens and exports still work. Any save is refused with HTTP 402 and a message such as "Your free trial has ended. Your data is safe and you can still view and export it. Choose a plan in Settings to keep making changes." It shows as a form error or a red toast. These keep working: billing, support tickets (and screenshots), account, push settings, the assistant, and **Cancel deletion**. The direct booking page shows "Online booking is paused". Gate passes are not sent.
+- **Card check pending (D-98):** a new workspace is gated until the owner confirms a card. The menu shows only **Confirm your card** and **Help & support**; Account and Log out stay reachable; any other page sends the person back to `#/confirm-card`, and any save the server refuses with 402 "Confirm your payment card to start your free trial." Support tickets (with a screenshot) still work. See 5.10.
 - **Demo:** same as read-only, with the message "This is the demo workspace, so changes are turned off. Start a free trial…". Settings hides Notifications, Plan & billing, Direct booking page and Your data. The Launchpad reminder is hidden. The assistant button is hidden. The demo booking page says "This is a demo, so booking is turned off."
 - **Listing limit:** adding a listing, giving a long-term unit a nightly rate, or restoring a listing beyond the plan's limit fails with "Your Starter plan includes up to 2 listings. Upgrade your plan in Settings to add more." (402). Long-term units without a nightly rate do not count.
 - **AI drafts limit:** on Starter, the **✨ Draft reply with AI** button is not shown. A direct API call returns "AI reply drafts are included in the Growth and Pro plans." (402).
@@ -186,6 +188,7 @@ Cleaning push notifications do not go to cleaners yet.
 ### 5.4 Sign up `#/signup` (and invitations)
 - Fields: full name, email, password, confirm, Terms/Privacy.
 - With `?invite=…`: title "Join <workspace>", email pre-filled. An invalid or expired invite shows "Invitation not valid" with a link to create your own account.
+- **Under the button (D-98, only while the card check is on):** a muted line, "After you sign up, you'll confirm a card with a ₱20 payment to start your 14-day free trial."
 - **Create account** → `afterLogin` → `#/verify-pending` (new user) or the app (invited users are verified by the link, then go to their home page).
 - **Sign up with Google** → Google (passes the invite).
 - After a brand-new Google sign-up the server returns to `#/` (landing). Unverified: the visitor may need to click Log in to reach setup.
@@ -208,9 +211,36 @@ Cleaning push notifications do not go to cleaners yet.
 - If answers from the Get-started popup are saved, they fill the setup form; the workspace is created only when the person clicks **Create workspace** (D-84) → Launchpad or Properties.
 - Otherwise: business name and type → **Create workspace** → `#/launchpad` (short-term/Both) or `#/properties?new=1` (long-term).
 - Already in a workspace → `afterLogin`.
+- **D-98:** when the card check is on and the person is not a platform admin, the new workspace has no trial yet, so `afterLogin` sends the owner to **Confirm your payment card** (5.10) instead of the Launchpad or Properties. When the check is off, nothing changes (the trial starts at creation).
 
 ### 5.9 Privacy `#/privacy` and Terms `#/terms`
 Open to everyone. Linked from sign-up, guest pages and footers.
+
+### 5.10 Confirm your payment card `#/confirm-card` (owners; D-98)
+
+*Numbered 5.10 because 5.9 was already Privacy and Terms.* The page appears right after workspace setup (and whenever a gated owner signs in or opens any other page). It is the only app page a gated owner can use besides Help (`#/help`) and Account (`#/account`).
+
+**What the owner sees**
+- h1 **Confirm your payment card**; lead **One last step before your 14-day free trial starts.**
+- **Plan after your trial** (Starter, Growth, Pro cards; default Growth) with the hint **You can change this anytime before your trial ends.**
+- A list of what happens: (1) **We charge ₱20 to your card once, to confirm it's yours. The ₱20 is not refunded and is not part of a plan payment.** (2) **PayMongo keeps your card details. BalayHub never sees or stores your card number.** (3) Stage 1: **Your trial ends on {date}. Then pay for {plan} ({price} a month) with this card in one tap. We'll email you 3 days and 1 day before. Nothing is charged automatically. If you don't pay, your workspace becomes view-only, and nothing is deleted.** Stage 2 (when automatic payment is on): **Your trial ends on {date}. Then we charge {plan} ({price} a month) to this card every month until you cancel. You can cancel anytime in Settings, Plan & billing, and you won't be charged again after you cancel.**
+- Stage 2 only: a required tick box **I agree that BalayHub may charge my card for the plan above every month after my trial, until I cancel.**
+- Fields: **Name on card**, **Card number**, **Expiry (MM/YY)**, **CVC** (they carry no `name` and the card never goes to BalayHub). Button **Pay ₱20 and start my trial** (busy: **Checking your card…**). Small print: **Card payments are handled by PayMongo. Your bank may ask you to confirm with a code.**
+- Footer links: **Help**, **Account**, **Log out**.
+
+**Next**
+- **Success** (card accepted, 3-D Secure done or not asked): h2 **Your card is confirmed**, **Your free trial has started. It ends on {date}.** and **Set up my workspace** (to the Launchpad, or `#/properties?new=1` for long-term-only). The h2 takes focus.
+- **The bank's page:** the browser goes to the bank for a code and comes back to `#/confirm-card?check=<id>`. Waiting: h2 **Checking with your bank…** and **This usually takes a few seconds.** (checks every 3 seconds for up to 60). Then **Still waiting for your bank. You can leave this page. Your trial starts as soon as the payment comes through.** with **Check again**.
+- **Already confirmed** (page opened later): goes home with no message.
+
+**States and messages**
+- Field errors (shown under the box, the first one takes focus): **Enter the name on the card.** / **Enter the card number.** / **This card number isn't valid. Check it and try again.** / **Enter the expiry as MM/YY.** / **This card has expired.** / **Enter the 3 or 4 digit code on the back of the card.** / **Tick the box to agree to automatic payment.**
+- Error summary at the top (`role="alert"`, takes focus): declined **Your card was declined. Try another card, or ask your bank.**; bank check not finished **Your bank's check wasn't finished, so nothing was charged. Try again.**; network **We couldn't reach the payment service. Nothing was charged. Please try again in a moment.**; too many tries **Too many tries. Please wait a few minutes and try again.**; PayMongo's own field message is shown prefixed **PayMongo says:**. A declined card keeps the same payment, so a second card can be tried (no second charge attempt is created).
+- Loading: skeleton while the page reads `GET /billing/card-check`. If the check is off or already done: goes home.
+- **Team members** (manager, staff, cleaner) of a gated workspace see **Waiting for your workspace owner**: **{Owner name} needs to confirm a payment card before your team can use BalayHub. Ask them to log in and finish setup.** with Help, Account and Log out.
+- **Phones:** card fields stack one per row (expiry and CVC share a row from 360px); every button and link is at least 44px tall.
+- **Re-verify fixes (2026-10-19):** returning from the bank page the page waits for the payment, then shows success or the bank-failure message. A declined card shows the server's message, or "Your card was declined. Try another card, or ask your bank." If an earlier ₱20 payment already went through, the page goes straight to success and charges nothing. If PayMongo cannot be reached, the page says so in plain words and nothing is charged. While the card is due, the menu is flat and shows only **Confirm your card** and **Help**. Known gap: reloading the page in the middle of the bank check shows the form again (carried).
+- Team members of a gated workspace should rarely see the waiting page: invitations are blocked until the card is confirmed (D-98), so that page is a safety net.
 
 ---
 
@@ -411,7 +441,7 @@ Cards top to bottom (owner):
 2. **Language for guests** (not long-term) — English or Taglish, "Also switch my … messages" → **Save** → "Guest language saved." (notes any "(my version)" copies).
 3. **Appearance** — Light / Dark / Match device.
 4. **App & notifications** (not demo) — **Install BalayHub**, **Turn on notifications**, topics, **Send a test**, **Turn off on this device**. iPhone without Home Screen install → instructions first.
-5. **Plan & billing** (not demo) — status alert, plan, listings used, paid until. Online: pick plan, months, total, **Pay now** ("Opening secure checkout…") → PayMongo → back to `#/settings?billing=…` → "Payment received. Thank you! Your plan is active." or "still waiting…". Cancelled → "Payment cancelled. Nothing was charged." Manual: email instructions. Payment history. *Round 15 (D-94): owners also get a **Have a coupon code?** box above the Pay button, a free activation and a card-only ₱20 payment; see section 28.1.*
+5. **Plan & billing** (not demo) — status alert, plan, listings used, paid until. Online: pick plan, months, total, **Pay now** ("Opening secure checkout…") → PayMongo → back to `#/settings?billing=…` → "Payment received. Thank you! Your plan is active." or "still waiting…". Cancelled → "Payment cancelled. Nothing was charged." Manual: email instructions. Payment history. *Round 15 (D-94): owners also get a **Have a coupon code?** box above the Pay button, a free activation and a card-only ₱20 payment; see section 28.1.* *Round 17 (D-98): the card on file, one-tap pay and automatic payment rows are described in section 30.11; dates here read like "Nov 14, 2026" (D-99).*
 6. **Direct booking page** (not long-term, not demo) — **Connect PayMongo** (secret key) → **Turn on / Turn off**, **Copy link**, **Page settings** (address, welcome text), **Change key**. TEST MODE warning. Tip to add photos.
 7. **Your data** (not demo) — **Download all data**, **Delete workspace** (type the name) → "Deletion scheduled. You can cancel it within 14 days." → deleting banner.
 8. **Team & permissions** — **Invite** (email, role, properties) → "Invitation created" with the link and **Copy**. **Edit access**, **Remove** (confirm). Pending: **New link**, **Revoke**.
@@ -499,6 +529,7 @@ No assigned properties → lists are empty with "assigned to you" wording.
 - **Platform admin `#/admin`:** stats (on trial, paying, monthly revenue, ended/overdue), filter bar (status, type, plan, signup dates, sort), workspace table. **Click a workspace** (not the demo) → plan, paid until, trial ends, note → **Save** (audit-logged). **Support queue** → `#/admin/support`.
 - **Support queue `#/admin/support`:** tickets from every workspace, urgent and new first. Status tabs plus the standard filter bar (search, topic, priority, assigned to me); the filters are kept in the address and remembered. Rows open with Enter or Space. Help tickets on `#/help` use the same filter bar (search plus the Open or Closed tabs). Empty: "No tickets here".
 - **Ticket `#/admin/support/<id>`:** **Assign to me**, **Mark resolved**, reply or internal note, customer card, attachments, **Change status** buttons. Customers see replies from "BalayHub Support".
+- **Card on file (D-98):** the workspace table has a **Card** column (a dash when not needed, **Waiting**, **Visa 4242**, **Skipped**) and the Status filter has **Waiting for card**. A waiting workspace shows an amber **Waiting for card** badge, and after the owner removes the card the Card column reads **Removed**. A waiting workspace's panel says "Waiting for the owner to save a card. The trial has not started." with **Skip card check**: the dialog reads **Skip the card check for {workspace}? Their 14-day trial starts now.** (**Cancel** / **Skip card check**), the toast **Card check skipped. The trial has started.** On a workspace that is not waiting the server answers 409.
 - **Plan coupons `#/admin/coupons`** (a button next to Support queue on the admin page; platform admins only; anyone else sees "Not found"). Make and manage coupons for BalayHub's plans; see section 28.2.
 - A platform admin is also a normal member of their own workspace.
 
@@ -517,7 +548,8 @@ No assigned properties → lists are empty with "assigned to you" wording.
 | 15 min | Gate passes due | "Sent" status on reservations |
 | 6 h | Guest ID cleanup | IDs disappear after the retention period |
 | 2–3 min | Direct booking and balance payment checks | Bookings and payments appear even if the guest closed the page |
-| 10 min | Plan payment check | Plan activates even if the webhook was missed |
+| 10 min | Plan payment check | Plan activates even if the webhook was missed; a card check left unfinished for 24 hours is marked expired (D-98) |
+| 1 h | Trial reminders; automatic payment start (off) | Trial-end emails 3 days and 1 day before (D-98); Stage 2 only: monthly subscriptions start |
 | 1 h | Support auto-close; workspace purge; demo date refresh | Tickets close; deleted workspaces purged after 14 days |
 
 ## 12. Unit owner portal (separate sign-in)
@@ -1069,7 +1101,7 @@ The bar is drawn once and stays when you change page, so it never flickers or lo
 
 **Search**
 - Press **/** anywhere on the page (not while typing in a field, and not with a dialog open) or click the box. The key cap "/" shows at the right end while the box is empty.
-- Empty box with focus: your last 5 searches (on this device only), with **Clear**. One letter: pages only, with "Type 2 or more letters to search records." Two or more letters: pages and settings first (found in the browser), then the record groups when the server answers: Reservations, Guests, Listings, Properties, Tenants, Unit owners, Quotes, Maintenance, Help articles. Empty groups are not shown.
+- Empty box with focus: your last 5 searches (on this device only), with **Clear**. One letter: pages only, with "Type 2 or more letters to search records." Two or more letters: pages and settings first (found in the browser), then the record groups when the server answers: Reservations, Guests, Listings, Properties, Tenants, Unit owners, Quotes, Repair requests, Cleaning tasks, Supplies, Expenses, Discount codes, Add-ons, Help articles *(the order and the five new groups are section 30.1, D-99)*. Staff get no Discount codes or Add-ons groups. Empty groups are not shown.
 - What you can find depends on your role: an owner searches everything; a manager or staff member only records of the properties they are assigned to; staff get no Unit owners or Quotes groups; a cleaner gets pages and help articles only (the app never asks the server). Search matches names, listing names and confirmation codes, never phone numbers, emails, notes or money. Archived listings, properties, tenants and unit owners are left out; cancelled reservations are shown marked "Cancelled".
 - **Arrow Down / Up** move through results (focus stays in the box), **Enter** opens the chosen one (or the first), **Escape** closes the list, a second **Escape** returns you to where you were. Choosing a result clears the box and opens that page; the page heading then gets focus.
 - States: "Searching…" while the server answers; "No results for “zzz”." with a hint for your role ("Try a guest name, a confirmation code or a listing name."; long-term: "Try a tenant, a property or a repair."; cleaners: "Try a page name or a help topic."); "Search isn't working right now. Try again." (pages still work); "Too many searches in a minute. Wait a moment and try again."; offline: "You're offline. Only pages can be searched."
@@ -1199,7 +1231,7 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 
 ### 29.2 Reservations
 - The Nights and Guests filters say "Enter a number from 1 to 99."
-- **Do not rebook** warns for any booking whose email belongs to a flagged guest (the owner's save toast; the Inbox note and push for an online booking). The flag stays on the original guest record. Group bookings do not warn yet (carried).
+- **Do not rebook** warns for any booking whose email belongs to a flagged guest (the owner's save toast; the Inbox note and push for an online booking). The flag stays on the original guest record. Group bookings do not warn yet (carried). *(They warn since round 17, D-99 O8; section 30.2.)*
 
 ### 29.3 Calendar
 - On phones, Property, Tag and Availability sit under Filters and the colour key is folded. A night's menu starts on New reservation. The month bar (previous, month, next, Today) stays on one row.
@@ -1208,13 +1240,13 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 - A payment error shows just above "Continue to payment". Once both dates are picked, the calendar heading says "Dates chosen. Tap a date to change them." (before that: "Choose your check-in date", then "Now choose your check-out date").
 
 ### 29.5 Check-in and gate pass
-- When a guest registers more people than booked, they see "This booking is for N guests…". The host's check-in card reads "6 registered · booked for 4"; the gate pass and its email read "6 (booked for 4)". Nothing is blocked. An upload that fails while online says "That didn't go through. Your answers are still here; please try again."
+- When a guest registers more people than booked, they see "This booking is for N guests…". The host's check-in card reads "6 registered · booked for 4"; the gate pass and its email read "6 (booked for 4)". Nothing is blocked. *(When only the main guest registered, the pass reads "1 (booked for 2)", section 30.4.)* An upload that fails while online says "That didn't go through. Your answers are still here; please try again."
 
 ### 29.6 Inbox
 - Assigned to, Snooze/Unsnooze and Archive/Unarchive keep keyboard focus. Switching between Guest message and Internal note keeps each one's own text (in memory only).
 
 ### 29.7 Top bar search
-- The panel says "Search covers guests, reservations, listings and pages."
+- The panel says "Search covers guests, reservations, listings and pages." *(Widened in round 17: the scope line and the group list follow section 30.1, D-99.)*
 
 ### 29.8 Plan & billing
 - A comped workspace sees "Your workspace is on a complimentary plan, so there is nothing to pay." and no Pay now or coupon box. A free-with-card coupon says "You pay ₱20.00 once by card." in the preview message, the hint and the banner. A forever coupon reads "Coupon CODE: ₱100 off every month." with no months-left count. Apply sits beside the code box; a code error is tied to the box.
@@ -1226,7 +1258,7 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 - A percentage fee over 50% asks "Check the management fee" (Save anyway / Change it); 0% saves without a question. An exact duplicate name asks "Name already used" (Save anyway / Change it). On Edit, the fee question is asked only when the fee model or the value changed.
 
 ### 29.11 Reports
-- A custom range longer than two years keeps the last report and marks the To box "Choose up to two years."
+- Stay reports: a custom range longer than two years keeps the last report and marks the To box "Choose up to two years." Long-term Reports has no range limit (D-99).
 
 ### 29.12 Rent & Expenses
 - The Vendor list hides vendors seen only on voided expenses unless voided expenses are shown.
@@ -1235,7 +1267,72 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 - The current group is open; later groups fold under "Later (N more steps)". The count at the top is still the full count. This applies to every owner (S2).
 
 ### 29.14 Cleaning task and repair request
-- Picking a photo uploads it at once. There is no Upload photo button. (The deposits page still uses pick, then button.)
+- Picking a photo uploads it at once. There is no Upload photo button. (The deposits page still uses pick, then button.) *(The deposits page now uploads on pick too, D-99.)*
 
 ### 29.15 Forms in dialogs
 - While saving, the Save button shows "Saving…", is marked busy and keeps focus. A dialog with no fields starts on its first action button.
+
+## 30. QA round 17 changes (D-98, D-99; 2026-10-15)
+
+### 30.1 Top bar search (O1; widens 27.1 and 29.7)
+- Five new groups, each scoped as its own page is: **Cleaning tasks** (by unit or property name; the same scope as the Housekeeping list; opens the task), **Supplies** (by name; opens Supplies filtered to it), **Expenses** (by vendor or description; opens the expense), **Discount codes** and **Add-ons** (owners and managers only; staff get neither group). The old **Maintenance** group is now called **Repair requests**.
+- Results never show money, guest contact details or notes. **Archived add-ons are not found.** A discount code result shows only its status word (Active, Off, Expired, Used up or Starts later), never its note. An expense result is titled with its vendor, then its category, never the free-text description. Voided expenses and archived supplies are not found. Long-term owners get no Supplies group.
+- Order of groups: Pages, Reservations, Guests, Listings, Properties, Tenants, Unit owners, Quotes, Repair requests, Cleaning tasks, Supplies, Expenses, Discount codes, Add-ons, Help articles. Still 5 per group.
+- The line under the box names what the person can search:
+  - Owner, short-term: "Search covers reservations, guests, listings, properties, unit owners, quotes, repair requests, cleaning tasks, supplies, expenses, discount codes, add-ons, pages and help."
+  - Staff, short-term: "Search covers reservations, guests, listings, properties, repair requests, cleaning tasks, supplies, expenses, pages and help."
+  - Owner, long-term: "Search covers properties, tenants, repair requests, expenses, pages and help."
+  - Cleaner: "Search covers pages and help."
+
+### 30.2 Reservations and groups
+- A room's error shows on that room's own box in the group form ("This listing allows up to 4 guests." under Guests in this room, marked invalid). A one-room group reads "The 1 room will be cancelled…".
+- Group bookings warn like single reservations when the lead guest's email belongs to a guest marked Do not rebook (owner or manager toast: Heads up: {name} is marked "Do not rebook" in Guests.).
+- A booking whose email and first name match a saved guest joins that guest and says so: "Saved under the existing guest {name} (same email and first name)." The typed name is not stored.
+- **Record payment** on an Airbnb booking starts on **Cash** (Channel payout stays a choice). Direct bookings still start with no method chosen; other channels start on Channel payout.
+- Reason boxes (void a payment, refund, cancel, remove a room, reject a proof, void a charge, payout or withdrawal) take up to 500 characters and show "Reason must be at most 500 characters." instead of cutting the text. Deposit deduction reasons keep 1,000; block reasons keep 200.
+- **Record refund** checks Amount, Method and Reason together and shows all that are missing at once.
+- A negative deposit deduction is flagged at the field with no question. Deposit damage photos upload when picked (the **Add photo** button is gone; "Damage photos: add them on the deposit card (before or after saving).").
+- A bad number in an address filter (for example `min_guests=abc`) is dropped from the address.
+- On phones the room links on a group booking's page are 44px tall, and the landing footer's theme buttons are 44px wide.
+
+### 30.3 Filters (every list page)
+- **Done** closes the Filters panel and puts keyboard focus on the **Filters** button.
+
+### 30.4 Guest pages
+- The gate pass (page and email) shows the registered count whenever a registration exists, with the booked count when they differ: "1 (booked for 2)".
+- A draft check-in registration's button reads **Submit registration** (English and Taglish).
+- A balance payment that fails shows its message above the Pay button.
+
+### 30.5 Inbox
+- The teammate list for an `@` mention opens in the flow under the note box and never covers the **Internal note** and **Message guest** tabs; clicking a tab switches mode and never inserts a mention.
+- **Skip to conversation** (a keyboard skip link) jumps to the open thread's heading.
+- Non-owners read "These automatic messages are off until the workspace owner turns them on." on the automations card.
+
+### 30.6 Rent & Expenses
+- Rent due **Sort** default reads **Overdue first**. A voided payment prints one VOID line. An expense above ₱50,000 asks **Check the amount** ("This expense is ₱… . Save anyway?"; Save anyway / Change it), on add and on a correction whose amount changed.
+
+### 30.7 Platform admin coupons (`#/admin/coupons`)
+- A fixed amount above the highest plan price (today ₱1,799.00) asks **Check the amount off** (Save anyway / Change it; Change it focuses the amount). **Total discount given** counts every coupon, not only the page shown, with two decimals. Offers show thousands separators.
+- Coupon codes are up to 32 characters ("Codes are up to 32 characters."). On Plan & billing a forever coupon shows its offer once.
+
+### 30.8 Home and Listings (small hosts)
+- The Home first-run card says "Your calendar is connected. Bookings from it show here after the next sync." once a calendar is connected, and is hidden while a sync problem shows.
+- Listing photos upload when picked. With 3 or fewer listings the Listings bar shows Occupancy and Sort, and folds the rest under Filters.
+- A failed first sync shows in the Channels dialog, on the listing card, in the bell and in the Home banner, with no toast on top.
+
+### 30.9 Repairs
+- After a status change (Start work, Mark resolved, Reopen) focus goes to the page heading, never to the button that would undo the change.
+
+### 30.10 Cleaner pay (phones)
+- Each row's tick box label, and the **Select all unpaid** label, is a 44px tap target. The box itself may stay 24px.
+
+### 30.11 Plan & billing: card on file (owners; D-98; adds to 28.1)
+- **Card on file: Visa ending 4242** with **Remove card**. The dialog is **Remove your card?** — Stage 1: "BalayHub forgets this card. You can still pay another way."; Stage 2: "BalayHub forgets this card and turns off automatic payment. Your plan stays active until {date}." Buttons **Keep card** / **Remove card**; toast **Card removed.**
+- **Plan after your trial: Growth** (after the trial: **Next plan: Growth**) with **Change**, which shows a plan drop-down and **Save** (toast **Saved.**).
+- **Stage 1 pay:** the primary button **Pay ₱999 with Visa ending 4242** (the amount follows plan, months and coupon preview; a free coupon keeps **Activate free plan**) and a secondary **Pay another way** (the hosted PayMongo checkout). If the saved card is declined: "Your saved card couldn't be charged. Pay another way, or use a different card." If the bank asks for a code, the browser goes to the bank and comes back to Plan & billing with the usual "Payment received" message.
+- The note "BalayHub never charges your card on its own; you renew here." stays in Stage 1.
+- **Stage 2 (when switched on):** "Automatic payment is on. Next charge: ₱999 to Visa ending 4242 on {date}." with **Cancel automatic payment** (dialog **Cancel automatic payment?**, buttons **Keep it on** / **Cancel automatic payment**, toast **Automatic payment is off.**). Off with a saved card: "Automatic payment is off." and **Turn on automatic payment** (shows the consent tick box). Past due: "Your card payment on {date} didn't go through. Pay now to keep making changes."
+- **History:** a card check row reads **Card check**, "Paid {date} · Visa ending 4242", ₱20.00, badge **Paid**. Dates on this page read "Nov 14, 2026" (D-99).
+- **Reminder email** (3 days and 1 day before the trial ends): subject "Your BalayHub trial ends on {date}" with a link to Settings. Stage 2 with automatic payment on gets "Your BalayHub plan starts on {date}" 3 days before.
+- After saving the plan after the trial (Change, then Save), focus stays on **Change**.
+- Owners only; managers, staff and cleaners never see or call any of this.

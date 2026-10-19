@@ -1,6 +1,6 @@
 // Platform admin: every workspace, its plan and trial; activate a plan after payment.
 
-import { get, patch, qs } from '../api.js';
+import { get, patch, post, qs } from '../api.js';
 import { h, fmtDate, fmtDateTime, manilaDay, badge, field, makeForm, openModal, confirmDialog, todayManila, emptyState, toast } from '../ui.js';
 import { state } from '../app.js';
 import { initFilters, filterBar, changed, apiFilters } from '../filters.js';
@@ -13,9 +13,25 @@ export function trialLastDay(endsAt) {
   return endsAt ? manilaDay(new Date(new Date(endsAt).getTime() - 1)) : '';
 }
 
+// ---- helpers (read out by test/qa-r17-cardcheck-admin-view.test.js)
+// Card column: card_check is null (not needed), required (waiting), passed (brand and last 4) or waived (skipped).
+export function cardText(w) {
+  if (w.card_check === 'required') return 'Waiting';
+  if (w.card_check === 'passed') {
+    if (!w.card_brand && !w.card_last4) return 'Removed'; // the owner removed the card after it passed
+    const brand = w.card_brand ? w.card_brand.charAt(0).toUpperCase() + w.card_brand.slice(1) : 'Card';
+    return `${brand} ${w.card_last4 || ''}`.trim();
+  }
+  if (w.card_check === 'waived') return 'Skipped';
+  return '—';
+}
+export const skipCardText = (name) => `Skip the card check for ${name}? Their 14-day trial starts now.`;
+// ---- end helpers
+
 function statusBadge(w) {
   const s = w.status;
   if (w.is_demo) return badge('archived', 'Demo');
+  if (w.admin_status === 'card_pending' || s.reason === 'card_check') return badge('partial', 'Waiting for card');
   if (s.read_only) return badge('overdue', s.reason === 'trial_ended' ? 'Trial ended' : s.reason === 'deleting' ? 'Deleting' : 'Payment due');
   if (s.plan === 'trial') return badge('unpaid', `Trial · ${s.trial_days_left}d left`);
   if (s.reason === 'grace') return badge('partial', 'Grace period');
@@ -42,11 +58,26 @@ export async function adminView(el, { rerender, query = {} }) {
     const paidUntil = w.paid_until ? String(w.paid_until).slice(0, 10) : '';
     const trialDay = trialLastDay(w.trial_ends_at);
     let modal;
+    const skipCard = async () => {
+      const ok = await confirmDialog({ title: 'Skip card check', text: skipCardText(w.name), confirmText: 'Skip card check', cancelText: 'Cancel' });
+      if (!ok) return;
+      try {
+        await post(`/admin/workspaces/${w.organization_id}/card-check`, { action: 'waive' });
+      } catch (err) { toast(err.message, 'error'); return; }
+      toast('Card check skipped. The trial has started.');
+      modal.close();
+      await rerender();
+      const hd = document.querySelector('#main h1'); // the row is gone from the list, so focus the page heading
+      if (hd) { hd.setAttribute('tabindex', '-1'); hd.focus(); }
+    };
     const form = makeForm({
       submitText: 'Save',
       cancel: () => modal.close(),
       fields: [
         h('p', { class: 'muted small' }, `${w.owner_name || '—'} · ${w.owner_email || '—'} · ${w.unit_count} units · ${w.member_count} members`),
+        ...(w.card_check === 'required' ? [h('div', { class: 'field' },
+          h('p', { class: 'muted small' }, 'Waiting for the owner to save a card. The trial has not started.'),
+          h('button', { type: 'button', class: 'btn btn--secondary', id: 'skip-card-check', onclick: skipCard }, 'Skip card check'))] : []),
         field({ name: 'plan', label: 'Plan', type: 'select', required: true, value: w.plan, placeholderOption: false,
           options: plans.map((p) => [p.key, `${p.name}${p.price ? ` — ₱${p.price}/mo` : ''} (${p.listings >= 1000 ? 'unlimited' : `${p.listings} listings`})`]) }),
         field({ name: 'paid_until', label: 'Paid until (paid plans)', type: 'date', value: paidUntil,
@@ -77,7 +108,7 @@ export async function adminView(el, { rerender, query = {} }) {
     const filtered = Object.keys(changed(filters, defaults)).some((k) => k !== 'sort');
     count.textContent = filtered ? `Showing ${workspaces.length} of ${total} workspaces` : `${total} workspace${total === 1 ? '' : 's'}`;
     if (!workspaces.length) {
-      tbody.replaceChildren(h('tr', null, h('td', { colspan: 7 }, emptyState({ title: 'No results found', text: 'No workspace matches these filters. Try removing a filter.' }))));
+      tbody.replaceChildren(h('tr', null, h('td', { colspan: 8 }, emptyState({ title: 'No results found', text: 'No workspace matches these filters. Try removing a filter.' }))));
       return;
     }
     tbody.replaceChildren(...workspaces.map((w) => h('tr', { class: w.is_demo ? '' : 'row-link', onclick: () => { if (!w.is_demo) edit(w); } },
@@ -86,6 +117,7 @@ export async function adminView(el, { rerender, query = {} }) {
         w.is_demo ? h('strong', null, w.name) : h('button', { type: 'button', class: 'link-btn', 'aria-haspopup': 'dialog' }, w.name),
         h('div', { class: 'muted small' }, w.owner_email || '—')),
       h('td', null, statusBadge(w), h('div', { class: 'muted small' }, BUSINESS[w.business_type] || '')),
+      h('td', null, cardText(w)),
       h('td', null, w.paid_until ? fmtDate(w.paid_until) : '—'),
       h('td', { class: 'num' }, String(w.unit_count)),
       h('td', null, fmtDate(w.created_at)),
@@ -101,7 +133,7 @@ export async function adminView(el, { rerender, query = {} }) {
     key: 'admin-workspaces', values: filters, defaults, onChange: load,
     search: { placeholder: 'Search workspace, owner name or email' },
     quick: [
-      { name: 'status', label: 'Status', all: 'All statuses', options: [['trial', 'On trial'], ['paying', 'Paying'], ['grace', 'Grace period'], ['trial_ended', 'Trial ended'], ['overdue', 'Payment overdue'], ['comped', 'Complimentary'], ['deleting', 'Scheduled for deletion'], ['demo', 'Demo']] },
+      { name: 'status', label: 'Status', all: 'All statuses', options: [['trial', 'On trial'], ['card_pending', 'Waiting for card'], ['paying', 'Paying'], ['grace', 'Grace period'], ['trial_ended', 'Trial ended'], ['overdue', 'Payment overdue'], ['comped', 'Complimentary'], ['deleting', 'Scheduled for deletion'], ['demo', 'Demo']] },
       { name: 'business_type', label: 'Business type', all: 'All types', options: Object.entries(BUSINESS) },
     ],
     more: [
@@ -122,6 +154,6 @@ export async function adminView(el, { rerender, query = {} }) {
       h('div', { class: 'stat stat--alert' }, h('div', { class: 'stat__label' }, 'Ended / overdue'), h('div', { class: 'stat__value' }, String(counts.lapsed)))),
     h('div', { style: { marginTop: '16px' } }, bar), count,
     h('div', { class: 'card card--flush' }, h('div', { class: 'table-wrap' }, h('table', { class: 'table' },
-      h('thead', null, h('tr', null, ['Workspace', 'Plan', 'Paid until', 'Units', 'Created', 'Last active', 'Note'].map((t, i) => h('th', { class: i === 3 ? 'num' : null }, t)))),
+      h('thead', null, h('tr', null, ['Workspace', 'Plan', 'Card', 'Paid until', 'Units', 'Created', 'Last active', 'Note'].map((t, i) => h('th', { class: i === 4 ? 'num' : null }, t)))),
       tbody))));
 }

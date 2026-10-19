@@ -2,7 +2,7 @@
 
 This document describes BalayHub's PostgreSQL schema as it stands after migrations `001`–`026` in `db/migrations/`, where uploaded files are stored, and who can see or change each kind of data. It was checked against the migrations and the route code in `src/routes/*.js` and `src/lib/*.js`. Anything not confirmed in the code is marked **unverified**.
 
-Last updated: 2026-10-15 (QA round 16: section 22 and a footnote to the section 6 matrix; D-97)
+Last updated: 2026-10-15 (QA round 17: migrations 037 and 038, section 2.19, matrix 6.5, section 23; D-98 and D-99)
 
 ---
 
@@ -615,6 +615,8 @@ Round 15 columns (migration 035, D-94): `list_amount` numeric (the price before 
 
 Related columns: `organizations.plan`, `trial_ends_at`, `paid_until` and `plan_note`.
 
+*Round 17 (migration 037, D-98): card checks and saved-card payments also use this table (`kind`, `payment_intent_id`, `invoice_id`, `failure_code`, new providers; `plan` and `months` can be NULL on a card check row). See section 2.19.*
+
 ### 2.16 System
 
 | Table | Purpose |
@@ -670,6 +672,47 @@ Decisions D-94 and D-95. The contract the build followed is `docs/contracts/plat
 **Purge and export.** The purge deletes a workspace's `platform_coupon_redemptions` (after its billing rows, which point at them; deleting a workspace therefore frees a slot under a coupon's limit). `platform_coupons` themselves are kept, as the platform's own data; their `created_by` and the redemptions' `redeemed_by` are SET NULL when a user is deleted. `PURGED_TABLES` lists the redemptions table, the export includes it, and `test/account.test.js` still guards the list.
 
 ---
+
+### 2.19 Card on file and automatic payment (migration 037, QA round 17, 2026-10-15)
+
+Decision D-98. The contract is `docs/contracts/card-on-file.md`. Forward-only; the rollback steps are written in the migration file. Workspaces that existed before the migration keep `card_check` NULL (never gated).
+
+**New columns on `organizations`**
+
+| Column | Type | Notes |
+|---|---|---|
+| card_check | text | `required` (waiting for the ₱20 card check), `passed`, `waived` (a platform admin skipped it) or NULL (not needed: pre-037, check off, demo, platform-admin-made). Partial index `organizations_card_check_pending_idx` on `created_at` where `required` |
+| card_checked_at | timestamptz | Set when the check passes or is waived. CHECK: required when `card_check = 'passed'` |
+| paymongo_customer_id | text | PayMongo customer id. Never shown |
+| card_payment_method_id | text | The saved card's PayMongo payment method id. Never shown |
+| card_brand, card_last4 | text | Brand (at most 20 characters) and last 4 digits (`^[0-9]{4}$`). Shown to the owner and to platform admins |
+| renewal_plan | text | `starter`, `growth` or `pro`: the plan chosen for after the trial |
+| auto_renew | boolean | Default false. Stage 2 automatic payment |
+| auto_renew_consented_at | timestamptz | CHECK: set whenever `auto_renew` is true |
+| paymongo_subscription_id | text | Unique. Stage 2 only. Never shown |
+| subscription_status | text | `active`, `past_due`, `unpaid`, `cancelled` or `incomplete` |
+
+While `card_check = 'required'`, `trial_ends_at` is NULL; a pass sets it to now plus `TRIAL_DAYS`.
+
+**Changes to `billing_payments`**
+
+| Column or rule | Change |
+|---|---|
+| kind | New, text, default `plan`: `plan` or `card_check` |
+| payment_intent_id | New, unique: the PayMongo Payment Intent behind a card check or a one-tap payment |
+| invoice_id | New, unique: the Stage 2 invoice (one paid month per invoice) |
+| failure_code | New, at most 64 characters |
+| plan, months | Now nullable; CHECK `billing_payments_kind_shape`: a `plan` row needs both, a `card_check` row has neither, `provider = 'paymongo_intent'` and `amount = 20` |
+| provider | CHECK now allows `paymongo`, `coupon`, `paymongo_intent`, `paymongo_subscription` |
+| `billing_payments_one_live_card_check` | Unique index on `organization_id` where `kind = 'card_check'` and `status = 'pending'`: one pending card check per workspace |
+
+**New table `paymongo_plans`** (platform data, no `organization_id`, not purged, Stage 2 cache): `plan_key` (`starter`, `growth`, `pro`), `amount_c` (integer centavos, at least 100), `paymongo_plan_id` (unique), `created_at`; primary key (`plan_key`, `amount_c`). A forever coupon gets its own discounted PayMongo plan, hence the amount in the key.
+
+**PURGED_TABLES impact:** none. `billing_payments` is already purged; `paymongo_plans` holds no workspace data.
+
+**Audit actions:** `billing.card_check_passed`, `billing.card_removed`, `billing.renewal_changed` (field names only), `billing.trial_reminder_sent` (the once-per-day-count record for reminder emails), `platform.card_check_waived`.
+
+**Migration 038 (QA round 17, D-99 O5), `038_refund_reason_500.sql`:** widens the `booking_refunds.reason` CHECK from 300 to 500 characters so a refund reason matches every other audit reason. The `void_reason` columns on the money tables are plain text with no length CHECK (only the API limited them), so nothing else changed in the database.
 
 ## 3. Relationships at a glance
 
@@ -753,6 +796,8 @@ organizations ─┬─ users ─┬─ sessions / auth_tokens / consent_records
 `PURGED_TABLES` in `src/lib/account.js` lists every table in migrations 001–029 except `mail_sync_state` (global) and `schema_migrations`. The five owner tables from migration 029 are included, and are deleted before `unit_owners`. `test/account.test.js` fails if a new table is missing. No table is missing at the time of writing.
 
 *2026-10-15 (round 14):* `bookmarks` and `notifications` (migration 033) are in `PURGED_TABLES`. Both are left out of the workspace export (personal saved pages and a rolling alert feed). Notifications older than 90 days are deleted by the daily `notifications-cleanup` job (`notifyfeed.purgeOld`); bookmarks stay until the person removes them or the user is deleted.
+
+*2026-10-15 (round 17, D-98):* migration 037 adds no workspace table. `paymongo_plans` is platform data (no `organization_id`), is not in `PURGED_TABLES`, and is on the ignore list in `test/account.test.js`. A PayMongo subscription must not outlive its workspace, so the subscriptions job cancels the subscription of any workspace with `deletion_scheduled_at` set (deletion is always scheduled before a purge); this runs whenever the PayMongo secret key is set, even with Subscriptions off. *Security review 2026-10-15:* the purge itself also cancels the subscription (if the cancel fails the purge stops and retries later, keeping the workspace row), then detaches the saved card and deletes the PayMongo customer (name, email, phone) outside the database transaction; the last two are best-effort and not retried.
 
 The workspace export (`exportOrganization`) is not complete. It leaves out `support_messages`, `support_events`, `consent_records`, `automation_runs`, `receipt_counters`, `push_subscriptions` (by design), sessions and auth tokens. It also includes file metadata only, not the file contents.
 
@@ -996,7 +1041,9 @@ All three endpoints sit under `/api` and need a signed-in session. Every query a
 | Tenants (long-term workspaces) | All | Assigned properties | Assigned properties | 403 | No |
 | Unit owners | Yes | **No group** | **No group** | 403 | No |
 | Quotes | Yes | Assigned only | **No group** | 403 | No |
-| Maintenance requests | All | Assigned only | Assigned only | 403 | No |
+| Repair requests (the old "Maintenance" group, renamed in round 17) | All | Assigned only | Assigned only | 403 | No |
+| Cleaning tasks, Supplies, Expenses *(round 17, D-99)* | All (supplies: short-term only) | Assigned only | Assigned only | 403 | No |
+| Discount codes, Add-ons *(round 17, D-99)* | Yes | Yes | **No group** | 403 | No |
 | Help articles | Yes | Yes | Yes | No server call: the app uses the help list (`/api/help/articles`) | No |
 
 A result carries only `id`, `title`, `sub` and `href`. Search never matches or returns an email, phone number, note, money figure or token, so staff see names, listing names and confirmation codes but no contact details or amounts. Archived listings, properties, tenants and unit owners are left out. Pages and settings are searched in the browser from the menu the role already has and never touch the server.
@@ -1016,6 +1063,21 @@ Every role has them, cleaners and read-only workspaces included (they sit under 
 | List, count, mark read | Own only | Own only | Own only | Own only | No |
 
 Rows are re-scoped **at read time**, not only when written: a row shows only if its type is one the role receives, the person has not turned that type off in My account, and (when the row has a property) the person is still assigned to that property and has not filtered it out. A person who loses access to a property stops seeing its alerts. Marking read by id touches only the person's own rows, and an id that is not theirs is ignored without an error. **Non-owners see only rows for properties they are assigned to; a row with no property is owner-only** (so a person who loses a property, or an alert written without one, never shows to a manager or staff member). Cleaners get cleaning alerts only. Long-term-only workspaces have no bell in the app.
+
+---
+
+### 6.5 Card on file access matrix (QA round 17, D-98)
+
+| Data | Owner | Manager | Staff | Cleaner | Platform admin |
+|---|---|---|---|---|---|
+| Card on file (brand, last 4) | See, remove | No | No | No | See (admin list) |
+| Card check (start, attach, refresh) | Create | No (403) | No (403) | No (403) | Waive ("Skip card check") |
+| Renewal plan, automatic payment | See, edit | No | No | No | See |
+| Card check payment rows | See (Plan & billing history) | No | No | No | No |
+| PayMongo customer / payment method / subscription ids | Never shown | No | No | No | Never shown |
+| `paymongo_plans` | No | No | No | No | No (server only) |
+
+Another workspace's `billing_id` answers 404 on every card check route. Team members of a gated workspace get `owner_name` in `/auth/me` (and nothing else) so their waiting page can name the owner.
 
 ---
 
@@ -1320,3 +1382,16 @@ Decision D-97. No table or column changes and no migration.
 - **Push:** `push.notify` with no property reaches owners whatever their property filter. Managers and staff still get only rows for their properties.
 - **`POST /api/public/pay/:token/refresh`:** a PayMongo 401 clears `organizations.paymongo_key_checked_at` only when the 401 came from the key currently saved (`paymongo_key_enc` matches the key the checkout used). The checkout-expire helper in `src/routes/balancepay.js` still swallows a 401 (carried).
 - **Coupons:** the preview `message` for a free coupon with `require_card` ends " You pay ₱20.00 once by card." when the ₱20 floor applied. The banner in the owner coupon box builds from the coupon text plus its own card note, so the sentence is not shown twice. See `docs/contracts/platform-coupons.md`.
+
+## 23. API notes from QA round 17 (2026-10-15)
+
+Decisions D-98 and D-99. **Migrations:** 037 (card on file, section 2.19) and 038 (`booking_refunds.reason` limit 300 to 500). No other table or column changes. The card-on-file routes are in `docs/contracts/card-on-file.md`.
+
+- **`GET /api/search`:** new groups `housekeeping` (Cleaning tasks), `supplies`, `expenses`, `discount_codes` (owner, manager) and `addons` (owner, manager); `maintenance` is labelled "Repair requests". Each group is scoped as its page is (cleaning tasks by `taskScope`; supplies and expenses by `propertyScope`; staff get no discount codes or add-ons; long-term owners get no supplies). Items never carry money, contact details or notes; an expense title is the vendor, then the category, never the description; voided expenses and archived supplies are not found.
+- **`POST /api/booking-groups`:** answers `guest_do_not_rebook` and `guest_name`; a per-room 400 carries `room_index` (0-based position in `rooms`) so the screen can mark the right room.
+- **Audit reasons:** `max 500` on reservation cancel, booking payment void, group room remove and group cancel, refund record and void, charge void, rent payment and expense void, payout and withdrawal void, proof reject. Answer: "Reason must be at most 500 characters." Deposit deduction reasons stay at 1,000 and block reasons at 200. The only database limit that was lower, `booking_refunds.reason`, moved to 500 in migration 038; the `void_reason` columns have no length CHECK.
+- **`POST/PATCH /api/admin/coupons`:** 409 `AMOUNT_ABOVE_PLAN` (with `max_plan_price`) for a fixed amount above the highest plan price; resend with `confirm_high_amount: true` (not stored). `GET /api/admin/coupons` adds `summary.discount_total` over the whole list (it does not change with the Status filter). Code length: the message is "Codes are up to 32 characters."
+- **`GET /api/admin/workspaces`** rows gain `card_check`, `card_brand`, `card_last4`; the status filter gains `card_pending`. `POST /api/admin/workspaces/:id/card-check` with `{ "action": "waive" }` (audit `platform.card_check_waived`; 409 when not waiting). `GET /api/public/plans` gains `card_check`.
+- **Gate pass:** the guest count is `registered` whenever a registration exists, else the booked count; the text adds "(booked for N)" when they differ.
+- **Balance pay:** closing a checkout whose key PayMongo refuses (401), or the scheduled balance check, clears `paymongo_key_checked_at` only when that checkout used the key still saved.
+- **Role matrix:** the "Search" row of 6.4 lists the new groups per role.

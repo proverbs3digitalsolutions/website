@@ -256,6 +256,8 @@ function control(f, values, emit, defaults = {}) {
     const errId = `${id}-err`;
     const err = f.pattern || f.type === 'date' ? h('div', { id: errId, role: 'alert', hidden: true, style: { color: 'var(--red)', fontSize: '.84rem', fontWeight: '650' } }) : null;
     const input = h('input', { class: 'input', id, 'data-flt': f.name, type: f.type, value: values[f.name] || '', min: f.min, step: f.step, placeholder: f.placeholder, inputmode: f.type === 'number' ? 'decimal' : null, 'aria-describedby': err ? errId : null });
+    // A number box cannot hold text (min_guests=abc from a link): it shows empty, so the filter and the address lose the value too.
+    if (f.type === 'number' && String(values[f.name] ?? '') !== '' && input.value === '') { values[f.name] = defaults[f.name] ?? ''; dropFromAddress([f.name]); }
     const show = (v) => {
       const outside = f.type === 'date' && outOfWindow(v);
       const bad = outside || Boolean(f.pattern && v !== '' && !f.pattern.test(v));
@@ -366,7 +368,7 @@ export function filterBar({ key, values, defaults, search, quick = [], more = []
     const moreCtrls = more.map((f) => { const c = control({ type: 'select', ...f }, values, emit, defaults); controls.push(c); return c; });
     panel.append(h('div', { class: 'flt__grid' }, moreCtrls.map((c) => c.el)),
       h('div', { class: 'flt__actions' }, h('button', { type: 'button', class: 'btn btn--secondary btn--sm', onclick: () => clearAll() }, 'Reset filters'),
-        h('button', { type: 'button', class: 'btn btn--primary btn--sm', onclick: () => toggle(false) }, 'Done')));
+        h('button', { type: 'button', class: 'btn btn--primary btn--sm', onclick: () => { toggle(false); moreBtn.focus(); } }, 'Done')));
     const was = panelOpen.get(key);
     if (activeMore() || moreCtrls.some((c) => c.invalid) || (was && was.path === pathNow() && was.open)) panel.hidden = false;
   }

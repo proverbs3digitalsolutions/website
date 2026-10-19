@@ -1144,8 +1144,8 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .bk-cal__day.is-holiday small { color: var(--accent); }
 
 /* ================================================================ theme switch */
-.themeswitch { display: inline-flex; border: 1px solid var(--line-2); border-radius: 99px; padding: 3px; gap: 2px; background: var(--surface); }
-.themeswitch button { white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--muted); border-radius: 99px; padding: 6px 12px; font: inherit; font-size: .88rem; font-weight: 650; cursor: pointer; }
+.themeswitch { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; border: 1px solid var(--line-2); border-radius: 99px; padding: 3px; gap: 2px; background: var(--surface); }
+.themeswitch button { white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; background: transparent; color: var(--muted); border-radius: 99px; padding: 6px 12px; font: inherit; font-size: .88rem; font-weight: 650; cursor: pointer; }
 .themeswitch button[aria-checked="true"] { background: var(--forest); color: #fff; }
 .themeswitch button > [aria-hidden] { display: inline-flex; font-size: 1.1rem; line-height: 1; }
 .themeswitch button > [aria-hidden] svg { width: 18px; height: 18px; flex: none; }
@@ -1496,7 +1496,7 @@ a.op__row:hover { background: var(--surface-2); }
 .hk-day { margin-top: 0; display: grid; gap: 8px; align-items: start; padding: 12px 16px; }
 .hk-day h3 { margin: 0; font-size: .95rem; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .hk-day--today { border: 2px solid var(--teal); }
-.hk-day__today { font-size: .7rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--teal); color: var(--surface); }
+.hk-day__today { font-size: .7rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--teal); color: var(--on-forest); }
 .hk-day__empty { margin: 0; }
 .hk-jobs { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
 .hk-job { display: grid; gap: 4px; align-content: start; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
@@ -1597,7 +1597,7 @@ a.op__row:hover { background: var(--surface-2); }
 
 /* Phase 5: team */
 .composer__body { position: relative; display: grid; }
-.mention-list { position: absolute; left: 0; right: 0; bottom: 100%; margin: 0 0 4px; padding: 4px; list-style: none; background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--radius-sm); box-shadow: var(--shadow); z-index: 20; max-height: 220px; overflow-y: auto; }
+.mention-list { position: static; margin: 4px 0 0; padding: 4px; list-style: none; background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--radius-sm); box-shadow: var(--shadow); z-index: 20; max-height: 220px; overflow-y: auto; }
 .mention-list[hidden] { display: none; }
 .mention-list__item { padding: 10px 12px; min-height: 44px; display: flex; align-items: center; border-radius: 8px; cursor: pointer; color: var(--text); }
 .mention-list__item[aria-selected="true"], .mention-list__item:hover { background: var(--teal-soft); color: var(--forest); font-weight: 600; }
@@ -1724,6 +1724,11 @@ a.op__row:hover { background: var(--surface-2); }
   .assist-fab--bar { width: 44px; height: 44px; }
   /* Row checkboxes in the ops and cleaner-pay tables (QA round 13, #55): 20px was too small to tap on a phone. */
   .table .ops-check input[type="checkbox"] { width: 24px; height: 24px; }
+  /* Round 17 (#34, O3): the row's label is the 44px tap target; the box itself stays 24px. */
+  .ops-check__tap { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; cursor: pointer; }
+  /* Round 17 (#37): three nowrap labels do not fit a phone row, so the columns may shrink equally and the label wraps. */
+  .themeswitch { grid-auto-columns: minmax(0, 1fr); max-width: 100%; }
+  .themeswitch button { white-space: normal; text-align: center; line-height: 1.2; }
   /* Round 14 (class E): the controls the list above missed. .chart-foot .link-btn and .lp-top .btn--sm are repeated here
      because their own rules are more specific and would otherwise win. */
   .check, .link-btn, .linkbtn, .flt__clear, .chart-foot .link-btn, .input--sm, .langtoggle button, .lp-top .btn--sm, .gc__foot a, .lpad-guide summary { min-height: 44px; }
@@ -1737,6 +1742,8 @@ a.op__row:hover { background: var(--surface-2); }
   .themeswitch button, .themeswitch--compact button, .morenav__theme .themeswitch button,
   .bk__foot a, .lp-foot a, .stars button, .stars--sm button, .hk-job__unit, .flt__check { min-height: 44px; }
   .bk__foot a, .lp-foot a, .hk-job__unit { display: inline-flex; align-items: center; }
+  /* Round 17 follow-up: icon-only compact segments (landing footer) were 40px wide; equal 44px columns. */
+  .themeswitch--compact button { min-width: 44px; }
   .stars { gap: 4px; }
   .stars button, .stars--sm button { min-width: 44px; }
   .btn--sm { min-width: 44px; }

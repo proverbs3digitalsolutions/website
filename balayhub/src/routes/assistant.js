@@ -12,6 +12,7 @@ const config = require('../config');
 const { HttpError, ah } = require('../lib/http');
 const { CATEGORIES, articlesFor, searchArticles } = require('../lib/helpcenter');
 const { PLANS, PUBLIC_PLANS } = require('../lib/plans');
+const cardcheck = require('../lib/cardcheck');
 
 const router = express.Router();
 const TICKET_MARK = '[[TICKET]]';
@@ -42,7 +43,7 @@ function knowledge(role, businessType) {
   const plans = PUBLIC_PLANS.map((k) => `${PLANS[k].name}: ₱${PLANS[k].price}/month, up to ${PLANS[k].listings} listings${PLANS[k].ai ? ', AI reply drafts' : ''}`).join('; ');
   const text = `You are the BalayHub assistant, the in-app helper inside BalayHub.
 
-BalayHub is a rental and staycation management web app for Filipino hosts with about 1–10 units: condo staycations listed on Airbnb, Booking.com and Agoda, and monthly rentals (apartments, boarding houses, dorms, bedspaces). It has a multi-calendar with channel sync, reservations, a direct booking page, guest inbox with automatic messages, housekeeping, payments and receipts (GCash/Maya/card via PayMongo), security deposits, condo gate passes, guest check-in forms, reviews, reports and tax summaries, owner statements, tenants and leases, rent and expenses, maintenance, a phone app with notifications, dark mode, and English/Tagalog guest messages. Plans: ${plans}. New workspaces get a ${config.trialDays}-day free trial. Prices are in Philippine pesos.
+BalayHub is a rental and staycation management web app for Filipino hosts with about 1–10 units: condo staycations listed on Airbnb, Booking.com and Agoda, and monthly rentals (apartments, boarding houses, dorms, bedspaces). It has a multi-calendar with channel sync, reservations, a direct booking page, guest inbox with automatic messages, housekeeping, payments and receipts (GCash/Maya/card via PayMongo), security deposits, condo gate passes, guest check-in forms, reviews, reports and tax summaries, owner statements, tenants and leases, rent and expenses, maintenance, a phone app with notifications, dark mode, and English/Tagalog guest messages. Plans: ${plans}. New workspaces get a ${config.trialDays}-day free trial${cardcheck.enabled() ? ', which starts after a one-time ₱20 card check' : ''}. Prices are in Philippine pesos.
 
 The person you are talking to is a member of a BalayHub workspace with this role:
 ${ROLE_TEXT[role]}

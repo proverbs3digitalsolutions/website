@@ -13,7 +13,8 @@ const { validate, uuidParam, isValidDate } = require('../lib/validate');
 const { audit } = require('../lib/audit');
 const { requireAuth } = require('../lib/auth');
 const { PLANS, PUBLIC_PLANS, planStatus } = require('../lib/plans');
-const { normalizeCode, CODE_RE, couponState, toCentavos } = require('../lib/coupons');
+const { normalizeCode, CODE_RE, couponState, toCentavos, toPesos } = require('../lib/coupons');
+const { fmtPeso } = require('../lib/messaging');
 
 const router = express.Router();
 
@@ -24,6 +25,7 @@ router.get('/public/plans', (req, res) => {
     trial_days: config.trialDays,
     contact_email: contact.endsWith('.local') ? '' : contact,
     online_payments: Boolean(config.paymongoSecretKey),
+    card_check: require('../lib/cardcheck').enabled(),
     plans: PUBLIC_PLANS.map((k) => ({ key: k, name: PLANS[k].name, price: PLANS[k].price, listings: PLANS[k].listings, ai: PLANS[k].ai })),
   });
 });
@@ -42,6 +44,7 @@ router.use('/admin', platformAdmin);
 function adminStatus(w) {
   const st = w.status;
   if (w.is_demo) return 'demo';
+  if (st.reason === 'card_check') return 'card_pending';
   if (st.reason === 'deleting') return 'deleting';
   if (st.reason === 'trial_ended') return 'trial_ended';
   if (st.reason === 'payment_due') return 'overdue';
@@ -50,7 +53,7 @@ function adminStatus(w) {
   if (st.plan === 'comped') return 'comped';
   return 'paying';
 }
-const ADMIN_STATUS = ['trial', 'paying', 'grace', 'trial_ended', 'overdue', 'comped', 'deleting', 'demo'];
+const ADMIN_STATUS = ['trial', 'paying', 'grace', 'trial_ended', 'overdue', 'comped', 'deleting', 'demo', 'card_pending'];
 const BUSINESS_TYPES = ['short_term', 'long_term', 'both'];
 const ADMIN_SORTS = {
   newest: (a, b) => b.created_at - a.created_at,
@@ -69,6 +72,7 @@ router.get('/admin/workspaces', ah(async (req, res) => {
   const q = req.query;
   const { rows } = await query(
     `SELECT o.organization_id, o.name, o.business_type, o.plan, o.trial_ends_at, o.paid_until, o.plan_note, o.is_demo, o.created_at, o.deletion_scheduled_at,
+            o.card_check, o.card_brand, o.card_last4,
             ow.full_name AS owner_name, ow.email AS owner_email,
             (SELECT COUNT(*) FROM units u JOIN properties p USING (property_id) WHERE p.organization_id = o.organization_id
                AND u.status = 'active' AND p.status = 'active') AS unit_count,
@@ -119,6 +123,17 @@ router.patch('/admin/workspaces/:id', ah(async (req, res) => {
     await audit(null, { organization_id: id, user_id: req.user.user_id }, 'platform.plan_changed', 'organization', id, { before: { plan: org.plan, paid_until: org.paid_until }, after: body });
   }
   res.json({ ok: true });
+}));
+
+// Skip the card check for a workspace the founder invited by hand: starts the trial now.
+router.post('/admin/workspaces/:id/card-check', ah(async (req, res) => {
+  const id = uuidParam(req.params.id);
+  validate(req.body, { action: { type: 'enum', values: ['waive'], label: 'Action', required: true } });
+  const org = await one('SELECT is_demo FROM organizations WHERE organization_id = $1', [id]);
+  if (!org) throw notFound();
+  if (org.is_demo) throw new HttpError(409, 'The demo workspace cannot be changed.', { code: 'DEMO' });
+  const r = await require('../lib/cardcheck').waive(id, req.user);
+  res.json({ ok: true, trial_ends_at: r.trial_ends_at });
 }));
 
 // ---- Plan coupons (D-94). The rules for using a coupon are in src/lib/coupons.js; these routes list, create,
@@ -240,6 +255,17 @@ const sameValue = (k, a, b) => {
   return a === b;
 };
 
+// A fixed amount above the highest plan price would make that plan free, so the server asks first (D-99, O9). It asks for
+// a new coupon, or an edit that changes the amount or the kind. The confirm flag is read here and never stored.
+const MAX_PLAN_C = Math.max(...PUBLIC_PLANS.map((p) => PLANS[p].price)) * 100;
+function askHighAmount(f, before, body) {
+  if (f.kind !== 'fixed' || toCentavos(f.amount_off) <= MAX_PLAN_C || body.confirm_high_amount === true) return;
+  const moved = !before || !sameValue('amount_off', before.amount_off, f.amount_off) || !sameValue('kind', before.kind, f.kind);
+  if (!moved) return;
+  const msg = `This is more than the highest plan price (${fmtPeso(toPesos(MAX_PLAN_C))}), so the plan would be free.`;
+  throw new HttpError(409, msg, { code: 'AMOUNT_ABOVE_PLAN', fields: { amount_off: msg }, max_plan_price: toPesos(MAX_PLAN_C) });
+}
+
 // Columns in the order the INSERT and UPDATE below use them. The times are Manila wall-clock, so the database makes them UTC.
 const couponParams = (f) => [f.code, f.name, f.kind, f.percent_off, f.amount_off, f.duration, f.duration_months, f.plans,
   f.max_redemptions, f.once_per_workspace, f.require_card, f.starts_on, f.starts_time, f.ends_on, f.ends_time, f.active, f.note];
@@ -261,11 +287,14 @@ const codeTaken = (err) => (err.code === '23505' && err.constraint === 'platform
   ? new HttpError(409, 'Another coupon already uses this code.', { code: 'CODE_TAKEN' }) : err);
 
 // Filters: text (code or name), state, kind and plan (a coupon with no plan list covers every paid plan), then sort.
-// `summary` counts every coupon, whatever the filters.
+// `summary` counts every coupon and totals what they took off, whatever the filters.
 router.get('/admin/coupons', ah(async (req, res) => {
   const q = req.query;
   const all = (await query(`${COUPON_SQL} ORDER BY c.created_at DESC`)).rows.map(couponOut);
-  const summary = Object.fromEntries(COUPON_STATES.map((k) => [k, all.filter((c) => c.state === k).length]));
+  const summary = {
+    ...Object.fromEntries(COUPON_STATES.map((k) => [k, all.filter((c) => c.state === k).length])),
+    discount_total: toPesos(all.reduce((s, c) => s + toCentavos(c.discount_total), 0)),
+  };
   const needle = q.q ? String(q.q).slice(0, 100).toLowerCase() : '';
   let list = all.filter((c) => !needle || `${c.code} ${c.name}`.toLowerCase().includes(needle));
   if (COUPON_STATES.includes(q.state)) list = list.filter((c) => c.state === q.state);
@@ -277,6 +306,7 @@ router.get('/admin/coupons', ah(async (req, res) => {
 
 router.post('/admin/coupons', ah(async (req, res) => {
   const f = couponFields({ once_per_workspace: true, ...req.body, active: true }, 0);
+  askHighAmount(f, null, req.body);
   let row;
   try {
     row = (await query(COUPON_INSERT, [...couponParams(f), req.user.user_id])).rows[0];
@@ -306,6 +336,7 @@ router.patch('/admin/coupons/:id', ah(async (req, res) => {
       if (redeemed && changed.some((k) => COUPON_LOCKED.includes(k))) {
         throw new HttpError(409, "This coupon has been used, so its discount can't change. Make a new coupon instead.", { code: 'COUPON_LOCKED' });
       }
+      askHighAmount(after, form, req.body);
       const startsChanged = changed.some((k) => k === 'starts_on' || k === 'starts_time');
       const endsChanged = changed.some((k) => k === 'ends_on' || k === 'ends_time');
       try {

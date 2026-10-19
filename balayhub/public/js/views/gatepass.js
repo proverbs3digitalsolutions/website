@@ -5,6 +5,12 @@ import { get, post, patch } from '../api.js';
 import { h, brand, fmtDate, fmtDateTime, field, formModal, emptyState, pageHead, toast, badge } from '../ui.js';
 
 // ---------------------------------------------------------------- settings
+// Registered people next to the booked number; before the form is in, the booked number.
+export function guestCountText(d) {
+  const n = d.registered ?? (d.guests.length > 1 ? d.guests.length : (d.num_guests || 1));
+  return `${n}${d.registered && d.num_guests && d.registered !== d.num_guests ? ` (booked for ${d.num_guests})` : ''}`;
+}
+
 export async function gatepassSettingsView(el, { rerender }) {
   const { properties } = await get('/gatepass/settings');
   const edit = (p) => formModal({
@@ -93,7 +99,7 @@ export async function gatepassPublicView(el, { params }) {
           h('dt', null, `Guest${d.guests.length > 1 ? 's' : ''}`), h('dd', null, guestNamesBlock(d.guests)),
           h('dt', null, 'Check-in'), h('dd', null, `${fmtDate(d.check_in)}${d.checkin_time ? `, ${d.checkin_time}` : ''}${d.arrival_time ? ` (arriving ${d.arrival_time})` : ''}`),
           h('dt', null, 'Check-out'), h('dd', null, `${fmtDate(d.check_out)}${d.checkout_time ? `, ${d.checkout_time}` : ''}`),
-          h('dt', null, 'Number of guests'), h('dd', null, `${d.guests.length > 1 ? d.guests.length : (d.num_guests || 1)}${d.registered && d.num_guests && d.registered !== d.num_guests ? ` (booked for ${d.num_guests})` : ''}`),
+          h('dt', null, 'Number of guests'), h('dd', null, guestCountText(d)),
           d.vehicle_plate && [h('dt', null, 'Vehicle plate'), h('dd', null, d.vehicle_plate)],
           d.guest_phone && [h('dt', null, 'Guest mobile'), h('dd', null, d.guest_phone)],
           h('dt', null, 'Reference'), h('dd', null, d.code),

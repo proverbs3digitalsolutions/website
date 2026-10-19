@@ -38,9 +38,9 @@ test('channelsLink points at the first listing\'s Channels dialog, and at Listin
 });
 
 test('firstRunCard takes the listings and links with channelsLink', () => {
-  assert.match(home, /export function firstRunCard\(\{ reservations, listings \}\)/);
+  assert.match(home, /export function firstRunCard\(\{ reservations, listings, syncProblem \}\)/);
   assert.match(fn(home, 'export function firstRunCard'), /href: channelsLink\(listings\)/);
-  assert.match(home, /firstRunCard\(\{ reservations: seen, listings \}\)/);
+  assert.match(home, /firstRunCard\(\{ reservations: seen, listings, syncProblem: Boolean\(sync\) \}\)/);
 });
 
 test('Listings opens the Channels dialog for ?channels=<id> after drawing, only for a listed listing', () => {
@@ -65,7 +65,9 @@ test('listingFilterMode: none for 0, compact for 1 to 3, full from 4', () => {
 test('Listings: no bar with none, quick filters folded into More filters when compact', () => {
   const view = fn(listings, 'export async function listingsView');
   assert.match(view, /bar\.hidden = mode === 'none'/);
-  assert.match(view, /quick: m === 'compact' \? \[\] : quick, more: m === 'compact' \? \[\.\.\.quick, \.\.\.more\] : more/);
+  // R17 #31: compact keeps Occupancy and Sort in view, the rest go in the panel (compactSplit).
+  assert.match(view, /m === 'compact' \? compactSplit\(quick, more\) : \{ quick, more \}/);
+  assert.match(view, /quick: split\.quick, more: split\.more/);
   assert.match(view, /ensureBar\(listings\.length\)/);
 });
 

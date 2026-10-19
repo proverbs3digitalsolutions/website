@@ -33,6 +33,7 @@ const forgotPairLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, key: (r
 const signupLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 10, key: (req) => `signup|${req.ip}` });
 
 const { planStatus } = require('../lib/plans');
+const cardcheck = require('../lib/cardcheck');
 const isPlatformAdmin = (u) => Boolean(u.email_verified_at) && config.platformAdmins.includes(String(u.email).toLowerCase());
 
 function publicUser(u) {
@@ -50,6 +51,7 @@ function publicUser(u) {
     guest_language: u.guest_language || 'en',
     email_verified: Boolean(u.email_verified_at),
     plan,
+    card: u.role === 'owner' && u.card_last4 ? { brand: u.card_brand, last4: u.card_last4 } : null,
     is_platform_admin: isPlatformAdmin(u),
   };
 }
@@ -188,9 +190,15 @@ router.post('/auth/logout', ah(async (req, res) => {
   res.json({ ok: true });
 }));
 
-router.get('/auth/me', requireAuth, (req, res) => {
-  res.json({ user: publicUser(req.user), requireEmailVerification: config.requireEmailVerification });
-});
+router.get('/auth/me', requireAuth, ah(async (req, res) => {
+  const user = publicUser(req.user);
+  // The waiting page for team members names the owner while the card check is open.
+  if (user.plan?.card_check_due && user.role !== 'owner') {
+    const owner = await one(`SELECT full_name FROM users WHERE organization_id = $1 AND role = 'owner' ORDER BY created_at LIMIT 1`, [user.organization_id]);
+    user.owner_name = owner?.full_name || null;
+  }
+  res.json({ user, requireEmailVerification: config.requireEmailVerification });
+}));
 
 // ---------------------------------------------------------------- email verification
 router.post('/auth/verify-email', authLimiter, ah(async (req, res) => {
@@ -296,11 +304,14 @@ router.post('/workspace', requireAuth, ah(async (req, res) => {
     phone: { type: 'phone', label: 'Mobile number' },
   });
   const profile = Object.fromEntries(Object.entries({ units_band: unitsBand, phone }).filter(([, v]) => v));
+  // With the card check on, the trial starts when the owner's card passes (D-98), not now.
+  const gate = cardcheck.initialState(req.user);
   const org = await tx(async (db) => {
-    const { rows: [o] } = await db.query(`INSERT INTO organizations (name, business_type, plan, trial_ends_at, signup_profile)
-       VALUES ($1, $2, 'trial', now() + make_interval(days => $3), $4) RETURNING *`, [name, businessType || 'short_term', config.trialDays, JSON.stringify(profile)]);
+    const { rows: [o] } = await db.query(`INSERT INTO organizations (name, business_type, plan, trial_ends_at, signup_profile, card_check)
+       VALUES ($1, $2, 'trial', CASE WHEN $5::text IS NULL THEN now() + make_interval(days => $3) END, $4, $5) RETURNING *`,
+    [name, businessType || 'short_term', config.trialDays, JSON.stringify(profile), gate]);
     await db.query(`UPDATE users SET organization_id = $1, role = 'owner' WHERE user_id = $2`, [o.organization_id, req.user.user_id]);
-    await audit(db, { ...req.user, organization_id: o.organization_id }, 'workspace.created', 'organization', o.organization_id);
+    await audit(db, { ...req.user, organization_id: o.organization_id }, 'workspace.created', 'organization', o.organization_id, gate ? { card_check: gate } : undefined);
     return o;
   });
   res.status(201).json({ organization: org });

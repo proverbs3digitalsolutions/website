@@ -140,7 +140,7 @@ router.post('/unit-owners/:id/payouts', ownersOnly, ah(async (req, res) => {
 // Void a payout. The row stays for the record.
 router.post('/owner-payouts/:id/void', ownersOnly, ah(async (req, res) => {
   const id = uuidParam(req.params.id);
-  const { reason } = validate(req.body, { reason: { type: 'string', required: true, max: 300, label: 'Reason' } });
+  const { reason } = validate(req.body, { reason: { type: 'string', required: true, max: 500, label: 'Reason' } });
   await tx(async (db) => {
     const { rows: [p] } = await db.query(
       'SELECT owner_id, amount, voided_at FROM owner_payouts WHERE payout_id = $1 AND organization_id = $2 FOR UPDATE',
@@ -199,7 +199,7 @@ router.post('/unit-owners/:id/reserve/withdrawals', ownersOnly, ah(async (req, r
 // Void a withdrawal (always allowed: it puts money back). Deposits are reversed by unpublishing their statement.
 router.post('/reserve-entries/:id/void', ownersOnly, ah(async (req, res) => {
   const id = uuidParam(req.params.id);
-  const { reason } = validate(req.body, { reason: { type: 'string', required: true, max: 300, label: 'Reason' } });
+  const { reason } = validate(req.body, { reason: { type: 'string', required: true, max: 500, label: 'Reason' } });
   await tx(async (db) => {
     const { rows: [e] } = await db.query(
       'SELECT owner_id, kind, amount, voided_at FROM owner_reserve_entries WHERE entry_id = $1 AND organization_id = $2 FOR UPDATE',

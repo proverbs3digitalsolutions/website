@@ -26,6 +26,10 @@ function planStatus(org) {
   const out = { plan, name: p.name, price: p.price, listing_limit: p.listings, ai: p.ai, read_only: false, reason: null, is_demo: Boolean(org.is_demo) };
   if (org.is_demo) return { ...out, read_only: true, reason: 'demo' };
   if (org.deletion_scheduled_at) return { ...out, read_only: true, reason: 'deleting', deletion_scheduled_at: org.deletion_scheduled_at };
+  // Card on file (D-98): the 14-day trial has not started until the owner confirms a card.
+  if (plan === 'trial' && org.card_check === 'required') {
+    return { ...out, read_only: true, reason: 'card_check', card_check_due: true, trial_ends_at: null, trial_days_left: config.trialDays };
+  }
   if (plan === 'trial') {
     const ends = org.trial_ends_at ? new Date(org.trial_ends_at) : null;
     out.trial_ends_at = ends;
@@ -46,6 +50,7 @@ const READ_ONLY_MSG = {
   demo: 'This is the demo workspace, so changes are turned off. Start a free trial to use BalayHub with your own listings.',
   trial_ended: 'Your free trial has ended. Your data is safe and you can still view and export it. Choose a plan in Settings to keep making changes.',
   deleting: 'This workspace is scheduled for deletion, so changes are turned off. The owner can cancel the deletion in Settings.',
+  card_check: 'Confirm your payment card to start your free trial.',
   payment_due: 'Your plan payment is overdue. Your data is safe and you can still view it. Renew in Settings to keep making changes.',
 };
 

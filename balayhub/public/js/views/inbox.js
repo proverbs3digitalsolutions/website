@@ -157,6 +157,8 @@ export async function inboxView(el, { params, query, rerender }) {
   await load();
 
   const listPane = h('div', { class: `inbox__list card card--flush${selected ? ' inbox__list--hide-sm' : ''}` },
+    // Tab would pass every conversation row before the thread; this jumps straight to it.
+    selected && h('button', { type: 'button', class: 'skip-link', onclick: () => { const t = threadPane.querySelector('h2'); if (t) { t.setAttribute('tabindex', '-1'); t.focus(); } } }, 'Skip to conversation'),
     h('div', { class: 'inbox__filters' }, bar),
     items);
 
@@ -486,6 +488,7 @@ function composer(c, templates, status, rerender, assignees = []) {
   const modeTabs = h('div', { class: 'tabs tabs--compact' },
     [['message', 'Message guest'], ['note', 'Internal note']].map(([k, t]) => h('button', {
       type: 'button', 'aria-pressed': String(k === mode),
+      onmousedown: () => picker.close(),
       onclick: () => { setMode(k); body.focus(); },
     }, t)));
   const setMode = (k) => {
@@ -703,8 +706,9 @@ export async function inboxSettingsView(el, { rerender }) {
       h('div', { class: 'card__head' }, h('h2', null, 'Automatic messages'),
         canEdit && h('button', { class: 'btn btn--primary btn--sm', onclick: () => editAutomation(null) }, icon('plus'), 'Add')),
       !canEdit && h('p', { class: 'muted small' }, 'Only the workspace owner can change these.'),
-      automations.length > 0 && automations.every((a) => !a.enabled) && h('p', { class: 'muted small' },
-        "These automatic messages are ready but off. Check each one's wording, then turn on the ones you want."),
+      automations.length > 0 && automations.every((a) => !a.enabled) && h('p', { class: 'muted small' }, canEdit
+        ? "These automatic messages are ready but off. Check each one's wording, then turn on the ones you want."
+        : 'These automatic messages are off until the workspace owner turns them on.'),
       automations.length ? h('ul', { class: 'list' }, automations.map((a) => h('li', null, h('div', { class: 'row row--stack-sm' },
         h('div', { class: 'row__main' },
           h('span', { class: 'row__title' }, a.name),

@@ -20,7 +20,7 @@ extendTranslations({
   'Start your {n}-day free trial': 'Simulan ang {n}-day free trial',
   'Try the live demo': 'Subukan ang live demo',
   'Opening demo…': 'Binubuksan ang demo…',
-  'No credit card needed. Works on your phone. English or Tagalog.': 'Walang credit card na kailangan. Gumagana sa phone. English o Tagalog.',
+  '₱20 card check, then 14 days free. Works on your phone. English or Tagalog.': '₱20 card check, tapos 14 araw na libre. Gumagana sa phone. English o Tagalog.',
   'Syncs with': 'Naka-sync sa',
   // highlights
   'One calendar': 'Iisang calendar', 'for every channel': 'para sa lahat ng channel',
@@ -506,7 +506,7 @@ export async function landingView(el) {
             h('div', { class: 'lp-cta' },
               h('button', { class: 'btn btn--primary', type: 'button', onclick: getStarted() }, t('Start your {n}-day free trial', { n: trialDays })),
               h('button', { class: 'btn btn--secondary', type: 'button', onclick: tryDemo }, t('Try the live demo'))),
-            h('p', { class: 'lp-small' }, t('No credit card needed. Works on your phone. English or Tagalog.'))),
+            h('p', { class: 'lp-small' }, t('₱20 card check, then 14 days free. Works on your phone. English or Tagalog.'))),
           heroCalendar()),
         h('div', { class: 'lp-wrap' }, h('p', { class: 'lp-channels' }, h('span', null, t('Syncs with')), CHANNELS.map((c) => h('strong', null, c))))),
       h('section', { class: 'lp-highlights' },
