@@ -12,6 +12,9 @@ const fmtTime = (t) => {
   return `${((hh + 11) % 12) + 1}:${String(mm).padStart(2, '0')} ${hh < 12 ? 'AM' : 'PM'}`;
 };
 
+// Same wording as the gate pass: the booked number only when more people registered than booked.
+export const registeredText = (reg, booked) => (booked && reg > booked ? `${reg} (booked for ${booked})` : String(reg));
+
 extendTranslations({
   'Too many attempts': 'Napakaraming subok',
   'Something went wrong': 'May nagkaproblema',
@@ -265,7 +268,7 @@ export async function checkinCard(bookingId, rerender) {
     try { await post(`/reservations/${bookingId}/checkin/new-link`); toast('New link created.'); rerender(); } catch (err) { toast(err.message, 'error'); }
   };
   const reg = r ? 1 + (r.guests?.length || 0) : 0;
-  const registered = d.num_guests && reg !== d.num_guests ? `${reg} registered · booked for ${d.num_guests}` : String(reg);
+  const registered = registeredText(reg, d.num_guests);
   return h('div', { class: 'card' },
     h('div', { class: 'card__head' }, h('h2', null, 'Guest check-in form'),
       r?.submitted_at ? h('span', { class: 'badge badge--paid' }, 'Submitted') : h('span', { class: 'badge badge--unpaid' }, r ? 'Waiting' : 'Not yet')),

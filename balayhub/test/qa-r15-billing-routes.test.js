@@ -92,7 +92,7 @@ test('owner previews a coupon and gets the documented shape', async () => {
     free: false,
     card_only: false,
     min_charge_applied: false,
-    message: '50% off your first 3 months. This payment covers 1 of them.',
+    message: 'This payment covers 1 of your 3 coupon months.',
   });
 });
 

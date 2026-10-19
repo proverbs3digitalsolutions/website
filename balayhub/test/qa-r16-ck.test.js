@@ -80,7 +80,7 @@ test('view scans: guest sentence, host card line, gate pass line, #6 wording, Ta
   const gp = read('public/js/views/gatepass.js');
   assert.match(v, /This booking is for \{n\} guests\. If more people are coming, your host will see the new number\./);
   assert.match(v, /This booking is for 1 guest\. If more people are coming, your host will see the new number\./);
-  assert.match(v, /registered · booked for/);
+  assert.match(v, /\(booked for/);
   assert.match(v, /navigator\.onLine === false/);
   assert.match(v, /That didn't go through\. Your answers are still here; please try again\./);
   assert.match(gp, /booked for/);

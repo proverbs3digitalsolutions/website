@@ -342,6 +342,22 @@ test('bank return when the server says passed but the user is still card-due: re
   assert.ok(find(root, (e) => e.tag === 'a' && e.textContent === 'Set up my workspace'));
 });
 
+test('bank return passed on a detached page: the heading takes focus once the page is attached', async () => {
+  globalThis.history = { state: null, replaceState() {} };
+  cc.poll.attachMs = 5;
+  const el = new El('main'); el.isConnected = false;
+  stub.get = async () => ({ ...INFO, status: 'passed', required: false });
+  await view(el, { query: { check: 'b6' } });
+  const h2 = find(el, (e) => e.tag === 'h2' && e.textContent === 'Your card is confirmed');
+  document.activeElement = null;
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(document.activeElement, null, 'nothing to focus while detached');
+  el.isConnected = true;
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(document.activeElement, h2);
+  cc.poll.attachMs = 50;
+});
+
 test('passed without ?check= and the user refreshed clean: one navigate home; still due: Continue link, no navigate', async () => {
   st.user.plan = { card_check_due: false };
   await mount({ status: 'passed', required: false });

@@ -389,16 +389,20 @@ async function channelsModal(listing, onChange) {
     e.preventDefault();
     clearErrors(addForm); status.replaceChildren();
     const btn = addForm.querySelector('button[type=submit]');
-    btn.disabled = true; btn.textContent = 'Connecting…';
+    // 'Connecting…' shows only while a request is really running, never while the 'Save it anyway?' question is open.
+    const busy = () => { btn.disabled = true; btn.textContent = 'Connecting…'; };
     try {
       const body = { unit_id: listing.unit_id, channel: addForm.elements.channel.value, url: addForm.elements.url.value };
       let r;
+      busy();
       try { r = await post('/ical-feeds', body); } catch (err) {
         // A link that does not look like a calendar: ask, rather than refuse (Booking.com's ends in ical.html).
         if (err.code !== 'ICAL_NOT_CALENDAR') throw err;
+        btn.disabled = false; btn.textContent = 'Connect calendar';
         if (!await confirmDialog({ title: 'Check the calendar link', text: err.message, confirmText: 'Save anyway', cancelText: 'Change it' })) {
-          btn.disabled = false; btn.textContent = 'Connect calendar'; addForm.elements.url.focus(); return;
+          addForm.elements.url.focus(); return;
         }
+        busy();
         r = await post('/ical-feeds', { ...body, confirm_unusual_link: true });
       }
       const text = await syncToastText(listing.unit_id, r.feed_id, r.sync);
@@ -749,7 +753,7 @@ export async function guestsView(el, { query }) {
   }
   const bar = filterBar({
     key: 'guests', values: filters, defaults, onChange: load,
-    search: { placeholder: canManage ? 'Search name, mobile or email' : 'Search guests' },
+    search: { placeholder: canManage ? 'Name, mobile, email' : 'Search guests', label: canManage ? 'Search name, mobile or email' : 'Search guests' },
     quick: full ? [
       { name: 'segment', label: 'Guest type', all: 'All guests', options: [['vip', 'VIP'], ['repeat', 'Repeat (2+ stays)'], ['first', 'One stay so far'], ['no_stays', 'No stays yet'], ['do_not_rebook', 'Do not rebook']] },
       { name: 'stay', label: 'Stay', all: 'Any stay', options: [['upcoming', 'Has an upcoming stay'], ['in_house', 'Staying now'], ['none_upcoming', 'Nothing booked ahead']] },

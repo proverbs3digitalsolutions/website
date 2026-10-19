@@ -75,10 +75,13 @@ export async function dailyCloseView(el, { query, rerender }) {
     onSubmit: async (d) => { await post('/daily-close', { date, note: d.note }); toast(closed ? 'Close updated.' : 'Day closed.'); rerender(); },
   });
 
+  let reopening = false; // aria-busy + flag, not disabled: a disabled focused button drops focus to BODY
   const reopen = async (e) => {
+    if (reopening) return;
+    const btn = e.currentTarget; // currentTarget is null after the first await
     if (!await confirmDialog({ title: `Reopen ${fmtDate(date)}?`, text: `The saved close (by ${closed.closed_by_name || 'a team member'}, ${fmtDateTime(closed.closed_at)}) is removed. You can close the day again.`, confirmText: 'Reopen day' })) return;
-    e.target.disabled = true;
-    try { await post('/daily-close/reopen', { date }); toast('Day reopened.'); rerender(); } catch (err) { toast(err.message, 'error'); e.target.disabled = false; }
+    reopening = true; btn.setAttribute('aria-busy', 'true');
+    try { await post('/daily-close/reopen', { date }); toast('Day reopened.'); rerender(); } catch (err) { toast(err.message, 'error'); reopening = false; btn.removeAttribute('aria-busy'); }
   };
 
   const closes = hist.closes;

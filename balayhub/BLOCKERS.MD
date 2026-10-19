@@ -2,7 +2,7 @@
 
 Things only the founder can do or decide before related work can go ahead. Automated runs add items here. The founder clears them by doing the item and ticking it, or by writing the decision in DECISIONS.MD.
 
-Last updated: 2026-10-15 (card on file and automatic payment, D-98, and QA round 17 questions added; round 16 and earlier unchanged except two answered lines)
+Last updated: 2026-10-19 (QA round 18 questions added: the commission option and the coupon wording). Before that: 2026-10-15 (card on file and automatic payment, D-98, and QA round 17 questions added; round 16 and earlier unchanged except two answered lines)
 
 ## Security — do first
 
@@ -437,3 +437,9 @@ Each one has the default already built.
 - [ ] **Where a calendar sync problem shows (S2).** *Default:* the Channels dialog, the listing card, the bell and the Home banner, with no toast. *The other choice:* keep the "Connected, but the first sync failed" toast too.
 - [ ] **Airbnb payments start on Cash (O4).** *Default:* Cash on Airbnb bookings (Channel payout is one tap away). *The other choice:* start empty like direct bookings, or on Channel payout as before.
 - [ ] **Live stage for card on file (nothing local can answer):** a real ₱20 card payment with 3-D Secure, the saved-card one-tap payment, PayMongo's real answers to research R1 to R6, and the Stage 2 API shapes. The browser lanes used a local fake PayMongo.
+
+## Questions from QA round 18 (2026-10-19)
+
+- [ ] **A "free plan plus 2% on paid direct bookings" option (founder question, 2026-10-19).** Advice was given; **nothing is built.** *Decision needed from the founder:* build it or not. *What it needs:* either PayMongo split payments (BalayHub takes 2% as each guest pays the host directly; this needs PayMongo to approve the split-payment feature for the BalayHub account and a way for hosts to link their own PayMongo account), or a monthly invoice to each host for 2% of the paid direct bookings they took that month (simpler, but BalayHub has to chase payment and hosts can stop paying). *Default:* do not build; keep the three paid plans and the 14-day trial.
+- [ ] **Coupon wording: total months or months left (R18-CPN).** The line under the total on Plan & billing now reads "This payment covers 1 of your 3 coupon months." The 3 is the coupon's **total** months. *Default (built):* total months, the same words every time the host pays. *The other choice:* months left, for example "This payment covers 1 of your remaining 2 coupon months.", which changes as the coupon is used.
+- [ ] **Supplies filters on desktop (round 18).** The Property and Stock filters on Supplies now sit behind the Filters button on desktop as well as phones. *Default (built):* keep. *The other choice:* move them back beside the search box on desktop.

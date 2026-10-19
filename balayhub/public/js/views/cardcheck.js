@@ -57,6 +57,13 @@ export function cardProblems({ name, number, exp, cvc }, today = new Date()) {
   return out;
 }
 
+// The router attaches the page after the view returns, so focus() on a detached node does nothing: focus once it is attached (not awaited by the caller).
+async function focusWhenAttached(el, node) {
+  node.focus();
+  for (const t = Date.now(); el.isConnected === false && Date.now() - t < poll.attachMax;) await new Promise((ok) => setTimeout(ok, poll.attachMs));
+  if (el.isConnected !== false) node.focus();
+}
+
 const peso = (n) => `₱${Number(n).toLocaleString('en-PH')}`;
 let seq = 0;
 
@@ -93,7 +100,7 @@ export async function cardCheckView(el, { query = {} } = {}) {
           h('p', null, `Your free trial has started. It ends on ${fmtDate(info.trial_would_end)}.`),
           h('a', { class: 'btn btn--primary', href: query.check ? next : '#/' }, query.check ? 'Set up my workspace' : 'Continue')),
         footer()));
-      done.focus();
+      focusWhenAttached(el, done);
       return;
     }
     if (!stale) navigate(homeRoute(), { replace: true });

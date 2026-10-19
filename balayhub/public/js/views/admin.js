@@ -25,6 +25,10 @@ export function cardText(w) {
   if (w.card_check === 'waived') return 'Skipped';
   return '—';
 }
+// Trimmed on both sides, as the server does (src/routes/admin.js), so a stray space never leaves the button disabled.
+export const nameMatches = (typed, name) => typed.trim() === name.trim();
+export const DELETE_LATER = 'The owner and team are locked out now. You can cancel this for 14 days, then everything is deleted.';
+export const DELETE_NOW = 'Everything is deleted right away: bookings, guests, files, and their PayMongo card and plan. This cannot be undone.';
 export const skipCardText = (name) => `Skip the card check for ${name}? Their 14-day trial starts now.`;
 // ---- end helpers
 
@@ -32,6 +36,7 @@ function statusBadge(w) {
   const s = w.status;
   if (w.is_demo) return badge('archived', 'Demo');
   if (w.admin_status === 'card_pending' || s.reason === 'card_check') return badge('partial', 'Waiting for card');
+  if (w.admin_status === 'deleting') return badge('overdue', 'Deleting');
   if (s.read_only) return badge('overdue', s.reason === 'trial_ended' ? 'Trial ended' : s.reason === 'deleting' ? 'Deleting' : 'Payment due');
   if (s.plan === 'trial') return badge('unpaid', `Trial · ${s.trial_days_left}d left`);
   if (s.reason === 'grace') return badge('partial', 'Grace period');
@@ -70,6 +75,56 @@ export async function adminView(el, { rerender, query = {} }) {
       const hd = document.querySelector('#main h1'); // the row is gone from the list, so focus the page heading
       if (hd) { hd.setAttribute('tabindex', '-1'); hd.focus(); }
     };
+    const scheduled = w.admin_status === 'deleting' && w.deletion_scheduled_at;
+    const canDelete = !w.is_demo && w.organization_id !== state.user.organization_id; // the server also refuses (409) and its message is shown
+    const focusHeading = () => {
+      const hd = document.querySelector('#main h1');
+      if (hd) { hd.setAttribute('tabindex', '-1'); hd.focus(); }
+    };
+    const delErr = h('div', { class: 'alert alert--error', role: 'alert', tabindex: '-1', hidden: true });
+    const nameErr = h('div', { class: 'error', id: 'delete-name-err', role: 'alert' });
+    const nameBox = h('input', { class: 'input', id: 'delete-confirm-name', name: 'confirm_name', type: 'text', autocomplete: 'off', 'aria-describedby': 'delete-name-err' });
+    const delBtns = [];
+    const sync = () => { for (const b of delBtns) b.disabled = !nameMatches(nameBox.value, w.name); };
+    nameBox.addEventListener('input', () => { nameErr.textContent = ''; nameBox.removeAttribute('aria-invalid'); sync(); });
+    const runDelete = async (mode) => {
+      delErr.hidden = true; nameErr.textContent = '';
+      for (const b of delBtns) b.disabled = true;
+      try {
+        const r = await post(`/admin/workspaces/${w.organization_id}/delete`, { mode, confirm_name: nameBox.value });
+        if (mode === 'now') {
+          toast(`${w.name} was deleted.`);
+          modal.close();
+          await rerender();
+          focusHeading();
+        } else {
+          toast(`Deletion scheduled for ${fmtDate(r.deletion_scheduled_at)}.`);
+          modal.close();
+          await rerender();
+        }
+      } catch (err) {
+        sync();
+        if (err.fields?.confirm_name) { nameErr.textContent = err.fields.confirm_name; nameBox.setAttribute('aria-invalid', 'true'); }
+        delErr.textContent = err.message; delErr.hidden = false; delErr.focus();
+      }
+    };
+    const cancelDeletion = async () => {
+      delErr.hidden = true;
+      try { await post(`/admin/workspaces/${w.organization_id}/restore`, {}); } catch (err) { delErr.textContent = err.message; delErr.hidden = false; delErr.focus(); return; }
+      toast('Deletion cancelled.');
+      modal.close();
+      await rerender();
+    };
+    const delBtn = (mode, label, cls) => { const b = h('button', { type: 'button', class: `btn ${cls}`, disabled: true, onclick: () => runDelete(mode) }, label); delBtns.push(b); return b; };
+    const dangerZone = canDelete ? h('section', { class: 'form', 'aria-labelledby': 'delete-ws-title' },
+      h('h3', { id: 'delete-ws-title' }, 'Delete workspace'),
+      scheduled && h('p', { class: 'alert alert--warn' }, `Scheduled for deletion on ${fmtDate(w.deletion_scheduled_at)}.`),
+      scheduled && h('button', { type: 'button', class: 'btn btn--secondary', id: 'cancel-deletion', onclick: cancelDeletion }, 'Cancel deletion'),
+      h('div', { class: 'field', 'data-field': '' },
+        h('label', { for: 'delete-confirm-name' }, `Type ${w.name} to confirm`), nameBox, nameErr),
+      delErr,
+      !scheduled && h('div', { class: 'field' }, h('p', { class: 'muted small' }, DELETE_LATER), delBtn('schedule', 'Delete in 14 days', 'btn--danger')),
+      h('div', { class: 'field' }, h('p', { class: 'muted small' }, DELETE_NOW), delBtn('now', 'Delete now', 'btn--danger'))) : null;
     const form = makeForm({
       submitText: 'Save',
       cancel: () => modal.close(),
@@ -99,7 +154,7 @@ export async function adminView(el, { rerender, query = {} }) {
         modal.close();
       },
     });
-    modal = openModal({ title: `${w.name}`, body: form });
+    modal = openModal({ title: `${w.name}`, body: dangerZone ? h('div', null, form, dangerZone) : form });
   };
 
   const tbody = h('tbody');

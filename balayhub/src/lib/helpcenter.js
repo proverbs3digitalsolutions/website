@@ -131,7 +131,7 @@ const ARTICLES = [
       'Enter the guest name; a guest with the same email as a past guest joins their profile (shown as "Returning").',
       'On the reservation: Check in / Check out, Record payment, Copy payment link, Edit (incl. channel fee), Message guest, Cancel. Owners and managers also see Extra charges, Payment proofs and Refunds under the Payment card, plus a "You keep" line (total minus channel fee).',
       'Checking out marks the listing dirty and creates a cleaning task.',
-      'Saved views on the left (Check-ins today, Upcoming unpaid…) and the search and filters help you find stays quickly.',
+      'Saved views on the left (Check-ins today, “Unpaid, not yet checked out”…) and the search and filters help you find stays quickly.',
     ],
   },
   {

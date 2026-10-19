@@ -345,7 +345,7 @@ async function tasksTab(box, query) {
   const bar = cleaner ? tabs : filterBar({
     key: 'housekeeping', values: filters, defaults, onChange: () => load().catch((e) => toast(e.message, 'error')),
     extra: tabs,
-    search: { placeholder: 'Search listing, cleaner or notes' },
+    search: { placeholder: 'Listing, cleaner, notes', label: 'Search listing, cleaner or notes' },
     quick: [
       { name: 'mine', label: 'Only my tasks', type: 'check' },
       properties.length > 1 && { name: 'property_id', label: 'Property', all: 'All properties', options: properties.map((p) => [p.property_id, p.property_name]) },

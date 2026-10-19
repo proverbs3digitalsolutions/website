@@ -116,10 +116,9 @@ async function claimedMonths(db, redemptionId) {
 
 // What a checkout for this workspace gets. `org` needs organization_id, plan and is_demo.
 // Throws HttpError with the codes in the platform coupons contract. Every reason a code can't be used answers COUPON_INVALID,
-// except the workspace's own (COUPON_USED, COUPON_OTHER, COUPON_PLAN, CARD_OFF).
+// except the workspace's own (COUPON_USED, COUPON_OTHER, COUPON_PLAN, COMPED, CARD_OFF).
 async function resolve(db, { org, code, plan, months }) {
   if (org.is_demo) throw fail(409, 'COMPED', "The demo workspace can't use coupons.");
-  if (org.plan === 'comped') throw fail(409, 'COMPED', "Your workspace is on a complimentary plan, so coupons don't apply.");
   const n = Number(months);
   const typed = normalizeCode(code);
   if (typed && !CODE_RE.test(typed)) {
@@ -157,6 +156,8 @@ async function resolve(db, { org, code, plan, months }) {
   }
   const eligible = !coupon?.plans || coupon.plans.includes(plan);
   if (typed && !eligible) throw fail(409, 'COUPON_PLAN', `This code is for ${planList(coupon.plans)}.`);
+  // Checked after the code, so a comped workspace that sends an unusable code hears COUPON_INVALID; a usable code or no code gets COMPED.
+  if (org.plan === 'comped') throw fail(409, 'COMPED', "Your workspace is on a complimentary plan, so coupons don't apply.");
   const covered = coupon && eligible ? coveredMonths(coupon, monthsLeft, n) : 0;
   if (covered > 0 && coupon.require_card && !config.paymongoMethods.includes('card')) {
     throw fail(409, 'CARD_OFF', 'This code needs a card payment, and card payments are off right now.');
@@ -169,8 +170,9 @@ async function resolve(db, { org, code, plan, months }) {
   } else if (covered === 0) {
     message = eligible ? usedUpMsg(live.months_total) : `Your coupon covers ${planList(coupon.plans)}, so this payment is the full price.`;
   } else {
-    // A live forever coupon's offer already shows in the live box on Plan & billing, so it is not said twice.
-    message = (source === 'redeemed' && coupon.duration === 'forever' ? '' : describe(coupon)) + (coupon.duration === 'months' ? ` This payment covers ${covered} of them.` : '');
+    // The coupon box on Plan & billing states a limited-months offer and a live forever offer, so the line under the total does not repeat them.
+    if (coupon.duration === 'months') message = `This payment covers ${covered} of your ${coupon.duration_months} coupon months.`;
+    else message = source === 'redeemed' && coupon.duration === 'forever' ? '' : describe(coupon);
     // A free coupon that needs a card still charges the minimum; say the amount (D-97 O10).
     if (coupon.kind === 'free' && priced.cardOnly && priced.minChargeApplied) message += ` You pay ₱${toPesos(priced.amountC)} once by card.`;
     message = message.trim() || null;

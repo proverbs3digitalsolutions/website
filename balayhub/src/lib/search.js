@@ -94,14 +94,14 @@ const GROUPS = [
        WHERE s.archived_at IS NULL AND ${propertyScope(u, p)} AND s.name ILIKE $1 ESCAPE '\\'
        ORDER BY s.name ILIKE $2 ESCAPE '\\' DESC, s.name, p.property_name`,
     item: (r) => ({ id: r.id, title: r.title, sub: r.sub, href: `#/supplies?q=${encodeURIComponent(r.title)}` }) },
-  // Title: the vendor, else the category. Never the description (free text can hold money) or the amount.
-  // The vendor rank is COALESCEd so a missing vendor never ranks first.
+  // Title: the vendor as typed, else the category. Sub: the category only when the title is a vendor, so it is never shown twice.
+  // Never the description (free text can hold money) or the amount. The vendor rank is COALESCEd so a missing vendor never ranks first.
   { key: 'expenses', label: 'Expenses', roles: ALL,
-    sql: (u, p) => `SELECT x.expense_id AS id, COALESCE(NULLIF(btrim(x.vendor_name), ''), x.category) AS title, x.category, x.expense_date, p.property_name
+    sql: (u, p) => `SELECT x.expense_id AS id, NULLIF(btrim(x.vendor_name), '') AS vendor, x.category, x.expense_date, p.property_name
        FROM expenses x JOIN properties p ON p.property_id = x.property_id
        WHERE x.voided_at IS NULL AND ${propertyScope(u, p)} AND (x.vendor_name ILIKE $1 ESCAPE '\\' OR x.description ILIKE $1 ESCAPE '\\')
        ORDER BY COALESCE(x.vendor_name ILIKE $2 ESCAPE '\\', false) DESC, x.expense_date DESC, x.expense_id`,
-    item: (r) => ({ id: r.id, title: EXPENSE_CATEGORY[r.title] ?? r.title, sub: `${EXPENSE_CATEGORY[r.category]} · ${r.property_name} · ${d(r.expense_date)}`, href: `#/expenses/${r.id}` }) },
+    item: (r) => ({ id: r.id, title: r.vendor ?? EXPENSE_CATEGORY[r.category], sub: [r.vendor && EXPENSE_CATEGORY[r.category], r.property_name, d(r.expense_date)].filter(Boolean).join(' · '), href: `#/expenses/${r.id}` }) },
   // Sub: the status word the Discount codes page shows on a row, checked in the same order (off, expired, used up, starts, active).
   // The description is searched but never shown (D-99 O1).
   { key: 'discount_codes', label: 'Discount codes', roles: ['owner', 'manager'], module: 'stay',

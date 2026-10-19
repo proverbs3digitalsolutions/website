@@ -181,7 +181,7 @@ export async function tenantsView(el, { query }) {
         }
         load().catch((e) => toast(e.message, 'error'));
       },
-      search: { placeholder: canManage ? 'Search name, phone, unit or property' : 'Search name, unit or property' },
+      search: { placeholder: canManage ? 'Name, phone, unit, property' : 'Name, unit, property' },
       quick: [
         { name: 'lease', label: 'Lease', all: 'Any lease', options: [['active', 'Has a current lease'], ['ending30', 'Ending within 30 days'], ['ending60', 'Ending within 60 days'], ['no_end', 'No end date (month-to-month)'], ['moved_out', 'Moved out'], ['none', 'No unit assigned']] },
         { name: 'balance', label: 'Balance', all: 'Any balance', options: [['overdue', 'Overdue'], ['owing', 'Has unpaid balance'], ['clear', 'Up to date']] },
@@ -189,7 +189,7 @@ export async function tenantsView(el, { query }) {
       more: [
         properties.length > 1 && { name: 'property_id', label: 'Property', all: 'All properties', options: properties.map((p) => [p.property_id, p.property_name]) },
         { name: 'unit_id', label: 'Unit', all: 'All units', options: unitOptions },
-        { name: 'min_balance', label: 'Owes at least (₱)', type: 'number', min: 0, step: '0.01' },
+        { name: 'min_balance', label: 'Owes at least (₱)', type: 'number', min: 0, step: '0.01', pattern: /^\d{1,10}(\.\d{1,2})?$/, patternText: 'Enter an amount of 0 or more (up to 10 digits).' },
         { name: 'sort', label: 'Sort by', all: 'Name (A–Z)', options: [['balance', 'Biggest balance'], ['overdue', 'Most overdue'], ['lease_end', 'Lease ending soonest'], ['move_in', 'Newest move-in'], ['rent', 'Highest rent'], ['unit', 'Property and unit'], ['newest', 'Recently added']] },
       ].filter(Boolean),
     }));

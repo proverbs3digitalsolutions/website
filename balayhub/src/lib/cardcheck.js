@@ -180,8 +180,11 @@ async function savedCard(customerId, iv) {
 }
 
 // Apply a succeeded Payment Intent once. Returns true only for the call that started the trial / saved the card.
-async function markPassed(billingId, iv) {
-  const b = await one('SELECT * FROM billing_payments WHERE billing_id = $1', [billingId]);
+// With `client` it runs on that open transaction (attach() already holds the billing row lock there); otherwise it opens its own.
+async function markPassed(billingId, iv, client) {
+  const b = client
+    ? (await client.query('SELECT * FROM billing_payments WHERE billing_id = $1', [billingId])).rows[0]
+    : await one('SELECT * FROM billing_payments WHERE billing_id = $1', [billingId]);
   if (!b || b.kind !== 'card_check' || b.status === 'paid') return false;
   if (iv.status !== 'succeeded' || iv.amountC !== CARD_CHECK_C
     || iv.metadata?.organization_id !== b.organization_id || iv.metadata?.billing_id !== b.billing_id) {
@@ -192,7 +195,7 @@ async function markPassed(billingId, iv) {
   const card = await savedCard(org0?.paymongo_customer_id, iv);
   const last4 = /^[0-9]{4}$/.test(card.last4 || '') ? card.last4 : null;
   const brand = card.brand ? String(card.brand).slice(0, 20) : null;
-  return tx(async (db) => {
+  const apply = async (db) => {
     const { rows: [row] } = await db.query('SELECT * FROM billing_payments WHERE billing_id = $1 FOR UPDATE', [billingId]);
     const { rows: [org] } = await db.query('SELECT card_check FROM organizations WHERE organization_id = $1 FOR UPDATE', [b.organization_id]);
     if (row && row.status !== 'paid' && org.card_check === 'passed') {
@@ -213,7 +216,8 @@ async function markPassed(billingId, iv) {
       [b.organization_id, wasRequired, config.trialDays, card.pmId, brand, last4]);
     await audit(db, { organization_id: b.organization_id, user_id: b.created_by }, 'billing.card_check_passed', 'billing_payment', billingId, { brand, last4 });
     return true;
-  });
+  };
+  return client ? apply(client) : tx(apply);
 }
 
 async function trialEnd(orgId) {
@@ -229,20 +233,38 @@ async function markFailed(user, b, code) {
 
 // Attach the browser-made payment method to this workspace's Payment Intent and report where it stands.
 async function attach(user, billingId, paymentMethodId) {
-  const b = await one(`SELECT * FROM billing_payments WHERE billing_id = $1 AND organization_id = $2 AND kind = 'card_check'`, [billingId, user.organization_id]);
-  if (!b) throw new HttpError(404, "This record doesn't exist or you don't have permission to view it.", { code: 'NOT_FOUND' });
-  const org = await one('SELECT card_check FROM organizations WHERE organization_id = $1', [user.organization_id]);
-  if (b.status !== 'pending' || !b.payment_intent_id || !['required', 'waived'].includes(org.card_check)) throw notRequired(org);
-  let iv = await paymongo.attachPaymentIntent(sk(), b.payment_intent_id, {
-    paymentMethodId, returnUrl: `${config.appUrl}/#/confirm-card?check=${b.billing_id}`,
+  // The row is locked while PayMongo is called (bounded by its 20 s timeout), so two tabs can't both attach a card to the
+  // same pending check. The outcome is recorded before the lock is released: a success is applied on this transaction
+  // (markPassed, row then workspace), and a card handed to the bank is marked on the row (payment_method = 'attached'), so
+  // a second tab never attaches a second card to the same Payment Intent.
+  const { b, iv } = await tx(async (db) => {
+    const { rows: [b] } = await db.query(
+      `SELECT * FROM billing_payments WHERE billing_id = $1 AND organization_id = $2 AND kind = 'card_check' FOR UPDATE`, [billingId, user.organization_id]);
+    if (!b) throw new HttpError(404, "This record doesn't exist or you don't have permission to view it.", { code: 'NOT_FOUND' });
+    const { rows: [org] } = await db.query('SELECT card_check FROM organizations WHERE organization_id = $1', [user.organization_id]);
+    if (b.status !== 'pending' || !b.payment_intent_id || !['required', 'waived'].includes(org.card_check)) throw notRequired(org);
+    let iv;
+    if (b.payment_method === 'attached') {
+      // A card is already attached: report where that intent stands; only a bank that gave the intent back allows a new card.
+      iv = await paymongo.getPaymentIntent(sk(), b.payment_intent_id);
+    }
+    if (!iv || iv.status === 'awaiting_payment_method') {
+      iv = await paymongo.attachPaymentIntent(sk(), b.payment_intent_id, {
+        paymentMethodId, returnUrl: `${config.appUrl}/#/confirm-card?check=${b.billing_id}`,
+      });
+      // A refused attach (4xx) may mean the intent already moved on: read the real state.
+      if (iv.failed) {
+        const real = await paymongo.getPaymentIntent(sk(), b.payment_intent_id);
+        iv = real.status === 'awaiting_payment_method' && !real.errorCode ? { ...real, errorCode: iv.errorCode } : real;
+      }
+    }
+    if (iv.status === 'succeeded') await markPassed(b.billing_id, iv, db);
+    else if (['awaiting_next_action', 'processing'].includes(iv.status)) {
+      await db.query(`UPDATE billing_payments SET payment_method = 'attached' WHERE billing_id = $1`, [b.billing_id]);
+    }
+    return { b, iv };
   });
-  // A refused attach (4xx) may mean the intent already moved on: read the real state.
-  if (iv.failed) {
-    const real = await paymongo.getPaymentIntent(sk(), b.payment_intent_id);
-    iv = real.status === 'awaiting_payment_method' && !real.errorCode ? { ...real, errorCode: iv.errorCode } : real;
-  }
   if (iv.status === 'succeeded') {
-    await markPassed(b.billing_id, iv);
     const done = await one('SELECT status FROM billing_payments WHERE billing_id = $1', [b.billing_id]);
     return done.status === 'paid' ? { status: 'passed', trial_ends_at: await trialEnd(b.organization_id) } : { status: 'pending' };
   }

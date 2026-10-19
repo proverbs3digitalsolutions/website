@@ -144,7 +144,8 @@ export async function suppliesView(el, { query = {} } = {}) {
   barBox.replaceChildren(filterBar({
     key: 'supplies', values: filters, defaults, onChange: load,
     search: { placeholder: 'Search supplies' },
-    quick: [properties.length > 1 && { name: 'property_id', label: 'Property', all: 'All properties', options: properties.map((p) => [p.property_id, p.property_name]) },
+    // Both selects live in the Filters panel so the search box and the button share one row on a phone.
+    more: [properties.length > 1 && { name: 'property_id', label: 'Property', all: 'All properties', options: properties.map((p) => [p.property_id, p.property_name]) },
       { name: 'low', label: 'Stock', all: 'All items', options: [['1', 'Running low']] }].filter(Boolean),
   }));
   el.replaceChildren(pageHead({ title: 'Supplies', sub: 'What you keep stocked, and what is running low',

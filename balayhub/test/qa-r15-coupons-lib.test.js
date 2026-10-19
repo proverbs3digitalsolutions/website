@@ -185,7 +185,7 @@ test('a code is found whatever its case or spacing, and a percent coupon discoun
   assert.equal(r.source, 'new');
   assert.equal(r.covered, 1);
   assert.equal(r.amountC, 49950);
-  assert.equal(r.message, '50% off your first 3 months. This payment covers 1 of them.');
+  assert.equal(r.message, 'This payment covers 1 of your 3 coupon months.');
 });
 
 test('a once coupon discounts only the first billed month of a 3-month purchase', async () => {
@@ -232,7 +232,7 @@ test('a live coupon applies with no code, and months that open checkouts have cl
   assert.equal(r.source, 'redeemed');
   assert.equal(r.monthsLeft, 1);
   assert.equal(r.covered, 1);
-  assert.equal(r.message, '50% off your first 3 months. This payment covers 1 of them.');
+  assert.equal(r.message, 'This payment covers 1 of your 3 coupon months.');
 });
 
 test('the months counter counts up to the limit, ends as used_up, and writes one audit row per paid checkout', async () => {

@@ -60,35 +60,47 @@ const PURGED_TABLES = [
   'units', 'unit_owners', 'properties', 'invitations', 'audit_logs', 'sessions', 'auth_tokens', 'consent_records', 'users', 'organizations',
 ];
 
-// Before the rows go: stop any live subscription and remove the saved card and customer at PayMongo.
-// A failed subscription cancel rethrows so the purge skips this workspace and purgeDue retries it (the row holds the only
-// copy of the subscription id). Card detach and customer delete are best effort. Logs ids only, never card data.
-async function releaseCard(orgId) {
-  const config = require('../config');
-  if (!config.paymongoSecretKey) return;
-  const pm = require('./paymongo');
-  const { rows: [o] } = await query('SELECT paymongo_customer_id AS cus, card_payment_method_id AS pm, paymongo_subscription_id AS sid FROM organizations WHERE organization_id = $1', [orgId]);
+// Before the rows go: stop any live subscription at PayMongo. A failed cancel rethrows so the purge skips this
+// workspace and purgeDue retries it (the row holds the only copy of the subscription id). Logs ids only.
+async function cancelSubscription(orgId) {
+  if (!require('../config').paymongoSecretKey) return;
   try {
     await require('./subscriptions').cancelForOrg(orgId, null, 'workspace deleted');
   } catch (err) {
-    console.error(`[account] cancel subscription ${orgId} (${o?.sid || '-'}, ${o?.cus || '-'}): ${err.message}`);
+    console.error(`[account] cancel subscription ${orgId}: ${err.message}`);
     throw err;
   }
+}
+
+// After the delete commits: remove the saved card and customer at PayMongo. Best effort; logs ids only, never card data.
+async function releaseCard(orgId, cus, pmId) {
+  const config = require('../config');
+  if (!config.paymongoSecretKey || !cus) return;
+  const pm = require('./paymongo');
   try {
-    if (o?.cus && o?.pm && !(await pm.detachPaymentMethod(config.paymongoSecretKey, o.cus, o.pm))) {
+    if (pmId && !(await pm.detachPaymentMethod(config.paymongoSecretKey, cus, pmId))) {
       console.error(`[account] detach card ${orgId}: PayMongo did not confirm`);
     }
-    if (o?.cus && !(await pm.deleteCustomer(config.paymongoSecretKey, o.cus))) {
-      console.error(`[account] delete customer ${orgId} (${o.cus}): PayMongo did not confirm`);
+    if (!(await pm.deleteCustomer(config.paymongoSecretKey, cus))) {
+      console.error(`[account] delete customer ${orgId} (${cus}): PayMongo did not confirm`);
     }
   } catch (err) { console.error(`[account] release card ${orgId}: ${err.message}`); }
 }
 
 // Permanently delete a workspace, its members' accounts and its stored files.
-async function purgeOrganization(orgId) {
-  const { rows: files } = await query('SELECT * FROM files WHERE organization_id = $1', [orgId]);
-  await releaseCard(orgId);
-  await tx(async (db) => {
+// Returns { deleted: true } or { deleted: false, reason: 'gone' | 'not_due' }. With { scheduledOnly: true } (the scheduler)
+// it deletes only a workspace whose deletion date has passed, so a restored workspace is never purged.
+async function purgeOrganization(orgId, { scheduledOnly = false } = {}) {
+  await cancelSubscription(orgId);
+  let files = [];
+  let cus = null; let pmId = null;
+  const skipped = await tx(async (db) => {
+    // The lock serialises two purges of the same workspace; the second finds the row gone.
+    const { rows: [lock] } = await db.query('SELECT deletion_scheduled_at, paymongo_customer_id, card_payment_method_id FROM organizations WHERE organization_id = $1 FOR UPDATE', [orgId]);
+    if (!lock) return 'gone';
+    if (scheduledOnly && (!lock.deletion_scheduled_at || new Date(lock.deletion_scheduled_at) > new Date())) return 'not_due';
+    cus = lock.paymongo_customer_id; pmId = lock.card_payment_method_id;
+    files = (await db.query('SELECT * FROM files WHERE organization_id = $1', [orgId])).rows;
     const run = (sql) => db.query(sql, [orgId]);
     const units = 'SELECT u.unit_id FROM units u JOIN properties p USING (property_id) WHERE p.organization_id = $1';
     const users = 'SELECT user_id FROM users WHERE organization_id = $1';
@@ -163,16 +175,19 @@ async function purgeOrganization(orgId) {
     await run(`DELETE FROM consent_records WHERE user_id IN (${users})`);
     await run('DELETE FROM users WHERE organization_id = $1');
     await run('DELETE FROM organizations WHERE organization_id = $1');
+    return null;
   });
+  if (skipped) return { deleted: false, reason: skipped };
+  await releaseCard(orgId, cus, pmId);
   for (const f of files) await storage.removeStoredFile(f);
-  return files.length;
+  return { deleted: true };
 }
 
 // Scheduler: delete workspaces whose grace period has passed.
 async function purgeDue() {
   const { rows } = await query(`SELECT organization_id FROM organizations WHERE deletion_scheduled_at IS NOT NULL AND deletion_scheduled_at <= now() AND NOT is_demo`);
   for (const r of rows) {
-    try { await purgeOrganization(r.organization_id); console.log(`[account] deleted workspace ${r.organization_id}`); } catch (err) { console.error('[account] delete failed:', err.message); }
+    try { const out = await purgeOrganization(r.organization_id, { scheduledOnly: true }); if (out.deleted) console.log(`[account] deleted workspace ${r.organization_id}`); } catch (err) { console.error('[account] delete failed:', err.message); }
   }
   return rows.length;
 }

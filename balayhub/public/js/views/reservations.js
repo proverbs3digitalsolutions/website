@@ -14,7 +14,7 @@ import { stars } from './guestcare.js';
 import { gatepassCard } from './gatepass.js';
 import { depositCard } from './deposits.js';
 import { chargesCard } from './charges.js';
-import { refundsCard } from './refunds.js';
+import { refundsCard, refundAmountProblem } from './refunds.js';
 import { proofsCard } from './proofs.js';
 
 const ordinal = (n) => { const s = ['th', 'st', 'nd', 'rd']; const v = n % 100; return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`; };
@@ -150,7 +150,7 @@ const VIEWS = [
   ['departures_today', 'Check-outs today'],
   ['arrivals_tomorrow', 'Check-ins tomorrow'],
   ['departures_tomorrow', 'Check-outs tomorrow'],
-  ['unpaid', 'Upcoming unpaid'],
+  ['unpaid', 'Unpaid, not yet checked out'],
   ['past', 'Past stays'],
   ['cancelled', 'Cancelled'],
   ['recent', 'Recently created'],
@@ -540,7 +540,14 @@ export async function reservationDetailView(el, { params, rerender }) {
   const recordPayment = () => formModal({
     title: 'Record payment', submitText: 'Save payment', idempotent: true,
     // A direct booking has no default method: a one-tap save must not record GCash for money that came another way.
-    check: (d) => (r.channel === 'direct' && !d.payment_method ? { payment_method: 'Choose how the guest paid.' } : null),
+    // Amount and method are reported together, like Record refund; a blank amount is left to the required check.
+    check: (d) => {
+      const f = {};
+      const typed = String(d.amount ?? '').trim();
+      if (typed !== '') { const a = parseAmount(typed); const bad = Number.isNaN(a) ? 'Amount must be a valid amount (e.g. 8500 or 8500.50).' : refundAmountProblem(a); if (bad) f.amount = bad; }
+      if (r.channel === 'direct' && !d.payment_method) f.payment_method = 'Choose how the guest paid.';
+      return Object.keys(f).length ? f : null;
+    },
     fields: [
       // The balance already counts refunds: below 0 the guest is still overpaid, exactly 0 is settled.
       h('div', { class: 'alert alert--info' }, paymentInfo(r.balance, r.total_amount, Number(r.channel_fee) > 0 && !r.channel_fee_ignored ? ` (after the ${peso(r.channel_fee)} channel fee)` : '')),

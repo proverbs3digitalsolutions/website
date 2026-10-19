@@ -16,6 +16,9 @@ function stat(label, value, sub) {
   return h('div', { class: 'stat stat--flat' }, h('div', { class: 'stat__value' }, value), h('div', { class: 'stat__label' }, label), sub && h('div', { class: 'muted small' }, sub));
 }
 
+// The last day of a YYYY-MM month.
+const lastDayOf = (ym) => { const [y, m] = ym.split('-').map(Number); return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10); };
+
 export async function pnlView(el, { query = {} } = {}) {
   const defaults = { month: '', property_id: '' };
   const filters = initFilters('pnl', query, defaults);
@@ -55,6 +58,12 @@ export async function pnlView(el, { query = {} } = {}) {
       box.replaceChildren(h('div', { class: 'card' }, emptyState({ iconName: 'chart', title: 'Nothing for this month', text: 'No stays or expenses were recorded for this month. Choose another month.' })));
       return;
     }
+    // Channel stays that checked out this month with no fee entered (a count, never money). The note is best effort: a failure just leaves it out.
+    let missing = [];
+    try { missing = (await get(`/stay-reports/missing-fees${qs({ month, property_id: filters.property_id })}`)).missing_fees || []; } catch { /* no note */ }
+    const missingNotes = missing.map((m) => h('p', { class: 'muted small' },
+      `${m.stays} ${m.label} ${m.stays === 1 ? 'stay has' : 'stays have'} no channel fee entered. `,
+      h('a', { href: `#/reservations${qs({ view: 'past', channel: m.channel, out_from: `${month}-01`, out_to: lastDayOf(month), property_id: filters.property_id })}` }, 'See the bookings')));
     const cells = (x) => [x.stays, x.nights].map((n) => h('td', { class: 'num' }, String(n)))
       .concat([x.gross, x.channel_fees, x.refunds, x.expenses].map((n) => h('td', { class: 'num' }, peso(n))), h('td', { class: 'num' }, h('strong', null, money(x.net))));
     box.replaceChildren(
@@ -63,6 +72,7 @@ export async function pnlView(el, { query = {} } = {}) {
         stat('Channel fees and refunds', peso(Number(t.channel_fees) + Number(t.refunds)), `${peso(t.channel_fees)} channel fees · ${peso(t.refunds)} refunds`),
         stat('Expenses', peso(t.expenses)),
         h('div', { class: `stat stat--flat${neg(t.net) ? ' stat--alert' : ''}` }, h('div', { class: 'stat__value' }, peso(t.net)), h('div', { class: 'stat__label' }, 'Net'), h('div', { class: 'muted small' }, 'gross − channel fees − refunds − expenses')))),
+      ...missingNotes,
       h('div', { class: 'card card--flush' }, h('div', { class: 'table-wrap' }, h('table', { class: 'table table--compact' },
         h('caption', { class: 'sr-only' }, `Profit and loss per unit for ${fmtMonth(month)}`),
         h('thead', null, h('tr', null, ['Unit', 'Stays', 'Nights', 'Gross', 'Channel fees', 'Refunds', 'Expenses', 'Net'].map((x, i) => h('th', { scope: 'col', class: i ? 'num' : null }, x)))),

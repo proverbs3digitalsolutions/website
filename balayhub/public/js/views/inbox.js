@@ -414,7 +414,7 @@ function composer(c, templates, status, rerender, assignees = []) {
   try { savedDraft = sessionStorage.getItem(draftKey) || ''; savedMode = sessionStorage.getItem(modeKey); } catch { /* ignore */ }
   let mode = composerModes.get(c.conversation_id) || restoredMode(savedMode, savedDraft);
   const subject = h('input', { class: 'input input--sm', name: 'subject', maxlength: 200, placeholder: `Subject (default: ${c.subject})`, 'aria-label': 'Subject' });
-  const body = h('textarea', { class: 'input', name: 'body', maxlength: 10000, placeholder: `Write to ${c.guest_name}…`, 'aria-label': 'Message' });
+  const body = h('textarea', { class: 'input', name: 'body', maxlength: 10000, placeholder: `Write to ${c.guest_name}…` });
   const counter = h('div', { class: 'small muted', hidden: true });
   const updateCounter = () => {
     const left = 10000 - body.value.length;
@@ -511,6 +511,7 @@ function composer(c, templates, status, rerender, assignees = []) {
     if (aiBtn) aiBtn.hidden = mode === 'note';
     sendBtn.textContent = mode === 'note' ? 'Save note' : 'Send';
     if (mode !== 'note') picker.close();
+    body.setAttribute('aria-label', mode === 'note' ? 'Internal note' : `Message to ${c.guest_name}`);
     body.placeholder = mode === 'note' ? 'Only your team sees notes.' : `Write to ${c.guest_name}…`;
     modeHint.textContent = mode === 'note' ? 'Internal note: only your team sees this. It is not emailed to the guest.' : c.guest_email ? `This will be emailed to ${c.guest_name}.` : 'Add an email address before you can send this.';
   };

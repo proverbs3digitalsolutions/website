@@ -133,7 +133,7 @@ export async function maintenanceView(el, { query }) {
         }
         load().catch((e) => toast(e.message, 'error'));
       },
-      search: { placeholder: 'Search issue, unit, reported by or assigned to' },
+      search: { placeholder: 'Issue, unit, person', label: 'Search issue, unit, reported by or assigned to' },
       quick: [
         { name: 'priority', label: 'Priority', all: 'Any priority', options: [['high_up', 'High and urgent'], ...PRIORITIES.slice().reverse().map((p) => [p, label(p)])] },
         properties.length > 1 && { name: 'property_id', label: 'Property', all: 'All properties', options: properties.map((p) => [p.property_id, p.property_name]) },
@@ -221,13 +221,16 @@ export async function maintenanceDetailView(el, { params, rerender }) {
   const canManage = state.user.role !== 'staff';
   const closed = ['resolved', 'cancelled'].includes(m.status);
 
+  let busy = false; // aria-busy + this flag, not disabled: a disabled focused button drops focus to BODY
   const statusButtons = canManage && nextStatuses(m.status).map((s) => h('button', {
     class: `btn btn--sm ${s === 'resolved' ? 'btn--primary' : 'btn--secondary'}`,
     'data-focus-key': `mt-status-${s}`,
     onclick: async (e) => {
+      const btn = e.currentTarget; // currentTarget is null after the first await
       if (s === 'cancelled' && !await confirmDialog({ title: 'Cancel this request?', text: 'Recorded costs stay on the books.', confirmText: 'Cancel request', cancelText: 'Keep request' })) return;
-      e.target.disabled = true;
-      try { await patch(`/maintenance/${m.request_id}`, { status: s }); toast(`Marked ${label(s).toLowerCase()}.`); rerender(); } catch (err) { toast(err.message, 'error'); e.target.disabled = false; }
+      if (busy) return;
+      busy = true; btn.setAttribute('aria-busy', 'true');
+      try { await patch(`/maintenance/${m.request_id}`, { status: s }); toast(`Marked ${label(s).toLowerCase()}.`); rerender(); } catch (err) { toast(err.message, 'error'); busy = false; btn.removeAttribute('aria-busy'); }
     },
   }, s === 'resolved' ? 'Mark resolved' : s === 'in_progress' ? 'Start work' : s === 'open' ? (m.status === 'in_progress' ? 'Back to open' : 'Reopen') : 'Cancel request'));
 

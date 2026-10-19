@@ -68,6 +68,8 @@ test.before(async () => {
   await sql(`UPDATE expenses SET voided_at = now(), void_reason = 'Duplicate entry' WHERE vendor_name = 'Voided Vendor Co'`);
   // No vendor: the description holds money typed by the owner. The result must show the category, never that text.
   assert.equal((await owner.post('/api/expenses', { property_id: propA, category: 'repairs', description: 'Paid 500 to plumber', amount: '500', expense_date: today })).status, 201);
+  // A vendor typed exactly like a category key is the title as typed, not the category name.
+  assert.equal((await owner.post('/api/expenses', { property_id: propA, category: 'repairs', description: 'Monthly premium', amount: '250', expense_date: today, vendor_name: 'insurance' })).status, 201);
 
   // A cleaning task for the unit, due today.
   const [{ organization_id: orgId }] = await sql('SELECT organization_id FROM properties WHERE property_id = $1', [propA]);
@@ -139,12 +141,19 @@ test('an expense is found by vendor, and its item shows the category, property a
   assert.deepEqual(titles(await search(staffB, 'Juan Plumbing'), 'expenses'), []);
 });
 
-test('an expense with no vendor shows its category as the title, never the description', async () => {
+// QA round 18, longterm finding 4: when the title already is the category, the sub line does not repeat it.
+test('an expense with no vendor shows its category as the title, never the description, and the category once', async () => {
   const r = await search(owner, 'Paid 500');
   assert.deepEqual(titles(r, 'expenses'), ['Repairs']);
-  assert.ok(group(r, 'expenses').items[0].sub.startsWith('Repairs · Azure · '), group(r, 'expenses').items[0].sub);
+  assert.equal(group(r, 'expenses').items[0].sub, `Azure · ${shortDate(manilaToday())}`, group(r, 'expenses').items[0].sub);
   assert.equal(JSON.stringify(group(r, 'expenses')).includes('Paid'), false, JSON.stringify(group(r, 'expenses')));
   assert.equal(LEAK.test(JSON.stringify(group(r, 'expenses'))), false, JSON.stringify(group(r, 'expenses')));
+});
+
+test('a vendor typed like a category name is the title as typed, and the category stays in the sub line', async () => {
+  const r = await search(owner, 'insurance');
+  assert.deepEqual(titles(r, 'expenses'), ['insurance']);
+  assert.equal(group(r, 'expenses').items[0].sub, `Repairs · Azure · ${shortDate(manilaToday())}`, group(r, 'expenses').items[0].sub);
 });
 
 test('a voided expense is not found', async () => {

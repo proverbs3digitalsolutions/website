@@ -65,7 +65,7 @@ test('a free 3-month coupon that needs a card names the covered months first, th
   const r = await c.resolve(pool, { org: await makeOrg(), code, plan: 'growth', months: '3' });
   assert.equal(r.covered, 3);
   assert.equal(r.amountC, 2000);
-  assert.equal(r.message, 'Free for your first 3 months. This payment covers 3 of them. You pay ₱20.00 once by card.');
+  assert.equal(r.message, 'This payment covers 3 of your 3 coupon months. You pay ₱20.00 once by card.');
 });
 
 test('a free forever coupon that needs a card says the card charge after "every month"', async () => {
@@ -90,7 +90,7 @@ test('a free 3-month card coupon on a 12-month purchase that stays above the min
   const r = await c.resolve(pool, { org: await makeOrg(), code, plan: 'growth', months: '12' });
   assert.equal(r.amountC, 749250);
   assert.equal(r.minChargeApplied, false);
-  assert.equal(r.message, 'Free for your first 3 months. This payment covers 3 of them.');
+  assert.equal(r.message, 'This payment covers 3 of your 3 coupon months.');
 });
 
 test('a percent coupon raised to the minimum keeps its message; only free coupons name the card charge', async () => {

@@ -77,7 +77,7 @@ const OPTIONS = [
 const quote = (o = {}) => ({
   coupon: { code: 'ALPHA50', kind: 'percent', percent_off: 50, amount_off: null, duration: 'months', duration_months: 3, months_left: 3 },
   plan: 'growth', months: 1, list_amount: '999.00', discount_amount: '499.50', amount: '499.50', covered_months: 1,
-  free: false, card_only: false, message: '50% off your first 3 months. This payment covers 1 of them.', ...o,
+  free: false, card_only: false, message: 'This payment covers 1 of your 3 coupon months.', ...o,
 });
 const mount = (bill = {}) => po({ plan: 'trial', read_only: false }, { online: true, options: OPTIONS, history: [], coupon: null, ...bill }, () => { calls.push(['rerender']); }, bc);
 const find = (root, f) => root.all(f)[0];
@@ -96,9 +96,10 @@ test('typing a code and pressing Apply previews it and shows a struck list price
   const strike = find(root, (e) => e.className === 'strike muted');
   assert.equal(strike.hidden, false); assert.equal(strike.textContent, '₱999.00');
   assert.equal(find(root, (e) => e.tag === 'strong' && e.textContent === '₱499.50').tag, 'strong');
-  assert.match(root.textContent, /50% off your first 3 months\. This payment covers 1 of them\./);
+  assert.match(root.textContent, /This payment covers 1 of your 3 coupon months\./);
   assert.match(root.textContent, /ALPHA50 applied: 50% off your first 3 months\./);
-  assert.match(root.textContent, /Your coupon is applied automatically/);
+  assert.match(root.textContent, /BalayHub never charges your card on its own; you renew here\./);
+  assert.doesNotMatch(root.textContent, /applied automatically/);
 });
 
 test('Enter in the code box applies it', async () => {

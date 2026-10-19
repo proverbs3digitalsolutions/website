@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
+Last updated: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
 
 ---
 
@@ -235,7 +235,7 @@ Open to everyone. Linked from sign-up, guest pages and footers.
 
 **States and messages**
 - Field errors (shown under the box, the first one takes focus): **Enter the name on the card.** / **Enter the card number.** / **This card number isn't valid. Check it and try again.** / **Enter the expiry as MM/YY.** / **This card has expired.** / **Enter the 3 or 4 digit code on the back of the card.** / **Tick the box to agree to automatic payment.**
-- Error summary at the top (`role="alert"`, takes focus): declined **Your card was declined. Try another card, or ask your bank.**; bank check not finished **Your bank's check wasn't finished, so nothing was charged. Try again.**; network **We couldn't reach the payment service. Nothing was charged. Please try again in a moment.**; too many tries **Too many tries. Please wait a few minutes and try again.**; PayMongo's own field message is shown prefixed **PayMongo says:**. A declined card keeps the same payment, so a second card can be tried (no second charge attempt is created).
+- Error summary at the top (`role="alert"`, takes focus): declined **Your card was declined. Try another card, or ask your bank.**; bank check not finished **Your bank's check wasn't finished, so nothing was charged. Try again.**; network **We couldn't reach the payment service. Nothing was charged. Please try again in a moment.**; too many tries **Too many tries. Please wait a few minutes and try again.**; PayMongo's own field message is shown prefixed **PayMongo says:**. A declined card keeps the same payment until the owner tries again; a retry after a decline expires the old ₱20 intent and creates one new intent (never two charges). *Changed 2026-10-19, D-100: the earlier text said the same intent was reused; the code makes a new one.* On the bank's page, choosing **Fail** returns to the card page with the declined message above (**Your card was declined. Try another card, or ask your bank.**), not the "bank check wasn't finished" message. After a bank return that passes, the **Your card is confirmed** panel takes focus on its heading.
 - Loading: skeleton while the page reads `GET /billing/card-check`. If the check is off or already done: goes home.
 - **Team members** (manager, staff, cleaner) of a gated workspace see **Waiting for your workspace owner**: **{Owner name} needs to confirm a payment card before your team can use BalayHub. Ask them to log in and finish setup.** with Help, Account and Log out.
 - **Phones:** card fields stack one per row (expiry and CVC share a row from 360px); every button and link is at least 44px tall.
@@ -474,7 +474,7 @@ Cards top to bottom (owner):
 - Staff don't see the menu item and get the server's 403 if they open the page directly.
 
 ### 7.24 Phase 3 pages (owners and managers)
-- **Cleaner pay `#/cleaner-pay`:** pick a month and filters, tick finished cleans, **Mark paid** (a per-hour clean with no start time shows "Pay not set — add the hours, or set the amount." and can't be marked paid until its pay is set) (date, method, reference, optional expense). **Rates** editor is owners only. **Undo paid** is owners only.
+- **Cleaner pay `#/cleaner-pay`:** pick a month and filters, tick finished cleans, **Mark paid** (a per-hour clean with no start time shows "Pay not set — add the hours, or set the amount." and can't be marked paid until its pay is set) (date, method, reference, optional expense). **How you paid** starts on **Choose…** (no default) and asks **Choose how you paid the cleaner.** until one is picked (D-100). **Rates** editor is owners only. **Undo paid** is owners only.
 - **Supplies `#/supplies`:** per property, low stock highlighted. Add, archive, record count, restock, or **Record use** (toast "Use recorded."). **History** on each item opens a dialog with its last 20 movements (what, how many, who, date, note). Owners and managers only; an archived item has no History button.
 - **Lost and found `#/lost-found`:** filter by status; mark Held, Returned or Disposed with a note.
 - **Maintenance → Schedules:** add, pause. Requests from a cleaning job show a "From cleaning task" badge.
@@ -530,6 +530,7 @@ No assigned properties → lists are empty with "assigned to you" wording.
 - **Support queue `#/admin/support`:** tickets from every workspace, urgent and new first. Status tabs plus the standard filter bar (search, topic, priority, assigned to me); the filters are kept in the address and remembered. Rows open with Enter or Space. Help tickets on `#/help` use the same filter bar (search plus the Open or Closed tabs). Empty: "No tickets here".
 - **Ticket `#/admin/support/<id>`:** **Assign to me**, **Mark resolved**, reply or internal note, customer card, attachments, **Change status** buttons. Customers see replies from "BalayHub Support".
 - **Card on file (D-98):** the workspace table has a **Card** column (a dash when not needed, **Waiting**, **Visa 4242**, **Skipped**) and the Status filter has **Waiting for card**. A waiting workspace shows an amber **Waiting for card** badge, and after the owner removes the card the Card column reads **Removed**. A waiting workspace's panel says "Waiting for the owner to save a card. The trial has not started." with **Skip card check**: the dialog reads **Skip the card check for {workspace}? Their 14-day trial starts now.** (**Cancel** / **Skip card check**), the toast **Card check skipped. The trial has started.** On a workspace that is not waiting the server answers 409.
+- **Delete workspace (D-100; platform admin only, section 31.1).** The workspace panel ends with a **Delete workspace** section: type the workspace name, then **Delete in 14 days** or **Delete now**. Not offered for the demo or the admin's own workspace; the server also refuses a workspace that has a platform admin as a member. A workspace waiting for deletion shows a red **Deleting** badge and a **Cancel deletion** button.
 - **Plan coupons `#/admin/coupons`** (a button next to Support queue on the admin page; platform admins only; anyone else sees "Not found"). Make and manage coupons for BalayHub's plans; see section 28.2.
 - A platform admin is also a normal member of their own workspace.
 
@@ -1336,3 +1337,50 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 - **Reminder email** (3 days and 1 day before the trial ends): subject "Your BalayHub trial ends on {date}" with a link to Settings. Stage 2 with automatic payment on gets "Your BalayHub plan starts on {date}" 3 days before.
 - After saving the plan after the trial (Change, then Save), focus stays on **Change**.
 - Owners only; managers, staff and cleaners never see or call any of this.
+
+---
+
+## 31. QA round 18 changes (D-100; 2026-10-19)
+
+### 31.1 Platform admin: Delete workspace (`#/admin`)
+- Open a workspace (not the demo, not your own). At the bottom of the panel, h3 **Delete workspace** with a box **Type {workspace name} to confirm**. The name is trimmed on both sides and must otherwise match exactly (capitals count). Both buttons stay off until it matches. The server checks again.
+- **Delete in 14 days:** "The owner and team are locked out now. You can cancel this for 14 days, then everything is deleted." Toast **Deletion scheduled for {date}.** The owner gets an email ("Your BalayHub workspace "{name}" will be deleted on {date}") with a link to Settings. The workspace is view-only and shows the **Deleting** badge in the table. The panel then shows **Cancel deletion** and only **Delete now**.
+- **Delete now:** "Everything is deleted right away: bookings, guests, files, and their PayMongo card and plan. This cannot be undone." Toast **{name} was deleted.**, the panel closes, the table redraws and focus goes to the page heading.
+- **Cancel deletion** (admin): toast **Deletion cancelled.**; the workspace is editable again. The owner can do the same from Settings (**Cancel deletion**), also for a deletion an admin scheduled.
+- **Messages (shown in the panel, focus moves to the message):** the demo "The demo workspace cannot be deleted."; own workspace "You cannot delete the workspace you belong to."; a workspace with a platform admin member "This workspace belongs to a BalayHub admin and can't be deleted here."; already scheduled "This workspace is already scheduled for deletion."; a wrong name "Type the workspace name exactly to confirm." (under the box, marked invalid); a failed purge "The workspace could not be deleted. Nothing was deleted. Please try again in a minute." (the box and buttons stay, so it can be retried); Cancel on a workspace that is not scheduled "This workspace is not scheduled for deletion."
+- The deletion is written to a record that survives the purge (platform audit, no workspace). The workspace's own Settings audit list shows "Workspace deletion scheduled by BalayHub" and "Workspace deletion cancelled by BalayHub".
+
+### 31.2 Confirm your payment card (5.10)
+- A bank **Fail** shows the declined message. A decline then a retry makes one new ₱20 payment (the old one expires); two charges never happen. The success panel takes focus on its heading after a bank return. See 5.10.
+- Plan & billing Stage 1: the note under the pay buttons is only "BalayHub never charges your card on its own; you renew here." The sentence about automatic payment shows only when automatic payment is on.
+- **Remove card** turns automatic payment off first, then forgets the card; removing again with no card writes no second log entry.
+
+### 31.3 Filters on phones (every list page with a filter bar)
+- Below 560px the search box and the **Filters** button share one row. Quick toggles and quick selects (for example Housekeeping **Only my tasks** and the property select) move into the Filters panel. Desktop is unchanged. First list row sits near the top (Housekeeping 605px to 443px, Maintenance 553 to 387, Expenses 466 to 300, Guests 443 to 277, measured at 390 wide).
+- **Clear all** and **Reset filters** clear only filter values; they keep the saved view the person chose.
+- The Appearance switch labels on Settings and My account stay on one line ("Match device" does not wrap).
+
+### 31.4 Reservations
+- The saved view **Upcoming unpaid** is now **Unpaid, not yet checked out** (it includes in-house unpaid stays).
+- **Record payment** reports the amount and the method together: both messages appear at once, as in Record refund.
+- Channels dialog (Listings): **Connecting…** and the busy button appear only after "Save it anyway?" is answered **Save anyway**, or when no question was needed.
+
+### 31.5 Cleaner pay
+- Mark paid: **How you paid** starts on **Choose…**; saving without a choice says **Choose how you paid the cleaner.**
+
+### 31.6 Inbox
+- The box under the thread is named **Internal note** in note mode and **Message to {guest name}** in message mode (it was always "Message").
+
+### 31.7 Reports and Profit and loss
+- Channel stays with no channel fee entered: one line per channel next to Channel fees, **N Airbnb stays have no channel fee entered.** (one stay reads "1 Airbnb stay has…") with a link **See the bookings** to Reservations filtered to that channel and period. Reports counts by check-in date, Profit and loss by check-out date (stays already ended). Counts only, never money. Owners and managers.
+- Reports custom dates: every date error marks the **From** and **To** boxes invalid and ties the message to them for screen readers.
+
+### 31.8 Plan coupons (Plan & billing)
+- A code is looked up first. An unknown or unusable code says "This code isn't valid right now. Check it and try again." even on a comped workspace. A comped workspace with a usable code or no code hears "Your workspace is on a complimentary plan, so coupons don't apply."
+- A coupon with limited months reads **This payment covers 1 of your 3 coupon months.** under the total. The offer itself stays in the coupon box. The number is the coupon's total months, not the months left.
+
+### 31.9 Other
+- Tenants **Owes at least (₱)** uses Rent's rule: **Enter an amount of 0 or more (up to 10 digits).**, no chip while invalid. Search placeholders fit at 1280px: Payments **Tenant, unit, reference, notes**; Tenants **Name, phone, unit, property**.
+- Top bar search: a page keyword matches whole words or word starts only ("Ana" no longer finds "manager"). An expense result's second line drops the category when the title already is the category.
+- The host check-in card reads **5 (booked for 3)** when more are registered than booked; when fewer, only the registered count.
+- Maintenance status buttons and Daily close **Reopen day** stay enabled while saving (the page marks them busy and ignores a second click), so focus never drops to the page body before it moves to the heading.

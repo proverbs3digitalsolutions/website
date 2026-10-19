@@ -116,11 +116,13 @@ export async function cleanerPayView(el, { query = {} } = {}) {
         h('p', { class: 'muted small' }, `${[...new Set(rows.map(whoOf))].join(', ')} · ${peso(fromCents(total))} in total`),
         h('div', { class: 'form-row form-row--2' },
           field({ name: 'paid_on', label: 'Date paid', type: 'date', required: true, value: todayManila(), max: todayManila() }),
-          field({ name: 'method', label: 'How you paid', type: 'select', required: true, value: 'cash', placeholderOption: false, options: options(METHODS) })),
+          field({ name: 'method', label: 'How you paid', type: 'select', placeholderOption: 'Choose…', options: options(METHODS) })),
         field({ name: 'reference', label: 'Reference (optional)', placeholder: 'GCash or bank reference number', maxlength: 100 }),
         field({ name: 'record_expense', label: 'Also record as cleaning expenses', type: 'checkbox', value: false }),
         h('p', { class: 'hint' }, 'Adds one cleaning expense per unit, so it shows on profit and loss and owner statements.'),
       ],
+      // No default method: a one-tap save must never record cash by accident (D-92 O4).
+      check: (d) => (!d.method ? { method: 'Choose how you paid the cleaner.' } : null),
       onSubmit: async (d, { idempotencyKey }) => {
         await post('/cleaner-pay/mark-paid', { task_ids: rows.map((x) => x.task_id), paid_on: d.paid_on, method: d.method, reference: d.reference || undefined, record_expense: !!d.record_expense }, { idempotencyKey });
         toast('Marked as paid.');

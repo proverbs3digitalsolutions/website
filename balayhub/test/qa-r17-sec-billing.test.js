@@ -4,6 +4,7 @@
 // TEST_DATABASE_URL=postgres://balayhub:balayhub@localhost:5432/balayhub_test_r2_23 node --test --test-concurrency=1 test/qa-r17-sec-billing.test.js
 
 if (!process.env.TEST_DATABASE_URL) throw new Error('Set TEST_DATABASE_URL. This test never falls back to the default database.');
+if (/\/balayhub(\?|$)/.test(process.env.TEST_DATABASE_URL)) throw new Error('Refusing to run on the balayhub database. Use a balayhub_test_* database.');
 process.env.PAYMONGO_SECRET_KEY = 'sk_test_x';
 process.env.PAYMONGO_PUBLIC_KEY = 'pk_test_x';
 process.env.PAYMONGO_WEBHOOK_SECRET = 'whsk_test';

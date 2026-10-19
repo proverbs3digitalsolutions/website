@@ -110,6 +110,14 @@ test('no saved card shows only the existing button', () => {
   assert.equal(find(root, (e) => /^Pay .* with /.test(e.textContent) && e.tag === 'button').hidden, true);
 });
 
+test('Stage 1 coupon note drops the applied-automatically sentence; Stage 2 keeps it', async () => {
+  stub.post = async () => ({ coupon: { code: 'A' }, plan: 'growth', months: 1, list_amount: '999.00', discount_amount: '499.50', amount: '499.50', free: false, card_only: false, message: '' });
+  const root = mount();
+  await apply(root, 'alpha');
+  assert.match(root.textContent, /BalayHub never charges your card on its own; you renew here\./);
+  assert.doesNotMatch(root.textContent, /applied automatically/);
+});
+
 test('the one-tap amount follows a coupon preview and a free coupon keeps Activate free plan', async () => {
   stub.post = async () => ({ coupon: { code: 'A' }, plan: 'growth', months: 1, list_amount: '999.00', discount_amount: '499.50', amount: '499.50', free: false, card_only: false, message: '' });
   const root = mount();

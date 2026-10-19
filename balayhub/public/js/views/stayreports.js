@@ -49,6 +49,16 @@ export function listingsFor(listings, propertyId) {
   return listings.filter((l) => String(l.property_id) === String(propertyId));
 }
 
+// The day before an exclusive end date, as YYYY-MM-DD. Pure.
+export const lastDay = (toExclusive) => new Date(Date.parse(`${toExclusive}T00:00:00Z`) - 86400000).toISOString().slice(0, 10);
+
+// One line per channel whose stays have no channel fee entered: a count and a link to those bookings, never money. Pure of data; `link` builds the address.
+export function missingFeeNotes(rows, link) {
+  return (rows || []).map((m) => h('p', { class: 'muted small' },
+    `${m.stays} ${m.label} ${m.stays === 1 ? 'stay has' : 'stays have'} no channel fee entered. `,
+    h('a', { href: link(m.channel) }, 'See the bookings')));
+}
+
 function stat(label, value, sub) {
   return h('div', { class: 'stat stat--flat' }, h('div', { class: 'stat__value' }, value), h('div', { class: 'stat__label' }, label), sub && h('div', { class: 'muted small' }, sub));
 }
@@ -166,6 +176,20 @@ export async function stayReportsView(el, { query = {} }) {
   const typed = {}; // custom dates the person typed that were refused: they stay in their box until fixed (#20)
   const setPeriod = (patch) => { windowLink = false; linkInvalid = false; if ('period' in patch) { delete typed.from; delete typed.to; } else Object.keys(patch).forEach((k) => delete typed[k]); Object.assign(filters, patch); rememberFilters('stay-reports', filters); load(); };
 
+  // Every refused or missing custom date is marked at its own box (aria-invalid), and the boxes already point at the status line (aria-describedby). N5.
+  function markBoxes(serverField) {
+    if (filters.period !== 'range') return;
+    const bad = new Set(Object.keys(typed));
+    if (serverField) bad.add(serverField);
+    if (filters.from && filters.to && filters.to < filters.from) bad.add('to');
+    if (!(filters.from && filters.to)) ['from', 'to'].forEach((k) => { if (!filters[k]) bad.add(k); });
+    if (windowLink) ['from', 'to'].forEach((k) => { if (isDay(filters[k]) && outOfWindow(filters[k])) bad.add(k); });
+    for (const [k, name] of [['from', 'From'], ['to', 'To']]) {
+      const box = periodBox.querySelector(`[aria-label="${name}"]`);
+      if (box) { if (bad.has(k)) box.setAttribute('aria-invalid', 'true'); else box.removeAttribute('aria-invalid'); }
+    }
+  }
+
   function drawPeriod() {
     // Drawing the controls again drops focus, so the control that had it gets it back (found by its name).
     const focusName = periodBox.contains(document.activeElement) && document.activeElement.getAttribute('aria-label');
@@ -208,6 +232,7 @@ export async function stayReportsView(el, { query = {} }) {
       : backwards ? 'The end date must be after the start date. Showing this month for now.'
       : filters.period === 'range' && !(filters.from && filters.to) ? 'Choose both dates. Showing this month for now.' : '';
     if (Object.keys(typed).length) status.textContent = `${OUT_OF_WINDOW} ` + refusedDatesText(typed); // refused typed dates win (#20)
+    markBoxes();
     const apiQ = qs({ ...periodQ, ...scopeOf(filters) });
     // A custom range is exported only once both dates are set and run forwards (#28).
     const exportOk = filters.period !== 'range' || Boolean(filters.from && filters.to && !backwards);
@@ -218,7 +243,7 @@ export async function stayReportsView(el, { query = {} }) {
       const fe = dateFieldError(err);
       if (fe) { // keep the last report, say why under the bar and mark the box (#22)
         status.textContent = fe.text;
-        periodBox.querySelector(`[aria-label="${fe.field === 'to' ? 'To' : 'From'}"]`)?.setAttribute('aria-invalid', 'true');
+        markBoxes(fe.field === 'to' ? 'to' : 'from');
         return;
       }
       fail(err); return;
@@ -244,6 +269,8 @@ export async function stayReportsView(el, { query = {} }) {
           stat('Avg nightly rate', peso(t.adr), `RevPAR ${peso(t.revpar)}`),
           stat('Net (before refunds)', peso(t.net), r.expenses_excluded ? `${peso(t.channel_fees)} channel fees · expenses not split by channel` : `${peso(t.channel_fees)} channel fees · ${peso(t.expenses)} expenses`)),
         h('p', { class: 'muted small' }, `Average stay ${t.avg_stay} nights (whole stays, check-ins in this period)${t.cancelled ? ` · ${t.cancelled} cancelled` : ''}.`),
+        // Channel stays with no fee make the net look higher than it is (per channel, linked to those bookings).
+        ...missingFeeNotes(r.missing_fees, (c) => `#/reservations${qs({ view: 'all', channel: c, from: r.from, to: lastDay(r.to_exclusive), property_id: filters.property_id, unit_id: filters.unit_id })}`),
         h('p', { class: 'muted small' }, 'Refunds aren\'t deducted here. Profit and loss shows the net after refunds.'),
         h('p', { class: 'muted small' }, `Counts nights in ${when}, including upcoming confirmed stays. Profit and loss counts only stays that have checked out.`)),
       h('div', { class: 'grid grid--2' },

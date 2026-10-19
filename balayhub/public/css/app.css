@@ -1728,7 +1728,9 @@ a.op__row:hover { background: var(--surface-2); }
   .ops-check__tap { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; cursor: pointer; }
   /* Round 17 (#37): three nowrap labels do not fit a phone row, so the columns may shrink equally and the label wraps. */
   .themeswitch { grid-auto-columns: minmax(0, 1fr); max-width: 100%; }
-  .themeswitch button { white-space: normal; text-align: center; line-height: 1.2; }
+  .themeswitch button { white-space: nowrap; text-align: center; line-height: 1.2; }
+  /* Round 18: "Match device" stays on one line in the ~103px segments, icon above the label as on the More sheet. */
+  .themeswitch:not(.themeswitch--compact) button { flex-direction: column; gap: 2px; padding: 6px 4px; font-size: .8rem; }
   /* Round 14 (class E): the controls the list above missed. .chart-foot .link-btn and .lp-top .btn--sm are repeated here
      because their own rules are more specific and would otherwise win. */
   .check, .link-btn, .linkbtn, .flt__clear, .chart-foot .link-btn, .input--sm, .langtoggle button, .lp-top .btn--sm, .gc__foot a, .lpad-guide summary { min-height: 44px; }
@@ -1783,6 +1785,14 @@ select.input { appearance: none; -webkit-appearance: none; padding-right: 36px;
 .flt__chip:active { background: var(--forest); color: var(--on-forest); }
 .flt__clear { border: 1px solid var(--line-2); border-radius: 999px; padding: 4px 12px; min-height: 32px; text-decoration: none; background: var(--surface); }
 .flt__clear:hover { border-color: var(--accent); }
+/* Round 18: on phones the search box and the Filters button share one row (the quick filters sit inside the panel, see filters.js). */
+@media (max-width: 559px) {
+  .flt__bar .search { flex: 1 1 0; }
+  .flt__bar .flt__more { flex: none; }
+  /* Anything else in the bar (the saved view select, tabs) takes its own full row, so the search box keeps most of the next row (QA r18 re-verify R4). */
+  .flt__bar > :not(.search, .flt__more, .flt__by, .flt__check) { flex: 1 1 100%; }
+  .flt__bar > :not(.search) select.input { width: 100%; max-width: none; }
+}
 .flt__check { border: 1px solid var(--line-2); border-radius: 999px; padding: 6px 14px; min-height: 38px; align-items: center; background: var(--surface); cursor: pointer; font-weight: 650; }
 .flt__check:has(input:checked) { border-color: var(--forest); background: var(--teal-soft); color: var(--teal-ink); }
 .tabs a:hover, .tabs button:hover { border-color: var(--forest); }

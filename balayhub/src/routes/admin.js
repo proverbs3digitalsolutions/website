@@ -15,6 +15,8 @@ const { requireAuth } = require('../lib/auth');
 const { PLANS, PUBLIC_PLANS, planStatus } = require('../lib/plans');
 const { normalizeCode, CODE_RE, couponState, toCentavos, toPesos } = require('../lib/coupons');
 const { fmtPeso } = require('../lib/messaging');
+const account = require('../lib/account');
+const { sendMail } = require('../lib/mailer');
 
 const router = express.Router();
 
@@ -93,7 +95,7 @@ router.get('/admin/workspaces', ah(async (req, res) => {
   if (isValidDate(q.created_to)) list = list.filter((w) => w.created_day <= q.created_to);
   if (own(ADMIN_SORTS, q.sort)) list = [...list].sort(own(ADMIN_SORTS, q.sort));
   res.json({
-    workspaces: list.map(({ deletion_scheduled_at: _d, created_day: _c, ...w }) => w),
+    workspaces: list.map(({ created_day: _c, ...w }) => w),
     total: all.length, summary,
     mrr: all.filter((w) => w.admin_status === 'paying' || w.admin_status === 'grace').reduce((s, w) => s + (PLANS[w.plan]?.price || 0), 0),
     plans: Object.entries(PLANS).map(([k, p]) => ({ key: k, ...p })),
@@ -134,6 +136,74 @@ router.post('/admin/workspaces/:id/card-check', ah(async (req, res) => {
   if (org.is_demo) throw new HttpError(409, 'The demo workspace cannot be changed.', { code: 'DEMO' });
   const r = await require('../lib/cardcheck').waive(id, req.user);
   res.json({ ok: true, trial_ends_at: r.trial_ends_at });
+}));
+
+// Remove a workspace. 'schedule' makes it view-only and deletes it after the grace period (the owner's own delete
+// does the same); 'now' deletes it at once. The name check is case-sensitive, after trimming.
+router.post('/admin/workspaces/:id/delete', ah(async (req, res) => {
+  const id = uuidParam(req.params.id);
+  const org = await one('SELECT organization_id, name, is_demo, deletion_scheduled_at FROM organizations WHERE organization_id = $1', [id]);
+  if (!org) throw notFound();
+  const body = validate(req.body, {
+    mode: { type: 'enum', values: ['schedule', 'now'], required: true, label: 'Mode' },
+    confirm_name: { type: 'string', max: 200, label: 'Workspace name' },
+  });
+  if (org.is_demo) throw new HttpError(409, 'The demo workspace cannot be deleted.', { code: 'DEMO' });
+  if (org.organization_id === req.user.organization_id) throw new HttpError(409, 'You cannot delete the workspace you belong to.', { code: 'OWN_WORKSPACE' });
+  const adminMember = config.platformAdmins.length && await one('SELECT 1 FROM users WHERE organization_id = $1 AND lower(email) = ANY($2::text[]) LIMIT 1', [id, config.platformAdmins]);
+  if (adminMember) throw new HttpError(409, "This workspace belongs to a BalayHub admin and can't be deleted here.", { code: 'PLATFORM_ADMIN_WORKSPACE' });
+  if ((body.confirm_name || '').trim() !== org.name.trim()) {
+    throw new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields: { confirm_name: 'Type the workspace name exactly to confirm.' } });
+  }
+  const who = `workspace ${id} deleted by platform admin ${req.user.user_id} (${body.mode})`;
+  // Platform rows (no workspace) so the record outlives the purge.
+  const platformAudit = (action) => audit(null, { organization_id: null, user_id: req.user.user_id }, action, 'organization', id,
+    { workspace_id: id, workspace_name: org.name, mode: body.mode });
+  if (body.mode === 'now') {
+    await platformAudit('platform.workspace_deleted');
+    let result;
+    try {
+      result = await account.purgeOrganization(id);
+    } catch (err) {
+      console.error(`[admin] purge failed for workspace ${id}: ${err.message}`);
+      throw new HttpError(502, 'The workspace could not be deleted. Nothing was deleted. Please try again in a minute.', { code: 'PURGE_FAILED' });
+    }
+    if (result && result.deleted === false && result.reason !== 'gone') {
+      throw new HttpError(502, 'The workspace could not be deleted. Nothing was deleted. Please try again in a minute.', { code: 'PURGE_FAILED' });
+    }
+    console.log(`[admin] ${who}`);
+    return res.json({ ok: true, deleted: true });
+  }
+  const row = await one(
+    `UPDATE organizations SET deletion_scheduled_at = now() + make_interval(days => $2)
+      WHERE organization_id = $1 AND deletion_scheduled_at IS NULL RETURNING deletion_scheduled_at`, [id, account.GRACE_DAYS]);
+  if (!row) throw new HttpError(409, 'This workspace is already scheduled for deletion.', { code: 'ALREADY_SCHEDULED' });
+  await audit(null, { organization_id: id, user_id: req.user.user_id }, 'platform.workspace_deletion_scheduled', 'organization', id, { delete_at: row.deletion_scheduled_at });
+  await platformAudit('platform.workspace_deletion_scheduled');
+  console.log(`[admin] ${who}`);
+  const owner = await one(`SELECT email, full_name FROM users WHERE organization_id = $1 AND role = 'owner' ORDER BY created_at LIMIT 1`, [id]);
+  if (owner) {
+    const date = new Date(row.deletion_scheduled_at).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'long' });
+    await sendMail({
+      to: owner.email,
+      subject: `Your BalayHub workspace "${org.name}" will be deleted on ${date}`,
+      text: `Hi ${owner.full_name},\n\nThe BalayHub team scheduled your workspace "${org.name}" for deletion. It is now view-only, and on ${date} all its data, files and team accounts will be permanently deleted.\n\nThink this is a mistake? Log in and click "Cancel deletion" in Settings before then: ${config.appUrl}/#/settings\n\n— BalayHub`,
+    }).catch((err) => console.error(`[admin] deletion email for workspace ${id} failed: ${err.message}`));
+  }
+  res.json({ ok: true, deletion_scheduled_at: row.deletion_scheduled_at });
+}));
+
+// Undo a scheduled deletion.
+router.post('/admin/workspaces/:id/restore', ah(async (req, res) => {
+  const id = uuidParam(req.params.id);
+  const org = await one('SELECT name FROM organizations WHERE organization_id = $1', [id]);
+  if (!org) throw notFound();
+  const row = await one('UPDATE organizations SET deletion_scheduled_at = NULL WHERE organization_id = $1 AND deletion_scheduled_at IS NOT NULL RETURNING organization_id', [id]);
+  if (!row) throw new HttpError(409, 'This workspace is not scheduled for deletion.', { code: 'NOT_SCHEDULED' });
+  await audit(null, { organization_id: id, user_id: req.user.user_id }, 'platform.workspace_deletion_cancelled', 'organization', id);
+  await audit(null, { organization_id: null, user_id: req.user.user_id }, 'platform.workspace_deletion_cancelled', 'organization', id,
+    { workspace_id: id, workspace_name: org.name, mode: 'restore' });
+  res.json({ ok: true });
 }));
 
 // ---- Plan coupons (D-94). The rules for using a coupon are in src/lib/coupons.js; these routes list, create,

@@ -228,12 +228,15 @@ router.patch('/billing/renewal', owners, ah(async (req, res) => {
 router.delete('/billing/card', owners, ah(async (req, res) => {
   const orgId = req.user.organization_id;
   const { rows: [org] } = await query('SELECT paymongo_customer_id, card_payment_method_id, paymongo_subscription_id FROM organizations WHERE organization_id = $1', [orgId]);
+  // Automatic payment goes off first, so a failed PayMongo cancel can never leave it on with the card still saved.
+  await query('UPDATE organizations SET auto_renew = false WHERE organization_id = $1', [orgId]);
   await cancelSubscription(req.user, 'card removed');
-  await query(`UPDATE organizations SET card_payment_method_id = NULL, card_brand = NULL, card_last4 = NULL, auto_renew = false WHERE organization_id = $1`, [orgId]);
+  await query('UPDATE organizations SET card_payment_method_id = NULL, card_brand = NULL, card_last4 = NULL WHERE organization_id = $1', [orgId]);
   if (org.card_payment_method_id && org.paymongo_customer_id) {
     await paymongoClient.detachPaymentMethod(config.paymongoSecretKey, org.paymongo_customer_id, org.card_payment_method_id);
   }
-  await audit(null, req.user, 'billing.card_removed', 'organization', orgId, {});
+  // A repeat removal with no card saved forgets nothing, so it writes no audit row.
+  if (org.card_payment_method_id) await audit(null, req.user, 'billing.card_removed', 'organization', orgId, {});
   res.json({ ok: true });
 }));
 

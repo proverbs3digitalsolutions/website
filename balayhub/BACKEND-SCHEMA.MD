@@ -2,7 +2,7 @@
 
 This document describes BalayHub's PostgreSQL schema as it stands after migrations `001`–`026` in `db/migrations/`, where uploaded files are stored, and who can see or change each kind of data. It was checked against the migrations and the route code in `src/routes/*.js` and `src/lib/*.js`. Anything not confirmed in the code is marked **unverified**.
 
-Last updated: 2026-10-15 (QA round 17: migrations 037 and 038, section 2.19, matrix 6.5, section 23; D-98 and D-99)
+Last updated: 2026-10-19 (QA round 18: section 24, admin delete routes in matrix 6.4, null-workspace platform audit rows; D-100). Before that: 2026-10-15 (QA round 17: migrations 037 and 038, section 2.19, matrix 6.5, section 23; D-98 and D-99)
 
 ---
 
@@ -589,7 +589,7 @@ A sequence `support_ticket_no_seq` starts at 1001 and numbers tickets `T-1001`, 
 
 ### 2.14 Audit
 
-**audit_logs**: audit_id (bigserial), organization_id, actor_user_id, action, record_type, record_id (text), details (jsonb), created_at. Indexed on `(organization_id, created_at DESC)`. Platform admin plan changes are written into the target workspace's log with the admin as the actor.
+**audit_logs**: audit_id (bigserial), organization_id, actor_user_id, action, record_type, record_id (text), details (jsonb), created_at. Indexed on `(organization_id, created_at DESC)`. Platform admin plan changes are written into the target workspace's log with the admin as the actor. *(Round 18, D-100: workspace delete actions also write platform rows with `organization_id` NULL, which survive the purge; see section 24.)*
 
 Phase 2 actions: `owner_portal.invited`, `owner_portal.disabled`, `owner_portal.block_created`, `owner_portal.block_cancelled` (portal actions have no team user; the owner is in `details.owner_id`), `unit_owner.statement_published`, `unit_owner.statement_unpublished`, `unit_owner.statement_sent`, `owner_payout.recorded`, `owner_payout.voided`, `owner_reserve.withdrawal_recorded`, `owner_reserve.withdrawal_voided`, and `owner_statements.reminder_sent` (the monthly reminder's once-per-month record, with `details.month`).
 
@@ -880,6 +880,7 @@ The workspace export (`exportOrganization`) is not complete. It leaves out `supp
 | Support tickets | All of the workspace's tickets: view, create, reply, resolve, rate, attach files | Own tickets only | Own tickets only | All tickets: view, reply, internal notes, change status, assign, view attachments | None |
 | Plan and billing payments | View; start and confirm checkout | Plan status only (via session; no price or listing limit, D-83) | Plan status only (same) | Set plan and dates by hand | None |
 | Plan coupons (list, create, edit, switch off, see who redeemed; `/api/admin/coupons*`, D-94) | No (404, not a platform admin) | No (404) | No (404) | **Manages them**: list, create, edit (locked fields after use), switch on or off, redemptions. Audit-logged at platform level | None |
+| Delete or restore a workspace (`POST /api/admin/workspaces/:id/delete` with `mode` `schedule` or `now`, and `POST .../restore`; D-100) | No (404, not a platform admin) | No (404) | No (404) | **Does it**, with the workspace name typed. Refused for the demo, the admin's own workspace and any workspace with a platform admin member. Audit-logged at platform level (workspace id NULL) | None |
 | Using a plan coupon (preview a code, check out with one, see the workspace's own coupon and history) | **Redeems them**: owners only, in their own workspace. Not for the comped plan or the demo | No (403) | No (403) | Only as the owner of their own workspace | None |
 | Audit log | View all entries (latest 200) | View own actions only | None | No viewer (plan changes are written into the workspace's log) | None |
 | Workspace export and deletion | Export JSON; request and cancel deletion | None | None | None | None |
@@ -1395,3 +1396,18 @@ Decisions D-98 and D-99. **Migrations:** 037 (card on file, section 2.19) and 03
 - **Gate pass:** the guest count is `registered` whenever a registration exists, else the booked count; the text adds "(booked for N)" when they differ.
 - **Balance pay:** closing a checkout whose key PayMongo refuses (401), or the scheduled balance check, clears `paymongo_key_checked_at` only when that checkout used the key still saved.
 - **Role matrix:** the "Search" row of 6.4 lists the new groups per role.
+
+## 24. API notes from QA round 18 (2026-10-19)
+
+Decision D-100. **No migration** this round (no 039: a duplicate owner name is allowed after "Save anyway?", so no unique index). No table or column changes.
+
+- **`POST /api/admin/workspaces/:id/delete`** (platform admin; anyone else 404) `{ mode: "schedule" | "now", confirm_name }`. The name is trimmed and compared exactly to the trimmed workspace name (400 `VALIDATION` on `confirm_name`). 409 `DEMO`, `OWN_WORKSPACE`, `PLATFORM_ADMIN_WORKSPACE` (any user of the workspace has an email in `PLATFORM_ADMIN_EMAILS`), `ALREADY_SCHEDULED`. `schedule` sets `organizations.deletion_scheduled_at = now() + 14 days` and emails the owner: 200 `{ ok, deletion_scheduled_at }`. `now` purges at once: 200 `{ ok, deleted: true }`; 502 `PURGE_FAILED` when the purge throws or reports it did not delete (a workspace already gone counts as done).
+- **`POST /api/admin/workspaces/:id/restore`:** clears the date. 409 `NOT_SCHEDULED` when there is none. The owner's own cancel (`POST /api/workspace/delete/cancel`, Settings) works on any scheduled deletion, including one an admin set.
+- **`GET /api/admin/workspaces`** rows carry `deletion_scheduled_at` (the table shows **Deleting**).
+- **Audit rows with no workspace.** `schedule`, `restore` and `now` each write a platform row with `organization_id` NULL, `actor_user_id` the admin, `record_type` `organization`, `record_id` the workspace id, and details `{ workspace_id, workspace_name, mode }`: `platform.workspace_deletion_scheduled`, `platform.workspace_deletion_cancelled`, `platform.workspace_deleted`. Schedule and restore also write a row in the workspace's own log (`organization_id` set). The "now" row is written before the purge. Null-workspace rows are not shown in any workspace's audit list.
+- **Purge order (`purgeOrganization(orgId, { scheduledOnly })` in `src/lib/account.js`):** (1) cancel the PayMongo subscription (failure: rethrow, nothing deleted, the scheduler retries); (2) transaction: `SELECT ... FOR UPDATE` on the `organizations` row (a second purge finds it gone); (3) with `scheduledOnly`, return `{ deleted: false, reason: 'not_due' }` unless `deletion_scheduled_at` is set and past, so a restored workspace is never purged; (4) delete all rows and collect the stored files; (5) commit, delete the files from disk, then detach the saved card and delete the PayMongo customer (best effort). Returns `{ deleted, reason? }` with reason `gone` or `not_due`. The nightly job calls it with `scheduledOnly: true`.
+- **`GET /api/stay-reports/missing-fees?month=YYYY-MM[&property_id=]`** (new; owner and manager, `managers` guard; staff and cleaners get 403): `{ missing_fees: [{ channel, label, stays }] }` for confirmed non-direct reservations that check out in the month, up to today, with no channel fee (NULL or 0), within the caller's property scope. Profit and loss reads this. `GET /api/stay-reports` carries the same list as `missing_fees`, counted by check-in date. `month` that is not a real `YYYY-MM` answers 400 on `month`. Counts only, no money.
+- **`src/lib/coupons.js`:** a sent code is looked up before the comped check (unknown or unusable: `COUPON_INVALID`; `COMPED` only for a usable code or no code). The limited-months preview `message` is "This payment covers N of your M coupon months." (M is `duration_months`, the total).
+- **`DELETE /api/billing/card`:** `auto_renew` is set false in the database before the PayMongo subscription is cancelled; a repeat removal with no card writes no second `billing.card_removed` row.
+- **`src/lib/cardcheck.js` `attach()`:** runs in a transaction that locks the `billing_payments` row first and the workspace row second, and requires `status = 'pending'`; otherwise it answers as not required. `start()` expires the earlier pending intent after a decline and creates one new intent.
+- **Role matrix:** the platform admin row 6.4 gains the delete and restore routes above.

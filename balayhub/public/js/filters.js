@@ -317,7 +317,7 @@ function clearField(f, values, defaults) {
  * open under "Filters". Calls onChange() after any change (debounced
  * for search), and remembers the values under `key`.
  */
-export function filterBar({ key, values, defaults, search, quick = [], more = [], onChange, extra }) {
+export function filterBar({ key, values, defaults, search, quick = [], more = [], onChange, extra, keep = ['view'] }) {
   const all = [...quick, ...more];
   const dropped = [];
   for (const f of all) {
@@ -350,7 +350,8 @@ export function filterBar({ key, values, defaults, search, quick = [], more = []
   }
   function emit() { rememberFilters(key, values); paint(); onChange(); }
   function clearAll() {
-    for (const k of Object.keys(defaults)) values[k] = defaults[k];
+    // The saved view the person picked (`view`, or the keys a page names in `keep`) is not a filter: it stays.
+    for (const k of Object.keys(defaults)) if (!keep.includes(k)) values[k] = defaults[k];
     if (searchInput) searchInput.value = values[search.name || 'q'] || '';
     controls.forEach((c) => c.sync());
     emit();
@@ -385,6 +386,17 @@ export function filterBar({ key, values, defaults, search, quick = [], more = []
   const focusName = old ? document.activeElement.getAttribute?.('data-flt') : null;
   const byLabel = !moreBtn && quick.some((f) => !f.type || f.type === 'select');
   const root = h('div', { class: 'flt' }, h('div', { class: 'toolbar flt__bar' }, extra, searchEl, byLabel && h('span', { class: 'flt__by muted small' }, filterIcon(), 'Filter by'), quickEls, moreBtn), panel, chips);
+  // Phones: the quick filters sit in the Filters panel, so the search box and the button share one row and the list starts near the top.
+  const grid = panel?.firstChild;
+  if (grid && quickEls.length && typeof matchMedia === 'function') {
+    const mq = matchMedia('(max-width: 559px)');
+    const place = () => { if (mq.matches) grid.prepend(...quickEls); else moreBtn.before(...quickEls); };
+    place();
+    // A bar that was replaced (the page redrew it) stops listening once it has left the page.
+    let seen = false;
+    const onMq = () => { if (root.isConnected) { seen = true; place(); } else if (seen) mq.removeEventListener('change', onMq); };
+    mq.addEventListener?.('change', onMq);
+  }
   if (old) {
     let tries = 0;
     const land = () => {

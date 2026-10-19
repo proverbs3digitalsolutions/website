@@ -1,6 +1,6 @@
 # BalayHub design brief
 
-Last updated: 2026-10-15 (QA round 17: section 26, the wordmark logotype exemption, the focus key table; D-98 and D-99)
+Last updated: 2026-10-19 (QA round 18: section 27, phone filter bar, theme switch label; D-100). Before that: 2026-10-15 (QA round 17: section 26, the wordmark logotype exemption, the focus key table; D-98 and D-99)
 
 **Summary.** BalayHub is a phone-first web app (also an installable PWA) for Filipino rental and staycation hosts. It is built with plain CSS, one stylesheet (`public/css/app.css`), and small JavaScript helpers (`public/js/ui.js`). There is no framework and no CSS preprocessor. The look is calm and practical: Forest Green on soft off-white, Sand and Sun as warm accents, Poppins for headings, Inter for text, rounded cards, and large touch targets. Colours come from CSS custom properties on `:root`. A dark theme redefines the same tokens, so any component that uses tokens gets dark mode automatically. This brief records what is **actually built**. Every value below comes from the code. Where the code doesn't define a token (spacing, type sizes), the brief lists the values in use and says so.
 
@@ -680,3 +680,14 @@ Decisions D-98 and D-99. Changes are in `public/css/app.css` except the card ste
 - **The wordmark is a logotype** (section 1; D-99 O2).
 - **Card on file (D-98), `public/css/cardcheck.css`** (linked from `index.html`; kept apart from `app.css`): `.cc-card` (the page card), `.cc-what` (the "what happens" list), `.cc-form` and `.cc-row` (fields stack one per row; expiry and CVC share a row from 360px), `.cc-wait` and `.cc-success` (the waiting-for-bank and confirmed states, whose h2 takes focus) and `.cc-footer` (Help, Account, Log out). Colours come from tokens only. Inputs carry no `name` and sit in no submitting form. The error summary is `role="alert"` and takes focus. Phone buttons are at least 44px.
 - **Plan & billing card rows** (`cardBlock` in `settings.js`) use `.payonline__row`, with **Remove card**, **Change**, **Turn on automatic payment** and **Cancel automatic payment** as `btn--secondary btn--sm` buttons (not link-style), which keeps them at 44px on phones.
+
+## 27. Patterns added in QA round 18 (2026-10-19)
+
+Decision D-100. CSS in `public/css/app.css`, behaviour in `public/js/filters.js`.
+
+- **Phone filter bar (below 560px).** The search box and the **Filters** button share one row. The quick filters (check toggles such as Housekeeping "Only my tasks", and quick selects such as the property select) move into the Filters panel, below the search row. Desktop and tablet (560px and up) are unchanged. Measured at 390px, the first list row moved up: Housekeeping 605 to 443, Maintenance 553 to 387, Expenses 466 to 300, Guests 443 to 277. Rule for new pages: use `filterBar()` and do not build a one-off phone row.
+- **Clear all keeps the saved view.** **Clear all** and **Reset filters** clear filter values only; the page's `view` key (or any key the page marks as a view) stays.
+- **Theme switch labels sit on one line.** On Settings and My account the three segments ("Light", "Dark", "Match device") never wrap at 390px (smaller font size and letter spacing, equal segments). Buttons stay 44px tall on phones.
+- **Date boxes in error.** A date range error marks both boxes `aria-invalid` and ties the message to them with `aria-describedby` (Reports custom dates).
+- **A destructive admin section** (Delete workspace) is its own section at the bottom of the panel: h3, the typed-name box, and `btn--danger` buttons that stay off until the name matches. An error message below the buttons takes focus.
+- **Known gaps (carried):** pages with quick filters but no Filters panel keep stacked rows on phones; the quick selects inside the phone Filters panel have no visible label.

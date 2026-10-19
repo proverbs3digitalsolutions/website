@@ -175,10 +175,39 @@ async function bySource(user, { from, to }, f = {}) {
   return rows.map((r) => ({ source: r.source, stays: r.stays, nights: r.nights, revenue: m2(cents(r.revenue)) }));
 }
 
+// Confirmed channel stays with no channel fee entered, per channel: a count only, never money. Same property
+// scope and filters as the report. Reports counts by check-in date; Profit and loss by check-out (basis 'checkout',
+// only stays already ended, as src/lib/pnl.js does).
+async function missingFees(user, { from, to }, f = {}, basis = 'checkin') {
+  const params = [];
+  const where = [propertyScope(user, params)];
+  const col = basis === 'checkout' ? 'b.check_out' : 'b.check_in';
+  params.push(from); where.push(`${col} >= $${params.length}`);
+  params.push(to); where.push(`${col} < $${params.length}`);
+  if (basis === 'checkout') { params.push(manilaToday()); where.push(`b.check_out <= $${params.length}`); }
+  if (f.property_id) { params.push(f.property_id); where.push(`p.property_id = $${params.length}`); }
+  if (f.unit_id) { params.push(f.unit_id); where.push(`u.unit_id = $${params.length}`); }
+  if (f.channel) { params.push(f.channel); where.push(`b.channel = $${params.length}`); }
+  const { rows } = await query(
+    `SELECT b.channel, COUNT(*)::int AS stays FROM bookings b JOIN units u ON u.unit_id = b.unit_id JOIN properties p ON p.property_id = u.property_id
+      WHERE ${where.join(' AND ')} AND b.kind = 'reservation' AND b.status = 'confirmed' AND b.channel <> 'direct' AND COALESCE(b.channel_fee, 0) = 0
+      GROUP BY b.channel ORDER BY COUNT(*) DESC, b.channel`, params);
+  return rows.map((r) => ({ channel: r.channel, label: CHANNEL_LABEL[r.channel] || r.channel, stays: r.stays }));
+}
+
+router.get('/stay-reports/missing-fees', managers, ah(async (req, res) => {
+  const m = req.query.month;
+  if (!/^\d{4}-\d{2}$/.test(m || '') || !isValidDate(`${m}-01`)) throw validationError({ month: 'Use the format YYYY-MM' });
+  const [y, mo] = m.split('-').map(Number);
+  const p = { from: `${m}-01`, to: new Date(Date.UTC(y, mo, 1)).toISOString().slice(0, 10) };
+  const f = { property_id: req.query.property_id ? uuidParam(req.query.property_id) : null };
+  res.json({ missing_fees: await missingFees(req.user, p, f, 'checkout') });
+}));
+
 router.get('/stay-reports', managers, ah(async (req, res) => {
   const p = period(req.query);
   const f = reportFilters(req.query);
-  res.json({ period: p.label, month_invalid: Boolean(p.month_invalid), ...(await performance(req.user, p, f)), by_source: await bySource(req.user, p, f) });
+  res.json({ period: p.label, month_invalid: Boolean(p.month_invalid), ...(await performance(req.user, p, f)), by_source: await bySource(req.user, p, f), missing_fees: await missingFees(req.user, p, f) });
 }));
 
 // Yearly income summary: per month, earned revenue, money received, channel fees, expenses.

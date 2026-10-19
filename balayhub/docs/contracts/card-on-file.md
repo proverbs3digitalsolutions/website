@@ -98,7 +98,7 @@ Server attaches it to the row's Payment Intent with the **secret key** (`POST /p
 - `passed`: Payment Intent `succeeded` and verified (amount 2000, metadata matches); the trial has started.
 - `action_required`: `awaiting_next_action` with `next_action.redirect.url`; the URL must be `https:` (else treated as `failed`).
 - `pending`: `processing`.
-- `failed`: `awaiting_payment_method` with `last_payment_error`; the row stays pending so the owner can retry with another card on the same Payment Intent.
+- `failed`: `awaiting_payment_method` with `last_payment_error`; the row stays pending until the owner retries. *(Round 18, D-100: the retry does not reuse the Payment Intent; `start()` expires the old pending row and creates one new intent, so there are never two charges. See "As built".)*
 
 Errors: 404 `NOT_FOUND` (not this workspace's row, or not a card check); 409 `CARD_CHECK_NOT_REQUIRED`; 400 `VALIDATION`; 429 `RATE_LIMITED`; 502 `BILLING_FAILED`.
 
@@ -200,3 +200,13 @@ Where the build differs from, or adds to, the plan text above:
 - **Scheduler jobs:** `trial-reminders` (hourly) and `subscriptions` (hourly, does nothing unless `PAYMONGO_SUBSCRIPTIONS=on`). The card check reconcile (expire a pending check after 24 hours, after one last look) runs inside the existing 10-minute `billing` job.
 - **Local browser checks:** outside production the browser may post the card to `PAYMONGO_BROWSER_API`, and a 3-D Secure redirect to `http://127.0.0.1` or `localhost` is accepted; production accepts only `https:`.
 - **Open research (R1 to R6)** is coded to the defaults in section 2 of the plan; the questions are in BLOCKERS.MD ("Card on file and automatic payment").
+
+### Round 18 (2026-10-19, D-100)
+
+- **`attach()` locks the row.** The attach runs in a transaction that takes `SELECT ... FOR UPDATE` on the `billing_payments` row first and the `organizations` row second (the same order `markPassed` uses), and it needs `status = 'pending'` and a Payment Intent; anything else answers `CARD_CHECK_NOT_REQUIRED`. Two attach calls at the same moment cannot both pass.
+- **`start()` re-checks the earlier intent.** After a decline the earlier pending row is re-read under its lock: if it moved (paid, expired by the reconcile job) `start()` follows that; if still pending and failed, the row is marked `expired` and one new Payment Intent is created. Never two live intents, never two charges. If PayMongo cannot be reached, 503 and nothing is charged. *This replaces the line in section 3.5 that says the owner retries "on the same Payment Intent".*
+- **Bank "Fail" copy.** On the bank's 3-D Secure page, **Fail** returns to the card page, and the card page shows the declined message ("Your card was declined. Try another card, or ask your bank."), not the "bank check wasn't finished" copy. A returned check that is still pending shows the waiting copy. After a pass, the success panel takes focus on its heading (it waits for the attach before focusing).
+- **`DELETE /billing/card`:** `auto_renew` goes false in the database before the PayMongo subscription is cancelled; a repeat removal with no card writes no second audit row.
+- **Workspace purge** (admin Delete now, the owner's delete after 14 days) cancels the subscription first, locks the workspace row, deletes, then detaches the card and deletes the PayMongo customer after the commit.
+- **Stage 1 coupon note** on Plan & billing keeps only "BalayHub never charges your card on its own; you renew here."; the "applied automatically" sentence shows only when automatic payment is on.
+- **Still open:** the Stage 2 **Next charge** amount ignores a coupon discount; the local fake PayMongo cannot answer 401 on refresh, and its "unreachable" switch does not cover `payment_intents`.

@@ -82,7 +82,8 @@ export function pageResults(q, user, nav, routeAllowed) {
     const l = e.label.toLowerCase();
     if (l.startsWith(s)) return 0;
     if (l.split(/[^a-z0-9]+/).some((w) => w.startsWith(s))) return 1;
-    return l.includes(s) || e.keywords.toLowerCase().includes(s) ? 2 : 3;
+    // Keywords match word starts only, so 'ana' does not find 'manager'.
+    return l.includes(s) || e.keywords.toLowerCase().split(/[^a-z0-9]+/).some((w) => w.startsWith(s)) ? 2 : 3;
   };
   const seen = new Set();
   return entries.map((e, i) => ({ e, r: rank(e), i })).filter((x) => x.r < 3).sort((a, b) => a.r - b.r || a.i - b.i)

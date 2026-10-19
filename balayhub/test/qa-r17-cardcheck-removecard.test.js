@@ -5,7 +5,8 @@
 //   Case 2  Stage 2 on with a live subscription: removal cancels it at PayMongo and paid_until does not move.
 //   Case 3  a manager and a staff member of the same workspace get 403 and nothing changes.
 //   Case 4  an owner of another workspace cannot remove or change the shared workspace's card.
-//   Case 5  removal with no card saved: an unconfirmed workspace is refused by the gate first; a repeat removal answers 200.
+//   Case 5  removal with no card saved: an unconfirmed workspace is refused by the gate first; a repeat removal answers 200 and writes no second audit row.
+//   Case 7  PayMongo fails to cancel the subscription: the removal fails but automatic payment is already off in the database.
 //   Case 6  PATCH /billing/renewal {auto_renew:true}: SAVED_CARD_NONE with Stage 2 on and no card; SUBSCRIPTIONS_OFF with Stage 2 off.
 // TEST_DATABASE_URL=postgres://balayhub:balayhub@localhost:5432/balayhub_test_r2_27 node --test --test-concurrency=1 test/qa-r17-cardcheck-removecard.test.js
 
@@ -325,9 +326,8 @@ test('case 5: removing with no card saved does not crash; an unconfirmed workspa
   assert.equal(row.auto_renew, false);
   assert.equal(row.card_check, 'passed', 'the card check stays passed');
 
-  // Current behaviour, recorded on purpose: every call writes its own card_removed audit row, so the repeat adds a second
-  // row even though nothing was removed. Change this line if the audit rule changes.
-  assert.equal((await auditRows(orgId, 'billing.card_removed')).length, 2);
+  // Round 18: a repeat removal forgets nothing, so it writes no second card_removed audit row.
+  assert.equal((await auditRows(orgId, 'billing.card_removed')).length, 1);
 });
 
 test('case 6: automatic payment with no saved card answers SAVED_CARD_NONE (Stage 2 on) and SUBSCRIPTIONS_OFF (Stage 2 off)', async () => {
@@ -367,4 +367,19 @@ test('case 6: automatic payment with no saved card answers SAVED_CARD_NONE (Stag
   assert.equal(offCard.status, 409, JSON.stringify(offCard.data));
   assert.equal(offCard.data.code, 'SUBSCRIPTIONS_OFF');
   assert.deepEqual(await cardState(sharedOrg), sharedBefore, 'the refusal changed nothing');
+});
+
+test('case 7: a failed PayMongo cancel still leaves automatic payment off in the database', async () => {
+  config.paymongoSubscriptions = true;
+  const email = 'cancelfail-owner@example.com';
+  const c = await cardedOwner(email, 'Cancel Fail Stays');
+  const orgId = await orgIdOf(email);
+  await liveSubscription(orgId);
+  assert.equal((await orgRow(orgId)).auto_renew, true, 'precondition: automatic payment is on');
+
+  fake.failNext(/^\/subscriptions\/[^/]+\/cancel$/, 500);
+  const del = await c.raw('DELETE', '/api/billing/card');
+  assert.notEqual(del.status, 200, JSON.stringify(del.data));
+  assert.equal((await orgRow(orgId)).auto_renew, false, 'automatic payment is off even though the cancel failed');
+  assert.equal((await auditRows(orgId, 'billing.card_removed')).length, 0, 'no card_removed row: the card was not removed');
 });

@@ -338,7 +338,7 @@ export async function rentView(el, { query }) {
     }
     if (tab === 'payments') {
       return {
-        search: { placeholder: 'Search tenant, unit, reference or notes' },
+        search: { placeholder: 'Tenant, unit, reference, notes' },
         quick: [
           { name: 'method', label: 'Method', all: 'All methods', options: METHODS.map((m) => [m, label(m)]) },
           propertyField(),
@@ -353,7 +353,7 @@ export async function rentView(el, { query }) {
       };
     }
     return {
-      search: { placeholder: 'Search description, vendor or property' },
+      search: { placeholder: 'Description, vendor, property', label: 'Search description, vendor or property' },
       quick: [
         { name: 'category', label: 'Category', all: 'All categories', options: CATEGORIES.map((c) => [c, label(c)]) },
         propertyField(),

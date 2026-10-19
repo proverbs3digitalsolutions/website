@@ -2,7 +2,7 @@
 
 BalayHub is a web app that helps Filipino hosts run 1 to 10 rental units from one place. It covers condo staycations listed on Airbnb, Booking.com and Agoda, and long-term monthly rentals such as apartments, boarding houses, dorms and bedspaces. Hosts get one calendar for every channel, a direct booking page with GCash, Maya and card payments, a guest inbox, cleaning tasks, condo gate passes, deposits, reports and owner statements. Long-term landlords get properties, tenants, leases, rent, expenses and repairs. This document describes what is **actually built** today, feature by feature, and lists what is planned. It was written from the code (`src/routes`, `src/lib`, `public/js`, `db/migrations`) and the existing docs.
 
-Last updated: 2026-10-15 (QA round 17; D-98 card on file before the trial, F20 and F2 and F28; D-99 search widened, F53)
+Last updated: 2026-10-19 (QA round 18: F28 admin workspace delete, F5 saved view name, F15 channel-fee note; D-100). Before that: 2026-10-15 (QA round 17; D-98 card on file before the trial, F20 and F2 and F28; D-99 search widened, F53)
 
 *2026-10-14 (D-85): the alpha targets owners of 1 to 3 properties; the Guesty-inspired ideas are on hold as reference only. QA puts small-host friction first.*
 
@@ -143,7 +143,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 **For:** Owners and managers (full). Staff (view, check in/out, record payments and deposits).
 
 **What it does:**
-- Saved views: Upcoming, Currently hosting, Check-ins today/tomorrow, Check-outs today/tomorrow, Upcoming unpaid, Past, Cancelled, Recently created, All.
+- Saved views: Upcoming, Currently hosting, Check-ins today/tomorrow, Check-outs today/tomorrow, Unpaid, not yet checked out (includes in-house unpaid stays; named "Upcoming unpaid" before round 18, D-100), Past, Cancelled, Recently created, All.
 - List with check-in, check-out, guest, listing, channel, code, total and balance. CSV export of the current view and filters.
 - **New reservation** form with a live price quote from the pricing rules, cleaning fee, other fees, channel fee, notes, and "Email a booking confirmation".
 - Reservation detail: stay, guest, payments, check-in form, gate pass, deposit, guest review.
@@ -348,6 +348,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 **What it does:**
 - **Performance** tab: for a month, year or date range — revenue, occupancy, average nightly rate, RevPAR, revenue by channel, results by listing, expenses, and net after channel fees and expenses. Filters by property, listing, channel. CSV download.
 - **Income summary (for taxes)** tab: per month and quarter — revenue earned, payments actually received (cash basis, without deposits), channel fees, expenses and net. CSV for the bookkeeper.
+- **Channel-fee note (round 18, D-100):** when channel stays in the period have no channel fee entered, Reports (Performance) and Profit and loss show "N Airbnb stays have no channel fee entered." per channel, with a link to those reservations. Counts only, never money.
 - **Deposits** tab (see F14).
 - Home also shows daily overview, 7/30-day trends and monthly revenue vs. last month.
 
@@ -577,11 +578,12 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - **Platform admin** page: counts for on trial, paying, monthly revenue, ended or overdue. Workspace table with filters (status, business type, plan, signup dates, sort).
 - Click a workspace to set plan, paid until, trial end date and a note. Changes are audit-logged. The demo cannot be changed.
 - **Plan coupons** (round 15, D-94): list, make, edit and switch off coupons for BalayHub's plans, and see who used each one (F54).
+- **Delete a workspace (round 18, D-100):** in a workspace's panel, **Delete workspace**: **Delete in 14 days** (the workspace goes view-only, the owner is emailed and can cancel from Settings, then it is purged) or **Delete now** (purged at once, including the saved card and plan at PayMongo). Both need the workspace name typed. Refused for the demo, the admin's own workspace and any workspace with a platform admin as a member. Every delete is written to a lasting platform audit record that outlives the workspace.
 - **Card on file (D-98):** the workspace table has a **Card** column (Waiting, Visa 4242, Skipped, or a dash), a **Waiting for card** status filter, and a **Skip card check** button on a waiting workspace that starts its trial now (audited).
 - **Support queue**: tickets from every workspace, urgent and new first. Ticket page: reply or internal note, assign to me, change status, mark resolved, customer details, attachments.
 
 **Done looks like:**
-- Non-admins get "Not found" for the page and 404 from the API.
+- Non-admins get "Not found" for the page and 404 from the API (the delete routes included).
 - Replies show to customers as "BalayHub Support".
 
 **Out of scope:** Impersonating a customer. Refunds from the admin page.
