@@ -173,7 +173,11 @@ function discountCodeProblems(out, fields) {
   const problems = {};
   // Guests typing a code are forgiven a space; the owner's copy is refused so the code is saved exactly as shared.
   if (!fields.code) {
-    if (/\s/.test(out.code)) problems.code = `Codes can't contain spaces. Try ${out.code.toUpperCase().replace(/\s+/g, '-')}.`;
+    if (/\s/.test(out.code)) {
+      // The suggestion keeps only what a code may hold: letters, numbers and single dashes (D-115).
+      const tryCode = out.code.toUpperCase().replace(/\s+/g, '-').replace(/[^A-Z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 20);
+      problems.code = /^[A-Z0-9-]{3,20}$/.test(tryCode) ? `Codes can't contain spaces. Try ${tryCode}.` : "Codes can't contain spaces. Use 3–20 letters, numbers or dashes, e.g. BALIK10.";
+    }
     else if (!/^[A-Z0-9-]{3,20}$/.test(normalize(out.code))) problems.code = 'Use 3–20 letters, numbers or dashes, e.g. BALIK10.';
   }
   // One of a percent or an amount, never both; an amount of 0 counts as no amount.

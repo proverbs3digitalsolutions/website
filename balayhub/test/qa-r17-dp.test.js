@@ -25,7 +25,8 @@ test('#3 a negative deduction says so at the field', () => {
 
 test('K1 the photo uploads on pick; no Add photo button, no Choose a photo first', () => {
   assert.match(src, /onchange: async \(\) => \{[\s\S]*?uploadFile\('deposit'/);
-  assert.match(src, /'aria-label': 'Add damage photo'/);
+  assert.match(src, /id: 'deposit-photo-file'/);
+  assert.match(src, /for: 'deposit-photo-file'/);
   assert.doesNotMatch(src, /'Add photo'/);
   assert.doesNotMatch(src, /Choose a photo first/);
   assert.ok(src.includes("Damage photos: add them on the deposit card (before or after saving)."));

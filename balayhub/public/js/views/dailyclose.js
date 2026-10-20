@@ -86,7 +86,8 @@ export async function dailyCloseView(el, { query, rerender }) {
       h('p', { class: 'muted small' }, `${fmtDate(date)}. ${open ? `${open} item${open === 1 ? ' is' : 's are'} still open. They are saved in the close so you can see them later.` : 'Everything on the checklist is clear.'}`),
       field({ name: 'note', label: 'Note (optional)', type: 'textarea', value: closed?.note || '', maxlength: 1000, placeholder: 'Anything the next shift should know' }),
     ],
-    onSubmit: async (d) => { await post('/daily-close', { date, note: d.note }); toast(closed ? 'Close updated.' : 'Day closed.'); rerender(); },
+    // Redraw after the dialog has closed: focus goes back to the button, then to Update close by its focus key, not the heading (APP-FLOW 1079, D-115).
+    onSubmit: async (d) => { await post('/daily-close', { date, note: d.note }); toast(closed ? 'Close updated.' : 'Day closed.'); setTimeout(rerender); },
   });
 
   let reopening = false; // aria-busy + flag, not disabled: a disabled focused button drops focus to BODY

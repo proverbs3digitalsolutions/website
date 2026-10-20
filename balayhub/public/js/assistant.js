@@ -76,7 +76,8 @@ export function openAssistant(question) {
 function buildPanel() {
   let msgs = load();
   let busy = false;
-  const list = h('div', { class: 'assist__list', 'aria-live': 'polite' });
+  const list = h('div', { class: 'assist__list' }); // the whole chat is never a live region (D-115)
+  const said = h('div', { class: 'sr-only', 'aria-live': 'polite' }); // only the newest answer is read out
   const longTerm = state.user?.business_type === 'long_term';
   const input = h('textarea', { class: 'input', rows: 2, maxlength: 2000, placeholder: longTerm ? 'Ask anything, e.g. how do I record rent? (English or Tagalog)' : 'Ask anything about BalayHub… (English or Tagalog)', 'aria-label': 'Your question' });
   const sendBtn = h('button', { class: 'btn btn--primary', type: 'submit', 'aria-label': 'Send' }, 'Send');
@@ -92,7 +93,7 @@ function buildPanel() {
       h('div', { class: 'small muted' }, 'Related guides'),
       m.articles.map((a) => h('details', { class: 'help-article' }, h('summary', null, a.title), h('div', { class: 'help-article__body' }, a.body.map((p) => h('p', null, p)))))),
     m.offer_ticket && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => toTicket(msgs) }, 'Contact support with this chat'),
-    m.failed && h('div', { class: 'alert alert--error', role: 'alert' }, "Couldn't answer. ",
+    m.failed && h('div', { class: 'alert alert--error' }, "Couldn't answer. ",
       h('button', { class: 'link-btn', type: 'button', style: { color: 'inherit' }, onclick: () => retry(m) }, 'Try again'), ' or ',
       h('button', { class: 'link-btn', type: 'button', style: { color: 'inherit' }, onclick: () => toTicket(msgs) }, 'contact support'), '.'));
 
@@ -116,6 +117,7 @@ function buildPanel() {
     if (busy) return;
     if (!q) { askError.textContent = 'Type a question first.'; input.focus(); return; }
     askError.textContent = '';
+    said.textContent = '';
     const asked = { role: 'user', content: q };
     msgs.push(asked);
     input.value = '';
@@ -124,9 +126,11 @@ function buildPanel() {
       // Failed questions stay on screen but are not sent back as history.
       const res = await post('/assistant/chat', { messages: msgs.filter((m) => !m.failed).map(({ role, content }) => ({ role, content })), page: location.hash.split('?')[0] });
       msgs.push({ role: 'assistant', content: res.reply, articles: res.articles, offer_ticket: res.offer_ticket });
+      said.textContent = res.reply;
     } catch {
       // Keep the question in the chat with an inline note, so it isn't lost.
       asked.failed = true;
+      said.textContent = "Couldn't answer. Try again or contact support.";
     } finally {
       busy = false; sendBtn.disabled = false; save(msgs); draw(); input.focus();
     }
@@ -137,9 +141,10 @@ function buildPanel() {
     h('header', { class: 'assist__head' },
       h('div', null, h('strong', null, 'BalayHub assistant'), h('div', { class: 'small' }, 'Answers from the BalayHub guides')),
       h('div', { class: 'assist__actions' },
-        h('button', { type: 'button', class: 'assist__icon', title: 'New chat', 'aria-label': 'New chat', onclick: () => { msgs = []; save(msgs); clearAskError(); draw(); input.focus(); } }, icon('plus')),
+        h('button', { type: 'button', class: 'assist__icon', title: 'New chat', 'aria-label': 'New chat', onclick: () => { msgs = []; save(msgs); said.textContent = ''; clearAskError(); draw(); input.focus(); } }, icon('plus')),
         h('button', { type: 'button', class: 'assist__icon', title: 'Close', 'aria-label': 'Close', onclick: closeAssistant }, '×'))),
     list,
+    said,
     askNote,
     form,
     h('p', { class: 'assist__foot' }, longTerm ? 'It can’t see your tenants, leases or rent records and may make mistakes. ' : 'It can’t see your bookings or guests and may make mistakes. ',

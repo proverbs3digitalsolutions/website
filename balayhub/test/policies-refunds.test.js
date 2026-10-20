@@ -262,7 +262,7 @@ test('void frees the cap again; voiding twice is refused; a reason is required; 
   const blocked = await owner.post(`/api/booking-payments/${pay1.payment_id}/void`, { reason: 'Wrong guest' });
   assert.equal(blocked.status, 409);
   assert.equal(blocked.data.code, 'REFUNDS_EXCEED_PAYMENTS');
-  assert.equal(blocked.data.error, 'Void the refund first, then this payment.');
+  assert.match(blocked.data.error, /^Void a refund first, then this payment\. Refunds on this booking: ₱1,500\.00 from .+ and ₱500\.00 from .+\.$/);
   assert.equal((await refundLog(id)).data.paid, '2000.00', 'a refused void leaves the payment counting');
 
   // Voiding the refunds, then the payment, leaves nothing paid, refunded or refundable (never negative).

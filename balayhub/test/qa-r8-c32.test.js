@@ -56,10 +56,10 @@ test('the assistant Send with an empty box says so above the box and sends nothi
 
 test('the assistant message clears on typing and on a valid question (#65)', () => {
   assert.match(ASSIST_SRC, /input\.addEventListener\('input', \(\) => \{ askError\.textContent = ''; \}\);/);
-  assert.match(ASSIST_SRC, /askError\.textContent = '';\n\s*const asked = \{ role: 'user', content: q \};/);
+  assert.match(ASSIST_SRC, /askError\.textContent = '';\n\s*said\.textContent = '';\n\s*const asked = \{ role: 'user', content: q \};/);
 });
 
 test('the assistant message sits between the chat list and the form, in the panel (#65)', () => {
-  assert.match(ASSIST_SRC, /\n    list,\n    askNote,\n    form,\n/);
+  assert.match(ASSIST_SRC, /\n    list,\n    said,\n    askNote,\n    form,\n/);
   assert.match(ASSIST_SRC, /const askNote = h\('div', \{ class: 'field', style: \{ padding: '0 12px' \} \}, askError\);/);
 });

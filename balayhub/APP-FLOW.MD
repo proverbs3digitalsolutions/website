@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-21 (QA round 32: section 45 and the notes in 14 and 28.7; D-114). Before that: 2026-10-21 (QA round 31: section 44, the notes in 5.10 and 43.2; D-113). Before that: 2026-10-21 (QA round 30: section 43, the notes in 5, 41.2 and 42.2; D-112). Before that: 2026-10-21 (QA round 29: section 42, a line in 39.3 and the notes in 5.10, 14.9 and 25; D-111). Before that: 2026-10-21 (QA round 28: section 41 and the notes in 29.1, 39.2 and 40.2; D-110). Before that: 2026-10-21 (QA round 27: section 40 and the notes in 29.1 and 30.6; D-109). Before that: 2026-10-21 (QA round 26: section 39 and 33.1; D-108). Before that: 2026-10-21 (QA round 25: section 38, 5.10 and 30 corrected; D-107). Before that: 2026-10-21 (QA round 24: section 37; D-106). Before that: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
+Last updated: 2026-10-21 (QA round 33: section 46 and the notes in 26 and 44; D-115). Before that: 2026-10-21 (QA round 32: section 45 and the notes in 14 and 28.7; D-114). Before that: 2026-10-21 (QA round 31: section 44, the notes in 5.10 and 43.2; D-113). Before that: 2026-10-21 (QA round 30: section 43, the notes in 5, 41.2 and 42.2; D-112). Before that: 2026-10-21 (QA round 29: section 42, a line in 39.3 and the notes in 5.10, 14.9 and 25; D-111). Before that: 2026-10-21 (QA round 28: section 41 and the notes in 29.1, 39.2 and 40.2; D-110). Before that: 2026-10-21 (QA round 27: section 40 and the notes in 29.1 and 30.6; D-109). Before that: 2026-10-21 (QA round 26: section 39 and 33.1; D-108). Before that: 2026-10-21 (QA round 25: section 38, 5.10 and 30 corrected; D-107). Before that: 2026-10-21 (QA round 24: section 37; D-106). Before that: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
 
 ---
 
@@ -757,7 +757,7 @@ Spec: `docs/specs/PHASE-5-PRICING-TEAM.md`. Decisions D-66 to D-74. Staff and cl
 - **Listing edit:** a blank required field shows a message on that field; the postal code must be 4 digits.
 - **Group bookings:** adding rooms is all or nothing (1 to 20).
 - **Team:** inviting or editing a manager needs at least one property ("Pick at least one property for a manager.").
-- **Voiding a payment** that refunds depend on is refused: "Void the refund first, then this payment."
+- **Voiding a payment** that refunds depend on is refused. With one live refund the message names it: "Void the ₱800.00 refund from Oct 21, 2026 first, then this payment." With several, it reads "Void a refund first, then this payment. Refunds on this booking: …" and lists them newest first (D-115).
 - **Cancelled stays:** the guest pay page, booking detail and CSV show nothing owed; held money points to the Refunds card.
 - **Quotes:** the accommodation price is kept after a date change; a non-number or zero price is refused.
 - **Maintenance:** cancelling a request asks first.
@@ -1075,8 +1075,8 @@ Decision D-89 (and D-90 for the planned top bar). Where this section and an olde
   - **Turn on** on an automatic message whose template was deleted is dimmed (`aria-disabled`) with "Choose a template first." (not reachable today, see D-89).
   - The email-alert line when mail is off reads in plain words and no longer names server files.
   - Snooze and Archive keep focus.
-- **Cleaner pay and housekeeping.** A cleaner rate above the ceiling (₱10,000.00 per clean, ₱1,000.00 per hour) is refused at the field before "Change this rate?". A rate added again under different capitals keeps the saved spelling. The supplies shortage text reads "so 1 pc was recorded". Row checkboxes are 24px on phones. Mark done, Set pay, Edit pay and Undo paid keep focus.
-- **Daily close.** **Close the day** / **Update close** keep focus on the same button after saving; **Reopen day** is its own control.
+- **Cleaner pay and housekeeping.** A cleaner rate above the ceiling (₱10,000.00 per clean, ₱1,000.00 per hour) is refused at the field before "Change this rate?". A rate added again under different capitals keeps the saved spelling. The supplies shortage text reads "so 1 pc was recorded". Row checkboxes are 24px on phones. Mark done, Set pay, Edit pay and Undo paid keep focus. *Restored 2026-10-21 (D-115).*
+- **Daily close.** **Close the day** / **Update close** keep focus on the same button after saving; **Reopen day** is its own control. *Restored 2026-10-21 (D-115).*
 - **Rent and Reports.** A voided-only month reads "Voided only: 3 entries, not counted in totals." (1 entry: "Voided only: 1 entry, not counted in totals."). Export with an inverted date range reads "Fix the dates to export." (a missing date still reads "Pick both dates to export."). The Reports screen row for expenses with no unit reads "Whole-property expenses (dues etc.)"; the profit and loss screen and both CSVs read "Whole-property expenses" (the suffix goes in round 14).
 - **Stay reports.** The tab row keeps focus on the same tab, even on a slow network.
 - **Gate pass (building admin).** One guest is a name, not "1."; the Set up buttons are named "Set up, <listing>"; Confirm received hands focus to the heading.
@@ -1732,7 +1732,7 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 - **Save note works on the first press while the @ list is open.** A press inside the note box keeps the list open until the press lands. The list still sits under the box and never covers the Message guest or Internal note tabs.
 - **A note with a typed @name that nobody picked says so.** The toast reads "Note saved. Nobody was notified: pick a name from the @ list to mention someone." An email address such as ana@x.com does not count.
 - **Dialog actions stay in view.** In every dialog, Save and Cancel stick to the bottom of the scrolling part, and a focused field scrolls clear of them.
-- **The page is not one live region.** Only the toasts and the small status areas (filter chips, search status, the assistant list, help suggestions) are read out as they change. A page change is said by focus on its heading, including the "Can't reach BalayHub." page when the app cannot start.
+- **The page is not one live region.** Only the toasts and the small status areas (filter chips, search status, the assistant list, help suggestions) are read out as they change. A page change is said by focus on its heading, including the "Can't reach BalayHub." page when the app cannot start. *Corrected 2026-10-21 (D-115): the chat is not live; only its newest answer is read out.*
 - **The card check gives the longer wait first.** While the day's card tries are used up, Pay gives that wait and starts nothing (5.10).
 
 ## 45. QA round 32 changes (D-114; 2026-10-21)
@@ -1752,3 +1752,20 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 - **"What happened is required."** is the message when Contact support's body is empty.
 - **A mention of someone not on the team** says "That person can't be mentioned. Pick a name from the @ list." Staff and cleaners keep "Only owners and managers can be mentioned."
 - **The guest's "Choose at least one extra."** clears when the guest picks or changes an extra (extends 43.3).
+
+## 46. QA round 33 changes (D-115; 2026-10-21)
+
+### 46.1 Dialogs and focus
+- **A reason dialog keeps the typed reason when the server refuses.** Cancel reservation; Void payment on a stay and on long-term rent; Void expense; Void payout; Void withdrawal; Remove room; Cancel group; Void refund; Void charge. The request is sent from inside the dialog. A refusal is said on a line above the buttons, and the reason stays in its box with focus on the confirm button. Only success closes the dialog. Closing the dialog while the request is still running is allowed: a success still redraws the page, and a refusal is said in a toast.
+- **Close the day / Update close and Set pay / Edit pay keep focus on their button after the dialog saves** (the lines at 26, "Cleaner pay and housekeeping" and "Daily close", are annotated). Other dialog saves still close onto the page heading; round 34 checks them.
+
+### 46.2 Names and live areas
+- **The deposit damage photo box is named "Damage / condition photos",** and the inbox's Send later box is named "Send later (Philippine time, optional)" (extends 45.1).
+- **The assistant chat is not a live region.** Its newest answer, or "Couldn't answer. Try again or contact support.", is read out from a hidden line beside the chat. That line is emptied when a question is sent and on New chat. A failed answer keeps its text and buttons, and its box is no longer an alert. The chat transcript (44, "The page is not one live region") is annotated.
+
+### 46.3 Money and guests
+- **"Void the refund first" names the refund.** With one live refund: "Void the ₱800.00 refund from Oct 21, 2026 first, then this payment." With several, the sentence lists them, newest first ("₱100.00 from Oct 22, 2026 and ₱800.00 from Oct 21, 2026"). The refusal rule itself is unchanged.
+- **A discount code suggestion keeps only letters, numbers and dashes.** The server and the page give the same suggestion ("Try BAD-CODE."). If nothing usable is left, the page says "Use 3–20 letters, numbers or dashes, e.g. BALIK10."
+- **The booking page's discount code box is marked when a code is refused.** It is marked invalid and points at its message. Typing in the box clears the message and the mark.
+- **"Just received" is said only when a real payment finished.** A free coupon activation no longer counts, so a refused one-tap payment on another tab shows the normal in-progress or waiting line.
+- **Home's daily tiles show a plain count when nothing is due.** The first tile reads "0" labelled Arrivals, the second "0" labelled Departures, instead of "0/0". With anything due, the fraction and "Checked in" or "Checked out" stay as before.

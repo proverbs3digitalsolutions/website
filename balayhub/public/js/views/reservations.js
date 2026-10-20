@@ -703,15 +703,17 @@ export async function reservationDetailView(el, { params, rerender }) {
   };
 
   const cancel = async () => {
-    const reason = await confirmDialog({ title: 'Cancel this reservation?', text: 'The dates become available again. Payments stay on record. Record any money you give back in the Refunds card.', confirmText: 'Cancel reservation', cancelText: 'Keep reservation', danger: true, reason: true });
+    // The request runs inside the dialog: a refusal is said there and the typed reason stays (D-115).
+    const reason = await confirmDialog({ title: 'Cancel this reservation?', text: 'The dates become available again. Payments stay on record. Record any money you give back in the Refunds card.', confirmText: 'Cancel reservation', cancelText: 'Keep reservation', danger: true, reason: true, onConfirm: (why) => post(`/reservations/${r.booking_id}/cancel`, { reason: why }) });
     if (!reason) return;
-    try { await post(`/reservations/${r.booking_id}/cancel`, { reason }); toast('Reservation cancelled.'); rerender(); } catch (err) { toast(err.message, 'error'); }
+    toast('Reservation cancelled.'); rerender();
   };
 
   const voidPayment = async (p) => {
-    const reason = await confirmDialog({ title: 'Void this payment?', text: `${peso(p.amount)} on ${fmtDate(p.payment_date)}. The record is kept for history.`, confirmText: 'Void payment', danger: true, reason: true });
+    // The request runs inside the dialog: a refusal is said there and the typed reason stays (D-115).
+    const reason = await confirmDialog({ title: 'Void this payment?', text: `${peso(p.amount)} on ${fmtDate(p.payment_date)}. The record is kept for history.`, confirmText: 'Void payment', danger: true, reason: true, onConfirm: (why) => post(`/booking-payments/${p.payment_id}/void`, { reason: why }) });
     if (!reason) return;
-    try { await post(`/booking-payments/${p.payment_id}/void`, { reason }); toast('Payment voided.'); rerender(); } catch (err) { toast(err.message, 'error'); }
+    toast('Payment voided.'); rerender();
   };
 
   // Every card loads at once (ten requests one after another kept the page blank for ~20 s on a slow connection). A money card that fails to load is skipped, so the page still opens.

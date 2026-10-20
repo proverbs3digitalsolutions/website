@@ -94,7 +94,7 @@ test('money#5 a payment cannot be voided while refunds would then exceed the pay
   const blocked = await owner.post(`/api/booking-payments/${pay}/void`, { reason: 'Mistake' });
   assert.equal(blocked.status, 409, JSON.stringify(blocked.data));
   assert.equal(blocked.data.code, 'REFUNDS_EXCEED_PAYMENTS');
-  assert.match(blocked.data.error, /Void the refund first/);
+  assert.match(blocked.data.error, /^Void the ₱800\.00 refund from .+ first, then this payment\.$/);
   assert.equal((await sql(`SELECT voided_at FROM booking_payments WHERE payment_id = $1`, [pay]))[0].voided_at, null);
   // Voiding the smaller one still leaves 1000 >= 800.
   assert.equal((await owner.post(`/api/booking-payments/${pay2}/void`, { reason: 'Mistake' })).status, 200);

@@ -127,9 +127,11 @@ export async function chargesCard(reservation, rerender) {
       confirmText: 'Void charge',
       danger: true,
       reason: true,
+      // The request runs with the dialog open: a refusal shows inside it and the typed reason stays (D-115, contract C1).
+      onConfirm: (why) => post(`/charges/${c.charge_id}/void`, { reason: why }),
     });
     if (!reason) return;
-    try { await post(`/charges/${c.charge_id}/void`, { reason }); toast('Charge voided.'); rerender(); } catch (err) { toast(err.message, 'error'); }
+    toast('Charge voided.'); rerender();
   };
 
   const row = (c) => {

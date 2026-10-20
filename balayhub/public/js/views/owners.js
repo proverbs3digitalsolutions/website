@@ -404,10 +404,11 @@ export async function ownerStatementView(el, { params, query = {}, rerender }) {
       toast('Payout recorded.'); rerender();
     },
   });
+  // The request runs inside the dialog: a refusal is said there and the typed reason stays (D-115).
   const voidPayout = async (p) => {
-    const reason = await confirmDialog({ title: 'Void this payout?', text: `${peso(p.amount)} paid on ${fmtDate(p.paid_on)}. The record is kept for history.`, confirmText: 'Void payout', danger: true, reason: true });
+    const reason = await confirmDialog({ title: 'Void this payout?', text: `${peso(p.amount)} paid on ${fmtDate(p.paid_on)}. The record is kept for history.`, confirmText: 'Void payout', danger: true, reason: true, onConfirm: (why) => post(`/owner-payouts/${p.payout_id}/void`, { reason: why }) });
     if (!reason) return;
-    try { await post(`/owner-payouts/${p.payout_id}/void`, { reason }); toast('Payout voided.'); rerender(); } catch (err) { toast(err.message, 'error'); }
+    toast('Payout voided.'); rerender();
   };
   const payoutsCard = h('section', { class: 'card no-print' },
     h('div', { class: 'card__head' }, h('h2', null, 'Payouts'),
@@ -435,10 +436,11 @@ export async function ownerStatementView(el, { params, query = {}, rerender }) {
     ],
     onSubmit: async (d) => { await post(`${base}/reserve/withdrawals`, d); toast('Withdrawal recorded.'); rerender(); },
   });
+  // Same: the request runs inside the dialog (D-115).
   const voidEntry = async (e) => {
-    const reason = await confirmDialog({ title: 'Void this withdrawal?', text: `${peso(e.amount)} on ${fmtDate(e.entry_date)} goes back into the reserve.`, confirmText: 'Void withdrawal', danger: true, reason: true });
+    const reason = await confirmDialog({ title: 'Void this withdrawal?', text: `${peso(e.amount)} on ${fmtDate(e.entry_date)} goes back into the reserve.`, confirmText: 'Void withdrawal', danger: true, reason: true, onConfirm: (why) => post(`/reserve-entries/${e.entry_id}/void`, { reason: why }) });
     if (!reason) return;
-    try { await post(`/reserve-entries/${e.entry_id}/void`, { reason }); toast('Withdrawal voided.'); rerender(); } catch (err) { toast(err.message, 'error'); }
+    toast('Withdrawal voided.'); rerender();
   };
   const entries = reserve?.entries || [];
   const showReserve = reserve && (Number(reserve.target) > 0 || Number(reserve.monthly) > 0 || entries.length > 0);

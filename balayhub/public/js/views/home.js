@@ -48,8 +48,9 @@ async function overviewCard() {
       h('div', { class: 'card__head' }, h('h2', null, 'Daily overview'),
         tabs([['today', 'Today'], ['tomorrow', 'Tomorrow'], ['7d', '7 days']], range, (v) => { range = v; load(); })),
       h('div', { class: 'stats' },
-        tile(`${checkedIn}/${o.arrivals.length}`, 'Checked in', range === 'today' ? null : 'Arrivals', '#/reservations?view=arrivals_today'),
-        tile(`${checkedOut}/${o.departures.length}`, 'Checked out', range === 'today' ? null : 'Departures', '#/reservations?view=departures_today'),
+        // With nothing due the tile is a plain count, not "0/0" (D-115).
+        o.arrivals.length ? tile(`${checkedIn}/${o.arrivals.length}`, 'Checked in', range === 'today' ? null : 'Arrivals', '#/reservations?view=arrivals_today') : tile('0', 'Arrivals', null, '#/reservations?view=arrivals_today'),
+        o.departures.length ? tile(`${checkedOut}/${o.departures.length}`, 'Checked out', range === 'today' ? null : 'Departures', '#/reservations?view=departures_today') : tile('0', 'Departures', null, '#/reservations?view=departures_today'),
         tile(String(o.turnovers.length), 'Turnovers', 'Same-day out & in'),
         tile(String(o.staying.length), 'Staying', `${o.guests_staying} guest${o.guests_staying === 1 ? '' : 's'} in total`, '#/reservations?view=hosting')),
       Number(o.dirty_listings) > 0 && h('a', { class: 'alert alert--warn', href: '#/listings?cleaning=dirty', style: { display: 'block', marginBottom: '12px' } },

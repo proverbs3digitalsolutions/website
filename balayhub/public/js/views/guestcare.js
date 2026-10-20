@@ -66,7 +66,11 @@ export async function reviewsView(el, { query = {} } = {}) {
 export function discountCodeProblems(d) {
   const out = {};
   const code = String(d.code ?? '').trim();
-  if (/\s/.test(code)) out.code = `Codes can't contain spaces. Try ${code.toUpperCase().replace(/\s+/g, '-')}.`;
+  if (/\s/.test(code)) {
+    // The suggestion keeps only what a code may hold: letters, numbers and single dashes (D-115).
+    const tryCode = code.toUpperCase().replace(/\s+/g, '-').replace(/[^A-Z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 20);
+    out.code = /^[A-Z0-9-]{3,20}$/.test(tryCode) ? `Codes can't contain spaces. Try ${tryCode}.` : "Codes can't contain spaces. Use 3–20 letters, numbers or dashes, e.g. BALIK10.";
+  }
   else if (code && !/^[A-Z0-9-]{3,20}$/.test(code.toUpperCase())) out.code = 'Use 3–20 letters, numbers or dashes, e.g. BALIK10.';
   const percent = String(d.percent_off ?? '').trim() !== '';
   const amountText = String(d.amount_off ?? '').trim();

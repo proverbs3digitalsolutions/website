@@ -50,7 +50,7 @@ test('#10 the assistant panel clears "Type a question first." on input, when it 
   assert.match(ASSIST_SRC, /let clearAskError = \(\) => \{\};/);
   assert.match(ASSIST_SRC, /clearAskError = \(\) => \{ askError\.textContent = ''; \};/);
   assert.match(ASSIST_SRC, /export function openAssistant\(question\) \{\s*if \(!panel\) panel = buildPanel\(\);\s*clearAskError\(\);/);
-  assert.match(ASSIST_SRC, /onclick: \(\) => \{ msgs = \[\]; save\(msgs\); clearAskError\(\); draw\(\); input\.focus\(\); \}/);
+  assert.match(ASSIST_SRC, /onclick: \(\) => \{ msgs = \[\]; save\(msgs\); said\.textContent = ''; clearAskError\(\); draw\(\); input\.focus\(\); \}/);
 });
 
 test('#10 an empty question still says what to do, and nothing is sent (existing behaviour kept)', () => {

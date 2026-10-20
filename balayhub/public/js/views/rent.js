@@ -514,9 +514,10 @@ export async function paymentDetailView(el, { params, rerender }) {
       canVoid && h('button', {
         class: 'btn btn--danger',
         onclick: async () => {
-          const reason = await confirmDialog({ title: 'Void this payment?', text: 'Voiding keeps the record but removes it from balances and reports. Use this to correct a mistake, then record the correct payment.', confirmText: 'Void payment', danger: true, reason: true });
+          // The request runs inside the dialog: a refusal is said there and the typed reason stays (D-115).
+          const reason = await confirmDialog({ title: 'Void this payment?', text: 'Voiding keeps the record but removes it from balances and reports. Use this to correct a mistake, then record the correct payment.', confirmText: 'Void payment', danger: true, reason: true, onConfirm: (why) => post(`/payments/${p.payment_id}/void`, { reason: why }) });
           if (!reason) return;
-          try { await post(`/payments/${p.payment_id}/void`, { reason }); toast('Payment voided.'); rerender(); } catch (err) { toast(err.message, 'error'); }
+          toast('Payment voided.'); rerender();
         },
       }, 'Void'),
     ],
@@ -580,9 +581,10 @@ export async function expenseDetailView(el, { params, rerender }) {
         h('button', {
           class: 'btn btn--danger',
           onclick: async () => {
-            const reason = await confirmDialog({ title: 'Void this expense?', text: 'The record is kept for your history but removed from totals and reports.', confirmText: 'Void expense', danger: true, reason: true });
+            // The request runs inside the dialog: a refusal is said there and the typed reason stays (D-115).
+            const reason = await confirmDialog({ title: 'Void this expense?', text: 'The record is kept for your history but removed from totals and reports.', confirmText: 'Void expense', danger: true, reason: true, onConfirm: (why) => post(`/expenses/${x.expense_id}/void`, { reason: why }) });
             if (!reason) return;
-            try { await post(`/expenses/${x.expense_id}/void`, { reason }); toast('Expense voided.'); rerender(); } catch (err) { toast(err.message, 'error'); }
+            toast('Expense voided.'); rerender();
           },
         }, 'Void')],
     }),

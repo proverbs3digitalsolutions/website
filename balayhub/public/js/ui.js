@@ -534,36 +534,51 @@ export function openModal({ title, body, onClose, wide }) {
 // An audit reason is at most 500 characters. No maxlength on the box (it cuts a paste silently): Confirm checks and says so.
 export const REASON_MAX = 500;
 let reasonSeq = 0;
-export function confirmDialog({ title, text, confirmText = 'Confirm', cancelText = 'Cancel', danger = false, reason = false }) {
+export function confirmDialog({ title, text, confirmText = 'Confirm', cancelText = 'Cancel', danger = false, reason = false, onConfirm = null }) {
   return new Promise((resolve) => {
     let done = false;
+    let busy = false;
     const rid = `reason-${++reasonSeq}`;
     const reasonInput = reason ? h('textarea', { class: 'input', id: rid, name: 'reason', required: true, 'aria-describedby': `${rid}-err`, placeholder: 'Required — explain why (kept in the audit log)' }) : null;
     const err = h('div', { class: 'error', id: `${rid}-err`, role: 'alert' });
     // A form asking this question is not saving yet: its button shows its own label until the answer is yes.
     const saving = [...document.querySelectorAll('button[data-own-label]')].filter((b) => b.textContent === 'Saving…');
     for (const b of saving) b.textContent = b.dataset.ownLabel;
+    // A refusal from the server is said here and the dialog stays open with the typed reason (D-115).
+    const refusal = h('div', { role: 'alert' });
     const cancelBtn = h('button', { class: 'btn btn--secondary', type: 'button', onclick: () => m.close() }, cancelText);
+    const confirmBtn = h('button', {
+      class: `btn ${danger ? 'btn--danger' : 'btn--primary'}`, type: 'button',
+      onclick: async () => {
+        if (busy) return;
+        if (reasonInput && !reasonInput.value.trim()) { err.textContent = 'Please enter a reason.'; reasonInput.setAttribute('aria-invalid', 'true'); reasonInput.focus(); return; }
+        if (reasonInput && reasonInput.value.trim().length > REASON_MAX) { err.textContent = `Reason must be at most ${REASON_MAX} characters.`; reasonInput.setAttribute('aria-invalid', 'true'); reasonInput.focus(); return; }
+        const value = reasonInput ? reasonInput.value.trim() : true;
+        if (onConfirm) {
+          busy = true; confirmBtn.setAttribute('aria-busy', 'true'); refusal.replaceChildren();
+          try { await onConfirm(value); } catch (e) {
+            busy = false; confirmBtn.removeAttribute('aria-busy');
+            if (m.el.open) { refusal.replaceChildren(h('div', { class: 'alert alert--error' }, e.message)); confirmBtn.focus(); } else { done = true; toast(e.message, 'error'); resolve(null); }
+            return;
+          }
+          busy = false;
+        }
+        done = true;
+        for (const b of saving) if (b.dataset.ownLabel !== undefined) b.textContent = 'Saving…';
+        if (m.el.open) m.close();
+        resolve(value);
+      },
+    }, confirmText);
     const m = openModal({
       title,
-      onClose: () => { if (!done) resolve(null); },
+      onClose: () => { if (!done && !busy) resolve(null); },
       body: h('div', { class: 'form' },
         h('p', null, text),
         reasonInput && h('div', { class: 'field' }, h('label', { for: rid }, 'Reason ', h('span', { class: 'req' }, '*')), reasonInput, err),
-        h('div', { class: 'form-actions' },
-          cancelBtn,
-          h('button', {
-            class: `btn ${danger ? 'btn--danger' : 'btn--primary'}`, type: 'button',
-            onclick: () => {
-              if (reasonInput && !reasonInput.value.trim()) { err.textContent = 'Please enter a reason.'; reasonInput.setAttribute('aria-invalid', 'true'); reasonInput.focus(); return; }
-              if (reasonInput && reasonInput.value.trim().length > REASON_MAX) { err.textContent = `Reason must be at most ${REASON_MAX} characters.`; reasonInput.setAttribute('aria-invalid', 'true'); reasonInput.focus(); return; }
-              done = true;
-              for (const b of saving) if (b.dataset.ownLabel !== undefined) b.textContent = 'Saving…';
-              m.close(); resolve(reasonInput ? reasonInput.value.trim() : true);
-            },
-          }, confirmText))),
+        refusal,
+        h('div', { class: 'form-actions' }, cancelBtn, confirmBtn)),
     });
-    reasonInput?.addEventListener('input', () => { err.textContent = ''; reasonInput.removeAttribute('aria-invalid'); });
+    reasonInput?.addEventListener('input', () => { err.textContent = ''; reasonInput.removeAttribute('aria-invalid'); refusal.replaceChildren(); });
     // The safe choice first: a confirm without a reason box starts on Cancel, not on the close button.
     if (!reasonInput) cancelBtn.focus();
   });

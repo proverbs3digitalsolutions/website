@@ -101,9 +101,11 @@ export async function refundsCard(reservation, rerender) {
     const reason = await confirmDialog({
       title: 'Void this refund?', text: `${peso(r.amount)} refunded on ${fmtDate(r.refund_date)}. The record is kept for history.`,
       confirmText: 'Void refund', danger: true, reason: true,
+      // The request runs inside the dialog: a refusal is said there and the typed reason stays (D-115).
+      onConfirm: (why) => post(`/refunds/${r.refund_id}/void`, { reason: why }),
     });
     if (!reason) return;
-    try { await post(`/refunds/${r.refund_id}/void`, { reason }); toast('Refund voided.'); rerender(); } catch (err) { toast(err.message, 'error'); }
+    toast('Refund voided.'); rerender();
   };
 
   const policy = data.policy

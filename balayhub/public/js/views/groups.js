@@ -425,7 +425,6 @@ export async function groupDetailView(el, { params, rerender }) {
   const { group: g, guest, rooms, totals } = await get(`/booking-groups/${params.id}`);
   const cancelled = isCancelled(g);
   const active = rooms.filter((r) => r.status !== 'cancelled');
-  const run = async (fn, msg) => { try { await fn(); toast(msg); rerender(); } catch (err) { toast(err.message, 'error'); } };
 
   const edit = () => formModal({
     title: 'Edit group', submitText: 'Save changes',
@@ -437,14 +436,18 @@ export async function groupDetailView(el, { params, rerender }) {
   });
   const removeRoom = async (r) => {
     const low = active.length <= 2 ? ' The group will have fewer than two rooms left.' : '';
-    const reason = await confirmDialog({ title: 'Remove this room?', text: `${r.unit_name}, ${fmtDate(r.check_in)} – ${fmtDate(r.check_out)} will be cancelled. Payments stay on record.${low}`, confirmText: 'Remove room', danger: true, reason: true });
+    const reason = await confirmDialog({ title: 'Remove this room?', text: `${r.unit_name}, ${fmtDate(r.check_in)} – ${fmtDate(r.check_out)} will be cancelled. Payments stay on record.${low}`, confirmText: 'Remove room', danger: true, reason: true,
+      // The request runs inside the dialog: a refusal is said there and the typed reason stays (D-115).
+      onConfirm: (why) => post(`/booking-groups/${g.group_id}/rooms/${r.booking_id}/remove`, { reason: why }) });
     if (!reason) return;
-    run(() => post(`/booking-groups/${g.group_id}/rooms/${r.booking_id}/remove`, { reason }), 'Room removed.');
+    toast('Room removed.'); rerender();
   };
   const cancelGroup = async () => {
-    const reason = await confirmDialog({ title: 'Cancel the whole group?', text: `${active.length === 1 ? 'The 1 room' : `All ${active.length} rooms`} will be cancelled and the dates become available again. Payments stay on record.`, confirmText: 'Cancel group', cancelText: 'Keep group', danger: true, reason: true });
+    const reason = await confirmDialog({ title: 'Cancel the whole group?', text: `${active.length === 1 ? 'The 1 room' : `All ${active.length} rooms`} will be cancelled and the dates become available again. Payments stay on record.`, confirmText: 'Cancel group', cancelText: 'Keep group', danger: true, reason: true,
+      // The request runs inside the dialog: a refusal is said there and the typed reason stays (D-115).
+      onConfirm: (why) => post(`/booking-groups/${g.group_id}/cancel`, { reason: why }) });
     if (!reason) return;
-    run(() => post(`/booking-groups/${g.group_id}/cancel`, { reason }), 'Group cancelled.');
+    toast('Group cancelled.'); rerender();
   };
 
   const cols = ['Listing', 'Dates', 'Guests'];

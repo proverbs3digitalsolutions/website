@@ -447,7 +447,7 @@ function composer(c, templates, status, rerender, assignees = []) {
   };
   body.addEventListener('input', updateCounter);
   const errId = `cerr-${c.conversation_id}`;
-  const sendAt = h('input', { class: 'input input--sm', type: 'datetime-local', 'aria-label': 'Send later at', 'aria-describedby': errId });
+  const sendAt = h('input', { class: 'input input--sm', type: 'datetime-local', 'aria-describedby': errId }); // named by its wrapping label "Send later (Philippine time, optional)" (D-115)
   const err = h('div', { class: 'error', role: 'alert', id: errId });
   // Typing, or changing or clearing the send-later time, drops a stale error so it doesn't sit on screen.
   body.addEventListener('input', () => { err.textContent = ''; });

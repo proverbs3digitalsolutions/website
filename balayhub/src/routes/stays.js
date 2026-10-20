@@ -23,6 +23,17 @@ const { FEE, PAID, REFUNDED, BALANCE } = require('../lib/balance');
 // The amount owed changed: close the guest's open online-payment checkouts (lazy require: circular-safe).
 const closeOpenCheckouts = (bookingId) => require('./balancepay').closeOpenCheckouts(bookingId);
 
+// Names the live refunds a payment void is waiting on, newest first (D-115).
+const refundPeso = (v) => `₱${Number(v).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const refundDay = (ymd) => new Date(`${String(ymd).slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+function refundsFirstText(rows) {
+  // No rows only if a refund was voided between the two reads of this refusal: the old sentence still tells the host what to do.
+  if (!rows.length) return 'Void the refund first, then this payment.';
+  if (rows.length === 1) return `Void the ${refundPeso(rows[0].amount)} refund from ${refundDay(rows[0].refund_date)} first, then this payment.`;
+  const named = rows.map((x) => `${refundPeso(x.amount)} from ${refundDay(x.refund_date)}`);
+  return `Void a refund first, then this payment. Refunds on this booking: ${named.slice(0, -1).join(', ')} and ${named[named.length - 1]}.`;
+}
+
 const router = express.Router();
 const managers = requireRole('owner', 'manager');
 
@@ -805,7 +816,10 @@ router.post('/booking-payments/:id/void', managers, ah(async (req, res) => {
       `SELECT (SELECT COALESCE(SUM(amount), 0) FROM booking_payments WHERE booking_id = $1 AND voided_at IS NULL AND payment_id <> $2) AS paid,
               (SELECT COALESCE(SUM(amount), 0) FROM booking_refunds WHERE booking_id = $1 AND voided_at IS NULL) AS refunded`, [p.booking_id, id]);
     if (Math.round(t.refunded * 100) > Math.round(t.paid * 100)) {
-      throw new HttpError(409, 'Void the refund first, then this payment.', { code: 'REFUNDS_EXCEED_PAYMENTS' });
+      // The live refunds this void would strand, read in this transaction (D-115).
+      const { rows: live } = await db.query(
+        `SELECT amount, refund_date FROM booking_refunds WHERE booking_id = $1 AND voided_at IS NULL ORDER BY refund_date DESC, created_at DESC`, [p.booking_id]);
+      throw new HttpError(409, refundsFirstText(live), { code: 'REFUNDS_EXCEED_PAYMENTS' });
     }
     await db.query('UPDATE booking_payments SET voided_at = now(), voided_by = $2, void_reason = $3 WHERE payment_id = $1 AND voided_at IS NULL', [id, req.user.user_id, reason]);
     await audit(db, req.user, 'reservation.payment_voided', 'booking_payment', id, { amount: p.amount, reason });

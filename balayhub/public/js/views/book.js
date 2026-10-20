@@ -236,22 +236,25 @@ export async function bookListingView(el, { params, query }) {
   const payError = h('div');
   // Discount code
   let promoCode = '';
-  const codeMsg = h('div', { class: 'muted small', role: 'status' });
-  const codeInput = h('input', { class: 'input', name: 'code', maxlength: 40, autocomplete: 'off', placeholder: 'e.g. BALIK10', 'aria-label': t('Discount code') });
+  const codeMsg = h('div', { class: 'muted small', role: 'status', id: 'bk-code-msg' });
+  const codeInput = h('input', { class: 'input', name: 'code', maxlength: 40, autocomplete: 'off', placeholder: 'e.g. BALIK10', 'aria-describedby': 'bk-code-msg bk-code-err', 'aria-label': t('Discount code') });
   const applyCode = () => {
     promoCode = codeInput.value.trim();
     // With no dates yet nothing can be checked, so say so; the quote checks the code once the dates are picked.
     if (!checkIn || !checkOut) {
       codeMsg.className = 'muted small';
       codeMsg.textContent = promoCode ? t('Choose your dates first, then apply your code.') : '';
+      codeInput.removeAttribute('aria-invalid');
     }
     updateQuote();
   };
   codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); applyCode(); } });
+  // A message clears when the code is changed (D-114).
+  codeInput.addEventListener('input', () => { if (codeMsg.className === 'error') { codeMsg.textContent = ''; codeMsg.className = 'muted small'; codeInput.removeAttribute('aria-invalid'); } });
   const codeBox = h('details', { class: 'field bk-code', dataset: { field: 'code' } },
     h('summary', null, t('Have a discount code?')),
     h('div', { class: 'chips' }, codeInput, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: applyCode }, t('Apply'))),
-    codeMsg, h('div', { class: 'error', role: 'alert' }));
+    codeMsg, h('div', { class: 'error', role: 'alert', id: 'bk-code-err' }));
   const submit = h('button', { class: 'btn btn--primary btn--block', type: 'submit', disabled: true }, t('Continue to payment'));
   let current = null;
   // Add-ons: addon_id -> quantity (only entries above 0).
@@ -344,6 +347,8 @@ export async function bookListingView(el, { params, query }) {
       const q = await get(`/public/book/${encodeURIComponent(slug)}/units/${l.unit_id}/quote?check_in=${checkIn}&check_out=${checkOut}&guests=${guestsNow()}${promo}${ad}`);
       codeMsg.textContent = tServer(q.code_error) || (q.promo_code ? `${t('Code {code} applied: −{amount}.', { code: q.promo_code, amount: money(q.promo_discount) })}${q.promo_note ? ` ${tServer(q.promo_note)}` : ''}` : '');
       codeMsg.className = q.code_error ? 'error' : 'muted small';
+      // The box is marked like the other fields (D-103, D-115).
+      if (q.code_error) codeInput.setAttribute('aria-invalid', 'true'); else codeInput.removeAttribute('aria-invalid');
       current = q;
       // This stay's price before any discount (the summary's first line), per night.
       const stayTotal = q.discount_label || q.promo_code ? q.subtotal : q.accommodation_total;

@@ -77,5 +77,5 @@ test('openModal picks the first field that is not disabled (source pin; the dial
 test('confirmDialog source: empty reason marks the box and typing clears it', () => {
   const src = fs.readFileSync(path.join(JS, 'ui.js'), 'utf8');
   assert.match(src, /Please enter a reason\.'; reasonInput\.setAttribute\('aria-invalid', 'true'\)/);
-  assert.match(src, /reasonInput\?\.addEventListener\('input', \(\) => \{ err\.textContent = ''; reasonInput\.removeAttribute\('aria-invalid'\); \}\)/);
+  assert.match(src, /reasonInput\?\.addEventListener\('input', \(\) => \{ err\.textContent = ''; reasonInput\.removeAttribute\('aria-invalid'\); refusal\.replaceChildren\(\); \}\)/);
 });

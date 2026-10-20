@@ -674,7 +674,8 @@ function payModal(task, onSaved) {
   formModal({
     title: 'Pay for this clean', submitText: 'Save',
     fields: [field({ name: 'pay_amount', label: 'Amount', type: 'money', required: true, value: task.pay_amount ?? '' })],
-    onSubmit: async (d) => { await patch(`/cleaning-tasks/${task.task_id}`, { pay_amount: d.pay_amount }); toast('Pay saved.'); onSaved(); },
+    // Redraw after the dialog has closed, so Set pay / Edit pay keep focus (APP-FLOW 1078, D-115).
+    onSubmit: async (d) => { await patch(`/cleaning-tasks/${task.task_id}`, { pay_amount: d.pay_amount }); toast('Pay saved.'); setTimeout(onSaved); },
   });
 }
 

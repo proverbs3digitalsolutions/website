@@ -107,8 +107,9 @@ async function prepareCharge(user, plan, months, { couponCode, provider, seenPai
       [user.organization_id]);
     // A refusal because another payment is open reads as "received" when a plan payment was marked paid a moment ago:
     // the other tab's payment just finished, so "try again" would mislead. Which requests are refused does not change.
+    // A free activation (a ₱0 coupon row) is not a payment received: another tab's activation is caught by the stale check (D-115).
     const { rows: [justPaid] } = await db.query(
-      `SELECT 1 FROM billing_payments WHERE organization_id = $1 AND kind = 'plan' AND status = 'paid' AND paid_at > now() - interval '2 minutes'`, [user.organization_id]);
+      `SELECT 1 FROM billing_payments WHERE organization_id = $1 AND kind = 'plan' AND status = 'paid' AND provider <> 'coupon' AND paid_at > now() - interval '2 minutes'`, [user.organization_id]);
     const openError = (message) => (justPaid || stale(org) ? paymentReceived() : new HttpError(409, message, { code: 'PAYMENT_IN_PROGRESS' }));
     // A free activation is written pending and marked paid in its own transaction; until then it is an open payment too
     // (BIL-1, D-108). Bounded to 2 minutes so a row left pending by a crash never blocks for long.

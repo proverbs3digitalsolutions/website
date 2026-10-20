@@ -105,7 +105,7 @@ export async function depositCard(r, rerender) {
     if (!await confirmDialog({ title: 'Undo the return?', text: 'The deposit goes back to "Held" so you can record the return again. Emails already sent are not recalled.', confirmText: 'Undo' })) return;
     try { await post(`/reservations/${r.booking_id}/deposit/reopen`); toast('Back to held.'); rerender(); } catch (err) { toast(err.message, 'error'); }
   };
-  const upload = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', class: 'input', 'aria-label': 'Add damage photo', onchange: async () => {
+  const upload = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', class: 'input', id: 'deposit-photo-file', onchange: async () => {
     up.clear();
     if (!upload.files[0]) return;
     upload.disabled = true;
@@ -133,7 +133,7 @@ export async function depositCard(r, rerender) {
       dep.status === 'held' && isManager && h('button', { class: `btn ${due ? 'btn--primary' : 'btn--secondary'} btn--sm`, type: 'button', 'data-focus-key': 'deposit-action', onclick: settle }, 'Return deposit'),
       dep.status !== 'held' && state.user.role === 'owner' && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'data-focus-key': 'deposit-action', onclick: reopen }, 'Undo')),
     h('div', { class: 'form', style: { marginTop: '10px' } },
-      h('label', { class: 'small muted' }, 'Damage / condition photos'), up.wrap));
+      h('label', { class: 'small muted', for: 'deposit-photo-file' }, 'Damage / condition photos'), up.wrap));
 }
 
 // Home: deposits still held after check-out.
