@@ -265,6 +265,8 @@ publicRouter.post('/public/pay/:token/proofs/:proofId/image', proofUploadLimiter
     const refusal = manualRefusal(b);
     if (refusal) throw refusal;
     const proofId = uuidParam(req.params.proofId);
+    // An empty file is said as empty, not as a wrong type (D-111, round 29; same as files.js).
+    if (req.get('Content-Length') === '0' || (Buffer.isBuffer(req.body) && !req.body.length)) throw new HttpError(400, 'This file is empty. Choose the file again.', { code: 'EMPTY_FILE' });
     const mime = String(req.get('Content-Type') || '').split(';')[0].trim();
     if (!storage.checkUpload(mime, req.body)) {
       throw new HttpError(415, 'Upload a JPG, PNG, WEBP or PDF file up to 10 MB.', { code: 'UNSUPPORTED_FILE' });

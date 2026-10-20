@@ -119,7 +119,7 @@ test('listings#3: on equal first nights the season created later is the one that
   const a = S({ name: 'QA Season A', unit_id: 'p', unit_name: 'Paris 1208', start_date: '2031-11-20', end_date: '2031-11-22', nightly_rate: '3100' });
   const b = S({ name: 'QA Season B', unit_id: 'p', unit_name: 'Paris 1208', start_date: '2031-11-20', end_date: '2031-11-21', nightly_rate: '3200', created_at: '2026-10-13T10:05:00.000Z' });
   const seasons = [a, b];
-  assert.equal(view.clashText(view.seasonClashes(a, seasons)[0]), 'Overlaps QA Season B: QA Season B wins the shared nights.');
+  assert.equal(view.clashText(view.seasonClashes(a, seasons)[0]), 'Overlaps QA Season B, which wins the shared nights.');
   assert.equal(view.clashText(view.seasonClashes(b, seasons)[0]), 'Overlaps QA Season A: this season wins the shared nights.');
 });
 
@@ -128,7 +128,7 @@ test('listings#4: an all-listings season and a listing season that share nights 
   const all = S({ name: 'QA All Dec', start_date: '2031-12-09', end_date: '2031-12-11', adjust_pct: 10 });
   const hill = S({ name: 'Hill Dec', unit_id: 'h', unit_name: 'Hill 2', start_date: '2031-12-10', end_date: '2031-12-10', nightly_rate: '2900' });
   const seasons = [paris, all, hill];
-  assert.equal(view.clashText(view.seasonClashes(all, seasons).find((c) => c.name === 'Paris Dec')), 'Overlaps Paris Dec on Paris 1208: Paris Dec wins the shared nights.');
+  assert.equal(view.clashText(view.seasonClashes(all, seasons).find((c) => c.name === 'Paris Dec')), 'Overlaps Paris Dec on Paris 1208, which wins the shared nights.');
   assert.equal(view.clashText(view.seasonClashes(paris, seasons).find((c) => c.name === 'QA All Dec')), 'Overlaps QA All Dec on Paris 1208: this season wins the shared nights.');
   // A season on another listing does not touch Paris.
   assert.deepEqual(view.seasonClashes(paris, [paris, hill]), []);

@@ -208,6 +208,8 @@ router.get('/units/:id/photos', ah(async (req, res) => {
 
 router.post('/units/:id/photos', managers, express.raw({ type: ['image/jpeg', 'image/png', 'image/webp'], limit: config.maxUploadBytes }), ah(async (req, res) => {
   const unit = await loadUnit(req.user, uuidParam(req.params.id));
+  // An empty file is said as empty, not as a wrong type (D-111, round 29; same as files.js).
+  if (req.get('Content-Length') === '0' || (Buffer.isBuffer(req.body) && !req.body.length)) throw new HttpError(400, 'This file is empty. Choose the file again.', { code: 'EMPTY_FILE' });
   const mime = String(req.get('Content-Type') || '').split(';')[0].trim();
   if (!storage.checkUpload(mime, req.body, { imagesOnly: true })) throw new HttpError(415, 'Upload a photo (JPG, PNG or WEBP) up to 10 MB.', { code: 'UNSUPPORTED_FILE' });
   const file = await tx(async (db) => {

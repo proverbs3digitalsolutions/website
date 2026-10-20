@@ -24,7 +24,7 @@ function isRealDate(s) {
 export function closeDayFor(raw, today = todayManila()) {
   const tomorrow = addDays(today, 1);
   if (!raw) return { date: today, message: null };
-  if (!isRealDate(raw)) return { date: today, message: "That date isn't valid." };
+  if (!isRealDate(raw)) return { date: today, message: "That date isn't valid, so this shows today." };
   if (raw > tomorrow) return { date: tomorrow, message: 'You can close a day up to tomorrow, so this shows tomorrow.' };
   return { date: raw, message: null };
 }

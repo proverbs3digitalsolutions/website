@@ -8,6 +8,8 @@ const TL = {
   // shared
   'Privacy notice': 'Privacy notice',
   'Payments are processed securely by PayMongo. ': 'Ligtas na pinoproseso ng PayMongo ang bayad. ',
+  // An empty file is refused before sending (D-111, round 29); same sentence as housekeeping.
+  'This file is empty. Choose the file again.': 'Walang laman ang file. Piliin ulit ang file.',
   'Link not found': 'Hindi makita ang link',
   'Something went wrong. Please try again.': 'May nagkaproblema. Pakisubukan ulit.',
   'Stay': 'Stay',

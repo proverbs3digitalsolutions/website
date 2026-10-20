@@ -68,7 +68,7 @@ Response 200:
 
 Server: creates (or reuses) the PayMongo Customer and the pending card check row and its Payment Intent (amount 2000, `payment_method_allowed: ['card']`, `payment_method_options.card.request_three_d_secure: 'any'`, `currency: 'PHP'`, `description: 'BalayHub card check'`, `statement_descriptor: 'BALAYHUB'`, `setup_future_usage: { session_type: 'on_session', customer_id }`, `metadata: { billing_id, organization_id, kind: 'card_check' }`). Stores `renewal_plan` (and in Stage 2, `auto_renew = true`, `auto_renew_consented_at = now()`). Reuses an existing pending row (same `billing_id`) if its Payment Intent is still `awaiting_payment_method`.
 
-Errors: 403 `FORBIDDEN` (not owner); 409 `CARD_CHECK_NOT_REQUIRED` ("Your card is already confirmed." / or "Your workspace doesn't need a card check."); 409 `CARD_CHECK_OFF` ("Card checks are off right now. Please try again later."); 400 `VALIDATION` (field `consent`: "Tick the box to agree to automatic payment."); 429 `RATE_LIMITED`; 502 `BILLING_FAILED` ("We couldn't reach the payment service. Nothing was charged. Please try again in a moment.").
+Errors: 403 `FORBIDDEN` (not owner); 409 `CARD_CHECK_NOT_REQUIRED` ("Your card is already confirmed." / or "Your workspace doesn't need a card check."); 409 `CARD_CHECK_OFF` ("Card checks are off right now. Please try again later."); 400 `VALIDATION` (field `consent`: "Tick the box to agree to automatic payment."); 429 `RATE_LIMITED`; 502 `BILLING_FAILED` ("We couldn't reach the payment service. Nothing was charged. Please try again in a moment."). *The body carries `retry_after` (seconds left in the window; D-111). The start limit does not count a press that ended 502 or 503.*
 
 ### 3.4 Browser to PayMongo (not BalayHub)
 
@@ -100,7 +100,7 @@ Server attaches it to the row's Payment Intent with the **secret key** (`POST /p
 - `pending`: `processing`.
 - `failed`: `awaiting_payment_method` with `last_payment_error`; the row stays pending until the owner retries. *(Round 18, D-100: the retry does not reuse the Payment Intent; `start()` expires the old pending row and creates one new intent, so there are never two charges. See "As built".)*
 
-Errors: 404 `NOT_FOUND` (not this workspace's row, or not a card check); 409 `CARD_CHECK_NOT_REQUIRED`; 400 `VALIDATION`; 429 `RATE_LIMITED`; 502 `BILLING_FAILED`.
+Errors: 404 `NOT_FOUND` (not this workspace's row, or not a card check); 409 `CARD_CHECK_NOT_REQUIRED`; 400 `VALIDATION`; 429 `RATE_LIMITED`; 502 `BILLING_FAILED`. *The body carries `retry_after` (seconds left in the window; D-111). This route's limit counts a press that ended 502 or 503; only the start limit gives those back.*
 
 ### 3.6 `POST /api/billing/card-check/:id/refresh` (new, owner)
 

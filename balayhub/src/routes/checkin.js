@@ -168,6 +168,8 @@ publicRouter.post('/public/checkin/:token/id', uploadLimiter, express.raw({ type
   const b = await loadByToken(req.params.token);
   if (b.closed) throw new HttpError(409, 'This stay has ended or was cancelled, so the form is closed.', { code: 'CLOSED' });
   if (b.is_demo) throw new HttpError(403, 'This is a demo.', { code: 'DEMO_READ_ONLY' });
+  // An empty file is said as empty, not as a wrong type (D-111, round 29; same as files.js).
+  if (req.get('Content-Length') === '0' || (Buffer.isBuffer(req.body) && !req.body.length)) throw new HttpError(400, 'This file is empty. Choose the file again.', { code: 'EMPTY_FILE' });
   const mime = String(req.get('Content-Type') || '').split(';')[0].trim();
   if (!storage.checkUpload(mime, req.body, { imagesOnly: true })) throw new HttpError(415, 'Upload a photo (JPG, PNG or WEBP) up to 10 MB.', { code: 'UNSUPPORTED_FILE' });
   // Count and insert under a lock on the registration so the cap can't be raced.

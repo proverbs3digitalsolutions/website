@@ -261,6 +261,7 @@ function pendingList(list, token, reload) {
           const f = file.files[0];
           msg.replaceChildren();
           if (!f) { msg.replaceChildren(h('div', { class: 'alert alert--error' }, t('Choose a screenshot or receipt.'))); return; }
+          if (!f.size) { msg.replaceChildren(h('div', { class: 'alert alert--error' }, t('This file is empty. Choose the file again.'))); return; } // D-111
           if (f.size > MAX_PROOF_BYTES || !PROOF_TYPES.includes(f.type)) { msg.replaceChildren(h('div', { class: 'alert alert--error' }, t('Upload a JPG, PNG, WEBP or PDF file up to 10 MB.'))); return; }
           add.disabled = true; back.disabled = true;
           add.textContent = t('Uploading the screenshot…');
@@ -340,6 +341,7 @@ function proofForm(d, token, onSent, left, pendingTotal) {
     else if (amount > left + 0.001) problems.amount = t("You already sent proofs for {sent} that the host hasn't checked yet, so you can send up to {left} more.", { sent: peso(pendingTotal), left: peso(left) });
     if (Object.keys(problems).length) { showErrors(form, problems); return; }
     if (!file) { formError.replaceChildren(alertBox(t('Choose a screenshot or receipt.'))); return; }
+    if (!file.size) { formError.replaceChildren(alertBox(t('This file is empty. Choose the file again.'))); return; } // D-111
     if (file.size > MAX_PROOF_BYTES) { formError.replaceChildren(alertBox(t('Upload a JPG, PNG, WEBP or PDF file up to 10 MB.'))); return; }
     if (!PROOF_TYPES.includes(file.type)) { formError.replaceChildren(alertBox(t('Upload a JPG, PNG, WEBP or PDF file up to 10 MB.'))); return; }
     submit.disabled = true;

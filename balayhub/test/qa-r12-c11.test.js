@@ -19,7 +19,7 @@ const { startServer, client, sql, ownerAccount, manilaToday } = require('./helpe
 const addDays = (s, n) => new Date(Date.parse(s) + n * 86400000).toISOString().slice(0, 10);
 const PASSWORD = 'longenough1';
 const DAILYCLOSE_JS = path.join(__dirname, '..', 'public', 'js', 'views', 'dailyclose.js');
-const INVALID = "That date isn't valid.";
+const INVALID = "That date isn't valid, so this shows today.";
 const day = (date) => `/api/daily-close?date=${date}`;
 
 let srv; let owner; let manager; let orgId; let propA; let propB; let today; let dailyclose; let dir;

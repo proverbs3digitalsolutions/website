@@ -29,7 +29,7 @@ test.after(() => fs.rmSync(dir, { recursive: true, force: true }));
 const TODAY = '2026-10-13';
 const TOMORROW = '2026-10-14';
 const CLAMPED = 'You can close a day up to tomorrow, so this shows tomorrow.';
-const INVALID = "That date isn't valid.";
+const INVALID = "That date isn't valid, so this shows today.";
 
 test('a date after tomorrow is clamped to tomorrow with a message, never sent to the server', () => {
   assert.deepEqual(dailyclose.closeDayFor('2028-02-29', TODAY), { date: TOMORROW, message: CLAMPED });

@@ -61,11 +61,13 @@ export function seasonClashes(s, seasons) {
       return { name: o.name, on: mixed ? (s.unit_id ? s.unit_name : o.unit_name) : null, wins, takeovers };
     });
 }
+// The other season is named once (D-111).
 export const clashText = (c) => {
   const head = `Overlaps ${c.name}${c.on ? ` on ${c.on}` : ''}`;
   if (c.wins === null) return `${head}.`;
-  if (c.takeovers.length) return `${head}: ${c.wins === 'this' ? `this season beats ${c.name}` : `${c.name} beats this season`} on the nights they share, except where ${c.takeovers.join(' or ')} takes over.`;
-  return `${head}: ${c.wins === 'this' ? 'this season' : c.name} wins the shared nights.`;
+  const them = c.wins !== 'this';
+  if (c.takeovers.length) return them ? `${head}, which wins the nights they share, except where ${c.takeovers.join(' or ')} takes over.` : `${head}: this season wins the nights they share, except where ${c.takeovers.join(' or ')} takes over.`;
+  return them ? `${head}, which wins the shared nights.` : `${head}: this season wins the shared nights.`;
 };
 // The preview line for a shared night: the season that lost first, the one that won last ("A also covers this night, but B takes it.").
 export const overlapLine = (winner, ...losers) => `${losers.join(', ')} also cover${losers.length === 1 ? 's' : ''} this night, but ${winner} takes it.`;

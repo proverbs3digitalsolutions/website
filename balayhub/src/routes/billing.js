@@ -149,7 +149,12 @@ router.post('/billing/checkout', owners, checkoutLimiter, onlyWithCode(codeIpLim
 
 // ---- Card on file (D-98). The card number goes from the browser straight to PayMongo; only the payment method id
 // ("pm_...") ever reaches these routes.
-const cardStartLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 10, key: (req) => `cardstart|${req.user.organization_id}` });
+// Backstop: counts every start press with no give-back, ahead of cardStartLimiter, so a PayMongo outage (whose 502/503
+// presses are given back below) can't make unlimited outbound calls on the shared key (D-111). Same shape as attachAllLimiter.
+const cardStartAllLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 30, key: (req) => `cardstartall|${req.user.organization_id}` });
+// A press that failed only because PayMongo couldn't be reached (502, 503) is not a try and is given back; paid, declined
+// and refused presses count (D-111). The 10 an hour is a founder decision (BLOCKERS round 29 (a)).
+const cardStartLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 10, giveBack: (status) => status === 502 || status === 503, key: (req) => `cardstart|${req.user.organization_id}` });
 const attachLimiter = rateLimit({ windowMs: 24 * 60 * 60 * 1000, max: 8, failedOnly: true, key: (req) => `cardattach|${req.user.organization_id}` });
 const attachIpLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, failedOnly: true, key: (req) => `cardattachip|${req.ip}` });
 // Count every attach (3-D Secure and processing cards answer 200, which the failedOnly limiters give back).
@@ -171,7 +176,7 @@ router.get('/billing/card-check', owners, ah(async (req, res) => {
   res.json({ ...v, plans: v.plans.map((p) => ({ ...p, listings: PLANS[p.key].listings })) });
 }));
 
-router.post('/billing/card-check/start', owners, cardStartLimiter, ah(async (req, res) => {
+router.post('/billing/card-check/start', owners, cardStartAllLimiter, cardStartLimiter, ah(async (req, res) => {
   const body = validate(req.body, {
     renewal_plan: { type: 'enum', values: PUBLIC_PLANS, required: true, label: 'Plan' },
     consent: { type: 'bool' },

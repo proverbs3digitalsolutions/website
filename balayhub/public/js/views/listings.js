@@ -325,6 +325,7 @@ async function photosModal(listing) {
       input.disabled = true;
       try {
         for (const [i, f] of files.entries()) {
+          if (!f.size) throw new Error('This file is empty. Choose the file again.'); // D-111 (round 29): a 0-byte file is refused before sending
           status.textContent = `Uploading ${i + 1} of ${files.length}…`;
           const blob = await shrink(f);
           await api('POST', `/units/${listing.unit_id}/photos`, undefined, { rawBody: blob, headers: { 'Content-Type': blob.type || 'image/jpeg' } });

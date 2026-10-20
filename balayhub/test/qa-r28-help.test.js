@@ -18,7 +18,7 @@ test.before(async () => {
   const w = (n, s) => fs.writeFileSync(path.join(dir, n), s);
   fs.mkdirSync(path.join(dir, 'views'));
   w('package.json', '{"type":"module"}');
-  w('api.js', 'export const get = async () => ({}), post = async () => ({}), qs = () => "", uploadFile = async () => ({});');
+  w('api.js', 'export const get = async () => ({}), post = async () => ({}), qs = () => "", uploadFile = async () => ({}); export class ApiError extends Error {}');
   w('ui.js', `export const ${['h', 'icon', 'fmtDateTime', 'badge', 'field', 'makeForm', 'emptyState', 'searchBox', 'pageHead', 'toast', 'confirmDialog', 'filesList', 'label'].map((n) => `${n} = () => null`).join(', ')};`);
   w('app.js', 'export const state = {}, navigate = () => {};');
   w('themeswitch.js', 'export const currentTheme = () => "light";');

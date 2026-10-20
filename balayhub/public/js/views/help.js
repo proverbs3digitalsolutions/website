@@ -2,7 +2,7 @@
 // ticket from "Received" to "Resolved". Also the support queue for BalayHub's
 // own platform admins.
 
-import { get, post, qs, uploadFile } from '../api.js';
+import { get, post, qs, uploadFile, ApiError } from '../api.js';
 import {
   h, icon, fmtDateTime, badge, field, makeForm, emptyState, searchBox, pageHead, toast, confirmDialog, filesList, label } from '../ui.js';
 import { state, navigate } from '../app.js';
@@ -10,13 +10,27 @@ import { currentTheme } from '../themeswitch.js';
 import { assistantEnabled, openAssistant } from '../assistant.js';
 import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 
-// A screenshot is checked before the ticket is created, so a refused file never leaves the ticket without it.
+// A screenshot is checked (type, size, content) before the ticket is created, so a refused file never leaves the ticket without it.
 export function screenshotError(file) {
   if (!file) return null;
   // An empty screenshot is refused before the ticket is created (D-110).
   if (file.size === 0) return 'This file is empty. Choose the file again.';
   const ok = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.type) && file.size <= 10 * 1024 * 1024;
   return ok ? null : 'Upload a PDF, JPG, PNG or WEBP file up to 10 MB.';
+}
+
+const SIGNATURES = {
+  'image/png': (b) => b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47,
+  'image/jpeg': (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  'image/webp': (b) => String.fromCharCode(...b.slice(0, 4)) === 'RIFF' && String.fromCharCode(...b.slice(8, 12)) === 'WEBP',
+  'application/pdf': (b) => String.fromCharCode(...b.slice(0, 4)) === '%PDF',
+};
+// The first bytes the server checks (src/lib/storage.js), read before the ticket is created, so a renamed file never
+// leaves a ticket without its screenshot (D-111). The server still checks the whole file.
+export async function screenshotContentError(file) {
+  if (!file || !file.size || !SIGNATURES[file.type]) return null;
+  const b = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  return SIGNATURES[file.type](b) ? null : "This file isn't a real PDF, JPG, PNG or WEBP. Choose the file again.";
 }
 
 const TOPICS = [
@@ -167,6 +181,8 @@ export async function helpNewView(el, { query }) {
     cancel: () => navigate('#/help'),
     check: () => (screenshotError(screenshot.files[0]) ? { screenshot: screenshotError(screenshot.files[0]) } : null),
     onSubmit: async (data) => {
+      const bad = await screenshotContentError(screenshot.files[0]);
+      if (bad) throw new ApiError('Please check the highlighted fields.', { status: 400, code: 'VALIDATION', fields: { screenshot: bad } });
       const res = await post('/support/tickets', {
         ...data,
         context: {

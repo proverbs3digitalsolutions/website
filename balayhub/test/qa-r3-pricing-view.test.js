@@ -39,14 +39,14 @@ test('O-b: a third season that takes some shared nights is named, instead of one
   const seasons = [a, b, all];
   // A beats the all-listings season, but B prices the 2nd and 3rd, so A only wins the 4th.
   assert.equal(clashFor(all, seasons, 'QA rvC A'),
-    'Overlaps QA rvC A on Paris 1208: QA rvC A beats this season on the nights they share, except where QA rvC B takes over.');
+    'Overlaps QA rvC A on Paris 1208, which wins the nights they share, except where QA rvC B takes over.');
   assert.equal(clashFor(a, seasons, 'QA rvC All'),
-    'Overlaps QA rvC All on Paris 1208: this season beats QA rvC All on the nights they share, except where QA rvC B takes over.');
+    'Overlaps QA rvC All on Paris 1208: this season wins the nights they share, except where QA rvC B takes over.');
   // B beats both A and the all-listings season on every night they share, so those lines stay as they were.
-  assert.equal(clashFor(all, seasons, 'QA rvC B'), 'Overlaps QA rvC B on Paris 1208: QA rvC B wins the shared nights.');
+  assert.equal(clashFor(all, seasons, 'QA rvC B'), 'Overlaps QA rvC B on Paris 1208, which wins the shared nights.');
   assert.equal(clashFor(b, seasons, 'QA rvC All'), 'Overlaps QA rvC All on Paris 1208: this season wins the shared nights.');
   assert.equal(clashFor(b, seasons, 'QA rvC A'), 'Overlaps QA rvC A: this season wins the shared nights.');
-  assert.equal(clashFor(a, seasons, 'QA rvC B'), 'Overlaps QA rvC B: QA rvC B wins the shared nights.');
+  assert.equal(clashFor(a, seasons, 'QA rvC B'), 'Overlaps QA rvC B, which wins the shared nights.');
 });
 
 test('a third season the winner still beats on the shared nights leaves the pair\'s text alone', () => {
@@ -54,7 +54,7 @@ test('a third season the winner still beats on the shared nights leaves the pair
   const b = S({ name: 'QA Season B', unit_id: 'p', unit_name: 'Paris 1208', start_date: '2031-06-01', end_date: '2031-06-03', nightly_rate: '2100', created_at: '2026-10-13T10:05:00.000Z' });
   // C is saved between A and B, so it beats A but B beats it. It never prices a night that B also covers.
   const c = S({ name: 'QA Season C', unit_id: 'p', unit_name: 'Paris 1208', start_date: '2031-06-01', end_date: '2031-06-05', nightly_rate: '2050', created_at: '2026-10-13T10:02:00.000Z' });
-  assert.equal(clashFor(a, [a, b, c], 'QA Season B'), 'Overlaps QA Season B: QA Season B wins the shared nights.');
+  assert.equal(clashFor(a, [a, b, c], 'QA Season B'), 'Overlaps QA Season B, which wins the shared nights.');
   assert.equal(clashFor(b, [a, b, c], 'QA Season A'), 'Overlaps QA Season A: this season wins the shared nights.');
 });
 
@@ -82,6 +82,6 @@ test('a third season counts only when it sets a price on this listing', () => {
   const minOnly = S({ name: 'QA Min Stay', unit_id: 'p', unit_name: 'Paris 1208', start_date: '2031-06-01', end_date: '2031-06-05', min_nights: 3, created_at: '2026-10-13T10:20:00.000Z' });
   // Sets a price, but on Hill 2, so it never touches Paris.
   const hill = S({ name: 'QA Hill', unit_id: 'h', unit_name: 'Hill 2', start_date: '2031-06-01', end_date: '2031-06-05', nightly_rate: '2900', created_at: '2026-10-13T10:30:00.000Z' });
-  assert.equal(clashFor(all, [a, all, minOnly], 'QA Season A'), 'Overlaps QA Season A on Paris 1208: QA Season A wins the shared nights.');
-  assert.equal(clashFor(all, [a, all, hill], 'QA Season A'), 'Overlaps QA Season A on Paris 1208: QA Season A wins the shared nights.');
+  assert.equal(clashFor(all, [a, all, minOnly], 'QA Season A'), 'Overlaps QA Season A on Paris 1208, which wins the shared nights.');
+  assert.equal(clashFor(all, [a, all, hill], 'QA Season A'), 'Overlaps QA Season A on Paris 1208, which wins the shared nights.');
 });

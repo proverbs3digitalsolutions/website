@@ -486,6 +486,9 @@ export function installFocusGuard(doc = document, { observe = true } = {}) {
       else for (const r of [pageRec, dlgRec]) if (r && r.el === e.target) r.visible = onScreen(r.el); // typing in a box: is it on screen now?
     }, true);
     doc.addEventListener('focusin', (e) => { if (e.target instanceof Element) note(e.target); }, true);
+    // A file chosen without focusing its control (dropped on it, or set by assistive technology) is remembered like a pressed one, so the
+    // redraw after its upload puts focus back on it, never on the page body (D-111). File inputs only: a text box's change fires as the person leaves it.
+    doc.addEventListener('change', (e) => { const t = e.target; if (t instanceof Element && t.tagName === 'INPUT' && String(t.getAttribute('type')).toLowerCase() === 'file') note(t); }, true);
     doc.addEventListener('pointerdown', (e) => {
       const t = e.target instanceof Element ? e.target : null;
       const el = t?.closest(FOCUSABLE);

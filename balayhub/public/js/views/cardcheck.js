@@ -22,6 +22,16 @@ const MSG = {
   rate: 'Too many tries. Please wait a few minutes and try again.',
 };
 
+// The server's own wait (retry_after seconds on a 429), so the page never promises a few minutes when the limit lasts an hour or a day (D-111).
+export function rateText(seconds) {
+  const s = Number(seconds);
+  if (!Number.isFinite(s) || s <= 0) return MSG.rate;
+  const m = Math.ceil(s / 60);
+  if (m < 60) return `Too many tries. Please try again in ${m} minute${m === 1 ? '' : 's'}.`;
+  const hrs = Math.round(m / 60);
+  return `Too many tries. Please try again in about ${hrs === 1 ? 'an hour' : `${hrs} hours`}.`;
+}
+
 export function luhnOk(digits) {
   const s = String(digits);
   if (!/^\d{12,19}$/.test(s)) return false;
@@ -296,7 +306,7 @@ export async function cardCheckView(el, { query = {} } = {}) {
         navigate(homeRoute(), { replace: true });
         return;
       }
-      showSummary(err.shown || err.code === 'PAYMENT_PROVIDER_UNAVAILABLE' ? err.message : err.status === 429 || err.code === 'RATE_LIMITED' ? MSG.rate
+      showSummary(err.shown || err.code === 'PAYMENT_PROVIDER_UNAVAILABLE' ? err.message : err.status === 429 || err.code === 'RATE_LIMITED' ? rateText(err.data?.retry_after)
         : err.status >= 500 || err.offline || !err.message ? MSG.network : err.data?.message || (err.status === 402 ? MSG.declined : err.message));
     }
   }

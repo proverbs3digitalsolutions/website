@@ -71,7 +71,10 @@ export function discountCodeProblems(d) {
   const percent = String(d.percent_off ?? '').trim() !== '';
   const amountText = String(d.amount_off ?? '').trim();
   const amount = amountText !== '' && parseAmount(amountText) !== 0;
-  if (percent && amount) out.percent_off = 'Choose one: a percent off or an amount off, not both.';
+  // When Percent off has its own problem (150, 2.5), that problem keeps the box and 'not both' goes on the amount box, so both show in one save (D-111, D-105 (a)); when it is fine, 'not both' stays on Percent off, as the server says it.
+  const percentText = String(d.percent_off ?? '').trim();
+  const percentOk = /^\d+$/.test(percentText) && Number(percentText) >= 1 && Number(percentText) <= 90;
+  if (percent && amount) out[percentOk ? 'percent_off' : 'amount_off'] = 'Choose one: a percent off or an amount off, not both.';
   else if (!percent && !amount) out.percent_off = 'Set either a percent off or an amount off.';
   if (d.valid_from && d.valid_until && d.valid_until < d.valid_from) out.valid_until = 'The end date must be after the start date.';
   return Object.keys(out).length ? out : null;
