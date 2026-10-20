@@ -54,6 +54,14 @@ export function closeAssistant() {
   if (hadFocus) fab?.focus(); // closing the panel gives focus back to the Ask button, not the page body
 }
 
+// A page change closes the panel so it never sits over the new page's submit button. The Ask button stays, and focus is left
+// to the new page (closeAssistant would pull it back to the button).
+globalThis.addEventListener?.('hashchange', () => {
+  if (!panel || panel.hidden) return;
+  panel.hidden = true;
+  document.querySelector('.assist-fab')?.setAttribute('aria-expanded', 'false');
+});
+
 export function openAssistant(question) {
   if (!panel) panel = buildPanel();
   clearAskError();

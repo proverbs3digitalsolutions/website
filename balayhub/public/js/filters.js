@@ -357,13 +357,31 @@ export function filterBar({ key, values, defaults, search, quick = [], more = []
       moreBtn.classList?.toggle('is-active', n > 0);
     }
     const q = search && values[search.name || 'q'];
-    chips.replaceChildren(
-      ...(q ? [h('button', { type: 'button', class: 'flt__chip', 'aria-label': `Remove search ${q}`, onclick: () => { keepPlace(); values[search.name || 'q'] = ''; searchInput.value = ''; emit(); } }, `“${q}”`, h('span', { 'aria-hidden': 'true' }, ' ×'))] : []),
-      ...active.map(([f, t]) => h('button', { type: 'button', class: 'flt__chip', 'aria-label': `Remove filter ${t}`, onclick: () => { keepPlace(); clearField(f, values, defaults); controls.forEach((c) => c.sync()); emit(); } }, t, h('span', { 'aria-hidden': 'true' }, ' ×'))),
-      (q || active.length > 0) ? h('button', { type: 'button', class: 'flt__clear', onclick: () => { keepPlace(); clearAll(); } }, 'Clear all') : '');
+    // The chip buttons are kept between paints and only relabelled: a typed box commits on blur, which is the mouse press on a
+    // chip or Clear all, and a button replaced mid-press loses its click. The row is touched only when its buttons change.
+    const next = [
+      ...(q ? [chip('q', `Remove search ${q}`, `“${q}”`, () => { values[search.name || 'q'] = ''; searchInput.value = ''; })] : []),
+      ...active.map(([f, t]) => chip('f:' + (f.name || rangeKeys(f)[0]), `Remove filter ${t}`, t, () => { clearField(f, values, defaults); controls.forEach((c) => c.sync()); })),
+    ];
+    if (q || active.length > 0) next.push(clearBtn);
+    if (next.length !== chips.children.length || next.some((b, i) => b !== chips.children[i])) chips.replaceChildren(...next);
+  }
+  const chipBtns = new Map();
+  const clearBtn = h('button', { type: 'button', class: 'flt__clear', onclick: () => { keepPlace(); clearAll(); } }, 'Clear all');
+  // A mouse press on a chip button must not take focus: that would blur a half-typed number box, commit it and redraw the row
+  // under the pointer, and the click would be lost. The click still fires; keyboard focus and activation are unchanged.
+  const noFocusSteal = (b) => b.addEventListener('mousedown', (e) => e.preventDefault());
+  noFocusSteal(clearBtn);
+  function chip(k, label, text, undo) {
+    let c = chipBtns.get(k);
+    if (!c) { c = { btn: h('button', { type: 'button', class: 'flt__chip' }), text: null, undo: null }; c.btn.addEventListener('click', () => { keepPlace(); c.undo(); emit(); }); noFocusSteal(c.btn); chipBtns.set(k, c); }
+    c.undo = undo;
+    if (c.text !== text) { c.text = text; c.btn.replaceChildren(text, h('span', { 'aria-hidden': 'true' }, ' ×')); }
+    c.btn.setAttribute('aria-label', label);
+    return c.btn;
   }
   function emit() { rememberFilters(key, values); paint(); onChange(); }
-  // A chip or Clear all is replaced by the redraw, so a keyboard user's focus moves to the Filters button first (else the
+  // A chip that was removed leaves the row, so a keyboard user's focus moves to the Filters button first (else the
   // search box). It is the point of the action, and a page that rebuilds its bar lands on the same button (see `old` below).
   function keepPlace() {
     const el = moreBtn && moreBtn.style.display !== 'none' ? moreBtn : searchInput;

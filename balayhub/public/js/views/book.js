@@ -401,6 +401,20 @@ export async function bookListingView(el, { params, query }) {
     guestsFromServer = false;
     setGuestsError(guestCountOk() ? '' : guestCountMsg());
   });
+  // A field's message clears as soon as the guest changes that field (a checkbox, when ticked); the banner goes with the last marked field.
+  // The Guests box keeps its own live message (above), so it is left to that.
+  const clearFieldError = (e) => {
+    if (e.target.name === 'num_guests') return;
+    const wrap = e.target.closest?.('[data-field]');
+    if (!wrap?.classList.contains('field--invalid')) return;
+    wrap.classList.remove('field--invalid');
+    wrap.querySelectorAll('[aria-invalid]').forEach((f) => f.removeAttribute('aria-invalid'));
+    const err = wrap.querySelector('.error');
+    if (err) err.textContent = '';
+    if (!form.querySelector('.field--invalid')) payError.replaceChildren();
+  };
+  form.addEventListener('input', clearFieldError);
+  form.addEventListener('change', clearFieldError);
   // A new guest count is quoted again, so an over-limit count shows the refusal and no Total. Wait for it to settle, so one change makes one request.
   let guestTimer;
   form.elements.num_guests?.addEventListener('change', () => {

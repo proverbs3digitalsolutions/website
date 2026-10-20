@@ -2,7 +2,7 @@
 
 Every decision made on BalayHub, with the date and the reason. Newest decisions go at the bottom. When a decision changes, add a new entry and mark the old one **Superseded by D-xx**. Never delete history.
 
-Last updated: 2026-10-20 (D-102, QA round 20 calls; D-101, QA round 19 calls; D-100, QA round 18 calls and admin workspace delete; D-99, QA round 17 calls; D-98, card on file before the free trial; D-97, QA round 16 calls; D-96, QA round 15 late calls; D-95, QA round 15 calls; D-94, platform plan coupons; D-93, QA round 14 re-verify calls; D-92, QA round 14 calls; D-91, the top bar built; D-90, founder top bar request; D-89, QA round 13 calls)
+Last updated: 2026-10-21 (D-103, QA round 21 calls). Before that: 2026-10-20 (D-102, QA round 20 calls; D-101, QA round 19 calls; D-100, QA round 18 calls and admin workspace delete; D-99, QA round 17 calls; D-98, card on file before the free trial; D-97, QA round 16 calls; D-96, QA round 15 late calls; D-95, QA round 15 calls; D-94, platform plan coupons; D-93, QA round 14 re-verify calls; D-92, QA round 14 calls; D-91, the top bar built; D-90, founder top bar request; D-89, QA round 13 calls)
 
 ---
 
@@ -1334,3 +1334,35 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 > *Not bugs / not changed:* a double-click on **Reopen day** leaving focus on the page body (D-101 stands); an applied **coupon is not kept on reload** (it is checked again when the owner pays); **check-in consent must be ticked again** when a guest edits; **gap-night price tiles**; the **gate pass is English only** (founder questions only, not built); the **bell badge may lag up to 15 seconds** (the check is throttled); Log out below the fold on the phone More sheet for owners with many items (Close stays pinned; accepted).
 >
 > *Why:* one plan can only be paid once at a time, the history should show the card that was really used, a coupon limit should never silently become unlimited, and keyboard users should never lose their place.
+
+---
+
+> **D-103 · 2026-10-21 · QA round 21 calls (alpha with small hosts).** The twenty-first QA sweep (9 browser lanes: bookings, guest, inbox, longterm, money, onboarding, ops, phone, card, plus a PayMongo research lane) found no severe bug (no SEV1). It found three significant ones (SEV2: Clear all lost the first click; focus fell to the page body after a calendar save and after Cancel quote; a route change from the phone More sheet left focus on the More button) and the rest minor (SEV3). Fixed in about 14 code lanes; the calls are below. No migration.
+>
+> *Keyboard focus.*
+> - **The first wrong field, in the order the form shows it, gets focus** (all forms). Before, the server's error order decided (Add tenant with a bad phone and a bad email focused Email). `showErrors` in ui.js now picks the first invalid field by position in the page.
+> - **A route change chosen from the phone More sheet puts focus on the new page heading,** even when the old and new pages share the same heading text. The sheet gives focus back to the More button only when the page is still the one it opened on.
+> - **After the calendar grid reloads** (Block dates, Set price, New reservation from a cell, Remove block, drag-move), focus returns to the redrawn cell that opened the menu, else the page heading. **After Cancel quote,** focus lands on the page heading. *Why:* a redraw must never leave a keyboard user on the page body.
+> - **A quote that does not exist shows a "Not found" heading** and focuses it (the same as a missing reservation).
+> - **Clear all and the filter chip buttons are stable across redraws.** The buttons are built once and relabelled in place, so a click is never lost when a number box finishes editing under the pointer. *The SEV2: the first click on Clear all did nothing after a typed, unapplied number.*
+> - **Empty coupon code:** pressing Apply with an empty box puts focus in the box.
+>
+> *Assistant panel.* **The open assistant panel closes when the page changes** (the floating button stays), so it never covers a submit button such as Send to support. Focus does not move.
+>
+> *Notifications.* **"Notifications on this device" means this browser's own push subscription.** The server says on only when the user has at least one push subscription; the page narrows that to this browser (service worker registration, a live subscription, and permission granted). Before, it read the saved notification choices, so it said "On" with nothing subscribed.
+>
+> *Forms.*
+> - **Public booking form:** a field's error clears as soon as the guest changes that field (typing or choosing), a checkbox error clears when ticked, and the form banner goes when no field is marked. The guest-count box keeps its own live message.
+> - **Reservation form:** a date clash is named once in the banner; both date boxes are marked with no repeated text (like the Block dates form), and focus goes to Check-in. **"Email a booking confirmation" is unticked and disabled while there is no guest email;** it ticks when an email is typed, unless the host unticked it.
+> - **Quote form:** one pass shows every problem together (dates, guest limit, email, negative amounts), in the server's wording, like New reservation.
+>
+> *Plan & billing.*
+> - **A coupon that is free and card-only says "once by card" once,** not twice.
+> - **Plan cards sit one per row under 560px** (the labels are too long for three columns, which left Pro alone on a second row). The **Pay button wraps its label** inside its box, so the page no longer scrolls sideways at 320px.
+> - **PayMongo cancelled intent is accepted in both spellings** ("cancelled" and "canceled"). When an intent is still alive after a cancel call, one line is logged with the billing id and the status (no secrets). The cancel endpoint path is still unconfirmed against the live API (see BLOCKERS).
+>
+> *Cleaner pay.* **The bulk bar on Cleaner pay counts unpaid cleans only** ("N unpaid", or "Nothing unpaid").
+>
+> *Not bugs / not changed:* the calendar toolbar wrapping to three rows at 390px; save buttons without a busy marker (a second press is already refused); the Cleaner menu saying "Cleaning" while the heading differs; the dev host's PayMongo key not decrypting in the dev snapshot (a dev environment mismatch; the known carry that the owner gets no warning stands). Not built, asked in BLOCKERS: folding rarely used More tools for 1 to 3 property owners, a shorter first Add listing, whether the Rent Filters panel should survive a tab switch, the "already used" wording for a used-up coupon.
+>
+> *Why:* a keyboard user should always land on the thing that needs them, a button should never move out from under a click, a switch that says "On" must be on, and a form should say each problem once and stop saying it when it is fixed.

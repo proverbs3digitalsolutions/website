@@ -37,8 +37,8 @@ async function failCheckout(billingId, redemptionId) {
   await coupons.releaseIfUnused(pool, redemptionId);
 }
 
-// An unfinished charge that PayMongo has given up on: the bank step failed, or the intent was cancelled.
-const intentFailed = (iv) => ['cancelled', 'failed'].includes(iv.status) || (iv.status === 'awaiting_payment_method' && Boolean(iv.errorCode));
+// An unfinished charge that PayMongo has given up on: the bank step failed, or the intent was cancelled (either spelling).
+const intentFailed = (iv) => ['cancelled', 'canceled', 'failed'].includes(iv.status) || (iv.status === 'awaiting_payment_method' && Boolean(iv.errorCode));
 
 // Give up an abandoned one-tap charge (past the in-progress window): cancel it at PayMongo, then read it again. Only an
 // intent PayMongo shows as dead (cancelled, or declined) is expired and gives its coupon slot back; one that is still
@@ -47,7 +47,7 @@ async function expirePending(b) {
   try { await paymongo('POST', `/payment_intents/${encodeURIComponent(b.payment_intent_id)}/cancel`); } catch { /* read it again below */ }
   let iv;
   try { iv = await paymongoClient.getPaymentIntent(config.paymongoSecretKey, b.payment_intent_id); } catch { return; }
-  if (!intentFailed(iv)) return;
+  if (!intentFailed(iv)) { console.error(`[billing] intent for ${b.billing_id} still ${iv.status} after cancel`); return; }
   await query(`UPDATE billing_payments SET status = 'expired' WHERE billing_id = $1 AND status = 'pending'`, [b.billing_id]);
   await coupons.releaseIfUnused(pool, b.coupon_redemption_id);
 }

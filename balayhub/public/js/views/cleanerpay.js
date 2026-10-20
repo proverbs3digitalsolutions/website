@@ -61,6 +61,8 @@ export const cleanerStatus = (c) => {
 
 // The ticks that still count after a filter change: a ticked clean the filter hides is dropped, so the count,
 // the total and Mark paid only ever cover rows on screen.
+// The count beside "Select all unpaid" counts unpaid cleans only; paid ones in the list do not make it read "3 cleans".
+export const unpaidCount = (n) => (n ? `${n} unpaid` : 'Nothing unpaid');
 export const visibleSelection = (selected, rows) => new Set(rows.filter((x) => selected.has(x.task_id)).map((x) => x.task_id));
 
 // The Pay card and the empty list say "this month" for the current month, and name any other month (#41).
@@ -184,7 +186,7 @@ export async function cleanerPayView(el, { query = {} } = {}) {
           h('span', { class: 'ops-line__end' }, cleanerStatus(c), cents(c.paid) ? h('span', { class: 'muted small' }, ` · ${peso(c.paid)} paid`) : null))))),
       rows.length
         ? h('div', { class: 'card card--flush' },
-          h('div', { class: 'ops-bar' }, h('label', { class: 'check' }, all, h('span', null, 'Select all unpaid')), h('span', { class: 'muted small', style: { whiteSpace: 'nowrap' } }, `${rows.length} clean${rows.length === 1 ? '' : 's'}`), markBtn),
+          h('div', { class: 'ops-bar' }, h('label', { class: 'check' }, all, h('span', null, 'Select all unpaid')), h('span', { class: 'muted small', style: { whiteSpace: 'nowrap' } }, unpaidCount(rows.filter((x) => x.pay_status === 'unpaid').length)), markBtn),
           h('div', { class: 'table-wrap' }, h('table', { class: 'table ops-stack' },
             h('caption', { class: 'sr-only' }, `Cleaner pay for ${month()}`),
             h('thead', null, h('tr', null, h('th', { scope: 'col', class: 'ops-check' }, h('span', { class: 'sr-only' }, 'Select')), ['Date', 'Unit', 'Cleaner'].map((c) => h('th', { scope: 'col' }, c)), h('th', { scope: 'col', class: 'num' }, 'Pay'), h('th', { scope: 'col' }, 'Status'), h('th', { scope: 'col' }, h('span', { class: 'sr-only' }, 'Actions')))),

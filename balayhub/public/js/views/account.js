@@ -21,6 +21,14 @@ function planLine(p) {
   return p.name;
 }
 
+// This browser holds a push subscription and notifications are allowed: the same test the Settings card uses.
+async function thisDeviceSubscribed() {
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    return Boolean(await reg?.pushManager.getSubscription()) && Notification.permission === 'granted';
+  } catch { return false; }
+}
+
 // Notifications card: which kinds of alerts you get, and (owners and managers) for which properties.
 function notifyCard(role) {
   const card = h('div', { class: 'card' });
@@ -84,6 +92,8 @@ export async function accountView(el, { rerender }) {
     : (w.business_type === 'long_term' ? ROLE_TEXT.long_term : ROLE_TEXT.short_term)[w.role];
   const initials = u.full_name.split(/\s+/).filter(Boolean).slice(0, 2).map((s) => s[0].toUpperCase()).join('');
   const others = d.sessions.filter((s) => !s.current);
+  // Only a subscription on this device counts for "on this device"; the server's answer alone may be another device's.
+  u.notifications_on = u.notifications_on && await thisDeviceSubscribed();
 
   const editProfile = () => formModal({
     title: 'Edit profile', submitText: 'Save',

@@ -916,6 +916,7 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .plan-mini { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-top: 14px; }
 .plan-mini__item { display: grid; gap: 2px; border: 1px solid var(--line-2); border-radius: 12px; padding: 12px; }
 .plan-mini__item.is-current { border-color: var(--teal); background: var(--teal-soft); }
+@media (max-width: 559px) { .plan-mini { grid-template-columns: 1fr; } }
 @media print { .planbar { display: none !important; } }
 
 /* ================================================================ onboarding */
@@ -952,6 +953,7 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .plan-mini__pick:hover { border-color: var(--teal); }
 .payonline__row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 14px 0 8px; }
 .payonline__row select.input { width: auto; }
+.payonline__row .btn { white-space: normal; max-width: 100%; text-align: center; }
 
 /* ================================================================ listing photos */
 .ph-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }

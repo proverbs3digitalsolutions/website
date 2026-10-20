@@ -1,6 +1,6 @@
 # BalayHub design brief
 
-Last updated: 2026-10-20 (QA round 20: section 28; D-102). Before that: 2026-10-20 (QA round 19: landing links hidden below 768px; D-101). Before that: 2026-10-19 (QA round 18: section 27, phone filter bar, theme switch label; D-100). Before that: 2026-10-15 (QA round 17: section 26, the wordmark logotype exemption, the focus key table; D-98 and D-99)
+Last updated: 2026-10-21 (QA round 21: section 29; D-103). Before that: 2026-10-20 (QA round 20: section 28; D-102). Before that: 2026-10-20 (QA round 19: landing links hidden below 768px; D-101). Before that: 2026-10-19 (QA round 18: section 27, phone filter bar, theme switch label; D-100). Before that: 2026-10-15 (QA round 17: section 26, the wordmark logotype exemption, the focus key table; D-98 and D-99)
 
 **Summary.** BalayHub is a phone-first web app (also an installable PWA) for Filipino rental and staycation hosts. It is built with plain CSS, one stylesheet (`public/css/app.css`), and small JavaScript helpers (`public/js/ui.js`). There is no framework and no CSS preprocessor. The look is calm and practical: Forest Green on soft off-white, Sand and Sun as warm accents, Poppins for headings, Inter for text, rounded cards, and large touch targets. Colours come from CSS custom properties on `:root`. A dark theme redefines the same tokens, so any component that uses tokens gets dark mode automatically. This brief records what is **actually built**. Every value below comes from the code. Where the code doesn't define a token (spacing, type sizes), the brief lists the values in use and says so.
 
@@ -699,3 +699,9 @@ Decision D-100. CSS in `public/css/app.css`, behaviour in `public/js/filters.js`
 - **Listing card actions** use a two-column grid below 560px (class `listing__actions`); an odd last button spans both columns. Collapsed "Technical details" summaries are 44px tall.
 - **Theme switch at 320.** Light, Dark and Match device fit on one line at 320px (smaller font and padding under 360px).
 - **Dark mode divider** above Delete workspace uses the `--muted-2` token (a stronger line); no new token.
+
+## 29. Patterns added in QA round 21 (2026-10-21)
+
+- **Plan cards (`.plan-mini`, also on the confirm-card picker) sit one per row below 560px,** full width. Three columns did not fit the labels and left one card alone on a second row at 390px. At 560px and above the columns are unchanged.
+- **The Pay button on Plan & billing (`.payonline__row .btn`) wraps its label** (`white-space: normal`, `max-width: 100%`) so it stays inside its box at 320px and the page does not scroll sideways. The button keeps its 44px minimum height.
+- **Stable filter buttons.** Clear all and the chip remove buttons are built once and relabelled in place; the row is rebuilt only when the set of chips changes. No new token.

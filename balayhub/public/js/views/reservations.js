@@ -170,6 +170,9 @@ function syncChannelFee(form, switched) {
 const nightsBetween = (ci, co) => Math.round((Date.parse(co) - Date.parse(ci)) / 86400000);
 
 // ---------------------------------------------------------------- new reservation
+// The banner names a date clash once; the two date boxes are only marked (blank texts), and focus goes to the first.
+const dateClashOnce = (err) => { if (err?.code === 'DATES_TAKEN') err.fields = { check_in: '', check_out: '' }; return err; };
+
 export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
   let listings;
   try { ({ listings } = await get('/listings')); } catch (err) { toast(err.message, 'error'); return; }
@@ -239,7 +242,7 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
         delete data.unit_id;
       }
       delete data.pick_mode; delete data.room_pick;
-      const res = await post('/reservations', data);
+      const res = await post('/reservations', data).catch((err) => { throw dateClashOnce(err); });
       if (res.confirmation && !res.confirmation.sent) toast(`Reservation saved, but the confirmation was not emailed: ${res.confirmation.error}`, 'error');
       else toast(`Reservation ${res.reservation.confirmation_code} saved${res.confirmation?.sent ? ' and confirmation emailed' : ''}.`);
       const note = matchedGuestNote(data.guest_name, res.reservation.guest_name); if (note) toast(note);
@@ -264,6 +267,18 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
     form.elements.room_pick.required = t;
   };
   syncMode();
+  // The confirmation needs an email: unticked and off while the box is empty; typing one ticks it again unless the host unticked it.
+  const conf = form.elements.send_confirmation;
+  const mail = form.elements.guest_email;
+  let hostUnticked = mail.value.trim() !== '' && !conf.checked;
+  const syncConf = () => {
+    const has = mail.value.trim() !== '';
+    conf.disabled = !has;
+    conf.checked = has && !hostUnticked;
+  };
+  conf.addEventListener('change', () => { hostUnticked = !conf.checked; });
+  mail.addEventListener('input', syncConf);
+  syncConf();
   // A box counts as typed once the host puts something in it; a refresh then leaves it alone (a draft restored into the form counts too).
   const MONEY = ['accommodation_total', 'cleaning_fee'];
   const typed = Object.fromEntries(MONEY.map((n) => [n, form.elements[n].value.trim() !== '']));
@@ -609,7 +624,7 @@ export async function reservationDetailView(el, { params, rerender }) {
           field({ name: 'channel_fee', label: 'Channel fee / commission', type: 'money', value: r.channel_fee, hint: 'What the channel keeps. Used in owner statements. Leave blank for 0.' })),
         field({ name: 'notes', label: 'Notes', type: 'textarea', value: r.notes, maxlength: 1000 }),
       ],
-      onSubmit: async (d) => {
+      onSubmit: (d) => (async () => {
         d.channel_fee = channelFeeToSave(d.channel, r.channel_fee, d.channel_fee);
         let changes = changedFields(r, d);
         if ('source' in changes && !changes.source) changes.source = null;
@@ -639,7 +654,7 @@ export async function reservationDetailView(el, { params, rerender }) {
         // The server says whether it wrote anything (a blank fee is stored as 0, which can be no change at all).
         const saved = Object.keys(changes).length ? await patch(`/reservations/${r.booking_id}`, changes) : { changed: false };
         toast(saved.changed ? 'Reservation updated.' : 'No changes to save.'); rerender();
-      },
+      })().catch((err) => { throw dateClashOnce(err); }),
     });
     const form = modal.el.querySelector('form');
     form.addEventListener('change', (e) => { if (e.target.name === 'channel') syncChannelFee(form, true); });

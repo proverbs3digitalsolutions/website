@@ -2,7 +2,7 @@
 
 This document describes BalayHub's PostgreSQL schema as it stands after migrations `001`–`026` in `db/migrations/`, where uploaded files are stored, and who can see or change each kind of data. It was checked against the migrations and the route code in `src/routes/*.js` and `src/lib/*.js`. Anything not confirmed in the code is marked **unverified**.
 
-Last updated: 2026-10-20 (QA round 20: migration 039, section 26, 2.15 card columns, support tickets row; D-102). Before that: 2026-10-20 (QA round 19: section 25, section 6 guest_has_email, billing 'attached' and expiry notes; D-101). Before that: 2026-10-19 (QA round 18: section 24, admin delete routes in matrix 6.4, null-workspace platform audit rows; D-100). Before that: 2026-10-15 (QA round 17: migrations 037 and 038, section 2.19, matrix 6.5, section 23; D-98 and D-99)
+Last updated: 2026-10-21 (QA round 21: section 27; D-103). Before that: 2026-10-20 (QA round 20: migration 039, section 26, 2.15 card columns, support tickets row; D-102). Before that: 2026-10-20 (QA round 19: section 25, section 6 guest_has_email, billing 'attached' and expiry notes; D-101). Before that: 2026-10-19 (QA round 18: section 24, admin delete routes in matrix 6.4, null-workspace platform audit rows; D-100). Before that: 2026-10-15 (QA round 17: migrations 037 and 038, section 2.19, matrix 6.5, section 23; D-98 and D-99)
 
 ---
 
@@ -1438,3 +1438,10 @@ Decision D-102. **Migration 039:** `billing_payments.card_brand` and `card_last4
 - **`GET /billing` history** returns each paid row's `card_brand` and `card_last4` from the row.
 - **`POST /api/admin/coupons` and update:** when the body carries `limit_on: true`, a missing or blank `max_redemptions` is refused; bodies that omit `limit_on` behave as before. A taken code answers 409 `CODE_TAKEN` with `fields.code`. The code length (up to 32) is checked on save.
 - **`GET /api/support/tickets`:** a cleaner gets their own tickets (the route already allowed it; the matrix now says so).
+
+## 27. API notes from QA round 21 (2026-10-21)
+
+Decision D-103. **No migration.**
+
+- **`GET /api/account` `notifications_on`** (`src/routes/account.js`) is now true when the user has at least one row in `push_subscriptions` (it was true when `notify_prefs` was non-empty). The page narrows this to the current browser (service worker registration and subscription, permission granted). The saved `notify_prefs` choices are unchanged.
+- **PayMongo intent status (`src/lib/billing.js`).** The "intent is dead" test accepts both `cancelled` and `canceled` (the exact spelling at PayMongo is unconfirmed, see BLOCKERS). When `expirePending` finds an intent still not dead after the cancel call, it logs one line, `[billing] intent for <id> still <status> after cancel` (billing id and status only, no secrets). The hosted checkout still goes ahead only when the older payment is dead (D-102 unchanged).

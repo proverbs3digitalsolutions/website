@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
+Last updated: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
 
 ---
 
@@ -1473,3 +1473,29 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 - **Gate pass** has a labelled **Notes** row and a Unit row laid out like the others.
 - **Support:** a cleaner opens Help and sees their own tickets only.
 - Phones: the Housekeeping main tabs are two by two under 380px; the theme switch labels fit at 320px (they wrap if needed).
+
+## 34. QA round 21 changes (D-103; 2026-10-21)
+
+### 34.1 Keyboard focus
+- **Any form with several wrong fields** puts focus on the first wrong field in the order the form shows it (for example Add tenant with a bad phone and a bad email focuses Phone).
+- **Phones, More sheet:** choosing a page from the sheet puts focus on that page's heading, also when the new page has the same heading text as the old one. Closing the sheet without going anywhere returns focus to the More button.
+- **Calendar:** after Block dates, Set price, New reservation from a cell, Remove block or a drag-move, focus returns to the redrawn cell that opened the menu (else the page heading).
+- **Quotes:** after **Cancel quote** focus lands on the page heading. An unknown quote link shows a **Not found** heading with focus on it.
+- **Filters:** **Clear all** and the chip remove buttons work on the first click even when a number box (for example Nights at least) was typed and not yet applied.
+
+### 34.2 Assistant and notifications
+- The open **assistant panel closes when the page changes**; the floating button stays. It no longer covers the Send to support button on a new ticket.
+- **Account, Notifications on this device** reads **On** only when this browser has a push subscription and permission is granted; otherwise it reads **Turn on**.
+
+### 34.3 Forms
+- **Public booking form:** a field's error disappears as soon as the guest fixes that field; a ticked checkbox clears its error; the red banner goes when no field is marked.
+- **New reservation:** a date clash is stated once in the banner; both date boxes are marked and focus goes to Check-in. **Email a booking confirmation** is unticked and disabled until a guest email is typed, then it ticks (unless the host unticked it).
+- **New quote:** all problems (dates, guest limit, email, negative amounts) show in one pass.
+
+### 34.4 Plan & billing
+- A free, card-only coupon states "once by card" once.
+- Pressing **Apply** with an empty coupon box puts focus in the box.
+- Plan cards sit **one per row on phones (under 560px)**; the **Pay** button label wraps inside the button, so there is no sideways scroll at 320px.
+
+### 34.5 Cleaner pay
+- The bulk bar counts **unpaid cleans only**: "N unpaid", or "Nothing unpaid" when none are left.

@@ -66,7 +66,8 @@ export function couponBox({ current, getSelection, onQuote }) {
       ok.hidden = !q.coupon;
       if (q.coupon) {
         // A free coupon that still needs a card says what the card is charged.
-        const cardNote = q.card_only && q.min_charge_applied && q.coupon.kind === 'free' ? ` You pay ${money(q.amount)} once by card.` : '';
+        // q.message (the picker line) can already say it: then it is said once.
+        const cardNote = q.card_only && q.min_charge_applied && q.coupon.kind === 'free' && !(q.message && q.message.includes('once by card')) ? ` You pay ${money(q.amount)} once by card.` : '';
         // The line under the plan picker (q.message) already says the discount for a one-month or ongoing coupon: say it once.
         const offer = couponText(q.coupon);
         okText.textContent = `${q.coupon.code} applied${q.message && q.message.includes(offer) ? '.' : `: ${offer}.`}${cardNote}`;
@@ -76,7 +77,7 @@ export function couponBox({ current, getSelection, onQuote }) {
   };
   const apply = () => {
     code = input.value.trim();
-    if (!code) { setMsg('Enter your coupon code.'); return; }
+    if (!code) { setMsg('Enter your coupon code.'); input.focus(); return; } // the message is about the box, so focus goes there
     refresh(true);
   };
 

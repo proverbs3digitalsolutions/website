@@ -651,7 +651,9 @@ export function showErrors(form, fields = {}) {
     if (err) err.textContent = msg;
     const target = errorTarget(wrap);
     target.mark?.setAttribute('aria-invalid', 'true');
-    first ||= target.focus;
+    // Focus the first bad field as the form is laid out, not the first in the server's list.
+    const t = target.focus;
+    if (t && (!first || (t.compareDocumentPosition?.(first) & 4))) first = t; // 4 = first comes after t
   }
   first?.focus();
   return unplaced;

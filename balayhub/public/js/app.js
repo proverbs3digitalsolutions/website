@@ -432,7 +432,8 @@ export async function logout() {
 function openMore() {
   const current = parseHash().path; // read when the button is pressed: the shell outlives the page it was built on
   const moreBtn = document.activeElement;
-  let panel;
+  let panel; let picked = false; // picked: a link in the sheet was chosen
+  const pick = () => { picked = true; sheet.close(); };
   const sheet = h('dialog', { class: 'morenav', 'aria-label': 'More', onclick: (e) => { if (e.target === sheet) sheet.close(); }, onkeydown: (e) => {
       if (e.key !== 'Tab') return;
       // A link inside a closed More tools fold can't take focus; its summary can.
@@ -443,12 +444,19 @@ function openMore() {
       if (e.shiftKey && (document.activeElement === first || document.activeElement === sheet || document.activeElement === panel || !sheet.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     },
-    onclose: () => { sheet.remove(); if (moreBtn?.isConnected) moreBtn.focus(); } },
+    // The close event fires after the click, so a route change chosen in the sheet must not pull focus back to More (the new heading takes it).
+    // A chosen link to the page already open redraws nothing, so the heading takes focus here; closing without a link returns to More.
+    onclose: () => {
+      sheet.remove();
+      if (parseHash().path !== current) return;
+      if (picked) focusPageHeading(document.getElementById('app'));
+      else if (moreBtn?.isConnected) moreBtn.focus();
+    } },
     panel = h('div', { class: 'morenav__sheet' },
       h('button', { class: 'morenav__close', type: 'button', 'aria-label': 'Close menu', onclick: () => sheet.close() }, 'Close'),
-      h('a', { href: '#/account', onclick: () => sheet.close(), 'aria-current': isCurrent('/account', current) ? 'page' : null }, icon('users'), 'My account'),
+      h('a', { href: '#/account', onclick: pick, 'aria-current': isCurrent('/account', current) ? 'page' : null }, icon('users'), 'My account'),
       navGroups(state.user, moreNav()).map((g) => {
-        const links = g.items.map(([p, t, ic]) => h('a', { href: `#${p}`, onclick: () => sheet.close(), 'aria-current': isCurrent(p, current) ? 'page' : null }, icon(ic), t));
+        const links = g.items.map(([p, t, ic]) => h('a', { href: `#${p}`, onclick: pick, 'aria-current': isCurrent(p, current) ? 'page' : null }, icon(ic), t));
         // More tools folds like the sidebar (open on one of its pages or when left open); the other groups stay open.
         if (g.id === 'more' && g.title) {
           return h('details', { class: 'morenav__fold', open: moreSaved() || g.items.some(([p]) => isCurrent(p, current)) },

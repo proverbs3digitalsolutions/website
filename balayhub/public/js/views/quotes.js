@@ -1,7 +1,7 @@
 // Quotes: a price prepared for an inquiry, sent as a private link the guest accepts and pays.
 
 import { get, post, qs, ApiError } from '../api.js';
-import { h, icon, peso, fmtDate, fmtDateTime, badge, field, makeForm, openModal, confirmDialog, emptyState, errorState, pageHead, toast, skeleton, todayManila, parseAmount } from '../ui.js';
+import { h, icon, peso, fmtDate, fmtDateTime, badge, field, makeForm, openModal, confirmDialog, emptyState, errorState, pageError, pageHead, toast, skeleton, todayManila, parseAmount } from '../ui.js';
 import { initFilters, filterBar, rememberFilters, changed, apiFilters } from '../filters.js';
 
 const STATUS = { open: 'Open', paid: 'Paid', expired: 'Expired', cancelled: 'Cancelled' };
@@ -26,6 +26,34 @@ export const rateStay = (p) => (p.missing_rates || !(Number(p.accommodation_tota
 export const rateOffer = (typed, stay) => Number(stay) > 0 && parseAmount(typed) !== Number(stay);
 // The most guests a listing takes, or null when the listing has no limit set.
 export const guestLimit = (listings, unitId) => listings.find((l) => l.unit_id === unitId)?.max_guests || null;
+
+// An amount box as the server reads it (blank is the required check's job): null when fine, else the server's sentence.
+const amountProblem = (label, v, positive) => {
+  const t = String(v ?? '').trim();
+  if (t === '') return null;
+  const n = parseAmount(t);
+  if (Number.isNaN(n)) return `${label} must be a valid amount (e.g. 8500 or 8500.50).`;
+  if (n < 0) return `${label} cannot be negative.`;
+  return positive && n <= 0 ? `${label} must be greater than zero.` : null;
+};
+// Guests, email and amounts as { field: message }; the form's check adds dates and add-ons so one save shows every problem.
+// The guest sentences match reservations.js guestsProblem (not imported: reservations.js imports this file).
+export function fieldProblems(d, listings) {
+  const f = {};
+  const n = String(d.num_guests ?? '').trim();
+  const max = guestLimit(listings, d.unit_id);
+  if (!(/^\d+$/.test(n) && Number(n) >= 1)) f.num_guests = 'Enter a whole number of guests, 1 or more.';
+  else if (max && Number(n) > max) f.num_guests = `This listing allows up to ${max} guests.`;
+  if (d.guest_email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(d.guest_email)) f.guest_email = 'Enter a valid email address.';
+  const acc = amountProblem('Accommodation', d.accommodation_total, true);
+  const cle = amountProblem('Cleaning fee', d.cleaning_fee);
+  const dis = amountProblem('Discount', d.discount_amount);
+  if (acc) f.accommodation_total = acc;
+  if (cle) f.cleaning_fee = cle;
+  if (dis) f.discount_amount = dis;
+  else if (!acc && String(d.discount_amount ?? '').trim() !== '' && parseAmount(d.discount_amount) > parseAmount(d.accommodation_total)) f.discount_amount = "The discount can't be more than the accommodation.";
+  return f;
+}
 
 // Shared by the host pages (quotes, reservations, listings, charges, check-in). If the browser blocks the clipboard,
 // the text opens selected in a read-only box, so the host can copy it by hand.
@@ -86,9 +114,9 @@ async function newQuoteModal(listings, onSaved) {
   let modal;
   const form = makeForm({
     fields, submitText: 'Create quote', cancel: () => modal.close(),
-    // The date check runs with the required check, so a blank Accommodation box can't hide it.
+    // Dates, guests, email and amounts are reported together with the required check, so a blank box can't hide them.
     check: (d) => {
-      const bad = {};
+      const bad = fieldProblems(d, listings);
       const msg = datesProblem(d.check_in, d.check_out);
       if (msg) bad.check_out = msg;
       const over = addonProblem();
@@ -229,10 +257,20 @@ export async function quotesView(el, { query, rerender }) {
 
 export async function quoteDetailView(el, { params, rerender }) {
   let q;
-  try { ({ quote: q } = await get(`/quotes/${params.id}`)); } catch (err) { el.replaceChildren(h('a', { class: 'back', href: '#/quotes' }, '‹ Quotes'), errorState(err, rerender)); return; }
+  try { ({ quote: q } = await get(`/quotes/${params.id}`)); } catch (err) {
+    // A missing quote gets a real page heading (focused by the router), like a missing reservation.
+    el.replaceChildren(h('a', { class: 'back', href: '#/quotes' }, '‹ Quotes'), err?.status === 404 ? pageError(err) : errorState(err, rerender));
+    return;
+  }
   const url = quoteUrl(q);
   const open = q.status === 'open';
-  const act = async (fn, msg) => { try { await fn(); toast(msg); rerender(); } catch (err) { toast(err.message, 'error'); } };
+  const act = async (fn, msg, toHeading) => {
+    try {
+      await fn(); toast(msg);
+      await rerender();
+      // The button the host used is gone after a cancel: the page heading takes focus (as after Cancel group).
+      if (toHeading && (!document.activeElement || document.activeElement === document.body)) { const t = document.querySelector('#main h1, #app h1'); t?.setAttribute('tabindex', '-1'); t?.focus({ preventScroll: true }); }
+    } catch (err) { toast(err.message, 'error'); } };
   const out = h('input', { class: 'input', readonly: true, value: url, 'aria-label': 'Quote link' });
   const addons = Array.isArray(q.addons) ? q.addons : [];
   el.replaceChildren(
@@ -264,7 +302,7 @@ export async function quoteDetailView(el, { params, rerender }) {
                 q.guest_email && h('button', { class: 'btn btn--secondary btn--sm', onclick: () => act(() => post(`/quotes/${q.quote_id}/send`), `Quote emailed to ${q.guest_email}.`) }, 'Send by email'),
                 h('button', { class: 'btn btn--danger btn--sm', onclick: async () => {
                   if (!await confirmDialog({ title: 'Cancel this quote?', text: 'The link stops working. This can\'t be undone.', confirmText: 'Cancel quote', cancelText: 'Keep it', danger: true })) return;
-                  act(() => post(`/quotes/${q.quote_id}/cancel`), 'Quote cancelled.');
+                  act(() => post(`/quotes/${q.quote_id}/cancel`), 'Quote cancelled.', true);
                 } }, 'Cancel quote')),
               !q.guest_email && h('p', { class: 'muted small' }, 'No email on this quote, so copy the link and send it on Messenger or Viber.')]
               : h('p', { class: 'muted' }, q.status === 'expired' ? 'This quote expired. Create a new one if the guest is still interested.' : 'This quote was cancelled.')))));

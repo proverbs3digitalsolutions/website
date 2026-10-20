@@ -66,7 +66,9 @@ const sessionId = (hash) => hash.slice(0, 16);
 
 router.get('/account/profile', requireAuth, ah(async (req, res) => {
   const u = req.user;
-  const extra = await one('SELECT created_at, google_sub IS NOT NULL AS google_linked, notify_prefs FROM users WHERE user_id = $1', [u.user_id]);
+  // Push is on only when this person has a saved push subscription; a notification choice alone (notify_prefs) is not one.
+  const extra = await one(`SELECT created_at, google_sub IS NOT NULL AS google_linked,
+      EXISTS (SELECT 1 FROM push_subscriptions WHERE user_id = $1) AS notifications_on FROM users WHERE user_id = $1`, [u.user_id]);
   const { rows: sessions } = await query(
     `SELECT token_hash, created_at, last_seen_at, user_agent FROM sessions
       WHERE user_id = $1 AND expires_at > now() AND last_seen_at > now() - make_interval(hours => $2) ORDER BY last_seen_at DESC LIMIT 20`,
@@ -100,7 +102,7 @@ router.get('/account/profile', requireAuth, ah(async (req, res) => {
   }
   res.json({
     user: { full_name: u.full_name, email: u.email, phone: u.phone, email_verified: Boolean(u.email_verified_at), created_at: extra.created_at, google_linked: extra.google_linked,
-      notifications_on: Object.keys(extra.notify_prefs || {}).length > 0 },
+      notifications_on: extra.notifications_on },
     workspace, properties, owner, activity, support,
     sessions: sessions.map((x) => ({ id: sessionId(x.token_hash), device: deviceName(x.user_agent), created_at: x.created_at, last_seen_at: x.last_seen_at, current: x.token_hash === u.token_hash })),
   });

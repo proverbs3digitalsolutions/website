@@ -107,6 +107,20 @@ export async function calendarView(el, { query }) {
     render(data);
   }
 
+  // Reload the grid after an action, then put focus back on the redrawn cell that opened it (same key), else the page heading.
+  // Only when focus is free: the redraw and the closing dialog leave it on BODY. Waits a beat so the dialog has finished closing.
+  async function reload(key) {
+    await load();
+    setTimeout(() => {
+      const a = document.activeElement;
+      if ((a && a !== document.body && a.isConnected) || document.querySelector('dialog[open]')) return;
+      const target = (key && [...grid.querySelectorAll('[data-focus-key]')].find((n) => n.getAttribute('data-focus-key') === key)) || el.querySelector('h1');
+      if (!target) return;
+      if (target.tagName === 'H1') target.setAttribute('tabindex', '-1');
+      target.focus({ preventScroll: true });
+    }, 60);
+  }
+
   // Booked nights per listing inside the shown dates (reservations and blocks).
   function bookedNights(data, unitId) {
     const end = addDays(data.start, data.days);
@@ -213,7 +227,7 @@ export async function calendarView(el, { query }) {
     if (!await confirmDialog({ title: 'Move this reservation?', text: `Move ${b.guest_name || 'this guest'} from ${from?.unit_name || 'this listing'} to ${to.unit_name}? The price stays the same.`, confirmText: 'Move reservation' })) return;
     // err.message is the server's reason: the stay or block in the way, or the field messages (already de-duplicated by api.js).
     try { await patch(`/reservations/${b.booking_id}`, { unit_id: to.unit_id }); toast('Reservation moved.'); } catch (err) { toast(err.message, 'error'); }
-    load();
+    reload();
   }
 
   function cellMenu(listing, date, price, rule, overridden) {
@@ -225,7 +239,7 @@ export async function calendarView(el, { query }) {
       title: `${listing.unit_name} · ${fmtDate(date)}`,
       body: h('div', { class: 'form' },
         h('p', { class: 'muted' }, `Nightly price: ${price ? peso(price) : 'not set'}${rule?.label ? ` · ${rule.label}` : ''}`),
-        h('button', { class: 'btn btn--primary btn--block', onclick: () => { m.close(); newReservationModal({ unitId: listing.unit_id, checkIn: date, onSaved: load }); } }, icon('plus'), 'New reservation'),
+        h('button', { class: 'btn btn--primary btn--block', onclick: () => { m.close(); newReservationModal({ unitId: listing.unit_id, checkIn: date, onSaved: () => reload(`cal-night-${listing.unit_id}-${date}`) }); } }, icon('plus'), 'New reservation'),
         h('button', { class: 'btn btn--secondary btn--block', onclick: () => { m.close(); blockModal(listing, date); } }, '🔒 Block dates'),
         h('button', { class: 'btn btn--secondary btn--block', onclick: () => { m.close(); priceModal(listing, date, price, overridden); } }, '₱ Set nightly price')),
     });
@@ -247,7 +261,7 @@ export async function calendarView(el, { query }) {
           if (err.code === 'DATES_TAKEN') err.fields = { start_date: '', end_date: '' };
           throw err;
         }
-        toast('Dates blocked.'); load();
+        toast('Dates blocked.'); reload(`cal-night-${listing.unit_id}-${date}`);
       },
     });
   }
@@ -277,7 +291,7 @@ export async function calendarView(el, { query }) {
         // A blank price clears any set prices in the range; the server says how many it removed.
         if (d.price.trim() === '') toast(res.cleared > 0 ? (res.cleared === 1 ? 'Set prices cleared for 1 night. This night uses your usual rates again.' : `Set prices cleared for ${res.cleared} nights. These nights use your usual rates again.`) : 'No set prices to clear. These nights already use your usual rates.');
         else toast('Price saved.');
-        load();
+        reload(`cal-night-${listing.unit_id}-${date}`);
       },
     });
   }
@@ -286,7 +300,7 @@ export async function calendarView(el, { query }) {
     if (b.from_channel) { toast('This block comes from a channel calendar. Change it on the channel.'); return; }
     if (!canManage) return;
     if (!await confirmDialog({ title: 'Remove this block?', text: `${b.block_reason || 'Blocked'}: ${addDays(b.check_in, 1) === b.check_out ? `the night of ${fmtDate(b.check_in)}` : `${fmtDate(b.check_in)} to ${fmtDate(addDays(b.check_out, -1))}`}. ${addDays(b.check_in, 1) === b.check_out ? 'The night becomes' : 'The nights become'} available again.`, confirmText: 'Remove block' })) return;
-    try { await post(`/blocks/${b.booking_id}/remove`); toast('Block removed.'); load(); } catch (err) { toast(err.message, 'error'); }
+    try { await post(`/blocks/${b.booking_id}/remove`); toast('Block removed.'); reload(); } catch (err) { toast(err.message, 'error'); }
   }
 
   // A bar, or a price cell under one, opens the same action: the block menu, or the reservation.
