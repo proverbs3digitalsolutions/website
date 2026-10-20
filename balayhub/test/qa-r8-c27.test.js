@@ -38,6 +38,7 @@ export async function post(url, body) {
 export const patch = async () => ({});
 export const qs = () => '';
 export async function uploadFile() {}
+export async function fileContentError() { return null; }
 `;
 
 // Every element is a small tree: tag, props, kids, and text (the strings inside it, in order).

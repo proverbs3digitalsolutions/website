@@ -27,7 +27,7 @@ test('failed logins for one account still hit 429 with the same shape', async ()
   for (let i = 0; i < 21; i += 1) last = await client(srv.base).post('/api/auth/login', { email: 'office@example.com', password: 'wrong-password-1' });
   assert.equal(last.status, 429);
   assert.equal(last.data.code, 'RATE_LIMITED');
-  assert.equal(last.data.error ?? last.data.message, 'Too many attempts. Please wait a few minutes and try again.');
+  assert.match(last.data.error ?? last.data.message, /^Too many tries\. Please try again in \d+ minutes?\.$/);
   assert.ok(last.headers.get('retry-after'));
   // A different account from the same IP is not locked out.
   assert.equal((await signup('colleague@example.com')).status, 201);

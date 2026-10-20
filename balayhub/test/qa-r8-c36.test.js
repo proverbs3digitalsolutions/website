@@ -29,7 +29,7 @@ test('D-84 rent: Cancel on "Record more than is owed?" returns false before anyt
 
 test('D-84 rent: ApiError is no longer imported, because nothing in rent.js uses it', () => {
   assert.doesNotMatch(rentSrc, /ApiError/);
-  assert.match(rentSrc, /import \{ get, post, patch, qs, uploadFile \} from '\.\.\/api\.js';/);
+  assert.match(rentSrc, /import \{ get, post, patch, qs, uploadFile, fileContentError \} from '\.\.\/api\.js';/);
 });
 
 test('D-84 owners: Cancel on "Pay more than the statement?" returns false before anything is posted, with no error', () => {

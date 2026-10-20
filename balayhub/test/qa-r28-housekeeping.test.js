@@ -40,7 +40,7 @@ test('photoField is a keyed field with its own error line', () => {
 
 test('the three photo modals check the photo before anything is saved', () => {
   for (const name of ['damageModal', 'lostFoundModal', 'inspectModal']) {
-    assert.match(fn(name), /check: \(\) => \{ const p = photoProblem\(photo\.files\[0\]\); return p \? \{ photo: p \} : null; \}/, name);
+    assert.match(fn(name), /check: async \(\) => \{ const p = await photoCheck\(photo\.files\[0\]\); return p \? \{ photo: p \} : null; \}/, name);
   }
 });
 

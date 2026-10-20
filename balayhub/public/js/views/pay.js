@@ -2,7 +2,7 @@
 // Shows the itemised bill, the online payment button and, when the host allows it,
 // the manual payment details with a form to send a proof of payment.
 
-import { get, post, api, ApiError, newIdempotencyKey } from '../api.js';
+import { get, post, api, ApiError, newIdempotencyKey, fileContentError } from '../api.js';
 import { h, brand, toast, field, readForm, showErrors, clearErrors, parseAmount } from '../ui.js';
 import { t, tServer, guestLang, tFields, initGuestLang, langToggle, keepFormValues, restoreFormValues, fmtDateL as fmtDate, extendTranslations } from '../i18n.js';
 
@@ -23,6 +23,7 @@ extendTranslations({
   'Already on your bill': 'Nasa bill mo na',
   '{n} already on your bill': '{n} na ang nasa bill mo',
   'Upload a JPG, PNG, WEBP or PDF file up to 10 MB.': 'Mag-upload ng JPG, PNG, WEBP o PDF na file na hanggang 10 MB.',
+  "This file isn't a real PDF, JPG, PNG or WEBP. Choose the file again.": 'Hindi totoong PDF, JPG, PNG o WEBP ang file na ito. Piliin ulit ang file.',
   'Accommodation (1 night)': 'Tuluyan (1 gabi)',
   'Accommodation ({n} nights)': 'Tuluyan ({n} na gabi)',
   'Cleaning fee': 'Bayad sa paglilinis',
@@ -180,7 +181,7 @@ function addonsCard(token, reload, snap) {
     btn.addEventListener('click', async () => {
       err.replaceChildren();
       const selections = Object.entries(qty).filter(([, q]) => q > 0).map(([addon_id, quantity]) => ({ addon_id, quantity }));
-      if (!selections.length) { err.replaceChildren(h('div', { class: 'alert alert--error' }, t('Choose at least one extra.'))); return; }
+      if (!selections.length) { err.replaceChildren(h('div', { class: 'alert alert--error' }, t('Choose at least one extra.'))); card.querySelector('.gp-addons input')?.focus(); return; }
       btn.disabled = true;
       btn.textContent = t('Adding…');
       try {
@@ -301,7 +302,7 @@ function proofForm(d, token, onSent, left, pendingTotal) {
   const form = h('form', { class: 'form', novalidate: true });
   const formError = h('div', { class: 'form-error' });
   const progress = h('p', { class: 'muted small', 'aria-live': 'polite' });
-  const photo = h('input', { type: 'file', id: 'proof-file', accept: PROOF_TYPES.join(','), class: 'input' });
+  const photo = h('input', { type: 'file', id: 'proof-file', accept: PROOF_TYPES.join(','), class: 'input', 'aria-describedby': 'proof-file-err' });
   const submit = h('button', { class: 'btn btn--primary btn--block', type: 'submit' }, t('Send proof'));
   const alertBox = (msg) => h('div', { class: 'alert alert--error', role: 'alert' }, msg);
   // The server only lets a pending proof with no file go. If that fails too, the details stay locked.
@@ -322,14 +323,30 @@ function proofForm(d, token, onSent, left, pendingTotal) {
     field({ name: 'method', label: t('Payment method'), type: 'select', required: true, value: 'gcash', placeholderOption: false, options: PROOF_METHODS.map(([v, l]) => [v, t(l)]) }),
     field({ name: 'reference_number', label: t('Reference number'), maxlength: 100, hint: t('The reference or transaction number from your app or bank.') }),
     field({ name: 'payer_name', label: t('Name of payer'), maxlength: 120, hint: t('The name on the account you paid from.') }),
-    h('div', { class: 'field' },
+    h('div', { class: 'field', dataset: { field: 'proof_file' } },
       h('label', { for: 'proof-file' }, t('Screenshot or receipt'), h('span', { class: 'req', 'aria-hidden': 'true' }, ' *')),
       photo,
-      h('div', { class: 'hint' }, t('JPG, PNG, WEBP or PDF, up to 10 MB.'))),
+      h('div', { class: 'hint' }, t('JPG, PNG, WEBP or PDF, up to 10 MB.')),
+      h('div', { class: 'error', id: 'proof-file-err', role: 'alert' })),
     progress,
     submit);
+  // A field's message clears as soon as the guest changes that field (D-105).
+  const clearField = (e) => {
+    const wrap = e.target.closest?.('[data-field]');
+    if (!wrap?.classList.contains('field--invalid')) return;
+    wrap.classList.remove('field--invalid');
+    wrap.querySelectorAll('[aria-invalid]').forEach((f) => f.removeAttribute('aria-invalid'));
+    const msg = wrap.querySelector('.error');
+    if (msg) msg.textContent = '';
+  };
+  form.addEventListener('input', clearField);
+  form.addEventListener('change', clearField);
+  let busy = false;
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (busy) return;
+    busy = true;
+    try {
     clearErrors(form);
     formError.replaceChildren();
     const v = readForm(form);
@@ -339,11 +356,12 @@ function proofForm(d, token, onSent, left, pendingTotal) {
     if (!(amount > 0)) problems.amount = t('Enter the amount you paid.');
     else if (amount > Number(d.balance)) problems.amount = t('This is more than the balance of {amount}.', { amount: peso(d.balance) });
     else if (amount > left + 0.001) problems.amount = t("You already sent proofs for {sent} that the host hasn't checked yet, so you can send up to {left} more.", { sent: peso(pendingTotal), left: peso(left) });
+    // Every problem in one pass, before anything is sent; the first wrong field in form order gets focus (D-103, D-105, D-112).
+    if (!file) problems.proof_file = t('Choose a screenshot or receipt.');
+    else if (!file.size) problems.proof_file = t('This file is empty. Choose the file again.'); // D-111
+    else if (file.size > MAX_PROOF_BYTES || !PROOF_TYPES.includes(file.type)) problems.proof_file = t('Upload a JPG, PNG, WEBP or PDF file up to 10 MB.');
+    else { const bad = await fileContentError(file); if (bad) problems.proof_file = t(bad); }
     if (Object.keys(problems).length) { showErrors(form, problems); return; }
-    if (!file) { formError.replaceChildren(alertBox(t('Choose a screenshot or receipt.'))); return; }
-    if (!file.size) { formError.replaceChildren(alertBox(t('This file is empty. Choose the file again.'))); return; } // D-111
-    if (file.size > MAX_PROOF_BYTES) { formError.replaceChildren(alertBox(t('Upload a JPG, PNG, WEBP or PDF file up to 10 MB.'))); return; }
-    if (!PROOF_TYPES.includes(file.type)) { formError.replaceChildren(alertBox(t('Upload a JPG, PNG, WEBP or PDF file up to 10 MB.'))); return; }
     submit.disabled = true;
     submit.textContent = t('Sending…');
     try {
@@ -362,6 +380,7 @@ function proofForm(d, token, onSent, left, pendingTotal) {
     } catch (err) {
       const msg = err instanceof ApiError ? tServer(err.message) : (err.message || t('Something went wrong. Please try again.'));
       // Only a failed screenshot comes after a saved proof, so only then is there one to take back.
+      const atFile = Boolean(proofId);
       const taken = proofId && await withdraw();
       formError.replaceChildren(alertBox(err.offline ? t("You're offline. Please try again when you're connected.")
         : taken ? `${msg} ${t('Choose a different file and send again.')}` : msg));
@@ -369,7 +388,9 @@ function proofForm(d, token, onSent, left, pendingTotal) {
       progress.textContent = '';
       submit.disabled = false;
       submit.textContent = t('Send proof');
+      if (atFile && !err.offline) photo.focus();
     }
+    } finally { busy = false; }
   });
   return form;
 }

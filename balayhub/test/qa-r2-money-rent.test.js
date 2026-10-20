@@ -81,5 +81,5 @@ test('cancelling the over-balance prompt returns false with no error (rent cance
   assert.doesNotMatch(submit, /throw new Error\(/);
   assert.doesNotMatch(submit, /throw new ApiError\(/);
   assert.match(submit, /title: 'Record more than is owed\?'[^\n]*\)\) return false;/);
-  assert.match(src, /import \{ get, post, patch, qs, uploadFile \} from '\.\.\/api\.js';/);
+  assert.match(src, /import \{ get, post, patch, qs, uploadFile, fileContentError \} from '\.\.\/api\.js';/);
 });

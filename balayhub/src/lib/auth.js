@@ -172,6 +172,15 @@ async function purgeExpiredAuth() {
 const requireRole = (...roles) => (req, res, next) =>
   (roles.includes(req.user?.role) ? next() : next(forbidden()));
 
+// Words the wait the same way cardcheck.js rateText does (D-112, QA round 30); keep the two in step.
+// At least one minute, so a window that ends this second never reads "0 minutes".
+function rateText(seconds) {
+  const m = Math.max(1, Math.ceil(seconds / 60));
+  if (m < 60) return `Too many tries. Please try again in ${m} minute${m === 1 ? '' : 's'}.`;
+  const hrs = Math.round(m / 60);
+  return `Too many tries. Please try again in about ${hrs === 1 ? 'an hour' : `${hrs} hours`}.`;
+}
+
 // Very small in-memory fixed-window limiter (per process).
 // Every request is counted on arrival, so a burst of parallel requests can't slip past the cap.
 // giveBack(status): the count is given back when the response ends with a status it accepts
@@ -192,7 +201,7 @@ function rateLimit({ windowMs, max, key, failedOnly = false, giveBack = failedOn
     if (h.count > max) {
       const wait = Math.ceil((h.reset - now) / 1000);
       res.set('Retry-After', wait);
-      return next(new HttpError(429, 'Too many attempts. Please wait a few minutes and try again.', { code: 'RATE_LIMITED', retry_after: wait }));
+      return next(new HttpError(429, rateText(wait), { code: 'RATE_LIMITED', retry_after: wait }));
     }
     if (giveBack) res.on('finish', () => { if (giveBack(res.statusCode)) h.count = Math.max(0, h.count - 1); });
     next();

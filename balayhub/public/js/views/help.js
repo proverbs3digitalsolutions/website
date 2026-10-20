@@ -2,7 +2,7 @@
 // ticket from "Received" to "Resolved". Also the support queue for BalayHub's
 // own platform admins.
 
-import { get, post, qs, uploadFile, ApiError } from '../api.js';
+import { get, post, qs, uploadFile, fileContentError } from '../api.js';
 import {
   h, icon, fmtDateTime, badge, field, makeForm, emptyState, searchBox, pageHead, toast, confirmDialog, filesList, label } from '../ui.js';
 import { state, navigate } from '../app.js';
@@ -17,20 +17,6 @@ export function screenshotError(file) {
   if (file.size === 0) return 'This file is empty. Choose the file again.';
   const ok = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.type) && file.size <= 10 * 1024 * 1024;
   return ok ? null : 'Upload a PDF, JPG, PNG or WEBP file up to 10 MB.';
-}
-
-const SIGNATURES = {
-  'image/png': (b) => b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47,
-  'image/jpeg': (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
-  'image/webp': (b) => String.fromCharCode(...b.slice(0, 4)) === 'RIFF' && String.fromCharCode(...b.slice(8, 12)) === 'WEBP',
-  'application/pdf': (b) => String.fromCharCode(...b.slice(0, 4)) === '%PDF',
-};
-// The first bytes the server checks (src/lib/storage.js), read before the ticket is created, so a renamed file never
-// leaves a ticket without its screenshot (D-111). The server still checks the whole file.
-export async function screenshotContentError(file) {
-  if (!file || !file.size || !SIGNATURES[file.type]) return null;
-  const b = new Uint8Array(await file.slice(0, 12).arrayBuffer());
-  return SIGNATURES[file.type](b) ? null : "This file isn't a real PDF, JPG, PNG or WEBP. Choose the file again.";
 }
 
 const TOPICS = [
@@ -179,10 +165,9 @@ export async function helpNewView(el, { query }) {
       h('p', { class: 'muted small' }, 'We also send which page you came from, your browser and screen size, so we can see what you see.'),
     ],
     cancel: () => navigate('#/help'),
-    check: () => (screenshotError(screenshot.files[0]) ? { screenshot: screenshotError(screenshot.files[0]) } : null),
+    // Type, size and the first bytes are checked together with the other fields, before the ticket is created (D-111, D-112).
+    check: async () => { const f = screenshot.files[0]; const p = screenshotError(f) || await fileContentError(f); return p ? { screenshot: p } : null; },
     onSubmit: async (data) => {
-      const bad = await screenshotContentError(screenshot.files[0]);
-      if (bad) throw new ApiError('Please check the highlighted fields.', { status: 400, code: 'VALIDATION', fields: { screenshot: bad } });
       const res = await post('/support/tickets', {
         ...data,
         context: {
@@ -268,9 +253,14 @@ export async function helpTicketView(el, { params, rerender }) {
     placeholder: t.status === 'waiting_on_customer' ? 'Answer the question from support…' : t.status === 'resolved' ? 'Still not fixed? Reply here and we’ll reopen it.' : 'Add more details…' });
   const replyError = h('div', { class: 'error', role: 'alert' });
   const replyField = h('div', { class: 'field' }, reply, replyError);
-  const attach = h('input', { type: 'file', class: 'input', accept: 'image/jpeg,image/png,image/webp,application/pdf', 'aria-label': 'Attach a file' });
-  // Clears the message once the person types or attaches a file.
-  const clearReplyError = () => { replyError.textContent = ''; replyField.classList.remove('field--invalid'); reply.removeAttribute('aria-invalid'); };
+  const attach = h('input', { type: 'file', class: 'input', accept: 'image/jpeg,image/png,image/webp,application/pdf', 'aria-label': 'Attach a file', 'aria-describedby': 'reply-attach-err' });
+  const attachError = h('div', { class: 'error', id: 'reply-attach-err', role: 'alert' });
+  const attachField = h('div', { class: 'field' }, attach, attachError);
+  // Clears the messages once the person types or attaches a file.
+  const clearReplyError = () => {
+    replyError.textContent = ''; replyField.classList.remove('field--invalid'); reply.removeAttribute('aria-invalid');
+    attachError.textContent = ''; attachField.classList.remove('field--invalid'); attach.removeAttribute('aria-invalid');
+  };
   reply.addEventListener('input', clearReplyError);
   attach.addEventListener('change', clearReplyError);
   const send = async (e) => {
@@ -278,7 +268,16 @@ export async function helpTicketView(el, { params, rerender }) {
     if (!reply.value.trim() && !attach.files[0]) { replyError.textContent = 'Write a reply first.'; replyField.classList.add('field--invalid'); reply.setAttribute('aria-invalid', 'true'); reply.focus(); return; }
     btn.disabled = true;
     try {
-      if (attach.files[0]) await uploadFile('support', t.ticket_id, attach.files[0]);
+      if (attach.files[0]) {
+        try { await uploadFile('support', t.ticket_id, attach.files[0]); } catch (err) {
+          // A file refused before sending (empty, too big, not really its type) or by the server is said on the attach box; the reply text stays (D-112).
+          if (['EMPTY_FILE', 'BAD_FILE_CONTENT', 'UNSUPPORTED_FILE'].includes(err.code) || err.status === 413) {
+            attachError.textContent = err.message; attachField.classList.add('field--invalid'); attach.setAttribute('aria-invalid', 'true');
+            btn.disabled = false; attach.focus(); return;
+          }
+          throw err;
+        }
+      }
       if (reply.value.trim()) await post(`/support/tickets/${t.ticket_id}/reply`, { body: reply.value.trim() });
       toast(t.status === 'resolved' ? 'Ticket reopened. We’ll take another look.' : 'Sent to support.');
       rerender();
@@ -323,7 +322,7 @@ export async function helpTicketView(el, { params, rerender }) {
         h('div', { class: 'card' },
           h('div', { class: 'card__head' }, h('h2', null, 'Conversation')),
           timeline(messages, events),
-          canReply ? h('div', { class: 'form', style: { marginTop: '14px' } }, replyField, attach,
+          canReply ? h('div', { class: 'form', style: { marginTop: '14px' } }, replyField, attachField,
             h('div', null, h('button', { class: 'btn btn--primary', onclick: send }, t.status === 'resolved' ? 'Reply and reopen' : 'Send reply')))
             : h('div', { style: { marginTop: '14px' } }, h('a', { class: 'btn btn--secondary', href: `#/help/new${qs({ subject: `Follow-up on ${t.number}: ${t.subject}`.slice(0, 150) })}` }, 'Open a follow-up ticket')))),
       h('div', { class: 'stack' },

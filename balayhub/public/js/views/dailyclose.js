@@ -63,7 +63,21 @@ export async function dailyCloseView(el, { query, rerender }) {
   const open = sections.filter((s) => s.key !== 'payments_today').reduce((n, s) => n + s.count, 0);
 
   const picker = h('input', { class: 'input input--sm', type: 'date', value: date, max: addDays(today, 1), 'aria-label': 'Day to close', 'aria-describedby': message ? 'dc-date-msg' : undefined });
-  picker.addEventListener('change', () => { if (picker.value) location.hash = `#/daily-close${qs({ date: picker.value === today ? '' : picker.value })}`; });
+  // The warning is built once so the picker can drop it.
+  const msgBox = message && h('div', { class: 'alert alert--warn', id: 'dc-date-msg', role: 'alert' }, message);
+  // An emptied box changes nothing on the page (the person may be retyping part of the date), so it never navigates.
+  // The warning was about the address's date, so it goes; a box left empty shows the page's day again (D-112).
+  // Typing a year by keyboard makes Chrome fire change with a half-typed year (0002-10-15), so a change only navigates once the value
+  // is a real day in range; anything else waits so the typing is not lost. Leaving the box or pressing Enter with a bad value
+  // goes to the page, which shows its usual warning (D-112).
+  const go = () => { location.hash = `#/daily-close${qs({ date: picker.value === today ? '' : picker.value })}`; };
+  const settle = () => { if (picker.value && picker.value !== date && !isRealDate(picker.value)) go(); };
+  picker.addEventListener('change', () => {
+    if (isRealDate(picker.value)) go();
+    else if (!picker.value && msgBox) { msgBox.remove(); picker.removeAttribute('aria-describedby'); }
+  });
+  picker.addEventListener('blur', () => { if (!picker.value) picker.value = date; else settle(); });
+  picker.addEventListener('keydown', (e) => { if (e.key === 'Enter') settle(); });
 
   const closeDay = () => formModal({
     title: closed ? 'Update the daily close' : 'Close the day', submitText: closed ? 'Update close' : 'Close the day',
@@ -90,7 +104,7 @@ export async function dailyCloseView(el, { query, rerender }) {
       h('div', { class: 'page-head__title' }, h('h1', null, 'Daily close'), h('p', null, 'Check the day is wrapped up, then close it')),
       // The group names the header's buttons, so after Reopen day the focus guard lands on Close the day (its shared fallback).
       h('div', { class: 'page-head__actions', role: 'group', 'aria-label': 'Daily close actions' }, picker, closed?.can_change && h('button', { class: 'btn btn--secondary', 'data-focus-key': 'dc-reopen', onclick: reopen }, 'Reopen day'), (!closed || closed.can_change) && h('button', { class: 'btn btn--primary', 'data-focus-key': 'dc-close', onclick: closeDay }, closed ? 'Update close' : 'Close the day'))),
-    message && h('div', { class: 'alert alert--warn', id: 'dc-date-msg', role: 'alert' }, message),
+    msgBox,
     closed
       ? h('div', { class: 'alert alert--ok', role: 'status' }, `${fmtDate(date)} was closed on ${fmtDateTime(closed.closed_at)} by ${closed.closed_by_name || 'a team member'}${closed.note ? `: ${closed.note}` : ''}`)
       : h('div', { class: `alert ${open ? 'alert--warn' : 'alert--info'}`, role: 'status' }, `${fmtDate(date)} is not closed yet.${open ? ` ${open} item${open === 1 ? '' : 's'} to look at.` : ''}`),

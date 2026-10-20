@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-21 (QA round 29: section 42, a line in 39.3 and the notes in 5.10, 14.9 and 25; D-111). Before that: 2026-10-21 (QA round 28: section 41 and the notes in 29.1, 39.2 and 40.2; D-110). Before that: 2026-10-21 (QA round 27: section 40 and the notes in 29.1 and 30.6; D-109). Before that: 2026-10-21 (QA round 26: section 39 and 33.1; D-108). Before that: 2026-10-21 (QA round 25: section 38, 5.10 and 30 corrected; D-107). Before that: 2026-10-21 (QA round 24: section 37; D-106). Before that: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
+Last updated: 2026-10-21 (QA round 30: section 43, the notes in 5, 41.2 and 42.2; D-112). Before that: 2026-10-21 (QA round 29: section 42, a line in 39.3 and the notes in 5.10, 14.9 and 25; D-111). Before that: 2026-10-21 (QA round 28: section 41 and the notes in 29.1, 39.2 and 40.2; D-110). Before that: 2026-10-21 (QA round 27: section 40 and the notes in 29.1 and 30.6; D-109). Before that: 2026-10-21 (QA round 26: section 39 and 33.1; D-108). Before that: 2026-10-21 (QA round 25: section 38, 5.10 and 30 corrected; D-107). Before that: 2026-10-21 (QA round 24: section 37; D-106). Before that: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
 
 ---
 
@@ -181,7 +181,7 @@ Cleaning push notifications do not go to cleaners yet.
 
 ### 5.3 Log in `#/login`
 - Banners: session expired, password updated, or a Google error.
-- **Log in** → success → `afterLogin` (see 1). Wrong details → "Incorrect email or password. Try again or reset your password." Too many tries → "Too many attempts…".
+- **Log in** → success → `afterLogin` (see 1). Wrong details → "Incorrect email or password. Try again or reset your password." Too many tries → "Too many attempts…". *Now "Too many tries. Please try again in N minutes." with the real wait (D-112).*
 - **Log in with Google** (if set up) → Google → back to the app.
 - **Forgot password?** → `#/forgot`. **Create an account** → `#/signup`. **Try the live demo** → demo.
 
@@ -1672,7 +1672,7 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 
 ### 41.2 Files
 - **One sentence for an empty file, before anything is sent:** "This file is empty. Choose the file again." (Housekeeping, for cleaners: "Walang laman ang file. Piliin ulit ang file.") It is said on every upload control: deposit damage photo, housekeeping Photos, maintenance attachment, Help screenshot and reply, tenant documents, and expense and payment receipts and attachments. No request is sent. *Supersedes the receipt wording in 39.2 and 40.2 (D-110).*
-- **Forms that save a record and then attach a file check the file first,** so nothing is saved: Help's Contact support screenshot, and Housekeeping's Report damage, Found an item and Inspect cleaning photo. An empty file, a wrong type or a file over 10 MB is refused on its own field, and no ticket or record is created.
+- **Forms that save a record and then attach a file check the file first,** so nothing is saved: Help's Contact support screenshot, and Housekeeping's Report damage, Found an item and Inspect cleaning photo. An empty file, a wrong type or a file over 10 MB is refused on its own field, and no ticket or record is created. *Since D-112 this includes the file's first bytes, on these forms and on every upload control.*
 - **Server:** an empty upload gets 400 `EMPTY_FILE` with the same sentence. The check comes after the role and record checks, so an empty upload to a record the person cannot reach gets the access answer, not the file message. A file of the wrong type with content still gets 415 `UNSUPPORTED_FILE`.
 
 ### 41.3 Forms
@@ -1688,10 +1688,28 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 
 ### 42.2 Focus and files
 - **An upload control keeps focus after its card redraws,** including when the file was dropped on it rather than chosen by a click. This covers every upload-on-pick control: the deposit damage photo, the maintenance attachment, Housekeeping Photos and the Help reply attachment.
-- **Contact support checks the screenshot's content before the ticket exists.** A file whose first bytes are not those of its type (PDF, PNG, JPEG or WEBP) is refused on the Screenshot field with "This file isn't a real PDF, JPG, PNG or WEBP. Choose the file again.", and no ticket is created. The server still checks the whole file. A file of another type keeps its own message.
+- **Contact support checks the screenshot's content before the ticket exists.** A file whose first bytes are not those of its type (PDF, PNG, JPEG or WEBP) is refused on the Screenshot field with "This file isn't a real PDF, JPG, PNG or WEBP. Choose the file again.", and no ticket is created. The server still checks the whole file. A file of another type keeps its own message. *Since D-112 the same check runs on every upload (43.2).*
 - **Guest files refuse an empty file before sending.** The guest check-in ID photo, the direct-booking photo and the guest payment screenshot (both paths) say "This file is empty. Choose the file again." (Tagalog on the guest pages: "Walang laman ang file. Piliin ulit ang file."). The server answers an empty upload with 400 `EMPTY_FILE` after the access checks. The host's listing photo refuses the same empty file in English.
 
 ### 42.3 Forms and wording
 - **Discount code, both boxes filled:** "Choose one: a percent off or an amount off, not both." shows on the amount box when Percent off is wrong on its own (150, 2.5 or 0). With a whole number from 1 to 90 it stays on Percent off. Both problems show in one save.
 - **Season overlap:** the other season is named once: "Overlaps A, which wins the shared nights.", or "Overlaps A: this season wins the shared nights." when the season being edited wins.
 - **Daily close:** a date that isn't real, or is outside 2000 to 2100 (such as 1900-01-01 or 2026-02-30), shows today with "That date isn't valid, so this shows today." The older sentence is noted at 14.9 and in section 25.
+
+## 43. QA round 30 changes (D-112; 2026-10-21)
+
+### 43.1 Limits
+- **Every "too many tries" answer names the wait.** The limited answers from the server (sign-in, sign-up, password, email links, quotes, the owner portal, the guest pay pages and the card check) read "Too many tries. Please try again in N minutes.", "…in about an hour." or "…in about N hours.", from the wait the answer sends as `retry_after`. Tagalog guest and sign-in pages read it in Taglish: "Masyadong maraming subok. Subukan ulit pagkalipas ng N minuto." Extends 42.1 (D-112).
+
+### 43.2 Files
+- **A file is checked by its first bytes before anything is sent or saved.** Every upload control refuses a file whose first bytes are not those of its type (PDF, JPG, PNG or WEBP) before any request, with "This file isn't a real PDF, JPG, PNG or WEBP. Choose the file again." (Taglish for cleaners and on guest pages: "Hindi totoong PDF, JPG, PNG o WEBP ang file na ito. Piliin ulit ang file."). The server still checks the whole file. Extends 41.2 and 42.2 (D-110, D-111).
+- **Forms that save a record first say it in the same save as their other problems,** so nothing is saved: Housekeeping's Report damage, Found an item and Inspect cleaning; Add expense and Record payment (the receipt); Contact support; and the guest payment proof. The after-save toast stays for what the device cannot see (a cut-off image the server refuses, a lost connection).
+- **A file refused on a ticket reply** (empty, too big, not really its type, or refused by the server) is said on the Attach a file box, with focus on the box. The reply text stays and no reply is sent. Other failures keep their toast.
+- **Housekeeping Add photo** says the content sentence for a renamed file, not the type and size sentence. The empty-file sentence and every type and size sentence are unchanged (D-110).
+
+### 43.3 Guest pay, forms and wording
+- **The guest payment proof form checks everything in one press.** The amount and the screenshot are checked together, and the screenshot's message sits on its own box. Focus goes to the first wrong box in form order. A screenshot refused after the proof was saved focuses the screenshot box. Choosing a new file clears its message, and the form clears a field's message when that field changes (D-105).
+- **"Add selected to my bill" with nothing chosen** says "Choose at least one extra." and puts focus on the first extra's control.
+- **An empty internal note says "Write a note first."** A message keeps "Write a message first.".
+- **Daily close:** clearing the date box removes the warning ("That date isn't valid, so this shows today.") and the page does not navigate. A box left empty shows the page's day again, so the box and the close question name the same day. The address keeps the date it was opened with.
+- **The phone search box** is 48 px tall under 960 px and its text field fills it (DESIGN-BRIEF 37). The desktop box stays 40 px.

@@ -548,7 +548,7 @@ function composer(c, templates, status, rerender, assignees = []) {
       e.preventDefault();
       if (busy) return;
       err.textContent = '';
-      if (!body.value.trim()) { err.textContent = 'Write a message first.'; body.focus(); return; }
+      if (!body.value.trim()) { err.textContent = mode === 'note' ? 'Write a note first.' : 'Write a message first.'; body.focus(); return; }
       if (mode === 'message' && /@\[[^\]\n]+\]\([0-9a-f-]{36}\)|\{\{[^}\n]*\}\}/i.test(body.value)
         && !await confirmDialog({
           title: 'Send this to the guest?',

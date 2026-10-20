@@ -41,7 +41,7 @@ test('an empty file is refused before any request', async () => {
 
 test('a 70-byte PNG still sends one request', async () => {
   calls = 0;
-  await api.uploadFile('deposit', 'd1', { size: 70, type: 'image/png', name: 'a.png' });
+  await api.uploadFile('deposit', 'd1', new File([Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(62)])], 'a.png', { type: 'image/png' }));
   assert.equal(calls, 1);
 });
 

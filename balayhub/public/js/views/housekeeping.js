@@ -1,6 +1,6 @@
 // Housekeeping: cleaning tasks for departing stays, checklist, photos, assignment.
 
-import { get, post, patch, api, uploadFile, qs, ApiError } from '../api.js';
+import { get, post, patch, api, uploadFile, fileContentError, qs, ApiError } from '../api.js';
 import {
   h, icon, manilaDay, fmtDate, fmtDateTime, badge, field, formModal, confirmDialog, emptyState, errorState, toast, todayManila, filesList, openModal, peso,
 } from '../ui.js';
@@ -35,6 +35,7 @@ extendTranslations({
   'Add photo': 'Magdagdag ng litrato', 'Photo uploaded.': 'Na-upload na ang litrato.',
   'Choose a photo': 'Pumili ng litrato', 'No photos yet.': 'Wala pang litrato.', 'Upload a JPG, PNG or WEBP photo up to 10 MB.': 'Mag-upload ng JPG, PNG o WEBP na litrato, hanggang 10 MB.',
   'This file is empty. Choose the file again.': 'Walang laman ang file. Piliin ulit ang file.',
+  "This file isn't a real PDF, JPG, PNG or WEBP. Choose the file again.": 'Hindi totoong PDF, JPG, PNG o WEBP ang file na ito. Piliin ulit ang file.',
   'Report damage': 'I-report ang sira', 'Found an item': 'May nakitang gamit', 'Supplies used': 'Mga gamit na nagamit', 'Something broken?': 'May sira ba?',
   'Description': 'Paglalarawan', 'What happened?': 'Ano ang nangyari?', 'Send report': 'Ipadala ang report',
   'Damage reported. Thank you.': 'Na-report na ang sira. Salamat.',
@@ -234,6 +235,14 @@ export function photoProblem(file) {
   if (!file) return null;
   if (!file.size) return T('This file is empty. Choose the file again.');
   return ['image/jpeg', 'image/png', 'image/webp'].includes(file.type) && file.size <= 10 * 1024 * 1024 ? null : T('Upload a JPG, PNG or WEBP photo up to 10 MB.');
+}
+// The whole device check for the forms that save a record first: empty, type and size, then the first bytes,
+// so a renamed file is refused before the report, item or inspection is saved (D-112).
+export async function photoCheck(file) {
+  const p = photoProblem(file);
+  if (p) return p;
+  const c = await fileContentError(file);
+  return c ? T(c) : null;
 }
 
 // Unticked checklist items, counted from the checkbox states on screen.
@@ -510,7 +519,7 @@ function damageModal(task, onSaved) {
   const photo = photoInput();
   formModal({
     title: T('Report damage'), submitText: T('Send report'),
-    check: () => { const p = photoProblem(photo.files[0]); return p ? { photo: p } : null; },
+    check: async () => { const p = await photoCheck(photo.files[0]); return p ? { photo: p } : null; },
     fields: [
       field({ name: 'description', label: T('What happened?'), type: 'textarea', required: true, maxlength: 1000 }),
       canManage() && field({ name: 'estimated_cost', label: 'Estimated cost', type: 'money' }),
@@ -531,7 +540,7 @@ function lostFoundModal(task, onSaved) {
   const photo = photoInput();
   formModal({
     title: T('Found an item'), submitText: T('Save item'),
-    check: () => { const p = photoProblem(photo.files[0]); return p ? { photo: p } : null; },
+    check: async () => { const p = await photoCheck(photo.files[0]); return p ? { photo: p } : null; },
     fields: [
       field({ name: 'description', label: T('What did you find?'), required: true, maxlength: 300 }),
       field({ name: 'found_where', label: T('Where was it found?'), maxlength: 200 }),
@@ -635,7 +644,7 @@ function inspectModal(task, onSaved) {
   });
   formModal({
     title: 'Inspect cleaning', submitText: 'Save inspection',
-    check: () => { const p = photoProblem(photo.files[0]); return p ? { photo: p } : null; },
+    check: async () => { const p = await photoCheck(photo.files[0]); return p ? { photo: p } : null; },
     fields: [
       h('p', { class: 'hint' }, 'Untick any item that was not done well. A failed inspection reopens the task.'),
       h('ul', { class: 'hk-checklist' }, rows.map((r) => r.node)),
@@ -728,7 +737,7 @@ export async function housekeepingDetailView(el, { params, rerender }) {
       if (bad) { toast(bad, 'error'); upload.value = ''; return; }
       uploading = true;
       upload.setAttribute('aria-disabled', 'true');
-      try { await uploadFile('cleaning', t.task_id, upload.files[0]); upload.value = ''; toast(T('Photo uploaded.')); rerender(); } catch (err) { toast(err.code === 'EMPTY_FILE' ? T('This file is empty. Choose the file again.') : err.code === 'UNSUPPORTED_FILE' || err.status === 413 ? T('Upload a JPG, PNG or WEBP photo up to 10 MB.') : err.message, 'error'); upload.value = ''; } finally { uploading = false; upload.removeAttribute('aria-disabled'); }
+      try { await uploadFile('cleaning', t.task_id, upload.files[0]); upload.value = ''; toast(T('Photo uploaded.')); rerender(); } catch (err) { toast(err.code === 'EMPTY_FILE' ? T('This file is empty. Choose the file again.') : err.code === 'BAD_FILE_CONTENT' || err.message === "The file content doesn't match its type." ? T("This file isn't a real PDF, JPG, PNG or WEBP. Choose the file again.") : err.code === 'UNSUPPORTED_FILE' || err.status === 413 ? T('Upload a JPG, PNG or WEBP photo up to 10 MB.') : err.message, 'error'); upload.value = ''; } finally { uploading = false; upload.removeAttribute('aria-disabled'); }
     },
   });
   const actionBtn = (text, fn) => h('button', { class: 'btn btn--secondary hk-action', type: 'button', onclick: () => fn(t, rerender) }, text);

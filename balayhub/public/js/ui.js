@@ -833,7 +833,10 @@ export function makeForm({ fields, submitText = 'Save', onSubmit, cancel, draftK
     const badEmails = emailProblems(form, missing);
     if (Object.keys(badEmails).length) { Object.assign(missing, badEmails); requiredOnly = false; }
     // The view's own checks (check(data, form) returns null or { field: message }) run in the same pass, so every message shows at once.
-    const more = check?.(readForm(form), form);
+    let more = check?.(readForm(form), form);
+    // A view's check may read a file (the first-bytes check, D-112), so it can return a promise; it is waited for in the same pass.
+    // A check that fails to read counts as no problem: the server still checks.
+    if (typeof more?.then === 'function') { try { more = await more; } catch { more = null; } }
     if (more && Object.keys(more).length) { mergeChecks(missing, more); requiredOnly = false; }
     // Then the server's field-type rules, for fields still without a message, so a second problem shows on the first Save.
     const typed = typeProblems(form, missing, labelOf);

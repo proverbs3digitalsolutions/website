@@ -39,9 +39,9 @@ test('receiptField is a proper field wrapper with an error line', () => {
 
 test('every form with a receipt box adds receiptProblem to its check', () => {
   const pay = src.slice(src.indexOf('export async function recordPaymentModal'), src.indexOf('// ---------------------------------------------------------------- add expense'));
-  assert.match(pay, /check: \(d, form\)[\s\S]*receiptProblem\(form\)[\s\S]*out\.__receipt/, 'Record payment');
+  assert.match(pay, /check: async \(d, form\)[\s\S]*await receiptCheck\(form\)[\s\S]*out\.__receipt/, 'Record payment');
   const exp = src.slice(src.indexOf('export async function addExpenseModal'));
-  assert.match(exp.slice(0, exp.indexOf('onSubmit')), /check: \(d, form\)[\s\S]*receiptProblem\(form\)/, 'Add expense');
+  assert.match(exp.slice(0, exp.indexOf('onSubmit')), /check: async \(d, form\)[\s\S]*await receiptCheck\(form\)/, 'Add expense');
 });
 
 test('Record payment Method has the required mark but not the required attribute', () => {

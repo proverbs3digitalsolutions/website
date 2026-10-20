@@ -281,7 +281,7 @@ test('mention notes are capped at 60 an hour per person; notes without a mention
   const limited = await mgrA2.post(`/api/inbox/${convA}/messages`, withMention);
   assert.equal(limited.status, 429);
   assert.equal(limited.data.code, 'RATE_LIMITED');
-  assert.equal(limited.data.error, 'Too many attempts. Please wait a few minutes and try again.');
+  assert.match(limited.data.error, /^Too many tries\. Please try again in (about an hour|5\d minutes)\.$/);
   assert.equal((await mgrA2.post(`/api/inbox/${convA}/messages`, { body: 'No mention here', note: true })).status, 201);
   assert.equal((await owner.post(`/api/inbox/${convA}/messages`, { body: `Hi ${mention(mgrAU)}`, note: true })).status, 201);
 });

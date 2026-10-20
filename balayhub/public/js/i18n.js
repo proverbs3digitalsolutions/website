@@ -222,6 +222,10 @@ const SERVER_TL = [
   [/^This quote is not available\.$/, () => 'Hindi available ang quote na ito.'],
   [/^This booking page is not available\.$/, () => 'Hindi available ang booking page na ito.'],
   [/^This listing is not available\.$/, () => 'Hindi available ang listing na ito.'],
+  // The 429 wait (src/lib/auth.js and cardcheck.js rateText, D-112): minutes, "an hour", "N hours".
+  [/^Too many tries\. Please try again in (\d+) minutes?\.$/, (m) => `Masyadong maraming subok. Subukan ulit pagkalipas ng ${m[1]} minuto.`],
+  [/^Too many tries\. Please try again in about an hour\.$/, () => 'Masyadong maraming subok. Subukan ulit pagkalipas ng mga isang oras.'],
+  [/^Too many tries\. Please try again in about (\d+) hours\.$/, (m) => `Masyadong maraming subok. Subukan ulit pagkalipas ng mga ${m[1]} oras.`],
 ];
 export function tServer(msg) {
   if (current !== 'tl' || !msg) return msg;

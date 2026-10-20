@@ -18,7 +18,7 @@ test.before(async () => {
   const w = (n, s) => fs.writeFileSync(path.join(dir, n), s);
   fs.mkdirSync(path.join(dir, 'views'));
   w('package.json', '{"type":"module"}');
-  w('api.js', 'export const get = async () => ({}), post = async () => ({}), qs = () => "", uploadFile = async () => ({}); export class ApiError extends Error {}');
+  w('api.js', 'export const get = async () => ({}), post = async () => ({}), qs = () => "", uploadFile = async () => ({}), fileContentError = async () => null; export class ApiError extends Error {}');
   w('ui.js', `export const ${['h', 'icon', 'fmtDateTime', 'badge', 'field', 'makeForm', 'emptyState', 'searchBox', 'pageHead', 'toast', 'confirmDialog', 'filesList', 'label'].map((n) => `${n} = () => null`).join(', ')};`);
   w('app.js', 'export const state = {}, navigate = () => {};');
   w('themeswitch.js', 'export const currentTheme = () => "light";');
@@ -38,6 +38,6 @@ test('an empty screenshot gets the empty-file sentence; real ones and wrong type
 });
 
 test('the form check uses screenshotError and runs before the ticket is posted', () => {
-  assert.match(SRC, /check: \(\) => \(screenshotError\(/);
-  assert.ok(SRC.indexOf('check: () =>') < SRC.indexOf("post('/support/tickets'"));
+  assert.match(SRC, /check: async \(\) => \{ const f = screenshot\.files\[0\]; const p = screenshotError\(f\)/);
+  assert.ok(SRC.indexOf('check: async () =>') < SRC.indexOf("post('/support/tickets'"));
 });

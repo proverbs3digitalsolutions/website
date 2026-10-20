@@ -18,7 +18,7 @@ test.before(async () => {
   const w = (n, s) => fs.writeFileSync(path.join(dir, n), s);
   fs.mkdirSync(path.join(dir, 'views'));
   w('package.json', '{"type":"module"}');
-  w('api.js', 'export const get = async () => ({}), post = async () => ({}), qs = () => "", uploadFile = async () => ({}); export class ApiError extends Error {}');
+  w('api.js', 'export const get = async () => ({}), post = async () => ({}), qs = () => "", uploadFile = async () => ({}), fileContentError = async () => null; export class ApiError extends Error {}');
   w('ui.js', `export const ${['h', 'icon', 'fmtDateTime', 'badge', 'field', 'makeForm', 'emptyState', 'searchBox', 'pageHead', 'toast', 'confirmDialog', 'filesList', 'label'].map((n) => `${n} = () => null`).join(', ')};`);
   w('app.js', 'export const state = {}, navigate = () => {};');
   w('themeswitch.js', 'export const currentTheme = () => "light";');
@@ -40,8 +40,8 @@ test('screenshotError refuses a wrong type and an oversize file, accepts the all
 });
 
 test('the New ticket form checks the screenshot before post(), on a field named screenshot', () => {
-  assert.match(SRC, /check: \(\) => \(screenshotError\(screenshot\.files\[0\]\) \? \{ screenshot: screenshotError\(screenshot\.files\[0\]\) \} : null\)/);
+  assert.match(SRC, /check: async \(\) => \{ const f = screenshot\.files\[0\]; const p = screenshotError\(f\) \|\| await fileContentError\(f\); return p \? \{ screenshot: p \} : null; \}/);
   assert.match(SRC, /dataset: \{ field: 'screenshot' \}/);
   assert.match(SRC, /name: 'screenshot'/);
-  assert.ok(SRC.indexOf('check: () =>') < SRC.indexOf("post('/support/tickets'"));
+  assert.ok(SRC.indexOf('check: async () =>') < SRC.indexOf("post('/support/tickets'"));
 });

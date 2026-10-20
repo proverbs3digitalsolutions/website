@@ -130,6 +130,9 @@
   }
   .tb-pop--wide { width: auto; }
   .tb-pop__foot a { display: inline-flex; align-items: center; min-height: 44px; }
+  /* The phone search box is a 48px input like every other phone input; its text field fills it (D-112, DESIGN-BRIEF 23). */
+  .tb-search { min-height: 48px; }
+  .tb-input { align-self: stretch; }
 }
 @media (max-width: 559px) {
   .topbar .brand span { display: none; }

@@ -75,10 +75,27 @@ export function qs(params) {
   return s ? `?${s}` : '';
 }
 
+// The first bytes the server checks for each upload type (src/lib/storage.js). Read on the device so a renamed
+// file is refused before anything is sent or saved (D-112). The server still checks the whole file.
+const SIGNATURES = {
+  'image/png': (b) => b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47,
+  'image/jpeg': (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  'image/webp': (b) => String.fromCharCode(...b.slice(0, 4)) === 'RIFF' && String.fromCharCode(...b.slice(8, 12)) === 'WEBP',
+  'application/pdf': (b) => String.fromCharCode(...b.slice(0, 4)) === '%PDF',
+};
+// null for no file, an empty file (the empty-file sentence says that) or another type (each control's type sentence says that).
+export async function fileContentError(file) {
+  if (!file || !file.size || !SIGNATURES[file.type]) return null;
+  const b = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  return SIGNATURES[file.type](b) ? null : "This file isn't a real PDF, JPG, PNG or WEBP. Choose the file again.";
+}
+
 export async function uploadFile(recordType, recordId, file) {
-  // An empty file is refused before any request, on every control that uploads (D-110); the server says the same (files.js).
+  // An empty file, a file over 10 MB and a file whose first bytes are not its type are refused before any request, on every control that uploads (D-110, D-112); the server says the same (files.js).
   if (!file || !file.size) throw new ApiError('This file is empty. Choose the file again.', { status: 400, code: 'EMPTY_FILE' });
   if (file.size > 10 * 1024 * 1024) throw new ApiError('Files must be 10 MB or smaller.', { status: 413 });
+  const bad = await fileContentError(file);
+  if (bad) throw new ApiError(bad, { status: 415, code: 'BAD_FILE_CONTENT' });
   return api('POST', `/files${qs({ record_type: recordType, record_id: recordId })}`, undefined, {
     rawBody: file,
     headers: { 'Content-Type': file.type || 'application/octet-stream', 'X-File-Name': encodeURIComponent(file.name) },

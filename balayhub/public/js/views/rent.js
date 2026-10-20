@@ -1,6 +1,6 @@
 // Screen 6 — Rent & Expenses.
 
-import { get, post, patch, qs, uploadFile } from '../api.js';
+import { get, post, patch, qs, uploadFile, fileContentError } from '../api.js';
 import {
   h, icon, peso, fmtDate, fmtDateTime, fmtMonth, badge, label, options, field, formModal, confirmDialog, emptyState,
   pageHead, toast, todayManila, filesList, openModal, unitLabel, parseAmount } from '../ui.js';
@@ -30,6 +30,12 @@ function receiptField() {
     h('input', { id: 'receipt-input', type: 'file', class: 'input', name: '__receipt', accept: RECEIPT_TYPES.join(','), 'aria-describedby': 'receipt-input-hint receipt-input-err' }),
     h('div', { class: 'hint', id: 'receipt-input-hint' }, 'Photo or PDF, up to 10 MB.'),
     h('div', { class: 'error', id: 'receipt-input-err', role: 'alert' }));
+}
+
+// The receipt's whole device check: empty, type and size, then the first bytes, so a renamed file is refused
+// before the payment or expense is saved (D-112).
+export async function receiptCheck(form) {
+  return receiptProblem(form) || await fileContentError(form.querySelector('input[name="__receipt"]')?.files?.[0]);
 }
 
 // Returns true when there is no file or the upload worked, else the server's message; the caller shows the one toast.
@@ -109,10 +115,10 @@ export async function recordPaymentModal({ leaseId, amount, period, onSaved } = 
       h('p', { class: 'hint muted small' }, 'Recording a payment does not verify it with the bank or e-wallet. Check the transfer before saving.'),
     ],
     // No default method: a payment saved without a choice must never become cash by accident (D-92).
-    check: (d, form) => {
+    check: async (d, form) => {
       const out = {};
       if (!d.payment_method) out.payment_method = 'Choose how the money was received.';
-      const r = receiptProblem(form); if (r) out.__receipt = r;
+      const r = await receiptCheck(form); if (r) out.__receipt = r;
       return out;
     },
     onSubmit: async (data, { idempotencyKey, form }) => {
@@ -181,7 +187,7 @@ export async function addExpenseModal({ onSaved, expense } = {}) {
       !expense && receiptField(),
       expense && h('p', { class: 'hint muted small' }, 'Corrections are saved in the audit log with the previous values.'),
     ],
-    check: (d, form) => { const r = !expense && receiptProblem(form); return r ? { __receipt: r } : null; },
+    check: async (d, form) => { const r = !expense && await receiptCheck(form); return r ? { __receipt: r } : null; },
     onSubmit: async (data, { idempotencyKey, form }) => {
       delete data.__receipt;
       // "Change it" keeps the form open with focus on the amount.

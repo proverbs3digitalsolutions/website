@@ -38,6 +38,7 @@ export async function post(url, body) {
 export const patch = async () => ({});
 export const qs = () => '';
 export async function uploadFile() {}
+export async function fileContentError() { return null; }
 `;
 
 const UI_STUB = String.raw`
