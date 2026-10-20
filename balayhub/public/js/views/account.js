@@ -188,8 +188,11 @@ export async function accountView(el, { rerender }) {
         h('div', { class: 'card' },
           h('div', { class: 'card__head' }, h('h2', null, 'Preferences')),
           h('div', { class: 'acct-pref' }, h('span', null, 'Appearance'), themeSwitch()),
+          // A monthly-rental workspace has no alert types yet (DECISIONS 596, APP-FLOW 833): no Turn on link, "On · manage" only if a device is already on.
           h('div', { class: 'acct-pref' }, h('span', null, 'Notifications on this device'),
-            h('a', { class: 'link-tap', href: '#/settings' }, u.notifications_on ? 'On · manage' : 'Turn on'))),
+            w?.business_type === 'long_term' && !u.notifications_on
+              ? h('span', { class: 'muted' }, 'Not available yet for monthly rentals')
+              : h('a', { class: 'link-tap', href: '#/settings' }, u.notifications_on ? 'On · manage' : 'Turn on'))),
 
         d.support && h('div', { class: 'card' },
           h('div', { class: 'card__head' }, h('h2', null, 'Help & support')),

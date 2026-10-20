@@ -68,6 +68,6 @@ test('(3) makeForm marks Save aria-disabled while saving, never .disabled, and a
 
 test('(4) openModal falls back to the first body button or link, then the × button; confirmDialog still starts on Cancel', () => {
   const m = uiSrc.match(/export function openModal[\s\S]*?\n}\n/)[0];
-  assert.match(m, /input:not\(\[type=hidden\]\), select, textarea'\) \|\| dlg\.querySelector\('\.modal__body button:not\(:disabled\), \.modal__body a\[href\]'\)\)\?\.focus\(\)/);
+  assert.match(m, /input:not\(\[type=hidden\]\):not\(:disabled\), select:not\(:disabled\), textarea:not\(:disabled\)'\) \|\| dlg\.querySelector\('\.modal__body button:not\(:disabled\), \.modal__body a\[href\]'\)\)\?\.focus\(\)/);
   assert.match(uiSrc, /if \(!reasonInput\) cancelBtn\.focus\(\);/);
 });

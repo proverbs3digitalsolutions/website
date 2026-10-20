@@ -1,6 +1,6 @@
 # BalayHub design brief
 
-Last updated: 2026-10-21 (QA round 23: section 31; D-105). Before that: 2026-10-21 (QA round 22: section 30; D-104). Before that: 2026-10-21 (QA round 21: section 29; D-103). Before that: 2026-10-20 (QA round 20: section 28; D-102). Before that: 2026-10-20 (QA round 19: landing links hidden below 768px; D-101). Before that: 2026-10-19 (QA round 18: section 27, phone filter bar, theme switch label; D-100). Before that: 2026-10-15 (QA round 17: section 26, the wordmark logotype exemption, the focus key table; D-98 and D-99)
+Last updated: 2026-10-21 (QA round 24: section 32; D-106). Before that: 2026-10-21 (QA round 23: section 31; D-105). Before that: 2026-10-21 (QA round 22: section 30; D-104). Before that: 2026-10-21 (QA round 21: section 29; D-103). Before that: 2026-10-20 (QA round 20: section 28; D-102). Before that: 2026-10-20 (QA round 19: landing links hidden below 768px; D-101). Before that: 2026-10-19 (QA round 18: section 27, phone filter bar, theme switch label; D-100). Before that: 2026-10-15 (QA round 17: section 26, the wordmark logotype exemption, the focus key table; D-98 and D-99)
 
 **Summary.** BalayHub is a phone-first web app (also an installable PWA) for Filipino rental and staycation hosts. It is built with plain CSS, one stylesheet (`public/css/app.css`), and small JavaScript helpers (`public/js/ui.js`). There is no framework and no CSS preprocessor. The look is calm and practical: Forest Green on soft off-white, Sand and Sun as warm accents, Poppins for headings, Inter for text, rounded cards, and large touch targets. Colours come from CSS custom properties on `:root`. A dark theme redefines the same tokens, so any component that uses tokens gets dark mode automatically. This brief records what is **actually built**. Every value below comes from the code. Where the code doesn't define a token (spacing, type sizes), the brief lists the values in use and says so.
 
@@ -720,3 +720,13 @@ Decision D-105. CSS in `public/css/app.css`.
 - **Phone More sheet spacing.** In the sheet (`.morenav__sheet`), every row is a separate tap target at 390 x 844 at every scroll position: no row overlaps another, so **Log out never sits on top of a link**. The Log out button has the class `morenav__logout`: a divider above it (`border-top` in the sheet's border colour) and `margin-top: 16px` (at least a 16 px gap). A mis-tap near the last link cannot sign anyone out. Log out may be below the fold when the sheet scrolls; it just cannot overlap a row. Close stays pinned. No new token.
 - **Performance headline cards stack on phones.** The Performance headline row carries `stats--stack-phone`; under 560px (`@media (max-width: 559px)`) its cards are one per row (`grid-template-columns: 1fr`), so the Revenue detail wraps to three lines or fewer. This applies to that row only: Dashboard and other `.stats` rows keep two per row on phones, and at 1280 the row is four across.
 - **Marked fields in Bulk changes** use the existing invalid-field pattern (`.field--invalid`, the `.error` line under the box with `role="alert"`, `aria-invalid` on the box). A message and mark clear when that box is edited. No new style.
+
+## 32. Patterns added in QA round 24 (2026-10-21)
+
+Decision D-106. CSS in `public/css/app.css`.
+
+- **Compact tabs wrap, never clip.** In the compact tab grid (`.tabs--compact`) a label that is longer than its cell wraps onto a second line inside the cell, down to 320 px. Before, the cells were `white-space: nowrap` and "Today & overdue (6)" lost its ")".
+- **Action cells centre on the row's first line.** A table cell that holds only an action button carries `td.cell-action`: the button is centred on the row's first line of text, not pushed about 8 px low by the cell's top alignment and 10 px padding.
+- **Top bar while the card is due.** Only Help and the account menu are drawn. No new style; the full bar returns when the card passes.
+- **Revenue card footnote.** On Performance, the Revenue card's long note sits in a footnote so the card's detail stays at three lines at 390 px.
+- **Empty reason box.** A confirm dialog's reason box uses the existing invalid-field pattern (`aria-invalid` on the box together with the `.error` line).

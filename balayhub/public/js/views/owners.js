@@ -29,6 +29,15 @@ const lastDayOf = (month) => { const [y, m] = month.split('-').map(Number); retu
 // Drafts that can be published now. The list is for one month, so its drafts are all ready or none are.
 const readyCount = (rows, month, today) => (monthHasEnded(month, today) ? rows.filter((r) => r.status !== 'published').length : 0);
 
+// R24 BKG-3 BEGIN
+// Void button name. Rows of the same amount and date among the active ones get "(n of m)"; a row with no twin keeps the plain name.
+export function twinName(kind, rows, r, dateKey, only = () => true) {
+  const same = rows.filter((x) => !x.voided && only(x) && Number(x.amount) === Number(r.amount) && x[dateKey] === r[dateKey]);
+  const base = `Void ${kind} of ${peso(r.amount)} on ${fmtDate(r[dateKey])}`;
+  return same.length > 1 ? `${base} (${same.indexOf(r) + 1} of ${same.length})` : base;
+}
+// R24 BKG-3 END
+
 // The Publish dialog's text. The owner sees a statement in the portal only when the portal is on; otherwise it goes by email.
 export function publishText(monthLabel, portalOn) {
   const later = "Later changes won't show until you unpublish and publish again.";
@@ -412,7 +421,7 @@ export async function ownerStatementView(el, { params, query = {}, rerender }) {
               h('span', { class: `row__title${p.voided ? ' strike' : ''}` }, `${peso(p.amount)} · ${METHOD_LABEL[p.method] || p.method}`),
               h('span', { class: 'row__sub' }, `${fmtDate(p.paid_on)}${p.reference_number ? ` · Ref ${p.reference_number}` : ''}${p.note ? ` · ${p.note}` : ''}`),
               p.voided && h('span', { class: 'row__sub' }, `Voided: ${p.void_reason}`)),
-            h('div', { class: 'row__end' }, p.voided ? badge('voided', 'Voided') : h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Void payout of ${peso(p.amount)} on ${fmtDate(p.paid_on)}`, onclick: () => voidPayout(p) }, 'Void'))))))
+            h('div', { class: 'row__end' }, p.voided ? badge('voided', 'Voided') : h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': twinName('payout', payouts, p, 'paid_on'), onclick: () => voidPayout(p) }, 'Void'))))))
           : h('p', { class: 'muted small' }, 'No payouts recorded for this month yet.')]
       : h('p', { class: 'muted small' }, 'Payouts could not be loaded. Refresh the page to try again.'));
 
@@ -446,7 +455,7 @@ export async function ownerStatementView(el, { params, query = {}, rerender }) {
           h('span', { class: `row__title${e.voided ? ' strike' : ''}` }, `${e.kind === 'deposit' ? 'Top-up' : 'Withdrawal'} · ${peso(e.amount)}`),
           h('span', { class: 'row__sub' }, `${fmtDate(e.entry_date)}${e.note ? ` · ${e.note}` : ''}`),
           e.voided && h('span', { class: 'row__sub' }, `Voided${e.void_reason ? `: ${e.void_reason}` : ''}`)),
-        h('div', { class: 'row__end' }, e.voided ? badge('voided', 'Voided') : (e.kind === 'withdrawal' && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Void withdrawal of ${peso(e.amount)} on ${fmtDate(e.entry_date)}`, onclick: () => voidEntry(e) }, 'Void')))))))
+        h('div', { class: 'row__end' }, e.voided ? badge('voided', 'Voided') : (e.kind === 'withdrawal' && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': twinName('withdrawal', entries, e, 'entry_date', (x) => x.kind === 'withdrawal'), onclick: () => voidEntry(e) }, 'Void')))))))
       : h('p', { class: 'muted small' }, 'No reserve activity yet.'));
 
   el.replaceChildren(

@@ -249,9 +249,11 @@ export async function cleanerPayView(el, { query = {} } = {}) {
           r && outside && h('div', null, h('p', null, 'Name: ', h('strong', null, r.assignee_name)), h('p', { class: 'hint' }, 'To rename, remove this rate and add it again.')),
           h('div', { class: 'form-row form-row--2' },
             field({ name: 'rate_type', label: 'Paid', type: 'select', required: true, value: r?.rate_type || 'per_clean', placeholderOption: false, options: [['per_clean', 'Per clean'], ['per_hour', 'Per hour']] }),
-            field({ name: 'amount', label: 'Amount', type: 'money', required: true, value: r?.amount })),
+            field({ name: 'amount', label: 'Amount', type: 'money', required: true, positive: true, value: r?.amount })),
         ],
         submitText: 'Save rate',
+        // Runs in the same pass as the required boxes, so the ceiling shows on the first Save with the other messages (OPS-1).
+        check: (d) => { const over = rateCeilingProblem(d.rate_type, d.amount); return over ? { amount: over } : null; },
         cancel: () => modal.close(),
         onSubmit: async (d, { form: dialogForm }) => {
           // The ceiling is checked first and refused at the amount field with the server's sentence, so the question

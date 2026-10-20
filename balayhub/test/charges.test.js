@@ -174,7 +174,10 @@ test('cancelled reservations refuse new and voided charges; their charges stay o
 });
 
 test('receipts list the charge lines and leave out voided ones', async () => {
-  const [pay] = await sql('SELECT payment_id FROM booking_payments WHERE booking_id = $1 ORDER BY created_at LIMIT 1', [res.booking_id]);
+  // A receipt lists the charges that stood when its payment was recorded. The only payment here came before the charges,
+  // so record it as the latest one: the guest paid after the extras were added. (Balances are sums, so test 7 is unchanged.)
+  await sql('UPDATE booking_payments SET created_at = now() WHERE booking_id = $1', [res.booking_id]);
+  const [pay] = await sql('SELECT payment_id FROM booking_payments WHERE booking_id = $1 ORDER BY created_at DESC LIMIT 1', [res.booking_id]);
   const r = await owner.get(`/api/booking-payments/${pay.payment_id}/receipt`);
   assert.equal(r.status, 200);
   assert.deepEqual(r.data.receipt.charges.map((c) => c.description), ['Late check-out', 'Extra bed']);

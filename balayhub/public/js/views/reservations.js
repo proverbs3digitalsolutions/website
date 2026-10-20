@@ -18,6 +18,15 @@ import { refundsCard, refundAmountProblem } from './refunds.js';
 import { proofsCard } from './proofs.js';
 
 const ordinal = (n) => { const s = ['th', 'st', 'nd', 'rd']; const v = n % 100; return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`; };
+// Name of a payment row, shared by its Receipt, Email and Void buttons. The receipt number tells rows apart; with none, twins (same amount and date, not voided) get "(n of m)".
+export function paymentName(payments, p) {
+  const base = `of ${peso(p.amount)} on ${fmtDate(p.payment_date)}`;
+  if (p.receipt_number) return `payment ${p.receipt_number} ${base}`;
+  const twins = payments.filter((x) => !x.voided_at && !x.receipt_number && x.amount === p.amount && x.payment_date === p.payment_date);
+  const at = twins.indexOf(p);
+  return twins.length > 1 && at >= 0 ? `payment ${base} (${at + 1} of ${twins.length})` : `payment ${base}`;
+}
+
 // "VIP", "Returning guest · 3rd stay", "Do not rebook"
 export function guestBadges(r) {
   return [
@@ -822,9 +831,9 @@ export async function reservationDetailView(el, { params, rerender }) {
               h('span', { class: 'row__sub' }, `${fmtDate(p.payment_date)}${p.reference_number ? ` · Ref ${p.reference_number}` : ''} · by ${p.recorded_by_name}${p.receipt_number ? ` · ${p.receipt_number}` : ''}${p.receipt_sent_at ? ' · receipt emailed' : ''}`),
               p.voided_at && h('span', { class: 'row__sub' }, `Voided: ${p.void_reason}`)),
             h('div', { class: 'row__end' }, p.voided_at ? badge('voided', 'Voided') : h('div', { class: 'chips' },
-              h('a', { class: 'btn btn--ghost btn--sm', href: `#/receipts/${p.payment_id}`, 'aria-label': `Receipt for ${peso(p.amount)} on ${fmtDate(p.payment_date)}` }, 'Receipt'),
-              canManage && r.guest_email && h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `${p.receipt_sent_at ? 'Email again' : 'Email'} for ${peso(p.amount)} on ${fmtDate(p.payment_date)}`, onclick: () => emailReceipt(p) }, p.receipt_sent_at ? 'Email again' : 'Email'),
-              canManage && h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Void payment of ${peso(p.amount)} on ${fmtDate(p.payment_date)}`, onclick: () => voidPayment(p) }, 'Void')))))))
+              h('a', { class: 'btn btn--ghost btn--sm', href: `#/receipts/${p.payment_id}`, 'aria-label': `Receipt for ${paymentName(payments, p)}` }, 'Receipt'),
+              canManage && r.guest_email && h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `${p.receipt_sent_at ? 'Email again' : 'Email'} for ${paymentName(payments, p)}`, onclick: () => emailReceipt(p) }, p.receipt_sent_at ? 'Email again' : 'Email'),
+              canManage && h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Void ${paymentName(payments, p)}`, onclick: () => voidPayment(p) }, 'Void')))))))
             : h('p', { class: 'muted small' }, 'No payments recorded yet.')),
         charges, proofs, refunds && h('div', { id: 'refunds-card' }, refunds))));
 }
@@ -848,6 +857,10 @@ export async function receiptView(el, { params }) {
         h('dt', null, 'Date received'), h('dd', null, fmtDate(r.payment_date)),
         h('dt', null, 'Payment method'), h('dd', null, `${METHOD_LABEL[r.payment_method] || r.payment_method}${r.reference_number ? ` · Ref. ${r.reference_number}` : ''}`),
         h('dt', null, 'For'), h('dd', null, `${r.unit_name}, ${fmtDate(r.check_in)} – ${fmtDate(r.check_out)} (booking ${r.confirmation_code})`),
+        (r.charges || []).length > 0 && [
+          h('dt', null, 'Itemised charges'), h('dd', null, ''),
+          ...r.charges.map((c) => [h('dt', null, `${c.description}${c.quantity > 1 ? ` (${c.quantity} × ${peso(c.unit_price)})` : ''}`), h('dd', null, peso(c.amount))]),
+          h('dt', null, 'Extras total'), h('dd', null, peso(r.extras_total))],
         h('dt', null, 'Booking total'), h('dd', null, peso(r.total_amount)),
         Number(r.adjustments) > 0 && [h('dt', null, 'Adjustments (settled through the booking channel)'), h('dd', null, `-${peso(r.adjustments)}`)],
         receiptBalanceLine(r.balance_after).map((t, i) => h(i ? 'dd' : 'dt', null, t)),

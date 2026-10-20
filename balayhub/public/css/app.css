@@ -173,6 +173,7 @@ a { color: var(--accent); }
 button, input, select, textarea { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; box-shadow: none; }
 [hidden] { display: none !important; }
+.tb__search[hidden] { display: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 .boot { display: grid; place-items: center; min-height: 100vh; color: var(--muted); }
@@ -422,6 +423,8 @@ a.row:hover .row__title { color: var(--accent); }
 @media print { .table-wrap, .cal-scroll { -webkit-mask-image: none !important; mask-image: none !important; } }
 table.table { width: 100%; border-collapse: collapse; font-size: .92rem; }
 .table th, .table td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+/* R24: a top-aligned cell's button centres on the row's first line, so the cell drops its top padding. Table layout only: stacked phone cards keep their own padding. */
+@media (min-width: 560px) { .table td.cell-action { padding-top: 0; white-space: nowrap; } }
 .table th { font-size: .76rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 750; white-space: nowrap; }
 .table td.num, .table th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* Phone: low-priority columns drop out so the rest of the table fits. */
@@ -560,6 +563,8 @@ img.file-thumb { display: block; flex: none; width: 96px; max-width: 96px; aspec
   .tabs--compact:has(> :last-child:nth-child(3)) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .tabs--compact > :last-child:nth-child(odd):not(:nth-child(3)) { grid-column: 1 / -1; }
   .tabs--compact button { min-height: 44px; }
+  /* R24: at 320px a label such as "Today & overdue (6)" wraps inside its cell instead of clipping. */
+  .tabs--compact button, .tabs--compact a { white-space: normal; overflow-wrap: anywhere; }
 }
 /* Round 20: Housekeeping main tabs (4) form a 2x2 grid under 380px, so Scores is not alone on a row. */
 @media (max-width: 379px) {

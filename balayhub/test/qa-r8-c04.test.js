@@ -113,8 +113,8 @@ test('the owners quick filter says what Any covers', () => {
 
 test('the statements list and the payout and reserve Void buttons name their row', () => {
   assert.match(src, /'aria-label': `\$\{r\.status === 'published' \? 'Open' : 'Review'\} statement, \$\{r\.full_name\}`/);
-  assert.match(src, /'aria-label': `Void payout of \$\{peso\(p\.amount\)\} on \$\{fmtDate\(p\.paid_on\)\}`/);
-  assert.match(src, /'aria-label': `Void withdrawal of \$\{peso\(e\.amount\)\} on \$\{fmtDate\(e\.entry_date\)\}`/);
+  assert.match(src, /'aria-label': twinName\('payout', payouts, p, 'paid_on'\)/);
+  assert.match(src, /'aria-label': twinName\('withdrawal', entries, e, 'entry_date', \(x\) => x\.kind === 'withdrawal'\)/);
 });
 
 test('the management fee box is required on a percentage model and not on a flat one', () => {

@@ -99,7 +99,7 @@ test('#48 channel and property filters sit under More filters; the view picker a
 });
 
 test('D-81 every repeated row button in both files names its row', () => {
-  assert.match(refSrc, /'aria-label': `Void refund of /);
-  assert.match(resSrc, /'aria-label': `Void payment of /);
+  assert.match(refSrc, /'aria-label': `Void \$\{refundName\(data\.refunds, r\)\}/);
+  assert.match(resSrc, /'aria-label': `Void \$\{paymentName\(payments, p\)\}/);
   assert.match(resSrc, /'aria-label': `Receipt for /);
 });

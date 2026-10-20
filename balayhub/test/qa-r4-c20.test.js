@@ -29,7 +29,7 @@ test('book: the guest re-quote waits a short pause after the last change, and ne
   assert.match(block, /clearTimeout\(guestTimer\)/);
   assert.match(block, /guestTimer = setTimeout\(/);
   assert.match(block, /\}, 300\)/, 'a 300 ms pause, like the other debounced inputs');
-  assert.doesNotMatch(book, /num_guests\?\.addEventListener\('input'/);
+  assert.match(book, /num_guests\?\.addEventListener\('input'[\s\S]*?guestTyping = setTimeout\(\(\) => \{ if \(checkIn && checkOut\) updateQuote\(\); \}, 500\);/, 'typing re-quotes after a 500 ms pause, not on each keystroke');
 });
 
 test('book: a refused quote shows its message in the summary and clears the Total and Continue', () => {

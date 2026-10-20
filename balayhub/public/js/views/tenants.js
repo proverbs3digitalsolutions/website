@@ -3,7 +3,7 @@
 import { get, post, patch, qs, uploadFile, ApiError } from '../api.js';
 import {
   h, icon, peso, fmtDate, badge, label, field, formModal, confirmDialog, emptyState, pageHead, toast,
-  todayManila, filesList, openModal, unitLabel } from '../ui.js';
+  todayManila, manilaDay, filesList, openModal, unitLabel } from '../ui.js';
 import { state, navigate } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed, apiFilters } from '../filters.js';
 import { recordPaymentModal } from './rent.js';
@@ -20,6 +20,8 @@ function tenantFields(t = {}) {
 }
 
 // A lease card's button, named for a screen reader with its unit and start date (D-81): two leases share the same button names.
+// Lease end before start: the server's own sentence, shown with every other problem on the first Save.
+const leaseOrderCheck = (end, start) => (end && start && end < start ? { end_date: 'Lease end must be on or after the start date.' } : null);
 const leaseLabel = (l, action) => `${action}, ${unitLabel(l.unit_name)}, from ${fmtDate(l.start_date)}`;
 
 export function newTenantModal({ onSaved } = {}) {
@@ -73,7 +75,7 @@ export async function assignTenantModal({ tenant, unit, onSaved } = {}) {
     name: 'unit_id', label: 'Unit', type: 'select', required: true, value: unit?.unit_id,
     options: units.map((u) => [u.unit_id, `${u.property_name} — ${unitLabel(u.unit_name)} (${peso(u.monthly_rent)})`]),
   });
-  const rentField = field({ name: 'monthly_rent', label: 'Monthly rent', type: 'money', required: true, value: unit?.monthly_rent || (units.length === 1 ? units[0].monthly_rent : '') });
+  const rentField = field({ name: 'monthly_rent', label: 'Monthly rent', type: 'money', required: true, positive: true, value: unit?.monthly_rent || (units.length === 1 ? units[0].monthly_rent : '') });
   const depositField = field({ name: 'deposit_amount', label: 'Security deposit', type: 'money', value: unit?.security_deposit_amount || (units.length === 1 ? units[0].security_deposit_amount : '') });
   unitSelect.querySelector('select').addEventListener('change', (e) => {
     const u = units.find((x) => x.unit_id === e.target.value);
@@ -99,6 +101,7 @@ export async function assignTenantModal({ tenant, unit, onSaved } = {}) {
       depositField,
       schedule,
     ],
+    check: (d) => leaseOrderCheck(d.end_date, d.start_date),
     onSubmit: async (data) => {
       const res = await post('/leases', data);
       toast('Lease saved. The unit is now occupied.');
@@ -247,12 +250,13 @@ export async function tenantDetailView(el, { params, query, rerender }) {
     fields: [
       h('p', { class: 'muted small' }, 'Rent changes apply to months that have not been billed yet.'),
       h('div', { class: 'form-row form-row--2' },
-        field({ name: 'monthly_rent', label: 'Monthly rent', type: 'money', required: true, value: lease.monthly_rent }),
+        field({ name: 'monthly_rent', label: 'Monthly rent', type: 'money', required: true, positive: true, value: lease.monthly_rent }),
         field({ name: 'due_day', label: 'Due day', type: 'number', min: 1, max: 31, required: true, value: lease.due_day })),
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'end_date', label: 'Lease end', type: 'date', value: lease.end_date }),
         field({ name: 'deposit_amount', label: 'Security deposit', type: 'money', value: lease.deposit_amount })),
     ],
+    check: (d) => leaseOrderCheck(d.end_date, manilaDay(lease.start_date)),
     onSubmit: async (data) => { await patch(`/leases/${lease.lease_id}`, data); toast('Lease updated.'); rerender(); },
   });
 

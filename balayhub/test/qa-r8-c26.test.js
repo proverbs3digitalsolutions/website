@@ -84,9 +84,9 @@ test('D-81 every repeated damage button in the reservation detail names its repo
 
 test('D-81 every repeated payment row button names its payment (receipt, email, void)', () => {
   const pay = resSrc.slice(resSrc.indexOf('payments.map((p) =>'), resSrc.indexOf('charges, proofs, refunds'));
-  assert.ok(pay.includes("'aria-label': `Receipt for ${peso(p.amount)} on ${fmtDate(p.payment_date)}`"));
-  assert.ok(pay.includes("'aria-label': `${p.receipt_sent_at ? 'Email again' : 'Email'} for ${peso(p.amount)} on ${fmtDate(p.payment_date)}`"));
-  assert.ok(pay.includes("'aria-label': `Void payment of ${peso(p.amount)} on ${fmtDate(p.payment_date)}`"));
+  assert.ok(pay.includes("'aria-label': `Receipt for ${paymentName(payments, p)}`"));
+  assert.ok(pay.includes("'aria-label': `${p.receipt_sent_at ? 'Email again' : 'Email'} for ${paymentName(payments, p)}`"));
+  assert.ok(pay.includes("'aria-label': `Void ${paymentName(payments, p)}`"));
 });
 
 test('D-81 every group room row has its own Remove name, renumbered when a row is removed', () => {

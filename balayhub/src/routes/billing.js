@@ -130,6 +130,7 @@ router.post('/billing/coupon/preview', owners, codeIpLimiter, codeLimiter, ah(as
   });
 }));
 
+const withBillingFailed = (err) => (err.status === 502 ? new HttpError(502, 'We couldn\'t reach the payment service. Nothing was charged. Please try again in a moment.', { code: 'BILLING_FAILED' }) : err);
 router.post('/billing/checkout', owners, checkoutLimiter, onlyWithCode(codeIpLimiter), onlyWithCode(codeLimiter), ah(async (req, res) => {
   // With a code, a comped workspace hears the coupon reason from coupons.resolve instead.
   if (req.user.plan === 'comped' && !req.body?.coupon_code) throw new HttpError(409, 'Your workspace is on a complimentary plan, so there is nothing to pay.', { code: 'COMPED' });
@@ -142,8 +143,7 @@ router.post('/billing/checkout', owners, checkoutLimiter, onlyWithCode(codeIpLim
   try {
     res.json(await billing.createCheckout(req.user, body.plan, Number(body.months), { couponCode: body.coupon_code, seenPaidUntil: seenPaidUntil(req) }));
   } catch (err) {
-    if (err.status === 502) throw new HttpError(502, err.message, { code: 'BILLING_FAILED' });
-    throw err;
+    throw withBillingFailed(err);
   }
 }));
 
@@ -159,7 +159,6 @@ const attachAllIpLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 60, key: (
 // The confirm-card page polls every 3 s for 60 s (20 calls), well under.
 const cardRefreshLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 60, key: (req) => `cardrefresh|${req.user.organization_id}` });
 const planRefreshLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 60, key: (req) => `planrefresh|${req.user.organization_id}` });
-const withBillingFailed = (err) => (err.status === 502 ? new HttpError(502, 'We couldn\'t reach the payment service. Nothing was charged. Please try again in a moment.', { code: 'BILLING_FAILED' }) : err);
 // Stage 2 library, loaded only when needed. Does nothing for a workspace with no live subscription.
 async function cancelSubscription(user, reason) {
   try { await require('../lib/subscriptions').cancelForOrg(user.organization_id, user, reason); } catch (err) { throw withBillingFailed(err); }

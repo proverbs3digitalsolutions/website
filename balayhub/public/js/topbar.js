@@ -12,6 +12,7 @@ const initials = (name) => String(name || '').split(/\s+/).filter(Boolean).slice
 // Which controls this person gets, in bar order (TOPBAR-PLAN 1.0).
 export function topbarButtons(user) {
   const p = user?.plan || {};
+  if (p.card_check_due) return ['help', 'profile']; // until the card is confirmed (APP-FLOW 5.10): no search, bookmarks or alerts
   const canAdd = user?.role !== 'cleaner' && !p.read_only && !p.is_demo;
   return ['search', 'bookmarks', canAdd && 'add', user?.business_type !== 'long_term' && 'bell', 'help', 'profile'].filter(Boolean);
 }
@@ -21,6 +22,7 @@ export function isSlashShortcut(e, doc) {
   if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return false;
   const t = e.target;
   if (t && (['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || t.isContentEditable || t.closest?.('[contenteditable]'))) return false;
+  if (doc.querySelector('.topbar [data-tb="search"]')?.hidden) return false; // search is not offered to this person right now
   return !doc.querySelector('dialog[open]') && Boolean(doc.querySelector('.topbar'));
 }
 
@@ -98,6 +100,7 @@ export function closeTopbarLayers({ returnFocus = false } = {}) {
 const lazy = (file, fn, ctx) => async (panel, pop) => (await import(file))[fn](panel, ctx, pop);
 
 let desktopSearch = null; // promise of the desktop search handle, for the "/" key
+let mountDesktopSearch = null; // mounts the desktop search into its slot (once); set by buildTopbar
 
 export function buildTopbar(ctx) {
   const u = ctx.user();
@@ -122,12 +125,15 @@ export function buildTopbar(ctx) {
   bellBtn.onclick = toggle(bellPop); me.onclick = toggle(profilePop);
   searchBtn.onclick = () => openSearchSheet(ctx, searchBtn);
 
-  const searchSlot = h('div', { class: 'tb__search tb-desktop-only' });
+  const searchSlot = h('div', { class: 'tb__search tb-desktop-only', hidden: !want.includes('search') });
   const mountDesktop = () => { desktopSearch = import('./topsearch.js').then((m) => m.mountSearch(searchSlot, ctx)); desktopSearch.catch(() => {
     desktopSearch = null;
     searchSlot.replaceChildren(h('button', { type: 'button', class: 'btn btn--ghost btn--sm', onclick: mountDesktop }, 'Search'));
   }); };
-  mountDesktop();
+  // A gated owner has no search: build the slot hidden and leave the module unloaded until search is wanted (updateTopbar).
+  let mounted = false;
+  mountDesktopSearch = () => { if (!mounted) { mounted = true; mountDesktop(); } };
+  if (want.includes('search')) mountDesktopSearch();
 
   const bar = h('header', { class: 'topbar' }, brand(ctx.home?.() || '#/home'), searchSlot, h('span', { class: 'topbar__assist' }),
     h('div', { class: 'tb__actions' }, searchBtn, bookmarksBtn, addBtn, bellBtn, helpBtn, me));
@@ -171,7 +177,7 @@ function buildProfile(panel, pop, ctx, me, bookmarksPop, helpPop) {
     // The switch updates its buttons in place, so choosing a theme keeps the menu open and focus on the chosen radio.
     h('div', { class: 'tb-theme' }, themeSwitch({ compact: true })),
     h('ul', { class: 'tb-list tb-menu', role: 'menu', 'aria-label': 'Help and sign out' },
-      item(row('bookmark', 'Bookmarks'), { phone: true, onclick: () => { me.focus(); done(); bookmarksPop.open(me); } }),
+      !u.plan?.card_check_due && item(row('bookmark', 'Bookmarks'), { phone: true, onclick: () => { me.focus(); done(); bookmarksPop.open(me); } }),
       item(row('help', 'Help & support'), { phone: true, onclick: () => { me.focus(); done(); helpPop.open(me); } }),
       h('li', { class: 'tb-sep', role: 'separator' }),
       item(row('logout', 'Log out'), { onclick: () => { done(); ctx.logout(); } })));
@@ -196,6 +202,12 @@ export function updateTopbar(el, ctx) {
   closeTopbarLayers({ returnFocus: false });
   const want = topbarButtons(ctx.user());
   for (const b of el.querySelectorAll('[data-tb]')) b.hidden = !want.includes(b.dataset.tb);
+  const slot = el.querySelector('.tb__search'); // the desktop search box has no data-tb: it follows the search control
+  if (slot) {
+    const wantSearch = want.includes('search');
+    slot.hidden = !wantSearch;
+    if (wantSearch && !slot.firstChild) mountDesktopSearch?.();
+  }
   syncAdd(el, ctx);
   refreshBellIn(el, ctx);
 }

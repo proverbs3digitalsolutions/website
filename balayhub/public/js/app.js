@@ -379,6 +379,13 @@ export async function refreshUser() {
     if (err.offline) throw err;
     state.user = null;
   }
+  // The person changed what the shell is built from (the card passed, a role or module changed): rebuild it around the page on screen now,
+  // without a route change or a redraw. Moving the page node out of the document drops focus, so it goes back to the same element.
+  if (shellStale({ user: state.user, sig: shellSig, key: state.user && shellKey(state.user), connected: Boolean(shell?.el.isConnected) })) {
+    const focused = shell.content.contains(document.activeElement) ? document.activeElement : null;
+    swapShell(parseHash().path, shell.content);
+    if (focused?.isConnected) focused.focus({ preventScroll: true });
+  }
 }
 
 const isReady = (u) => u && u.organization_id && (u.email_verified || !state.requireEmailVerification);
@@ -535,6 +542,25 @@ function refreshUnread(el) {
 const shellKey = (u) => JSON.stringify([u.user_id, u.role, u.full_name, u.organization_id, u.organization_name, u.business_type, u.is_platform_admin,
   navFor(u).map((n) => n[0]), bottomNav().map((n) => n[0])]);
 
+export const shellStale = ({ user, sig, key, connected }) => Boolean(user) && connected && sig !== null && key !== sig;
+
+// A new shell for the person now signed in, carrying over the sidebar's scroll, the More tools fold and the page node `carry` (when given).
+// A render still in flight swaps its page in through the module-level `shell.content`, so it lands in this shell.
+function swapShell(path, carry) {
+  const old = shell?.el.isConnected ? shell.el : null;
+  const scrolled = old?.querySelector('.sidebar nav')?.scrollTop || 0;
+  const folded = old?.querySelector('details.nav__group--more')?.open;
+  shell = buildShell(path);
+  shellSig = shellKey(state.user);
+  const app = document.getElementById('app');
+  app.replaceChildren(shell.el);
+  placeAssistantButton();
+  const nav = shell.el.querySelector('.sidebar nav');
+  if (nav) nav.scrollTop = scrolled;
+  if (folded) shell.el.querySelector('details.nav__group--more').open = true;
+  if (carry) { shell.content.replaceWith(carry); shell.content = carry; }
+}
+
 // A route change on a kept shell: only the current-page marks, the plan banner and the unread badges change. No sidebar element is replaced.
 function updateShell(sh, path) {
   const mark = (a, on) => (on ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'));
@@ -622,18 +648,8 @@ export async function render() {
     const key = shellKey(state.user);
     if (shell?.el.isConnected && shellSig === key) updateShell(shell, path);
     else {
-      // First render, sign-in, or a role or module change: a new shell, carrying over the sidebar's scroll and the More tools fold.
-      const old = shell?.el.isConnected ? shell.el : null;
-      const scrolled = old?.querySelector('.sidebar nav')?.scrollTop || 0;
-      const folded = old?.querySelector('details.nav__group--more')?.open;
-      shell = buildShell(path);
-      shellSig = key;
-      app.replaceChildren(shell.el);
-      placeAssistantButton();
-      const nav = shell.el.querySelector('.sidebar nav');
-      if (nav) nav.scrollTop = scrolled;
-      if (folded) shell.el.querySelector('details.nav__group--more').open = true;
-      if (prev) { shell.content.replaceWith(prev); shell.content = prev; }
+      // First render, sign-in, or a role or module change: a new shell.
+      swapShell(path, prev);
     }
     // The view always draws into its own detached page, so a slow view that was replaced by a newer one can't write into the page on screen.
     const mount = h('main', { class: 'content', id: 'main' });

@@ -32,6 +32,14 @@ export function goesFirstLine(oldest, row) {
   return `This payment goes to ${oldest} first (the oldest unpaid month).`;
 }
 
+// D-106: an amount the app filled is a suggestion; only what the person typed is theirs.
+// Returns the new box text when it may be replaced (empty, or still the app's own fill), else null to leave it alone.
+export function nextSuggestedAmount(current, filled, outstanding) {
+  const cur = String(current ?? '').trim();
+  if (cur !== '' && cur !== filled) return null;
+  return Number(outstanding) > 0 ? String(outstanding) : '';
+}
+
 // period: the month of the rent row the host clicked Record on (absent on a tenant's own Record).
 export async function recordPaymentModal({ leaseId, amount, period, onSaved } = {}) {
   let leases;
@@ -55,18 +63,20 @@ export async function recordPaymentModal({ leaseId, amount, period, onSaved } = 
     options: leases.map((l) => [l.lease_id, `${l.tenant_name} — ${l.property_name}, ${unitLabel(l.unit_name)}${tenantTag(l)}`]),
   });
   const amountField = field({ name: 'amount_paid', label: 'Amount paid', type: 'money', required: true, positive: true, hint: 'Partial payments are fine — the remaining balance is kept.' });
+  let filled = ''; // the text the app last put in the amount box
   leaseField.querySelector('select').addEventListener('change', (e) => {
     showBalance(e.target.value);
     const l = leases.find((x) => x.lease_id === e.target.value);
     const amt = amountField.querySelector('input');
-    if (l && !amt.value && Number(l.outstanding) > 0) amt.value = l.outstanding;
+    const next = nextSuggestedAmount(amt.value, filled, l?.outstanding);
+    if (next !== null) { amt.value = next; filled = next; }
   });
   if (leaseId) {
     showBalance(leaseId, period);
     const l = leases.find((x) => x.lease_id === leaseId);
     // A rent row passes its own remaining amount; the balance line above still shows the whole balance.
     const suggested = amount ?? l?.outstanding;
-    if (l && Number(suggested) > 0) amountField.querySelector('input').value = suggested;
+    if (l && Number(suggested) > 0) { amountField.querySelector('input').value = suggested; filled = amountField.querySelector('input').value; }
   }
 
   formModal({

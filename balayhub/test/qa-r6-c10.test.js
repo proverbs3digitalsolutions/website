@@ -36,7 +36,8 @@ test('Stay reports: commission is "Channel fees" in the channel table and the su
 
 test('Stay reports: the Revenue tile splits rooms from cleaning and extras', () => {
   const src = read('stayreports.js');
-  assert.match(src, /Rooms \$\{peso\(t\.accommodation\)\} · cleaning and extras \$\{peso\(t\.fees\)\}/);
+  assert.match(src, /`Rooms \$\{peso\(t\.accommodation\)\}`/); // QA r24: split into short lines.
+  assert.match(src, /`Cleaning and extras \$\{peso\(t\.fees\)\}`/);
 });
 
 test('Stay reports: the By listing table has an Of which cleaning & extras column and its building row still lines up', () => {

@@ -126,7 +126,7 @@ export async function discountCodesView(el, { rerender, query = {} }) {
         codeDates(c),
       ].filter(Boolean).join(' · ') || 'Anyone'),
       h('td', null, `${c.uses}${c.max_uses ? ` / ${c.max_uses}` : ''}`, Number(c.total_discounted) > 0 && h('div', { class: 'muted small' }, `${peso(c.total_discounted)} given`)),
-      h('td', null, canManage && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `${c.active ? 'Turn off' : 'Turn on'} ${c.code}`, 'data-focus-key': `dc-toggle-${c.code_id}`, onclick: () => toggle(c) }, c.active ? 'Turn off' : 'Turn on')))))));
+      h('td', { class: 'cell-action' }, canManage && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `${c.active ? 'Turn off' : 'Turn on'} ${c.code}`, 'data-focus-key': `dc-toggle-${c.code_id}`, onclick: () => toggle(c) }, c.active ? 'Turn off' : 'Turn on')))))));
   const listBox = h('div', { class: 'card' });
   const welcomeBox = h('div');
 

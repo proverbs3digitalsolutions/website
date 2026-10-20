@@ -41,6 +41,13 @@ export function refundAmountProblem(amount) {
   return null;
 }
 
+// Row button name. Active refunds of the same amount and date get "(n of m)" by list place, so no two buttons share a name.
+export function refundName(refunds, r) {
+  const same = refunds.filter((x) => !x.voided_at && Number(x.amount) === Number(r.amount) && x.refund_date === r.refund_date);
+  const base = `refund of ${peso(r.amount)} on ${fmtDate(r.refund_date)}`;
+  return same.length > 1 ? `${base} (${same.indexOf(r) + 1} of ${same.length})` : base;
+}
+
 // The form's own checks in one pass, so Amount, Method and Reason all show at once (makeForm runs this before onSubmit).
 export function refundCheck(d, data) {
   const f = {};
@@ -113,7 +120,7 @@ export async function refundsCard(reservation, rerender) {
         h('span', { class: `row__title${r.voided_at ? ' strike' : ''}` }, `${peso(r.amount)} · ${METHOD_LABEL[r.method] || r.method}`),
         h('span', { class: 'row__sub' }, `${fmtDate(r.refund_date)}${r.reference_number ? ` · Ref ${r.reference_number}` : ''} · ${r.reason}${r.recorded_by_name ? ` · by ${r.recorded_by_name}` : ''}`),
         r.voided_at && h('span', { class: 'row__sub' }, `Voided: ${r.void_reason}`)),
-      h('div', { class: 'row__end' }, r.voided_at ? badge('voided', 'Voided') : canManage && h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Void refund of ${peso(r.amount)} on ${fmtDate(r.refund_date)}`, onclick: () => voidRefund(r) }, 'Void'))))))
+      h('div', { class: 'row__end' }, r.voided_at ? badge('voided', 'Voided') : canManage && h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Void ${refundName(data.refunds, r)}`, onclick: () => voidRefund(r) }, 'Void'))))))
     : h('p', { class: 'muted small' }, 'No refunds recorded yet.');
 
   return h('section', { class: 'card' },

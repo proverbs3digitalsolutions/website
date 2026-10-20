@@ -176,6 +176,11 @@ export async function maintenanceView(el, { query }) {
             field({ name: 'next_due', label: 'Next due', type: 'date', required: true, value: x?.next_due ? String(x.next_due).slice(0, 10) : todayManila() }),
             field({ name: 'priority', label: 'Priority', type: 'select', required: true, value: x?.priority || 'medium', placeholderOption: false, options: options(PRIORITIES) })),
         ],
+        // Same window as the second check below, run in the form's one pass so it shows beside the other messages.
+        check: (d) => {
+          const { earliest, latest } = nextDueWindow();
+          return d.next_due && (d.next_due < earliest || d.next_due > latest) ? { next_due: `Pick a date between ${fmtDate(earliest)} and ${fmtDate(latest)}.` } : null;
+        },
         onSubmit: async (d, ctx) => {
           // The server refuses a next-due date outside its window, so say so at the field before any question (#30).
           const { earliest, latest } = nextDueWindow();
@@ -252,7 +257,7 @@ export async function maintenanceDetailView(el, { params, rerender }) {
     fields: [
       h('p', { class: 'muted small' }, 'This is saved as a Repairs expense for the property, so it appears in your reports.'),
       h('div', { class: 'form-row form-row--2' },
-        field({ name: 'amount', label: 'Amount', type: 'money', required: true }),
+        field({ name: 'amount', label: 'Amount', type: 'money', required: true, positive: true }),
         field({ name: 'expense_date', label: 'Date paid', type: 'date', required: true, value: todayManila(), max: todayManila() })),
       field({ name: 'vendor_name', label: 'Paid to', value: m.assigned_to, maxlength: 120 }),
       field({ name: 'description', label: 'Description', placeholder: `Repair: ${m.title}`, maxlength: 300 }),

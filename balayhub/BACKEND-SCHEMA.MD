@@ -2,7 +2,7 @@
 
 This document describes BalayHub's PostgreSQL schema as it stands after migrations `001`–`026` in `db/migrations/`, where uploaded files are stored, and who can see or change each kind of data. It was checked against the migrations and the route code in `src/routes/*.js` and `src/lib/*.js`. Anything not confirmed in the code is marked **unverified**.
 
-Last updated: 2026-10-21 (QA round 23: section 29, paid-day weighting, owner-only Team count, discount-code route; D-105). Before that: 2026-10-21 (QA round 22: section 28, markPaid free-day rule; D-104). Before that: 2026-10-21 (QA round 21: section 27; D-103). Before that: 2026-10-20 (QA round 20: migration 039, section 26, 2.15 card columns, support tickets row; D-102). Before that: 2026-10-20 (QA round 19: section 25, section 6 guest_has_email, billing 'attached' and expiry notes; D-101). Before that: 2026-10-19 (QA round 18: section 24, admin delete routes in matrix 6.4, null-workspace platform audit rows; D-100). Before that: 2026-10-15 (QA round 17: migrations 037 and 038, section 2.19, matrix 6.5, section 23; D-98 and D-99)
+Last updated: 2026-10-21 (QA round 24: section 30 and the receipt note in 2.5; D-106). Before that: 2026-10-21 (QA round 23: section 29, paid-day weighting, owner-only Team count, discount-code route; D-105). Before that: 2026-10-21 (QA round 22: section 28, markPaid free-day rule; D-104). Before that: 2026-10-21 (QA round 21: section 27; D-103). Before that: 2026-10-20 (QA round 20: migration 039, section 26, 2.15 card columns, support tickets row; D-102). Before that: 2026-10-20 (QA round 19: section 25, section 6 guest_has_email, billing 'attached' and expiry notes; D-101). Before that: 2026-10-19 (QA round 18: section 24, admin delete routes in matrix 6.4, null-workspace platform audit rows; D-100). Before that: 2026-10-15 (QA round 17: migrations 037 and 038, section 2.19, matrix 6.5, section 23; D-98 and D-99)
 
 ---
 
@@ -49,7 +49,7 @@ Last updated: 2026-10-21 (QA round 23: section 29, paid-day weighting, owner-onl
 |---|---|---|
 | token_hash | text PK | SHA-256 of the cookie token |
 | user_id | uuid → users | **ON DELETE CASCADE** |
-| created_at, last_seen_at, expires_at | timestamptz | Idle and absolute expiry are checked on each request |
+| created_at, last_seen_at, expires_at | timestamptz | Idle and absolute expiry are checked on each request (idle `SESSION_IDLE_HOURS`, default 12 h; absolute `SESSION_TTL_HOURS`, default 7 days; see TRD security) |
 | user_agent | text | At most 300 characters (shown on My account) |
 
 **auth_tokens**: one-time email links.
@@ -310,6 +310,8 @@ Key constraint: **`bookings_no_overlap`** is an `EXCLUDE USING gist (unit_id WIT
 | voided_at, voided_by, void_reason | | CHECK: `voided_at` and `void_reason` are set together |
 
 **receipt_counters**: `organization_id` (PK → organizations), `last_number` (integer). Gives sequential receipt numbers per workspace.
+
+*Receipt figures (D-106).* A receipt's charge lines, extras total, booking total and remaining balance are computed as of the payment: charges count when their `created_at` is on or before the payment's `created_at` and they are not voided, or were voided after it; the total is the stay's total with those charges in place of today's; the balance counts only payments and refunds up to that payment. The stay's own price (accommodation, cleaning, other fees) is read live, so a later price edit shows on a re-print (known limit; no snapshot column). No table changes.
 
 **balance_checkouts**: a guest paying the remaining balance online through the host's PayMongo account.
 
@@ -1462,3 +1464,13 @@ Decision D-105. **No migration.**
 - **`POST /discount-codes` reports every field problem in one 400.** The space, format (3 to 20 letters, numbers or dashes after trimming and upper-casing), percent-or-amount, and date-order rules run inside `validate(body, spec, { check })`, so a code with a space and a percent of 0 answers `fields.code` and `fields.percent_off` together, with the same wording as before. Each rule runs only when its own inputs passed the spec. The 50-code limit (409) and the duplicate-code answer (`23505`) are unchanged and run after `validate`. There is no PATCH for discount codes today.
 - **Field-type rules are also read on the device** (`public/js/ui.js`): money format, negative money, "greater than zero" on a money box marked `positive`, whole numbers with min and max, and the phone pattern `/^[+\d][\d\s()-]{6,19}$/`. They copy `src/lib/validate.js` and are never stricter than the server: every server route with a phone box uses the `phone` type. The server stays the authority.
 - **Blank optional monthly rent is stored as 0.00** (`BLANK_TO_ZERO` in `src/routes/properties.js`); "greater than zero" applies only to a rent someone typed.
+
+## 30. API notes from QA round 24 (2026-10-21)
+
+Decision D-106. **No migration.**
+
+- **Receipt data (`receiptData` in `src/lib/receipts.js`) is as of the payment.** See the receipt note in section 2.5. Charge lines are those that existed and were not voided when the payment was recorded; `extras_total` is their sum; `total_amount` is the booking total less today's extras plus that sum; `balance_after` uses that total. The payment and refund parts of the balance are unchanged.
+- **Sessions (`sessions` table).** A session ends after `SESSION_IDLE_HOURS` (default 12) idle, or `SESSION_TTL_HOURS` (default 7 days), or by a sign-out action. There is no cap on sessions per person, so signing in on another device or lane does not end an earlier session. Saved QA lane states older than 12 hours must sign in again (SESSION24).
+- **Field-type rules are also read on the device for dates** (`public/js/ui.js`): a date box's `min` and `max` are checked on the first Save. The server still refuses the same dates; the device only says it sooner.
+- **`PATCH /api/push/settings`** refuses with 400 any known alert type the person cannot receive (stay types for a long-term workspace) and ignores keys that are not alert types. Nothing is stored either way.
+- **Draft storage is browser-side only** (session storage); nothing about drafts reaches the database.

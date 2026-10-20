@@ -28,27 +28,30 @@ async function receiptData(paymentId) {
     }
   });
   const r = await one(
-    `SELECT bp.*, b.confirmation_code, b.check_in, b.check_out, b.total_amount, b.extras_total, b.guest_id,
+    `SELECT bp.*, b.confirmation_code, b.check_in, b.check_out, (b.total_amount - b.extras_total + ex.extras_total)::numeric(12,2) AS total_amount, ex.extras_total, ex.charges, b.guest_id,
             COALESCE(g.full_name, b.guest_label, 'Guest') AS guest_name, g.email AS guest_email,
             u.unit_name, p.property_name, o.name AS workspace_name, ru.full_name AS recorded_by_name,
             (${FEE})::numeric(12,2) AS adjustments,
-            (b.total_amount - ${FEE} - COALESCE((SELECT SUM(x.amount) FROM booking_payments x WHERE x.booking_id = b.booking_id AND x.voided_at IS NULL
+            (b.total_amount - b.extras_total + ex.extras_total - ${FEE} - COALESCE((SELECT SUM(x.amount) FROM booking_payments x WHERE x.booking_id = b.booking_id AND x.voided_at IS NULL
                                           AND (x.payment_date, x.created_at) <= (bp.payment_date, bp.created_at)), 0)
               + COALESCE((SELECT SUM(r.amount) FROM booking_refunds r WHERE r.booking_id = b.booking_id AND r.voided_at IS NULL
                                           AND (r.refund_date, r.created_at) <= (bp.payment_date, bp.created_at)), 0))::numeric(12,2) AS balance_after
        FROM booking_payments bp
        JOIN bookings b ON b.booking_id = bp.booking_id
+       CROSS JOIN LATERAL (
+         -- The charges that stood when the payment was recorded (BKG-2): added by then and not yet voided.
+         SELECT COALESCE(SUM(c.amount), 0)::numeric(12,2) AS extras_total,
+                COALESCE(jsonb_agg(jsonb_build_object('description', c.description, 'quantity', c.quantity,
+                  'unit_price', c.unit_price::text, 'amount', c.amount::text) ORDER BY c.created_at, c.charge_id), '[]'::jsonb) AS charges
+           FROM booking_charges c
+          WHERE c.booking_id = b.booking_id AND c.created_at <= bp.created_at
+            AND (c.voided_at IS NULL OR c.voided_at > bp.created_at)) ex
        JOIN units u ON u.unit_id = b.unit_id
        JOIN properties p ON p.property_id = u.property_id
        JOIN organizations o ON o.organization_id = b.organization_id
        LEFT JOIN guests g ON g.guest_id = b.guest_id
        LEFT JOIN users ru ON ru.user_id = bp.recorded_by
       WHERE bp.payment_id = $1`, [paymentId]);
-  if (r) {
-    r.charges = (await query(
-      `SELECT description, quantity, unit_price, amount FROM booking_charges
-        WHERE booking_id = $1 AND voided_at IS NULL ORDER BY created_at, charge_id`, [r.booking_id])).rows;
-  }
   return r;
 }
 

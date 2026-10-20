@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
+Last updated: 2026-10-21 (QA round 24: section 37; D-106). Before that: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
 
 ---
 
@@ -1555,3 +1555,33 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 
 ### 36.4 Reports
 - **Performance (under 560px):** the four headline cards stack one per row. Dashboard stat cards stay two per row. At 1280 they are four across.
+
+## 37. QA round 24 changes (D-106; 2026-10-21)
+
+### 37.1 Reservations, payments and receipts
+- **New reservation, a saved draft:** closing the form and reopening it brings back only what the person typed. The price the quote suggested (Accommodation, Cleaning) is not restored as typed, so on another listing the quote fills the boxes again. A price the person typed is restored and the "Use the rate" offer shows as before. The same holds for every form that keeps a draft (Record payment, Add expense, Add listing, Add tenant, Add property, Add unit, Help ticket).
+- **Receipt (print, email, receipt page):** every money line is as of that payment: the charge lines, the extras total, the booking total and the remaining balance. A charge added or a refund recorded after the payment does not change a re-printed receipt. A later change to the stay's own price still shows at today's price.
+- **Payments, refunds, owner payouts and withdrawals:** the Void, Receipt and Email buttons name their own row: the receipt number when the row has one, else the amount and date with `(n of m)` when two rows match. A row with no twin keeps its old name.
+- **Calendar, Remove block:** after the grid reloads, focus returns to the day cell that opened the menu (restates the rule in section 34; not a change).
+
+### 37.2 Forms
+- **Dates are checked on the first Save:** a date box's own earliest and latest day (Record payment, Add expense, Add repair cost, Assign lease, Record payout, Quote and refund dates and others) shows "cannot be in the future", "must be on or after ...", or "Pick a date between ... and ..." together with the other problems.
+- **Assign lease and Change terms:** a lease end before the start says "Lease end must be on or after the start date." on the first Save.
+- **Maintenance, recurring job:** the next-due window message shows on the first Save.
+- **Cleaner pay, Add rate:** an amount of 0 and an amount above the ceiling (₱10,000 per clean, ₱1,000 per hour) show on the first Save.
+- **Listings, Channels:** an empty calendar link, or one that is not a link, is said on the device and is not sent to the server.
+- **Listings, Edit listing:** Maximum guests is blank when none is stored. Blank means no limit. Saving without a change stores no number. New listings still start at 2.
+- **Properties, Add unit on a workspace that takes stays:** asks the cleaning fee and maximum guests, like Add listing.
+- **Booking page, Guests box:** a valid count clears its message, red mark and greyed Continue as it is typed, and the price quote follows 500 ms after typing stops. An invalid count is said when the person leaves the box. A listing with no maximum allows up to 50.
+- **Pricing, Edit pricing rule:** opens with focus on Days (Rule and Applies to are fixed). **Bulk changes:** a negative price says "cannot be negative".
+- **Confirm dialogs with a reason box (Void payout and others):** an empty reason marks the box invalid and describes it.
+
+### 37.3 Card on file, shell and My account
+- **5.10, Confirm your card (gated):** the top bar shows only Help and the account menu. There is no Search, Bookmarks, Notifications or "/" key. When the card passes, the success panel shows the full top bar and the full sidebar at once, without going to another page. Focus that was inside the page stays on the same control.
+- **Confirm your card, a PayMongo outage:** one-tap pay and Pay another way both say "We couldn't reach the payment service. Nothing was charged. Please try again in a moment."
+- **My account, Preferences, monthly-rental owner:** a note that alerts aren't available yet, with no Turn on or Send a test button. "Turn off on this device" stays when a device is already on. Owners who take stays see the buttons as before.
+
+### 37.4 Phones
+- **Under 560 px, compact tabs** (for example Housekeeping's "Today & overdue (6)") wrap their label inside the cell and never clip it, down to 320 px.
+- **Reports, Performance (390 px):** the Revenue card detail is three lines or fewer; the note sits in a footnote.
+- **Tables:** a cell holding only an action button (Discount codes, Turn off / Turn on) centres the button on the row's first line.

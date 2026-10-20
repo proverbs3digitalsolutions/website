@@ -523,7 +523,7 @@ export function openModal({ title, body, onClose, wide }) {
   document.body.append(dlg);
   dlg.showModal();
   // A dialog with no field starts on its first action (a night's menu: New reservation), the × only when the body has none.
-  (dlg.querySelector('input:not([type=hidden]), select, textarea') || dlg.querySelector('.modal__body button:not(:disabled), .modal__body a[href]'))?.focus();
+  (dlg.querySelector('input:not([type=hidden]):not(:disabled), select:not(:disabled), textarea:not(:disabled)') || dlg.querySelector('.modal__body button:not(:disabled), .modal__body a[href]'))?.focus();
   return { close, el: dlg };
 }
 
@@ -551,7 +551,7 @@ export function confirmDialog({ title, text, confirmText = 'Confirm', cancelText
           h('button', {
             class: `btn ${danger ? 'btn--danger' : 'btn--primary'}`, type: 'button',
             onclick: () => {
-              if (reasonInput && !reasonInput.value.trim()) { err.textContent = 'Please enter a reason.'; reasonInput.focus(); return; }
+              if (reasonInput && !reasonInput.value.trim()) { err.textContent = 'Please enter a reason.'; reasonInput.setAttribute('aria-invalid', 'true'); reasonInput.focus(); return; }
               if (reasonInput && reasonInput.value.trim().length > REASON_MAX) { err.textContent = `Reason must be at most ${REASON_MAX} characters.`; reasonInput.setAttribute('aria-invalid', 'true'); reasonInput.focus(); return; }
               done = true;
               for (const b of saving) if (b.dataset.ownLabel !== undefined) b.textContent = 'Saving…';
@@ -559,6 +559,7 @@ export function confirmDialog({ title, text, confirmText = 'Confirm', cancelText
             },
           }, confirmText))),
     });
+    reasonInput?.addEventListener('input', () => { err.textContent = ''; reasonInput.removeAttribute('aria-invalid'); });
     // The safe choice first: a confirm without a reason box starts on Cancel, not on the close button.
     if (!reasonInput) cancelBtn.focus();
   });
@@ -663,22 +664,38 @@ export function showErrors(form, fields = {}) {
 // or a dropped connection. Passwords are never stored.
 export function persistDraft(form, key) {
   const storeKey = `bh-draft:${key}`;
+  // A draft keeps only what the person typed: a field is saved while it still holds the value the person last gave it (D-106).
+  // `mine` maps a field name to the JSON of that value. A value code wrote (a quote, a suggested amount, a default) never gets in.
+  const mine = new Map();
+  const storable = (el) => el.name && el.type !== 'password' && el.type !== 'file';
   try {
     const saved = JSON.parse(sessionStorage.getItem(storeKey) || 'null');
     if (saved) {
       for (const el of form.elements) {
-        if (!el.name || el.type === 'password' || el.type === 'file' || !(el.name in saved)) continue;
+        if (!storable(el) || !(el.name in saved)) continue;
         if (el.type === 'checkbox') { if (!el.dataset.multi) el.checked = saved[el.name]; } else el.value = saved[el.name];
       }
+      const now = readForm(form);
+      for (const el of form.elements) if (storable(el) && el.name in saved) mine.set(el.name, JSON.stringify(now[el.name]));
     }
   } catch { /* storage unavailable */ }
-  form.addEventListener('input', () => {
+  const given = (e) => {
     try {
+      const name = e.target?.name;
+      const names = new Set();
+      for (const el of form.elements) if (storable(el)) names.add(el.name);
+      if (!name || !names.has(name)) return;
       const data = readForm(form);
-      for (const el of form.elements) if (el.type === 'password') delete data[el.name];
-      sessionStorage.setItem(storeKey, JSON.stringify(data));
+      mine.set(name, JSON.stringify(data[name]));
+      for (const [k, v] of [...mine]) if (!(k in data) || JSON.stringify(data[k]) !== v) mine.delete(k);
+      const out = {};
+      for (const k of mine.keys()) out[k] = data[k];
+      sessionStorage.setItem(storeKey, JSON.stringify(out));
     } catch { /* ignore */ }
-  });
+  };
+  // Capture, so a synthetic event that doesn't bubble still counts as the person giving the value.
+  form.addEventListener('input', given, true);
+  form.addEventListener('change', given, true);
   return () => { try { sessionStorage.removeItem(storeKey); } catch { /* ignore */ } };
 }
 
@@ -740,6 +757,17 @@ export function typeProblems(form, missing, labelOf) {
   }
   for (const el of form.querySelectorAll('input[type=tel]')) {
     if (live(el) && !PHONE_RE.test(String(el.value).trim())) out[el.name] = 'Enter a valid phone number.';
+  }
+  // A date box's own min and max are what the server refuses outside of (the 2000-2100 check runs first, in makeForm).
+  for (const el of form.querySelectorAll('input[type=date]')) {
+    if (!live(el) || out[el.name] || dateOutOfRange(el.value)) continue;
+    const v = String(el.value).trim();
+    const min = el.min || '';
+    const max = el.max || '';
+    const today = todayManila();
+    if (min && max && (v < min || v > max)) out[el.name] = `Pick a date between ${fmtDate(min)} and ${fmtDate(max)}.`;
+    else if (max && v > max) out[el.name] = max === today ? `${labelOf(el)} cannot be in the future.` : `${labelOf(el)} must be on or before ${fmtDate(max)}.`;
+    else if (min && v < min) out[el.name] = min === today ? `${labelOf(el)} cannot be in the past.` : `${labelOf(el)} must be on or after ${fmtDate(min)}.`;
   }
   return out;
 }

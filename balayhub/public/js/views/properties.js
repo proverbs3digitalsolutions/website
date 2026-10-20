@@ -64,8 +64,12 @@ function unitFields(u = {}) {
       !stayOnly && field({ name: 'monthly_rent', label: 'Monthly rent', type: 'money', required: true, positive: true, value: u.monthly_rent, placeholder: '8,000' }),
       field({ name: 'security_deposit_amount', label: 'Security deposit', type: 'money', value: u.security_deposit_amount, placeholder: '16,000' })),
     // A new unit with no nightly rate is an unpriced listing the edit form then refuses to save.
+    // Same two questions as Add listing: the guest cap protects a stay (D-85, ONB-3).
+    !u.unit_id && state.user.business_type !== 'long_term' && h('div', { class: 'form-row form-row--2' },
+      field({ name: 'nightly_rate', label: 'Base nightly rate (₱)', type: 'money', required: true, placeholder: '2,500' }),
+      field({ name: 'cleaning_fee', label: 'Cleaning fee per stay', type: 'money', placeholder: 'e.g. 500', hint: "Leave blank if you don't charge a cleaning fee." })),
     !u.unit_id && state.user.business_type !== 'long_term' && h('div', { class: 'form-row' },
-      field({ name: 'nightly_rate', label: 'Base nightly rate (₱)', type: 'money', required: true, placeholder: '2,500' })),
+      field({ name: 'max_guests', label: 'Maximum guests', type: 'number', min: 1, max: 50, value: 2, inputmode: 'numeric' })),
     h('div', { class: 'form-row form-row--2' },
       field({ name: 'availability', label: 'Availability', type: 'select', value: u.availability || 'available', placeholderOption: false, options: [['available', 'Available to rent'], ['unavailable', 'Not available (renovation, owner use)']] }),
       field({ name: 'availability_date', label: 'Available from', type: 'date', value: u.availability_date })),

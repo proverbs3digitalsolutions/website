@@ -153,7 +153,7 @@ function listingFields(u = {}, roomTypes = [], building = null, buildingBasics =
       field({ name: 'nightly_rate', label: 'Base nightly rate', type: 'money', required: true, value: u.nightly_rate, placeholder: '2,500' }),
       field({ name: 'cleaning_fee', label: 'Cleaning fee per stay', type: 'money', value: u.cleaning_fee, placeholder: 'e.g. 500', hint: "Leave blank if you don't charge a cleaning fee." })),
     ...buildingBasics,
-    field({ name: 'max_guests', label: 'Maximum guests', type: 'number', min: 1, max: 50, value: u.max_guests || 2, inputmode: 'numeric' }),
+    field({ name: 'max_guests', label: 'Maximum guests', type: 'number', min: 1, max: 50, value: u.unit_id ? (u.max_guests ?? '') : (u.max_guests ?? 2), inputmode: 'numeric', hint: u.unit_id ? 'Leave blank for no limit.' : undefined }),
     h('details', { class: 'form-section', open: holds(u, ['room_type', 'tags']) },
       h('summary', null, 'More details'),
       building,
@@ -403,7 +403,17 @@ async function channelsModal(listing, onChange, { focusFeedId } = {}) {
     // 'Connecting…' shows only while a request is really running, never while the 'Save it anyway?' question is open.
     const busy = () => { btn.disabled = true; btn.textContent = 'Connecting…'; };
     try {
-      if (!addForm.elements.channel.value) { showErrors(addForm, { channel: 'Choose which site this calendar link is from.' }); return; }
+      // Everything the device can know is checked in one pass, before any request.
+      const problems = {};
+      if (!addForm.elements.channel.value) problems.channel = 'Choose which site this calendar link is from.';
+      const link = addForm.elements.url.value.trim();
+      if (!link) problems.url = 'Calendar link is required.';
+      else {
+        let https = false;
+        try { https = new URL(link).protocol === 'https:'; } catch { /* not a link */ }
+        if (!https) problems.url = 'Paste the full https:// calendar (iCal) link from the channel.';
+      }
+      if (Object.keys(problems).length) { showErrors(addForm, problems); return; }
       const body = { unit_id: listing.unit_id, channel: addForm.elements.channel.value, url: addForm.elements.url.value };
       let r;
       busy();

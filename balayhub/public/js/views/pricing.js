@@ -148,6 +148,7 @@ export async function pricingView(el, { rerender }) {
     const daysField = field({ name: 'days', label: 'Days', type: 'number', required: true, value: r?.days ?? 3, step: 1, inputmode: 'numeric' });
     const scopeField = field({ name: 'unit_id', label: 'Applies to', type: 'select', required: !isOwner, value: r?.unit_id || '', placeholderOption: false,
       options: [...(isOwner ? [['', 'All listings']] : []), ...listings.map((l) => [l.unit_id, `${l.unit_name} · ${l.property_name}`])] });
+    if (r) { kindSel.querySelector('select').disabled = true; scopeField.querySelector('select').disabled = true; }
     const m = formModal({
       title: r ? 'Edit pricing rule' : 'Add a pricing rule', submitText: 'Save rule',
       fields: [kindSel, daysField, daysHint,
@@ -183,7 +184,6 @@ export async function pricingView(el, { rerender }) {
       form.elements.days.min = k.min; form.elements.days.max = k.max;
       daysHint.textContent = k.hint;
     };
-    if (r) { form.elements.kind.disabled = true; form.elements.unit_id.disabled = true; }
     form.elements.kind.addEventListener('change', syncKind); syncKind();
   };
   const removeRule = async (r) => {
@@ -337,7 +337,8 @@ export function bulkProblems(b) {
     const n = parseAmount(b.price);
     if (!b.price) p.price = 'Enter the new price per night.';
     else if (Number.isNaN(n)) p.price = 'New price per night must be a valid amount (e.g. 8500 or 8500.50).';
-    else if (n <= 0) p.price = 'New price per night must be greater than zero.';
+    else if (n < 0) p.price = 'New price per night cannot be negative.';
+    else if (n === 0) p.price = 'New price per night must be greater than zero.';
   }
   if (b.action === 'percent' && !Number.isFinite(b.percent)) p.percent = 'Enter a percentage between -90 and 300.';
   if (b.action === 'block' && !b.reason) p.reason = 'Add a reason for the block.';

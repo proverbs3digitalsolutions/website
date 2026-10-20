@@ -115,6 +115,14 @@ export const filesList = () => null;
 export const openModal = () => {};
 export const toast = () => {};
 export const todayManila = () => '2026-10-14';
+// Same as the real ui.js: the Manila calendar day of a timestamp, plain dates unchanged.
+export function manilaDay(ts) {
+  if (!ts) return '';
+  const s = String(ts);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const d = new Date(ts);
+  return Number.isNaN(d.getTime()) ? s.slice(0, 10) : new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(d);
+}
 export const unitLabel = (x) => 'Unit ' + String(x);
 export const options = (xs) => xs.map((x) => [x, x]);
 export const label = (x) => String(x);

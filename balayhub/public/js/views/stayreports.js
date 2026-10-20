@@ -264,7 +264,7 @@ export async function stayReportsView(el, { query = {} }) {
     box.replaceChildren(
       h('div', { class: 'card' },
         h('div', { class: 'grid grid--4 stats stats--stack-phone' },
-          stat('Revenue', peso(t.revenue), [`${t.stays} stay${t.stays === 1 ? '' : 's'} · ${t.nights} nights`, h('br'), `Rooms ${peso(t.accommodation)} · cleaning and extras ${peso(t.fees)}`, h('br'), 'Rooms counted by night; cleaning and extras by check-in.']),
+          stat('Revenue', peso(t.revenue), [`${t.stays} stay${t.stays === 1 ? '' : 's'} · ${t.nights} nights`, h('br'), `Rooms ${peso(t.accommodation)}`, h('br'), `Cleaning and extras ${peso(t.fees)}`]),
           stat('Occupancy', pct(t.occupancy), 'booked nights ÷ open nights'),
           stat('Avg nightly rate', peso(t.adr), `RevPAR ${peso(t.revpar)}`),
           stat('Net (before refunds)', peso(t.net), r.expenses_excluded ? `${peso(t.channel_fees)} channel fees · expenses not split by channel` : `${peso(t.channel_fees)} channel fees · ${peso(t.expenses)} expenses`)),
@@ -272,7 +272,8 @@ export async function stayReportsView(el, { query = {} }) {
         // Channel stays with no fee make the net look higher than it is (per channel, linked to those bookings).
         ...missingFeeNotes(r.missing_fees, (c) => `#/reservations${qs({ view: 'all', channel: c, from: r.from, to: lastDay(r.to_exclusive), property_id: filters.property_id, unit_id: filters.unit_id })}`),
         h('p', { class: 'muted small' }, 'Refunds aren\'t deducted here. Profit and loss shows the net after refunds.'),
-        h('p', { class: 'muted small' }, `Counts nights in ${when}, including upcoming confirmed stays. Profit and loss counts only stays that have checked out.`)),
+        h('p', { class: 'muted small' }, `Counts nights in ${when}, including upcoming confirmed stays. Profit and loss counts only stays that have checked out.`),
+        h('p', { class: 'muted small' }, 'Rooms counted by night; cleaning and extras by check-in.')),
       h('div', { class: 'grid grid--2' },
         h('div', { class: 'card' }, h('h2', null, 'Revenue by channel'),
           shareBars(r.channels, (c) => c.revenue, (c) => c.label),

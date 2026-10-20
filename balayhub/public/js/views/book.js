@@ -300,6 +300,8 @@ export async function bookListingView(el, { params, query }) {
   // True only while the Guests message is the server's guest-limit text (set in the quote's catch below).
   let guestsFromServer = false;
   const guestCountOk = () => { const n = Number(form.elements.num_guests.value); return Number.isInteger(n) && n >= 1; };
+  // A whole number from 1 to the listing's maximum (50 when it has none, the server's ceiling).
+  const guestCountInRange = () => guestCountOk() && Number(form.elements.num_guests.value) <= (l.max_guests || 50);
   // A fraction (2.5) is not "at least 1": ask for a whole number.
   const guestCountMsg = () => (Number.isInteger(Number(form.elements.num_guests.value)) ? t('At least 1 guest.') : t('Enter a whole number of guests, 1 or more.'));
   // The summary, drawn from the current quote and the ticked pay choice (so changing the choice needs no new quote).
@@ -377,7 +379,7 @@ export async function bookListingView(el, { params, query }) {
     formError,
     h('div', { class: 'form-row form-row--2' },
       field({ name: 'name', label: t('Full name'), required: true, maxlength: 120, autocomplete: 'name' }),
-      field({ name: 'num_guests', label: t('Guests'), type: 'number', required: true, min: 1, max: l.max_guests || 20, value: Math.min(2, l.max_guests || 2), inputmode: 'numeric' })),
+      field({ name: 'num_guests', label: t('Guests'), type: 'number', required: true, min: 1, max: l.max_guests || 50, value: Math.min(2, l.max_guests || 2), inputmode: 'numeric' })),
     h('div', { class: 'form-row form-row--2' },
       field({ name: 'email', label: t('Email'), type: 'email', required: true, autocomplete: 'email', hint: t('We send your confirmation here.') }),
       field({ name: 'phone', label: t('Mobile number'), type: 'tel', required: true, inputmode: 'tel', autocomplete: 'tel', placeholder: '0917 123 4567' })),
@@ -400,6 +402,15 @@ export async function bookListingView(el, { params, query }) {
   form.elements.num_guests?.addEventListener('change', () => {
     guestsFromServer = false;
     setGuestsError(guestCountOk() ? '' : guestCountMsg());
+  });
+  // Typing a valid count clears the message at once and quotes again 500 ms after the last keystroke (D-103). An invalid count is said on change, not while typing. Focus never moves.
+  let guestTyping;
+  form.elements.num_guests?.addEventListener('input', () => {
+    if (!guestCountInRange()) return;
+    guestsFromServer = false;
+    setGuestsError('');
+    clearTimeout(guestTyping);
+    guestTyping = setTimeout(() => { if (checkIn && checkOut) updateQuote(); }, 500);
   });
   // A field's message clears as soon as the guest changes that field (a checkbox, when ticked); the banner goes with the last marked field.
   // The Guests box keeps its own live message (above), so it is left to that.
