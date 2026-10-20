@@ -227,6 +227,7 @@ export async function newGroupModal({ onSaved } = {}) {
   };
   addRow(); addRow();
   const conflicts = h('div');
+  let takenBanner = false; // the form's error line is the ROOMS_TAKEN message
 
   let modal;
   const form = makeForm({
@@ -266,10 +267,17 @@ export async function newGroupModal({ onSaved } = {}) {
         modal.close();
         if (onSaved) onSaved(res); else navigate(`#/groups/${res.group.group_id}`);
       } catch (err) {
+        takenBanner = err.code === 'ROOMS_TAKEN';
         if (err.status === 409) { conflicts.replaceChildren(...conflictList(err)); conflicts.scrollIntoView?.({ block: 'nearest' }); }
         throw mapRoomError(err, owners);
       }
     },
+  });
+  // Moving a room to free dates makes the taken list stale: drop it (and its banner line); the next save checks again.
+  for (const ev of ['input', 'change']) rowsBox.addEventListener(ev, () => {
+    if (conflicts.children.length) conflicts.replaceChildren();
+    if (takenBanner) form.querySelector('.form-error')?.replaceChildren();
+    takenBanner = false;
   });
   modal = openModal({ title: 'New group booking', body: form, wide: true });
 }

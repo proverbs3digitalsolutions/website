@@ -102,6 +102,12 @@ export function voidLabel(charges, c) {
   return same.length > 1 ? `Void ${c.description} (${same.indexOf(c) + 1} of ${same.length})` : `Void ${c.description}`;
 }
 
+// Void dialog line: names the charge as the list shows it (description, plus the category when it differs).
+export function voidText(c) {
+  const name = c.description && c.description.trim() !== label(c.category) ? `${c.description} (${label(c.category)})` : label(c.category);
+  return `${name}: ${peso(c.amount)}. The line stays on record, but the total and balance go down.`;
+}
+
 export async function chargesCard(reservation, rerender) {
   const id = reservation.booking_id;
   let data;
@@ -117,7 +123,7 @@ export async function chargesCard(reservation, rerender) {
   const voidCharge = async (c) => {
     const reason = await confirmDialog({
       title: 'Void this charge?',
-      text: `${label(c.category)}: ${peso(c.amount)}. The line stays on record, but the total and balance go down.`,
+      text: voidText(c),
       confirmText: 'Void charge',
       danger: true,
       reason: true,

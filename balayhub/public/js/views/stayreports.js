@@ -263,7 +263,7 @@ export async function stayReportsView(el, { query = {} }) {
     }
     box.replaceChildren(
       h('div', { class: 'card' },
-        h('div', { class: 'grid grid--4 stats' },
+        h('div', { class: 'grid grid--4 stats stats--stack-phone' },
           stat('Revenue', peso(t.revenue), [`${t.stays} stay${t.stays === 1 ? '' : 's'} · ${t.nights} nights`, h('br'), `Rooms ${peso(t.accommodation)} · cleaning and extras ${peso(t.fees)}`, h('br'), 'Rooms counted by night; cleaning and extras by check-in.']),
           stat('Occupancy', pct(t.occupancy), 'booked nights ÷ open nights'),
           stat('Avg nightly rate', peso(t.adr), `RevPAR ${peso(t.revpar)}`),

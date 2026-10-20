@@ -162,6 +162,7 @@ export async function cardCheckView(el, { query = {} } = {}) {
   fields.exp.input.addEventListener('input', () => {
     const v = fields.exp.input.value;
     if (/^\d{3,}$/.test(v)) fields.exp.input.value = `${v.slice(0, 2)}/${v.slice(2)}`;
+    clearOne(fields.exp);
   });
 
   const consentBox = stage2 && h('input', { type: 'checkbox', id: 'cc-consent', 'aria-describedby': 'cc-consent-err' });
@@ -185,6 +186,15 @@ export async function cardCheckView(el, { query = {} } = {}) {
       f.wrap?.classList.remove('field--invalid');
     }
   };
+
+  // Typing in a field (or ticking the box) clears that field's own message and mark; the summary goes with the last one. Focus never moves.
+  const clearOne = (f) => {
+    f.err.textContent = ''; f.input.removeAttribute('aria-invalid');
+    f.wrap?.classList.remove('field--invalid');
+    if (!Object.values(fields).some((x) => x.input && x.input.getAttribute('aria-invalid'))) { summary.hidden = true; summary.textContent = ''; }
+  };
+  for (const k of ['name', 'number', 'cvc']) fields[k].input.addEventListener('input', () => clearOne(fields[k]));
+  if (consentBox) consentBox.addEventListener('change', () => clearOne(fields.consent));
 
   const panel = h('div');
   const heading = (text) => { const e = h('h2', { tabindex: '-1' }, text); return e; };

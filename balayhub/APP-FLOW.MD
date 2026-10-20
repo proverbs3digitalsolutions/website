@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
+Last updated: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
 
 ---
 
@@ -1529,3 +1529,29 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 ### 35.5 Phones and Inbox
 - **Assistant panel (under 560px):** the open panel ends just above the bottom bar, so the bar's tabs can be tapped. Tapping a tab changes the page and closes the panel.
 - **Inbox search box:** the hint reads "Guest or code" and is not cut at 390px with a filter count showing.
+
+## 36. QA round 23 changes (D-105; 2026-10-21)
+
+### 36.1 Keyboard focus and navigation
+- **Same-page address changes:** editing the address, Back or Forward, or a plain `#` link to the same page with a different filter, view or month (for example Reservations `?view=all` to `?view=upcoming`, Profit and loss `?month=`, Expenses `&category=`, Inbox `?view=open`) puts keyboard focus on the page heading, as a page change does, when focus was not on anything inside the page. A control the person was using keeps focus: the Daily close date picker, a Reservations tab link, a filter chip and Profit and loss's Month box stay where they are.
+- **Housekeeping, a task, Add photo:** after the photo uploads, focus stays on the Add photo control and the "Photo uploaded." message shows. A second pick while the first is uploading is ignored.
+- **Phone More sheet (under 560px):** every link can be tapped at every scroll position. **Log out** sits after a visible gap (a divider) under the last link and never overlaps Supplies or any other row. A link to the page already open closes the sheet and focuses its heading; Close and Escape return to More.
+
+### 36.2 Forms: every problem on the first Save
+- **Money, number and phone boxes are checked on the first Save** together with the required fields: Add expense (date outside 2000 to 2100 and an amount like `100.555`, or an amount of 0), Record payout (date and amount), Record payment (an amount of 0 and no method), Add unit (no unit type and a rent of 0), Add tenant (no name and a phone like `abc`), Add listing (nightly rate, cleaning fee below zero, maximum guests 0), and any other form with these boxes. Focus goes to the first wrong box in page order and nothing is sent. A blank optional monthly rent is still stored as 0.00.
+- **Settings, Invite:** a bad email and a Property manager or Cleaner with no property show together.
+- **Settings, Discount codes, New discount code:** a code with a space, a percent of 0, a percent and an amount together, or an end date before the start date show together (the server also answers with all of them at once).
+- **Pricing, Bulk changes:** problems mark their boxes (listing or tag, first and last night, new price, percentage, block reason), focus goes to the first, and a box's message clears when it is edited. Preview is not sent until all are fixed.
+- **Get started (step 3) and Confirm your card:** a field's message, its red mark and the banner clear as soon as that field is corrected (Get started in English and in Tagalog).
+- **Confirm your card, Get started step 3 after a Tagalog choice:** Setup and Confirm your card stay in English (host screens, D-09); the language choice covers the public pages, Get started, Check your email and the verify step.
+- **Inbox, internal note:** picking a teammate shows `@Bea Reyes` in the box; the saved note shows the highlight and notifies as before. A draft keeps the mention across a reload. Messages to a guest are never coded.
+- **Groups, New group booking:** changing a room row's listing or dates clears the "These rooms are taken" list and its banner; the next Save lists only rooms that still clash.
+- **Booking, Charges, Void:** the dialog reads "Void this charge? <description> (<category>): ₱<amount>. ..." (the category alone when the description is the category's name or is empty).
+
+### 36.3 Plan & billing and My account
+- **Plan & billing, tab regains focus:** the page re-reads billing and redraws if a payment, the plan or the paid-until date changed, at most once every 5 seconds. A return inside that window is checked when the window ends. Leaving Settings stops the checks.
+- **Changing plan:** days convert by what was actually paid for them (a half-price payment converts at half weight); free days move day for day to a cheaper plan and never grow.
+- **My account:** the Team line ("Team: N members") shows for owners only. Managers, staff and cleaners see no Team line.
+
+### 36.4 Reports
+- **Performance (under 560px):** the four headline cards stack one per row. Dashboard stat cards stay two per row. At 1280 they are four across.

@@ -11,12 +11,13 @@ const line = app.split('\n').find((l) => l.startsWith('export const headingFocus
 const headingFocusDue = new Function(`${line.replace('export const', 'const')}; return headingFocusDue;`)();
 
 test('headingFocusDue truth table', () => {
-  const base = { drawnPath: '/home', path: '/home', prevKept: true, redirected: false };
+  const base = { drawnPath: '/home', path: '/home', prevKept: true, redirected: false, addressChange: false };
   assert.equal(headingFocusDue({ ...base, drawnPath: null }), true, 'first draw after load');
   assert.equal(headingFocusDue(base), false, 'same-page redraw stays with the focus guard');
   assert.equal(headingFocusDue({ ...base, redirected: true }), true, 'redirect onto the page already open');
   assert.equal(headingFocusDue({ ...base, path: '/payments' }), true, 'new page');
   assert.equal(headingFocusDue({ ...base, prevKept: false }), true, 'drawn under a skeleton');
+  assert.equal(headingFocusDue({ ...base, addressChange: true }), true, 'same page, address changed');
 });
 
 test('every navigate() inside render() sets viaRedirect first; both draw ends use the helper', () => {

@@ -80,8 +80,9 @@ router.get('/account/profile', requireAuth, ah(async (req, res) => {
     const plan = planStatus(u);
     // Only owners see what the plan costs and its listing limit; everyone sees the status (BACKEND-SCHEMA 6, D-83).
     if (u.role !== 'owner') { delete plan.price; delete plan.listing_limit; }
-    workspace = { name: u.organization_name, business_type: u.business_type, role: u.role, created_at: org.created_at, plan,
-      members: (await one(`SELECT COUNT(*)::int AS n FROM users WHERE organization_id = $1 AND account_status = 'active'`, [u.organization_id])).n };
+    workspace = { name: u.organization_name, business_type: u.business_type, role: u.role, created_at: org.created_at, plan };
+    // The team count is for owners only (BACKEND-SCHEMA 6); for other roles it isn't sent and isn't counted.
+    if (u.role === 'owner') workspace.members = (await one(`SELECT COUNT(*)::int AS n FROM users WHERE organization_id = $1 AND account_status = 'active'`, [u.organization_id])).n;
     // Which properties this person works on (owners see everything).
     ({ rows: properties } = await query(
       u.role === 'owner'

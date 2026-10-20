@@ -59,3 +59,12 @@ test('source: onChange commits lastProperty and the vendor source before redrawi
   assert.ok(body.indexOf('lastProperty = f.property_id') > -1 && body.indexOf('lastProperty = f.property_id') < body.indexOf('renderBar()'));
   assert.match(rentSrc, /const renderBar = noReentry\(/);
 });
+
+test('source: a property change commits a box still being typed in before the bar is redrawn, and loads once', () => {
+  const i = rentSrc.indexOf('onChange: () => {');
+  const body = rentSrc.slice(i, rentSrc.indexOf('load();', i) + 8);
+  // the open box is blurred (its change handler writes the typed value into the applied state) before renderBar() builds the new bar
+  assert.ok(body.indexOf('.blur()') > -1 && body.indexOf('.blur()') < body.indexOf('renderBar('), 'blur before redraw');
+  // the load that blur caused is not repeated
+  assert.match(body, /loadCount/);
+});

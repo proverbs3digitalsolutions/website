@@ -276,8 +276,9 @@ function couponAheadError(org, quote) {
 }
 
 // Days left on the old plan become days on the new one: paid days at the price ratio, free days at most day for day.
+// paidDays may be fractional (a day half paid by a coupon counts 0.5); the 1e-9 absorbs float noise before the floor.
 function convertDays({ paidDays, freeDays, oldPrice, newPrice }) {
-  return Math.floor((paidDays * oldPrice) / newPrice) + Math.floor(freeDays * Math.min(1, oldPrice / newPrice));
+  return Math.floor((paidDays * oldPrice) / newPrice + 1e-9) + Math.floor(freeDays * Math.min(1, oldPrice / newPrice) + 1e-9);
 }
 
 // Apply a confirmed payment once: switch the plan and extend "paid until".
@@ -301,11 +302,16 @@ async function markPaid(billingId, { method } = {}) {
         // Changing plan: the new plan starts today, and the unused days of the old
         // plan are converted at the two plans' prices.
         // Only days someone paid for convert at the price ratio; free days (coupon, trial) never grow. period_end is inclusive.
+        // A day counts by the share actually paid, min(1, amount / list_amount) of the row covering it (highest row wins;
+        // no list_amount means full price), so a half-price period is worth half its days.
         const remaining = daysBetween(today, paidUntil) + 1;
         const { rows: [{ n }] } = await db.query(
-          `SELECT COUNT(DISTINCT d)::int AS n FROM generate_series($2::date, $3::date, '1 day') d
-             JOIN billing_payments p ON d BETWEEN p.period_start AND p.period_end
-            WHERE p.organization_id = $1 AND p.kind = 'plan' AND p.status = 'paid' AND p.amount > 0 AND p.billing_id <> $4`,
+          `SELECT COALESCE(SUM(share), 0)::float8 AS n FROM (
+             SELECT MAX(LEAST(1, p.amount / COALESCE(p.list_amount, p.amount))) AS share
+               FROM generate_series($2::date, $3::date, '1 day') d
+               JOIN billing_payments p ON d BETWEEN p.period_start AND p.period_end
+              WHERE p.organization_id = $1 AND p.kind = 'plan' AND p.status = 'paid' AND p.amount > 0 AND p.billing_id <> $4
+              GROUP BY d) s`,
           [b.organization_id, today, paidUntil, b.billing_id]);
         bonusDays = convertDays({ paidDays: n, freeDays: remaining - n, oldPrice: PLANS[org.plan].price, newPrice: PLANS[b.plan].price });
       }

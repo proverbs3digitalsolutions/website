@@ -150,7 +150,7 @@ export async function accountView(el, { rerender }) {
             h('dt', null, 'Your role'), h('dd', null, label(w.role)),
             h('dt', null, 'What you can do'), h('dd', { class: 'small' }, roleText),
             h('dt', null, 'Plan'), h('dd', null, planLine(w.plan)),
-            h('dt', null, 'Team'), h('dd', null, `${w.members} member${w.members === 1 ? '' : 's'}`),
+            w.members != null && [h('dt', null, 'Team'), h('dd', null, `${w.members} member${w.members === 1 ? '' : 's'}`)],
             d.owner && [h('dt', null, 'Workspace owner'), h('dd', null, d.owner.full_name, h('div', { class: 'muted small' }, d.owner.email))]),
           h('div', { class: 'chips', style: { marginTop: '12px' } },
             isOwner && h('a', { class: 'btn btn--secondary btn--sm', href: '#/settings' }, w.plan?.plan === 'trial' || w.plan?.read_only ? 'Choose a plan' : 'Plan & billing'),

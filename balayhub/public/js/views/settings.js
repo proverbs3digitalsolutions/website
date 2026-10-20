@@ -61,13 +61,65 @@ async function focusWhenAttached(el, node) {
   if (el.isConnected !== false) node.focus();
 }
 
+// After a background redraw: wait for the new page heading, and focus it only if focus fell to the page (BODY).
+async function seatOnHeading(oldH1) {
+  for (const t = Date.now(); Date.now() - t < 3000;) {
+    const h1 = document.querySelector('h1');
+    if (h1 && h1 !== oldH1 && h1.isConnected) {
+      await new Promise((ok) => setTimeout(ok, 50)); // let the shared guard act first
+      const a = document.activeElement;
+      if (!a || a === document.body) { h1.setAttribute('tabindex', '-1'); h1.focus({ preventScroll: true }); }
+      return;
+    }
+    await new Promise((ok) => setTimeout(ok, 50));
+  }
+}
+
 // Set when a Pay press found the plan already paid elsewhere (PAYMENT_RECEIVED); the redrawn page shows it and takes focus.
 let carriedNotice = null;
 // PAYMENT_IN_PROGRESS carries the server's "try again" sentence too, but the redrawn page shows the waiting view instead when one is pending.
 let carriedUnlessWaiting = false;
 let billWaiting = false; // set by planCard: the loaded billing has a payment waiting at the bank
 
+// What the plan card shows depends on these; if another tab changes them, this tab is stale.
+const billSigOf = (bill) => JSON.stringify([bill.pending_payment, bill.paid_until, bill.renewal_plan, bill.plan]);
+let billSig = null;
+let stopBillWatch = () => {};
+
+// While Settings is open, re-read billing when the tab shows again (another tab may have paid) and redraw only if it changed.
+// The redraw is the same path PAYMENT_RECEIVED uses; the shared focus and scroll guard keeps the person's place.
+function startBillWatch(rerender) {
+  let lastWatch = 0;
+  let trailing = null; // a return inside the 5 s window is checked once when the window ends, not dropped
+  const check = async () => {
+    if (document.hidden) return;
+    if (!location.hash.startsWith('#/settings')) { stopBillWatch(); return; }
+    const wait = 5000 - (Date.now() - lastWatch);
+    if (wait > 0) { if (!trailing) trailing = setTimeout(() => { trailing = null; check(); }, wait); return; }
+    lastWatch = Date.now();
+    try {
+      const fresh = await get('/billing');
+      if (billSig !== null && billSigOf(fresh) !== billSig) {
+        // Only a person on the heading or on nothing is re-seated; the shared guard already keeps a control.
+        const a = document.activeElement, oldH1 = document.querySelector('h1');
+        const free = !a || a === document.body || a === oldH1;
+        await refreshUser(); rerender();
+        if (free) await seatOnHeading(oldH1);
+      }
+    } catch { /* offline or signed out: leave the page as it is */ }
+  };
+  document.addEventListener('visibilitychange', check);
+  window.addEventListener('focus', check);
+  stopBillWatch = () => {
+    clearTimeout(trailing);
+    document.removeEventListener('visibilitychange', check);
+    window.removeEventListener('focus', check);
+    stopBillWatch = () => {};
+  };
+}
+
 export async function settingsView(el, { rerender, query = {} }) {
+  stopBillWatch();
   let billingNotice = null;
   let carriedEl = null;
   const unlessWaiting = carriedUnlessWaiting; carriedUnlessWaiting = false;
@@ -130,6 +182,7 @@ export async function settingsView(el, { rerender, query = {} }) {
     invite = () => formModal({
       title: 'Invite a team member',
       submitText: 'Create invitation',
+      check: (d) => { const p = propertyProblem(d); return p ? { property_ids: p } : null; },
       fields: [
         field({ name: 'email', label: 'Their email', type: 'email', required: true }),
         field({ name: 'role', label: 'Role', type: 'select', required: true, value: 'manager', placeholderOption: false, options: roleOptions(u), hint: `Property manager: ${ROLE_HELP.manager} Staff: ${ROLE_HELP.staff}${u.business_type === 'long_term' ? '' : ` ${CLEANER_HINT}`}` }),
@@ -216,6 +269,7 @@ export async function settingsView(el, { rerender, query = {} }) {
   if (unlessWaiting && billWaiting && billingNotice === carriedEl) billingNotice = null;
   el.replaceChildren(pageHead({ title: 'Settings', sub: u.organization_name }), h('div', { class: 'stack' }, billingNotice, sections));
   if (billingNotice) focusWhenAttached(el, billingNotice);
+  if (u.role === 'owner' && u.plan && !u.plan.is_demo) startBillWatch(rerender);
   // The top bar's "Invite a teammate" link (#/settings?invite=1) opens the dialog once the page is drawn.
   query.invite && invite && (delete query.invite, history.replaceState(null, '', '#/settings'), invite());
 }
@@ -418,6 +472,7 @@ export async function planCard(u, rerender) {
   let bill = { online: false, options: [], history: [] };
   try { bill = await get('/billing'); } catch { /* ignore */ }
   billWaiting = !!bill.pending_payment;
+  billSig = billSigOf(bill);
   const status = p.read_only
     ? h('div', { class: 'alert alert--error' }, p.reason === 'trial_ended' ? 'Your free trial has ended. Your workspace is view-only until you choose a plan.' : 'Your payment is overdue. Your workspace is view-only until you renew.')
     : p.plan === 'trial' ? h('div', { class: 'alert alert--info' }, `Free trial: ${p.trial_days_left} day${p.trial_days_left === 1 ? '' : 's'} left. All features are included.`)

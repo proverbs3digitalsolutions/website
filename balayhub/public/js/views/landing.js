@@ -327,6 +327,15 @@ export function openGetStarted(preset = {}) {
     } catch { /* private mode: the setup page simply asks again */ }
   };
   const read = () => { for (const el of box.querySelectorAll('input[name], select[name]')) data[el.name] = el.type === 'checkbox' ? el.checked : el.value.trim(); };
+  // Changing a field settles its own message and mark; when none is left the banner that pointed at them goes too.
+  for (const ev of ['input', 'change']) box.addEventListener(ev, (e) => {
+    const field = e.target.closest?.('[data-field]');
+    const err = field?.querySelector('.error');
+    if (!err?.textContent) return;
+    err.textContent = '';
+    field.querySelector('[aria-invalid]')?.removeAttribute('aria-invalid');
+    if (![...box.querySelectorAll('[data-field] .error')].some((x) => x.textContent)) box.querySelector('.gs-form-error')?.replaceChildren();
+  });
 
   function draw() {
     if (step === 1) {
@@ -365,7 +374,7 @@ export function openGetStarted(preset = {}) {
           h('button', { class: 'btn btn--primary', type: 'submit' }, t('Continue')))));
     } else {
       const submit = h('button', { class: 'btn btn--primary btn--block', type: 'submit' }, t('Start my free trial'));
-      const formError = h('div');
+      const formError = h('div', { class: 'gs-form-error' });
       const form = h('form', { class: 'form', novalidate: true, onsubmit: async (e) => {
         e.preventDefault(); read();
         showErrors({}); formError.replaceChildren();

@@ -13,8 +13,19 @@ for (const [name, src, kind] of [['housekeeping', hk, 'cleaning'], ['maintenance
     const block = src.slice(i, src.indexOf('\n  });', i));
     assert.match(block, /onchange: async/);
     assert.ok(block.includes(`uploadFile('${kind}'`));
-    assert.match(block, /upload\.disabled = true/);
-    assert.match(block, /upload\.disabled = false/);
+    if (name === 'housekeeping') {
+      // R23 OPS-2: a busy flag + aria-disabled (not `disabled`, which drops focus) guards a second pick.
+      assert.match(block, /uploading = true/);
+      assert.match(block, /uploading = false/);
+      assert.match(block, /setAttribute\('aria-disabled', 'true'\)/);
+      assert.match(block, /removeAttribute\('aria-disabled'\)/);
+      assert.match(block, /onclick: \(e\) => \{ if \(uploading\) e\.preventDefault\(\); \}/);
+      assert.match(block, /'data-focus-key': 'hk-photo'/);
+      assert.doesNotMatch(block, /upload\.disabled/);
+    } else {
+      assert.match(block, /upload\.disabled = true/);
+      assert.match(block, /upload\.disabled = false/);
+    }
     assert.match(block, /upload\.value = ''/);
     assert.doesNotMatch(src, /'Upload photo'\)?\)/);
     assert.doesNotMatch(src, /\}, (T\()?'Upload photo'/);

@@ -595,7 +595,7 @@ export function field(f) {
       ...common, class: 'input',
       type: isMoney ? 'text' : (f.type || 'text'),
       inputmode: isMoney ? 'decimal' : f.inputmode,
-      min: f.min, max: f.max, step: f.step, maxlength: f.maxlength || (f.type === 'date' ? undefined : 200),
+      min: f.min, max: f.max, step: f.step, 'data-positive': isMoney && f.positive ? true : undefined, maxlength: f.maxlength || (f.type === 'date' ? undefined : 200),
       value: f.value ?? '',
     });
     if (isMoney) input = h('div', { class: 'input-money' }, input);
@@ -717,6 +717,33 @@ export function emailProblems(form, missing) {
   return out;
 }
 
+// The server's field-type rules (src/lib/validate.js), read from each control, for fields that have no message yet.
+export const PHONE_RE = /^[+\d][\d\s()-]{6,19}$/;
+export function typeProblems(form, missing, labelOf) {
+  const out = {};
+  const live = (el) => el.name && !missing[el.name] && !el.disabled && !el.closest('[hidden]') && String(el.value ?? '').trim();
+  for (const el of form.querySelectorAll('.input-money input')) {
+    if (!live(el)) continue;
+    const n = parseAmount(el.value);
+    if (Number.isNaN(n)) out[el.name] = `${labelOf(el)} must be a valid amount (e.g. 8500 or 8500.50).`;
+    else if (n < 0) out[el.name] = `${labelOf(el)} cannot be negative.`;
+    else if (n === 0 && el.hasAttribute('data-positive')) out[el.name] = `${labelOf(el)} must be greater than zero.`;
+  }
+  for (const el of form.querySelectorAll('input[type=number]')) {
+    if (!live(el)) continue;
+    const n = Number(String(el.value).trim());
+    const step = el.getAttribute('step');
+    const whole = !step || (step !== 'any' && Number.isInteger(Number(step)));
+    if (!Number.isFinite(n) || (whole && !Number.isInteger(n))) out[el.name] = `${labelOf(el)} must be a whole number.`;
+    else if (el.min !== '' && n < Number(el.min)) out[el.name] = `${labelOf(el)} must be at least ${el.min}.`;
+    else if (el.max !== '' && n > Number(el.max)) out[el.name] = `${labelOf(el)} must be at most ${el.max}.`;
+  }
+  for (const el of form.querySelectorAll('input[type=tel]')) {
+    if (live(el) && !PHONE_RE.test(String(el.value).trim())) out[el.name] = 'Enter a valid phone number.';
+  }
+  return out;
+}
+
 export function makeForm({ fields, submitText = 'Save', onSubmit, cancel, draftKey, idempotent = false, extra, check }) {
   const submitBtn = h('button', { class: 'btn btn--primary', type: 'submit' }, submitText);
   const formError = h('div', { class: 'form-error' });
@@ -768,6 +795,9 @@ export function makeForm({ fields, submitText = 'Save', onSubmit, cancel, draftK
     // The view's own checks (check(data, form) returns null or { field: message }) run in the same pass, so every message shows at once.
     const more = check?.(readForm(form), form);
     if (more && Object.keys(more).length) { mergeChecks(missing, more); requiredOnly = false; }
+    // Then the server's field-type rules, for fields still without a message, so a second problem shows on the first Save.
+    const typed = typeProblems(form, missing, labelOf);
+    if (Object.keys(typed).length) { Object.assign(missing, typed); requiredOnly = false; }
     if (Object.keys(missing).length) {
       clearSuccessToasts();
       formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert', dataset: { fieldNote: '' } }, requiredOnly ? 'Please fill in the highlighted fields.' : 'Please check the highlighted fields.'));

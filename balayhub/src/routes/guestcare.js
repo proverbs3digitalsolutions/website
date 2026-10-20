@@ -167,6 +167,26 @@ const codeSpec = {
   max_uses: { type: 'int', min: 1, max: 100000, label: 'Maximum uses' },
   returning_only: { type: 'bool', label: 'Returning guests only' },
 };
+// The rules that look at a code's shape or at more than one field. validate() runs them in the same pass as the
+// field rules, so every problem comes back in one 400. Each rule skips when its own fields already failed.
+function discountCodeProblems(out, fields) {
+  const problems = {};
+  // Guests typing a code are forgiven a space; the owner's copy is refused so the code is saved exactly as shared.
+  if (!fields.code) {
+    if (/\s/.test(out.code)) problems.code = `Codes can't contain spaces. Try ${out.code.toUpperCase().replace(/\s+/g, '-')}.`;
+    else if (!/^[A-Z0-9-]{3,20}$/.test(normalize(out.code))) problems.code = 'Use 3–20 letters, numbers or dashes, e.g. BALIK10.';
+  }
+  // One of a percent or an amount, never both; an amount of 0 counts as no amount.
+  if (!fields.percent_off && !fields.amount_off) {
+    const amountSet = out.amount_off !== null && Number(out.amount_off) !== 0;
+    if (out.percent_off !== null && amountSet) problems.percent_off = 'Choose one: a percent off or an amount off, not both.';
+    else if (out.percent_off === null && !amountSet) problems.percent_off = 'Set either a percent off or an amount off.';
+  }
+  if (!fields.valid_from && !fields.valid_until && out.valid_from && out.valid_until && out.valid_until < out.valid_from) {
+    problems.valid_until = 'The end date must be after the start date.';
+  }
+  return problems;
+}
 
 // Filters: status (active / scheduled / expired / used up / off), type
 // (percent or amount), returning-guests-only, issued to a guest (yes / no), and search on the code or note.
@@ -202,20 +222,8 @@ router.get('/discount-codes', managers, ah(async (req, res) => {
 }));
 
 router.post('/discount-codes', owners, ah(async (req, res) => {
-  const body = validate(req.body, codeSpec);
-  // Guests typing a code are forgiven a space; the owner's copy is refused so the code is saved exactly as shared.
-  if (/\s/.test(body.code)) throw validationError({ code: `Codes can't contain spaces. Try ${body.code.toUpperCase().replace(/\s+/g, '-')}.` });
+  const body = validate(req.body, codeSpec, { check: discountCodeProblems });
   const code = normalize(body.code);
-  if (!/^[A-Z0-9-]{3,20}$/.test(code)) throw validationError({ code: 'Use 3–20 letters, numbers or dashes, e.g. BALIK10.' });
-  // One of a percent or an amount, never both; an amount of 0 counts as no amount.
-  const amountSet = body.amount_off !== null && Number(body.amount_off) !== 0;
-  if (body.percent_off !== null && amountSet) {
-    throw validationError({ percent_off: 'Choose one: a percent off or an amount off, not both.' });
-  }
-  if (body.percent_off === null && !amountSet) {
-    throw validationError({ percent_off: 'Set either a percent off or an amount off.' });
-  }
-  if (body.valid_from && body.valid_until && body.valid_until < body.valid_from) throw validationError({ valid_until: 'The end date must be after the start date.' });
   // Personal codes issued to returning guests don't count toward the owner's limit.
   const { n } = await one('SELECT COUNT(*)::int AS n FROM discount_codes WHERE organization_id = $1 AND active AND issued_to_booking_id IS NULL', [req.user.organization_id]);
   if (n >= 50) throw new HttpError(409, 'You can have up to 50 active codes. Turn some off first.', { code: 'LIMIT' });

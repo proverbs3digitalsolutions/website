@@ -54,7 +54,7 @@ export async function recordPaymentModal({ leaseId, amount, period, onSaved } = 
     name: 'lease_id', label: 'Tenant', type: 'select', required: true, value: leaseId,
     options: leases.map((l) => [l.lease_id, `${l.tenant_name} — ${l.property_name}, ${unitLabel(l.unit_name)}${tenantTag(l)}`]),
   });
-  const amountField = field({ name: 'amount_paid', label: 'Amount paid', type: 'money', required: true, hint: 'Partial payments are fine — the remaining balance is kept.' });
+  const amountField = field({ name: 'amount_paid', label: 'Amount paid', type: 'money', required: true, positive: true, hint: 'Partial payments are fine — the remaining balance is kept.' });
   leaseField.querySelector('select').addEventListener('change', (e) => {
     showBalance(e.target.value);
     const l = leases.find((x) => x.lease_id === e.target.value);
@@ -140,7 +140,7 @@ export async function addExpenseModal({ onSaved, expense } = {}) {
       propField, unitField,
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'category', label: 'Category', type: 'select', required: true, value: e.category, options: options(CATEGORIES) }),
-        field({ name: 'amount', label: 'Amount', type: 'money', required: true, value: e.amount })),
+        field({ name: 'amount', label: 'Amount', type: 'money', required: true, positive: true, value: e.amount })),
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'expense_date', label: 'Date', type: 'date', required: true, value: e.expense_date || todayManila(), max: todayManila() }),
         field({ name: 'vendor_name', label: 'Paid to (vendor)', value: e.vendor_name, maxlength: 120 })),
@@ -239,7 +239,9 @@ export async function rentView(el, { query }) {
   const noResults = () => emptyState({ title: 'No results found', text: 'Nothing matches these filters. Try removing a filter.', action: h('button', { class: 'btn btn--secondary', onclick: clearFilters }, 'Clear filters') });
   const apiQuery = () => qs(apiFilters(valuesFor(tab), TABS[tab].defaults));
 
+  let loadCount = 0;
   async function load() {
+    loadCount++;
     const f = valuesFor(tab);
     history.replaceState(null, '', `#/rent${qs({ tab: tab === 'rent' ? '' : tab, ...changed(f, TABS[tab].defaults) })}`);
     try {
@@ -402,9 +404,15 @@ export async function rentView(el, { query }) {
         // A new property changes the unit choices; drop a unit from another property.
         if (f.property_id !== lastProperty || (tab === 'expenses' && vendorSource(f) !== vendorsFrom)) {
           lastProperty = f.property_id; // before the redraw: the removed Amount box blurs and calls this again mid-replace
+          // A box still being typed in (focus never left it) commits now, so the new bar is built from the applied values and its own load is not repeated below.
+          const a = document.activeElement;
+          const name = barBox.contains(a) && a.matches?.('input[data-flt]') ? a.getAttribute('data-flt') : null;
+          const before = loadCount;
+          if (name) a.blur();
           if (f.unit_id && f.unit_id !== 'none' && !units.some((u) => u.unit_id === f.unit_id && (!f.property_id || u.property_id === f.property_id))) f.unit_id = '';
           rememberFilters(TABS[tab].key, f);
-          renderBar();
+          renderBar().then(() => { if (name) barBox.querySelector(`[data-flt="${name}"]`)?.focus({ preventScroll: true }); });
+          if (loadCount !== before) return;
         }
         load();
       },

@@ -465,7 +465,7 @@ function openMore() {
         return [g.title && h('h2', { class: 'morenav__group-title' }, g.title), links];
       }),
       h('div', { class: 'morenav__theme' }, themeSwitch()),
-      h('button', { onclick: () => { sheet.close(); logout(); } }, icon('logout'), 'Log out')));
+      h('button', { class: 'morenav__logout', onclick: () => { sheet.close(); logout(); } }, icon('logout'), 'Log out')));
   document.body.append(sheet);
   sheet.showModal();
   sheet.querySelector('a[href], button:not([disabled])')?.focus();
@@ -560,21 +560,25 @@ let drawnPath = null; // the path last drawn to the end: a different path next m
 
 // Focus goes to the new page's heading after a route change, but only when nothing (a dialog, a field) has taken it.
 // The link the person just clicked in the menu (the shell stays now) counts as free, so the heading still takes focus.
+// Focus is free: nothing on the page holds it (the menu, top bar, bottom bar, skip link and the page heading itself count as free).
+const focusFree = (a = document.activeElement) => !a || a === document.body || !a.isConnected || a.matches('h1') || Boolean(a.closest('.sidebar, .topbar, .bottomnav, .skip-link, .assist-fab'));
 function focusPageHeading(root) {
-  const a = document.activeElement;
-  if (a && a !== document.body && a.isConnected && !a.closest('.sidebar, .topbar, .bottomnav, .skip-link, .assist-fab')) return;
+  if (!focusFree()) return;
   const h1 = root.querySelector('h1');
   if (h1) { h1.setAttribute('tabindex', '-1'); h1.focus({ preventScroll: true }); }
 }
+let viaAddress = false; // the person changed the address (typed it, Back, Forward, a # link) while focus was free
 let viaRedirect = false; // set just before a redirect so the draw it triggers knows it is one
 // Whether the router should move focus to the page heading after a draw: a new page, the first page drawn, a page drawn
 // under a skeleton, or a redirect (even onto the page already open). Same-page redraws stay with the focus guard in ui.js.
-export const headingFocusDue = ({ drawnPath, path, prevKept, redirected }) => drawnPath === null || drawnPath !== path || !prevKept || redirected;
+export const headingFocusDue = ({ drawnPath, path, prevKept, redirected, addressChange }) => drawnPath === null || drawnPath !== path || !prevKept || redirected || Boolean(addressChange);
 export async function render() {
   const seq = ++renderSeq;
   stopRestore();
   const redirected = viaRedirect; // this draw came from one of the redirects below (even onto the page already open)
   viaRedirect = false;
+  const addressChange = viaAddress; // an address change on the same page counts as a route change for focus
+  viaAddress = false;
   const { path, query } = parseHash();
   const app = document.getElementById('app');
   const route = match(path);
@@ -655,7 +659,7 @@ export async function render() {
     const title = mount.querySelector('h1')?.textContent;
     document.title = title ? `${title} — BalayHub` : 'BalayHub';
     // A page drawn under a skeleton (no old page kept) lost the old heading's focus, even when a redirect landed on the page it left (Reports to Stay reports).
-    if (headingFocusDue({ drawnPath, path, prevKept: Boolean(prev), redirected })) focusPageHeading(mount);
+    if (headingFocusDue({ drawnPath, path, prevKept: Boolean(prev), redirected, addressChange })) focusPageHeading(mount);
     drawnPath = path;
   } else {
     lastDrawing = null;
@@ -673,7 +677,7 @@ export async function render() {
       if (!PUBLIC_TITLES[path]) document.documentElement.dataset.h1title = '1';
     }
     if (seq === renderSeq) {
-      if (headingFocusDue({ drawnPath, path, prevKept: true, redirected })) focusPageHeading(mount);
+      if (headingFocusDue({ drawnPath, path, prevKept: true, redirected, addressChange })) focusPageHeading(mount);
       drawnPath = path;
     }
   }
@@ -793,7 +797,7 @@ function updateOnline() {
 }
 window.addEventListener('online', () => { updateOnline(); toast('Back online.'); });
 window.addEventListener('offline', updateOnline);
-window.addEventListener('hashchange', render);
+window.addEventListener('hashchange', () => { viaAddress = focusFree(); render(); });
 
 // Below 960px the bottom bar covers the lower edge of the screen, and the browser only scrolls a focused control to that edge, so Tab can
 // reach a control hidden under the bar (WCAG 2.4.11). Scroll such a control clear of the bar.

@@ -1,7 +1,7 @@
 // Guest reviews (private) and direct-booking discount codes.
 
 import { get, post, qs } from '../api.js';
-import { h, peso, fmtDate, manilaDay, field, formModal, emptyState, pageHead, toast, badge } from '../ui.js';
+import { h, peso, fmtDate, manilaDay, field, parseAmount, formModal, emptyState, pageHead, toast, badge } from '../ui.js';
 import { state } from '../app.js';
 import { initFilters, filterBar, changed, apiFilters } from '../filters.js';
 
@@ -61,11 +61,28 @@ export async function reviewsView(el, { query = {} } = {}) {
   el.replaceChildren(head, bar, listBox);
 }
 
+// New discount code: the server's business rules (POST /discount-codes), same wording, so every problem shows on the first save.
+// A filled percent is left to the number box's own 1-90 rule; a money box that isn't a number is left to the money rule.
+export function discountCodeProblems(d) {
+  const out = {};
+  const code = String(d.code ?? '').trim();
+  if (/\s/.test(code)) out.code = `Codes can't contain spaces. Try ${code.toUpperCase().replace(/\s+/g, '-')}.`;
+  else if (code && !/^[A-Z0-9-]{3,20}$/.test(code.toUpperCase())) out.code = 'Use 3–20 letters, numbers or dashes, e.g. BALIK10.';
+  const percent = String(d.percent_off ?? '').trim() !== '';
+  const amountText = String(d.amount_off ?? '').trim();
+  const amount = amountText !== '' && parseAmount(amountText) !== 0;
+  if (percent && amount) out.percent_off = 'Choose one: a percent off or an amount off, not both.';
+  else if (!percent && !amount) out.percent_off = 'Set either a percent off or an amount off.';
+  if (d.valid_from && d.valid_until && d.valid_until < d.valid_from) out.valid_until = 'The end date must be after the start date.';
+  return Object.keys(out).length ? out : null;
+}
+
 export async function discountCodesView(el, { rerender, query = {} }) {
   const defaults = { q: '', status: '', type: '', returning: '', sort: '' };
   const filters = initFilters('discount-codes', query, defaults);
   const add = () => formModal({
     title: 'New discount code', submitText: 'Create code',
+    check: (d) => discountCodeProblems(d),
     fields: [
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'code', label: 'Code', required: true, maxlength: 20, placeholder: 'e.g. BALIK10', hint: 'Letters, numbers and dashes. No spaces.' }),

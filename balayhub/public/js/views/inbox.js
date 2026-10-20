@@ -333,6 +333,17 @@ export function restoredMode(savedMode, draftText) {
 // "@[Full Name](user_id)" shows as a highlighted "@Full Name"; the stored text stays as typed.
 // Same pattern as MENTION_RE in src/routes/inbox.js, so only mentions the server saved are highlighted.
 const MENTION = /@\[([^\]\n]{1,120})\]\(([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\)/gi;
+// The note box shows "@Name" while typing; the saved body (and the draft) carry "@[Name](id)". `picked` maps a name to its user id.
+export function encodeMentions(text, picked) {
+  const names = [...picked.keys()].sort((a, b) => b.length - a.length).map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  if (!names.length) return String(text ?? '');
+  return String(text ?? '').replace(new RegExp(`@(${names.join('|')})(?=$|[\\s.,;:!?)])`, 'g'), (_m, n) => `@[${n}](${picked.get(n)})`);
+}
+export function decodeMentions(text) {
+  const picked = new Map();
+  const out = String(text ?? '').replace(MENTION, (_m, name, id) => { picked.set(name, id); return `@${name}`; });
+  return { text: out, picked };
+}
 function renderMentions(text) {
   const out = [];
   let last = 0;
@@ -353,7 +364,7 @@ export function previewText(text) {
 }
 
 // Typing "@" in the note box lists teammates; arrows + Enter pick, Esc closes.
-function mentionPicker(body, people) {
+function mentionPicker(body, people, picked) {
   const list = h('ul', { class: 'mention-list', role: 'listbox', id: `ml-${Math.random().toString(36).slice(2, 7)}`, 'aria-label': 'Team members', hidden: true });
   let items = []; let active = 0; let start = -1;
   const close = () => { list.hidden = true; items = []; start = -1; body.removeAttribute('aria-activedescendant'); };
@@ -363,7 +374,8 @@ function mentionPicker(body, people) {
   };
   const pick = (p) => {
     const caret = body.selectionStart;
-    const ins = `@[${p.full_name}](${p.user_id}) `;
+    const ins = `@${p.full_name} `;
+    picked.set(p.full_name, p.user_id);
     body.value = body.value.slice(0, start) + ins + body.value.slice(caret);
     const pos = start + ins.length;
     body.setSelectionRange(pos, pos);
@@ -438,9 +450,11 @@ function composer(c, templates, status, rerender, assignees = []) {
   ['input', 'change'].forEach((ev) => sendAt.addEventListener(ev, () => { sendAt.removeAttribute('aria-invalid'); err.textContent = ''; }));
   const modeHint = h('div', { class: 'small muted', role: 'status' });
   const sendBtn = h('button', { class: 'btn btn--primary', type: 'submit' }, 'Send');
+  const picked = new Map();
+  if (mode === 'note') { const d = decodeMentions(savedDraft); savedDraft = d.text; d.picked.forEach((id, n) => picked.set(n, id)); }
   body.value = savedDraft;
   updateCounter();
-  body.addEventListener('input', () => { try { sessionStorage.setItem(draftKey, body.value); sessionStorage.setItem(modeKey, mode); } catch { /* ignore */ } });
+  body.addEventListener('input', () => { try { sessionStorage.setItem(draftKey, mode === 'note' ? encodeMentions(body.value, picked) : body.value); sessionStorage.setItem(modeKey, mode); } catch { /* ignore */ } });
   // The subject is kept the same way, so switching conversations doesn't lose it.
   const subjKey = `bh-draft:subj:${c.conversation_id}`;
   try { subject.value = sessionStorage.getItem(subjKey) || ''; } catch { /* ignore */ }
@@ -492,7 +506,7 @@ function composer(c, templates, status, rerender, assignees = []) {
     },
   }, '✨ Draft reply with AI');
 
-  const picker = mentionPicker(body, assignees);
+  const picker = mentionPicker(body, assignees, picked);
   const modeTabs = h('div', { class: 'tabs tabs--compact' },
     [['message', 'Message guest'], ['note', 'Internal note']].map(([k, t]) => h('button', {
       type: 'button', 'aria-pressed': String(k === mode),
@@ -550,7 +564,7 @@ function composer(c, templates, status, rerender, assignees = []) {
       busy = true;
       sendBtn.disabled = true;
       try {
-        const payload = { body: body.value, note: mode === 'note' };
+        const payload = { body: mode === 'note' ? encodeMentions(body.value, picked) : body.value, note: mode === 'note' };
         if (mode === 'message') {
           if (subject.value.trim()) payload.subject = subject.value.trim();
           if (scheduleFor) payload.send_at = scheduleFor.toISOString();

@@ -1,7 +1,7 @@
 // Pricing rules: how nightly prices are worked out, seasons, and the PH holiday calendar.
 
 import { get, post, patch, qs } from '../api.js';
-import { h, peso, parseAmount, fmtDate, field, formModal, openModal, confirmDialog, emptyState, pageHead, toast, todayManila, showErrors } from '../ui.js';
+import { h, peso, parseAmount, fmtDate, field, formModal, openModal, confirmDialog, emptyState, pageHead, toast, todayManila, showErrors, clearErrors } from '../ui.js';
 import { highRateOk } from '../rates.js';
 import { state } from '../app.js';
 import { addDays } from './reservations.js';
@@ -325,21 +325,43 @@ function previewCard(listings, seasons) {
 // ---------------------------------------------------------------- bulk changes
 const BULK_ACTIONS = [['set', 'Set a price'], ['percent', 'Change prices by %'], ['clear', 'Clear custom prices'], ['block', 'Block dates'], ['unblock', 'Unblock dates']];
 
+// Every problem with a bulk change at once, keyed by field name; only the boxes the chosen action shows are checked.
+export function bulkProblems(b) {
+  const p = {};
+  if (b.tag === '') p.tag = 'Choose at least one listing or a tag.';
+  else if (b.unit_ids && !b.unit_ids.length) p.unit_ids = 'Choose at least one listing or a tag.';
+  if (!b.from) p.from = 'Choose the first and last night.';
+  if (!b.to) p.to = 'Choose the first and last night.';
+  if (b.from && b.to && b.to < b.from) p.to = 'The last night must be on or after the first night.';
+  if (b.action === 'set') {
+    const n = parseAmount(b.price);
+    if (!b.price) p.price = 'Enter the new price per night.';
+    else if (Number.isNaN(n)) p.price = 'New price per night must be a valid amount (e.g. 8500 or 8500.50).';
+    else if (n <= 0) p.price = 'New price per night must be greater than zero.';
+  }
+  if (b.action === 'percent' && !Number.isFinite(b.percent)) p.percent = 'Enter a percentage between -90 and 300.';
+  if (b.action === 'block' && !b.reason) p.reason = 'Add a reason for the block.';
+  return p;
+}
+
 async function bulkModal({ listings, rerender }) {
   let tags = [];
   try { tags = (await get('/tags')).tags || []; } catch { /* tag picking is optional */ }
-  const checks = listings.map((l) => h('label', { class: 'check pr-pick' }, h('input', { type: 'checkbox', name: 'unit', value: l.unit_id }), h('span', null, `${l.unit_name} · ${l.property_name}`)));
+  const checks = listings.map((l) => h('label', { class: 'check pr-pick' }, h('input', { type: 'checkbox', name: 'unit', value: l.unit_id, 'data-focus': '' }), h('span', null, `${l.unit_name} · ${l.property_name}`)));
   const tagSel = h('select', { class: 'input', name: 'tag', 'aria-label': 'Tag' }, h('option', { value: '' }, 'Choose a tag'), tags.map((t) => h('option', { value: t.tag }, `${t.tag} (${t.count})`)));
   const byRadio = (v, text, on) => h('label', { class: 'check' }, h('input', { type: 'radio', name: 'by', value: v, checked: on }), h('span', null, text));
   const listBox = h('div', { class: 'pr-picklist' }, checks);
-  const tagBox = h('div', { class: 'field', hidden: true }, tagSel);
+  const tagBox = h('div', { class: 'field', 'data-field': 'tag', hidden: true }, tagSel, h('div', { class: 'error', role: 'alert' }));
   const actSel = h('select', { class: 'input', name: 'action', id: 'bk-action' }, BULK_ACTIONS.map(([v, t]) => h('option', { value: v }, t)));
   const price = h('input', { class: 'input', name: 'price', id: 'bk-price', inputmode: 'decimal', placeholder: '2,500' });
   const pct = h('input', { class: 'input', name: 'percent', id: 'bk-pct', type: 'number', min: -90, max: 300, step: 1, placeholder: '-10' });
   const reason = h('input', { class: 'input', name: 'reason', id: 'bk-reason', maxlength: 200, placeholder: 'e.g. Repairs, family stay' });
   const from = h('input', { class: 'input', type: 'date', name: 'from', id: 'bk-from', value: todayManila() });
   const to = h('input', { class: 'input', type: 'date', name: 'to', id: 'bk-to', value: addDays(todayManila(), 30) });
-  const wrap = (id, label, input, hint, extra) => h('div', { class: 'field', hidden: extra?.hidden }, h('label', { for: id }, label), input, hint && h('p', { class: 'muted small' }, hint));
+  const wrap = (id, label, input, hint, extra) => {
+    input.setAttribute('aria-describedby', `${id}-err`);
+    return h('div', { class: 'field', 'data-field': id === 'bk-pct' ? 'percent' : id.slice(3), hidden: extra?.hidden }, h('label', { for: id }, label), input, hint && h('p', { class: 'muted small' }, hint), h('div', { class: 'error', id: `${id}-err`, role: 'alert' }));
+  };
   const priceF = wrap('bk-price', 'New price per night', price);
   const pctF = wrap('bk-pct', 'Change (%)', pct, 'Use a minus for a discount, e.g. -10. Works from each night\'s current price.', { hidden: true });
   const reasonF = wrap('bk-reason', 'Reason for the block', reason, 'Required. Kept in the audit log.', { hidden: true });
@@ -349,9 +371,9 @@ async function bulkModal({ listings, rerender }) {
   const applyBtn = h('button', { class: 'btn btn--primary', type: 'button', disabled: true }, 'Apply');
   const form = h('form', { class: 'form', novalidate: true },
     err,
-    h('fieldset', { class: 'pr-fieldset' }, h('legend', null, 'Listings'),
+    h('fieldset', { class: 'pr-fieldset', 'data-field': 'unit_ids' }, h('legend', null, 'Listings'),
       h('div', { class: 'chips' }, byRadio('pick', 'Pick listings', true), tags.length ? byRadio('tag', 'By tag', false) : null),
-      listBox, tagBox),
+      listBox, h('div', { class: 'error', role: 'alert' }), tagBox),
     h('div', { class: 'form-row form-row--2' }, wrap('bk-from', 'First night', from), wrap('bk-to', 'Last night', to)),
     h('div', { class: 'field' }, h('label', { for: 'bk-action' }, 'What to do'), actSel),
     priceF, pctF, reasonF,
@@ -367,16 +389,6 @@ async function bulkModal({ listings, rerender }) {
     if (b.action === 'block') b.reason = reason.value.trim();
     return b;
   };
-  const check = () => {
-    const b = body(true);
-    if (b.tag === '' || (b.unit_ids && !b.unit_ids.length)) return 'Choose at least one listing or a tag.';
-    if (!b.from || !b.to) return 'Choose the first and last night.';
-    if (b.to < b.from) return 'The last night must be on or after the first night.';
-    if (b.action === 'set' && !b.price) return 'Enter the new price per night.';
-    if (b.action === 'percent' && (pct.value === '' || !Number.isFinite(b.percent))) return 'Enter a percentage between -90 and 300.';
-    if (b.action === 'block' && !b.reason) return 'Add a reason for the block.';
-    return '';
-  };
   const stale = () => { applyBtn.disabled = true; result.replaceChildren(); };
   const sync = () => {
     priceF.hidden = actSel.value !== 'set'; pctF.hidden = actSel.value !== 'percent'; reasonF.hidden = actSel.value !== 'block';
@@ -384,18 +396,38 @@ async function bulkModal({ listings, rerender }) {
     listBox.hidden = tagMode; tagBox.hidden = !tagMode;
     stale();
   };
-  form.addEventListener('change', sync);
-  form.addEventListener('input', stale);
+  // An edit clears that box's mark and message (the dates and the listing choice clear together); the banner goes with the last one.
+  const clearEdited = (e) => {
+    const t = e.target;
+    const names = ['from', 'to'].includes(t.name) ? ['from', 'to'] : ['by', 'tag', 'unit'].includes(t.name) ? ['unit_ids', 'tag'] : [t.closest?.('[data-field]')?.dataset.field];
+    for (const n of names) {
+      const w = form.querySelector(`[data-field="${n}"]`);
+      if (!w) continue;
+      w.classList.remove('field--invalid');
+      w.querySelector('.error').textContent = '';
+      w.querySelectorAll('[aria-invalid]').forEach((c) => c.removeAttribute('aria-invalid'));
+      w.removeAttribute('aria-invalid');
+    }
+    if (!form.querySelector('.field--invalid')) err.replaceChildren();
+  };
+  form.addEventListener('change', (e) => { clearEdited(e); sync(); });
+  form.addEventListener('input', (e) => { clearEdited(e); stale(); });
   const m = openModal({ title: 'Bulk changes', body: form, wide: true });
 
   const skipped = (list) => list?.length ? h('div', { class: 'alert alert--warn' }, h('strong', null, `Skipped (${list.length})`),
     h('ul', { class: 'small' }, list.map((s) => h('li', null, `${s.unit_name}: ${s.reason}`)))) : null;
   const run = async (dry) => {
-    err.replaceChildren();
-    const problem = check();
-    if (problem) { err.replaceChildren(h('div', { class: 'alert alert--error' }, problem)); return null; }
+    clearErrors(form); err.replaceChildren();
+    const banner = (text) => err.replaceChildren(h('div', { class: 'alert alert--error' }, text));
+    const problems = bulkProblems(body(true));
+    if (Object.keys(problems).length) { banner('Please check the highlighted fields.'); showErrors(form, problems); return null; }
     try { return await post(isBlocks() ? '/bulk/blocks' : '/bulk/prices', body(dry)); }
-    catch (e) { err.replaceChildren(h('div', { class: 'alert alert--error' }, e.fields ? Object.values(e.fields).join(' ') : e.message)); return null; }
+    catch (e) {
+      const rest = e.fields ? showErrors(form, e.fields) : [e.message];
+      if (rest.length) banner(rest.join(' '));
+      else banner('Please check the highlighted fields.');
+      return null;
+    }
   };
   form.addEventListener('submit', async (e) => {
     e.preventDefault();

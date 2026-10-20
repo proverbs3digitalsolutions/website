@@ -32,7 +32,7 @@ test('restoredMode: saved mode wins; an old draft opens as a note', () => {
 test('mode is written on change and on input, read on load, removed with the draft', () => {
   assert.match(INBOX, /sessionStorage\.getItem\(modeKey\)/);
   assert.match(INBOX, /composerModes\.set\([^)]*\);\s*try \{ sessionStorage\.setItem\(modeKey, k\)/);
-  assert.match(INBOX, /setItem\(draftKey, body\.value\); sessionStorage\.setItem\(modeKey, mode\)/);
+  assert.match(INBOX, /setItem\(draftKey, mode === 'note' \? encodeMentions\(body\.value, picked\) : body\.value\); sessionStorage\.setItem\(modeKey, mode\)/);
   assert.match(INBOX, /removeItem\(draftKey\); sessionStorage\.removeItem\(modeKey\)/);
   assert.match(INBOX, /bh-draft:mode:/);
 });

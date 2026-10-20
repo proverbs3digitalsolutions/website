@@ -279,6 +279,7 @@ dialog.morenav::backdrop { background: var(--scrim); }
 .morenav__sheet .morenav__close { min-height: 44px; justify-content: center; background: var(--gray-soft); margin-bottom: 4px; position: sticky; top: 0; z-index: 1; box-shadow: 0 4px 0 var(--surface); }
 .morenav__sheet svg { width: 22px; height: 22px; color: var(--navy); }
 /* A group heading in the More sheet, styled like the sidebar group titles (QA round 9). */
+.morenav__sheet .morenav__logout { margin-top: 16px; border-top: 1px solid var(--line); border-radius: 0 0 12px 12px; }
 .morenav__group-title { margin: 14px 12px 4px; font-family: inherit; font-size: .78rem; font-weight: 600; line-height: 1.3; color: var(--muted); }
 /* The fold title is a tap target (QA round 13, F01 fold): 44px tall, with the same arrow as the sidebar fold. */
 .morenav__fold > summary.morenav__group-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; cursor: pointer; list-style: none; border-radius: 8px; }
@@ -359,6 +360,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 
 .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
 @media (min-width: 760px) { .stats { grid-template-columns: repeat(4, 1fr); } }
+@media (max-width: 559px) { .stats--stack-phone { grid-template-columns: 1fr; } }
 .stat {
   background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 16px;
   text-decoration: none; color: inherit; display: block; border: 1px solid transparent; min-width: 0;

@@ -1,6 +1,6 @@
 # BalayHub design brief
 
-Last updated: 2026-10-21 (QA round 22: section 30; D-104). Before that: 2026-10-21 (QA round 21: section 29; D-103). Before that: 2026-10-20 (QA round 20: section 28; D-102). Before that: 2026-10-20 (QA round 19: landing links hidden below 768px; D-101). Before that: 2026-10-19 (QA round 18: section 27, phone filter bar, theme switch label; D-100). Before that: 2026-10-15 (QA round 17: section 26, the wordmark logotype exemption, the focus key table; D-98 and D-99)
+Last updated: 2026-10-21 (QA round 23: section 31; D-105). Before that: 2026-10-21 (QA round 22: section 30; D-104). Before that: 2026-10-21 (QA round 21: section 29; D-103). Before that: 2026-10-20 (QA round 20: section 28; D-102). Before that: 2026-10-20 (QA round 19: landing links hidden below 768px; D-101). Before that: 2026-10-19 (QA round 18: section 27, phone filter bar, theme switch label; D-100). Before that: 2026-10-15 (QA round 17: section 26, the wordmark logotype exemption, the focus key table; D-98 and D-99)
 
 **Summary.** BalayHub is a phone-first web app (also an installable PWA) for Filipino rental and staycation hosts. It is built with plain CSS, one stylesheet (`public/css/app.css`), and small JavaScript helpers (`public/js/ui.js`). There is no framework and no CSS preprocessor. The look is calm and practical: Forest Green on soft off-white, Sand and Sun as warm accents, Poppins for headings, Inter for text, rounded cards, and large touch targets. Colours come from CSS custom properties on `:root`. A dark theme redefines the same tokens, so any component that uses tokens gets dark mode automatically. This brief records what is **actually built**. Every value below comes from the code. Where the code doesn't define a token (spacing, type sizes), the brief lists the values in use and says so.
 
@@ -712,3 +712,11 @@ Decision D-104. CSS in `public/css/app.css`.
 
 - **Picked-day price contrast.** `.bk-cal__day.is-picked small` (the small price on a picked check-in or check-out day on the booking calendar) is white in every theme. White on the dark teal is about 5.3:1, and on the light-theme forest green `#0f5132` it is higher; 4.5:1 is needed (WCAG 1.4.3). No new token.
 - **Assistant panel above the phone bottom bar.** Under 560px, `.assist` ends above `.bottomnav`: its `bottom` is `calc(var(--bottomnav-h, 56px) + env(safe-area-inset-bottom))` and its height shrinks by the same amount. `--bottomnav-h` is set on `:root` to the bar's measured height and used by both rules. The bar stays visible and tappable. Pages with no bottom bar (guest pages) and desktop are unchanged.
+
+## 31. Patterns added in QA round 23 (2026-10-21)
+
+Decision D-105. CSS in `public/css/app.css`.
+
+- **Phone More sheet spacing.** In the sheet (`.morenav__sheet`), every row is a separate tap target at 390 x 844 at every scroll position: no row overlaps another, so **Log out never sits on top of a link**. The Log out button has the class `morenav__logout`: a divider above it (`border-top` in the sheet's border colour) and `margin-top: 16px` (at least a 16 px gap). A mis-tap near the last link cannot sign anyone out. Log out may be below the fold when the sheet scrolls; it just cannot overlap a row. Close stays pinned. No new token.
+- **Performance headline cards stack on phones.** The Performance headline row carries `stats--stack-phone`; under 560px (`@media (max-width: 559px)`) its cards are one per row (`grid-template-columns: 1fr`), so the Revenue detail wraps to three lines or fewer. This applies to that row only: Dashboard and other `.stats` rows keep two per row on phones, and at 1280 the row is four across.
+- **Marked fields in Bulk changes** use the existing invalid-field pattern (`.field--invalid`, the `.error` line under the box with `role="alert"`, `aria-invalid` on the box). A message and mark clear when that box is edited. No new style.

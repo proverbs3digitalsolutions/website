@@ -707,13 +707,16 @@ export async function housekeepingDetailView(el, { params, rerender }) {
   const progress = h('span', { class: 'muted small' }, T('{n} of {total} done', { n: t.done_count, total: t.item_count }));
   const statusSlot = h('span', null, statusBadge(t.status));
   const startBtn = t.status === 'todo' ? h('button', { class: 'btn btn--secondary', 'data-focus-key': 'hk-status', onclick: () => setStatus('in_progress', T('Started.')) }, T('Start')) : null;
-  // Picking a photo uploads it at once (no second step); the input is off while the upload runs.
+  // Picking a photo uploads it at once (no second step). A busy flag, not `disabled`, blocks a second pick: a disabled control drops focus to the body.
+  let uploading = false;
   const upload = h('input', {
-    type: 'file', accept: 'image/jpeg,image/png,image/webp', class: 'input', capture: 'environment', 'aria-label': T('Add photo'),
+    type: 'file', accept: 'image/jpeg,image/png,image/webp', class: 'input', capture: 'environment', 'aria-label': T('Add photo'), 'data-focus-key': 'hk-photo',
+    onclick: (e) => { if (uploading) e.preventDefault(); },
     onchange: async () => {
-      if (!upload.files[0]) return;
-      upload.disabled = true;
-      try { await uploadFile('cleaning', t.task_id, upload.files[0]); upload.value = ''; toast(T('Photo uploaded.')); rerender(); } catch (err) { toast(err.code === 'UNSUPPORTED_FILE' || err.status === 413 ? T('Upload a JPG, PNG or WEBP photo up to 10 MB.') : err.message, 'error'); upload.disabled = false; upload.value = ''; }
+      if (uploading || !upload.files[0]) return;
+      uploading = true;
+      upload.setAttribute('aria-disabled', 'true');
+      try { await uploadFile('cleaning', t.task_id, upload.files[0]); upload.value = ''; toast(T('Photo uploaded.')); rerender(); } catch (err) { toast(err.code === 'UNSUPPORTED_FILE' || err.status === 413 ? T('Upload a JPG, PNG or WEBP photo up to 10 MB.') : err.message, 'error'); upload.value = ''; } finally { uploading = false; upload.removeAttribute('aria-disabled'); }
     },
   });
   const actionBtn = (text, fn) => h('button', { class: 'btn btn--secondary hk-action', type: 'button', onclick: () => fn(t, rerender) }, text);
