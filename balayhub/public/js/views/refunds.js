@@ -72,7 +72,7 @@ export async function refundsCard(reservation, rerender) {
         hint: `Up to ${peso(data.refundable)} is left to refund.` }),
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'refund_date', label: 'Date refunded', type: 'date', required: true, value: todayManila(), max: todayManila() }),
-        field({ name: 'method', label: 'Method', type: 'select', value: '', placeholderOption: 'Choose…', options: Object.entries(METHOD_LABEL) })),
+        field({ name: 'method', label: 'Method', type: 'select', value: '', placeholderOption: 'Choose…', options: Object.entries(METHOD_LABEL), markRequired: true })),
       field({ name: 'reference_number', label: 'Reference number (optional)', maxlength: 100 }),
       field({ name: 'reason', label: 'Reason', type: 'textarea', required: true,
         hint: 'Kept in the refund log. For example: cancelled by guest, 6 days before check-in.' }),

@@ -17,6 +17,7 @@ const RECEIPT_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp
 const RECEIPT_MAX = 10 * 1024 * 1024;
 export function receiptProblem(form) {
   const f = form.querySelector('input[name="__receipt"]')?.files?.[0];
+  if (f && f.size === 0) return 'This file is empty. Choose the receipt file again.';
   if (f && (!RECEIPT_TYPES.includes(f.type) || f.size > RECEIPT_MAX)) return 'Upload a PDF, JPG, PNG or WEBP file up to 10 MB.';
 }
 
@@ -28,10 +29,11 @@ function receiptField() {
     h('div', { class: 'error', id: 'receipt-input-err', role: 'alert' }));
 }
 
+// Returns true when there is no file or the upload worked, else the server's message; the caller shows the one toast.
 async function attachReceipt(form, type, id) {
   const file = form.querySelector('input[name="__receipt"]')?.files[0];
-  if (!file) return;
-  try { await uploadFile(type, id, file); } catch (err) { toast(`Saved, but the receipt didn't upload: ${err.message}`, 'error'); }
+  if (!file) return true;
+  try { await uploadFile(type, id, file); return true; } catch (err) { return err.message; }
 }
 
 // ---------------------------------------------------------------- record payment
@@ -119,8 +121,9 @@ export async function recordPaymentModal({ leaseId, amount, period, onSaved } = 
         if (!await confirmDialog({ title: 'Record more than is owed?', text: `Record ${peso(parseAmount(data.amount_paid))}? ${peso(err.data.credit_after)} becomes advance credit.`, confirmText: 'Record anyway' })) return false;
         res = await post('/payments', { ...data, confirm_over: true }, { idempotencyKey });
       }
-      await attachReceipt(form, 'payment', res.payment.payment_id);
-      toast(res.duplicate ? 'This payment was already saved.' : `Payment saved. New balance: ${peso(res.balance?.outstanding ?? 0)}`);
+      const up = await attachReceipt(form, 'payment', res.payment.payment_id);
+      if (up !== true) toast(`Payment saved, but the receipt didn't upload: ${up}`, 'error');
+      else toast(res.duplicate ? 'This payment was already saved.' : `Payment saved. New balance: ${peso(res.balance?.outstanding ?? 0)}`);
       if (onSaved) onSaved(res.payment); else navigate(`#/payments/${res.payment.payment_id}`);
     },
   });
@@ -187,8 +190,9 @@ export async function addExpenseModal({ onSaved, expense } = {}) {
         return;
       }
       const res = await post('/expenses', data, { idempotencyKey });
-      await attachReceipt(form, 'expense', res.expense.expense_id);
-      toast(res.duplicate ? 'This expense was already saved.' : 'Expense saved.');
+      const up = await attachReceipt(form, 'expense', res.expense.expense_id);
+      if (up !== true) toast(`Expense saved, but the receipt didn't upload: ${up}`, 'error');
+      else toast(res.duplicate ? 'This expense was already saved.' : 'Expense saved.');
       onSaved?.(res.expense);
     },
   });

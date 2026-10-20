@@ -22,7 +22,7 @@ export function couponText(c) {
   return `${what}${c.kind === 'free' && c.duration !== 'forever' ? ' for' : ''} ${span}`;
 }
 
-export function couponBox({ current, getSelection, onQuote }) {
+export function couponBox({ current, getSelection, onQuote, initialCode }) {
   const live = current && (current.status === 'active' || current.status === 'pending');
   const usedUp = current && current.status === 'used_up'; // no code needed to ask what a full-price payment looks like
   let code = '';
@@ -100,6 +100,8 @@ export function couponBox({ current, getSelection, onQuote }) {
       current && current.status === 'used_up' && h('p', { class: 'muted small' }, `Your coupon ${current.code} is used up.`),
       form);
   }
+  // A code the person typed survives a redraw of the page (D-106): the new box starts with it, open.
+  if (!live && typeof initialCode === 'string' && initialCode) { input.value = initialCode; code = initialCode; box.open = true; }
   box.refresh = refresh;
   box.getCode = () => code;
   box.showError = (text) => { if (box.tagName === 'DETAILS') box.open = true; setMsg(text); };

@@ -443,11 +443,11 @@ export function filterBar({ key, values, defaults, search, quick = [], more = []
   // Phones: the quick filters sit in the Filters panel, so the search box and the button share one row and the list starts near the top.
   const byEl = root.querySelector?.('.flt__by');
   const grid = panel?.firstChild;
-  // Phones also put the chips above the open panel, so a choice shows without scrolling past the panel.
+  // The chips sit under the bar, above the panel, at every width, so a choice shows without scrolling past the panel (D-108).
   if (panel && typeof matchMedia === 'function') {
     const mq = matchMedia('(max-width: 559px)');
     const place = () => {
-      if (mq.matches) panel.before(chips); else panel.after(chips);
+      panel.before(chips);
       if (!grid || !quickEls.length) return;
       // On phones each quick select gets its visible label in the panel; a quick-only bar shows the Filters button instead of "Filter by".
       if (mq.matches) { grid.prepend(...quickEls); for (const c of quickCtrls) if (c.field) { c.el.before(c.field); c.field.append(c.el); } }

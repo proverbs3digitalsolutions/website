@@ -49,7 +49,8 @@ export const sameRate = (prior, rateType, amount) => !!prior && prior.rate_type 
 
 // What the Pay column says when a clean has no amount yet: the owner's own clean, a name with no rate, or a clean still to price.
 const SELF_PAY = 'Done by you, no pay';
-const noPayText = (x) => (x.pay_status === 'self' ? SELF_PAY : x.no_rate ? 'No rate for this name. Add a rate or pick the team member.' : 'Pay not set. Use Set pay.');
+// Managers can't see or add rates (owner-only routes), so they are told to ask the owner.
+const noPayText = (x, owner) => (x.pay_status === 'self' ? SELF_PAY : x.no_rate ? (owner ? 'No rate for this name. Add a rate or pick the team member.' : 'No rate for this name. Ask the owner to add a rate.') : 'Pay not set. Use Set pay.');
 
 // One cleaner's status in the By cleaner card. A clean with no pay set is never "All paid"; a group of only the owner's own cleans owes nothing and says so.
 export const cleanerStatus = (c) => {
@@ -199,7 +200,7 @@ export async function cleanerPayView(el, { query = {} } = {}) {
                 h('td', { dataset: { label: 'Date' } }, fmtDate(doneDay(x))),
                 h('td', { dataset: { label: 'Unit' } }, unitOf(x)),
                 h('td', { dataset: { label: 'Cleaner' } }, whoOf(x)),
-                h('td', { class: 'num', dataset: { label: 'Pay' } }, x.pay_amount == null ? h('span', { class: 'muted' }, noPayText(x)) : peso(x.pay_amount)),
+                h('td', { class: 'num', dataset: { label: 'Pay' } }, x.pay_amount == null ? h('span', { class: 'muted' }, noPayText(x, isOwner)) : peso(x.pay_amount)),
                 h('td', { dataset: { label: 'Status' } }, x.pay_status === 'paid'
                   ? h('span', null, h('span', { class: 'badge badge--paid' }, 'Paid'), h('span', { class: 'muted small ops-note' }, ` ${x.paid_on ? fmtDate(manilaDay(x.paid_on)) : ''}${x.paid_method ? ` · ${label(x.paid_method)}` : ''}`))
                   : x.pay_status === 'unpaid' && h('span', { class: 'badge badge--unpaid' }, 'Unpaid')),
@@ -207,7 +208,7 @@ export async function cleanerPayView(el, { query = {} } = {}) {
                   x.pay_status === 'unpaid' && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'data-focus-key': `cp-pay-${x.task_id}`, onclick: () => editPay(x), 'aria-label': `${x.pay_amount == null ? 'Set pay' : 'Edit pay'} for ${unitOf(x)} on ${fmtDate(doneDay(x))}` }, x.pay_amount == null ? 'Set pay' : 'Edit pay'),
                   x.pay_status === 'paid' && isOwner && h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'data-focus-key': `cp-pay-${x.task_id}`, onclick: () => unpay(x), 'aria-label': `Undo paid for ${unitOf(x)} on ${fmtDate(doneDay(x))}` }, 'Undo paid')));
             })))))
-        : h('div', { class: 'card' }, emptyState({ iconName: 'inbox', title: data.tasks.length ? 'No cleans match these filters' : words.empty, text: data.tasks.length ? 'Try removing a filter.' : 'Pay shows up here once a cleaner marks a clean as done. Check the rates below if amounts are missing.' })));
+        : h('div', { class: 'card' }, emptyState({ iconName: 'inbox', title: data.tasks.length ? 'No cleans match these filters' : words.empty, text: data.tasks.length ? 'Try removing a filter.' : isOwner ? 'Pay shows up here once a cleaner marks a clean as done. Check the rates below if amounts are missing.' : 'Pay shows up here once a cleaner marks a clean as done.' })));
   }
 
   function renderBar() {

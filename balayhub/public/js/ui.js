@@ -888,8 +888,8 @@ export function formModal({ title, ...formOpts }) {
   const form = makeForm({
     ...formOpts,
     cancel: () => modal.close(),
-    // false means nothing was saved, so the dialog stays open.
-    onSubmit: async (data, ctx) => { const result = await formOpts.onSubmit(data, ctx); if (result !== false) modal.close(); },
+    // false means nothing was saved, so the dialog stays open. Pass the view's false on, so makeForm keeps the draft (D-106, D-108).
+    onSubmit: async (data, ctx) => { const result = await formOpts.onSubmit(data, ctx); if (result !== false) modal.close(); return result; },
   });
   modal = openModal({ title, body: form });
   return modal;

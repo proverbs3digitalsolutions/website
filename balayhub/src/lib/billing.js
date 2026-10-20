@@ -105,6 +105,12 @@ async function prepareCharge(user, plan, months, { couponCode, provider, seenPai
     const { rows: [org] } = await db.query(
       'SELECT organization_id, plan, is_demo, trial_ends_at, paid_until FROM organizations WHERE organization_id = $1 FOR UPDATE',
       [user.organization_id]);
+    // A free activation is written pending and marked paid in its own transaction; until then it is an open payment too
+    // (BIL-1, D-108). Bounded to 2 minutes so a row left pending by a crash never blocks for long.
+    const { rows: [freeOpen] } = await db.query(
+      `SELECT 1 FROM billing_payments WHERE organization_id = $1 AND kind = 'plan' AND status = 'pending' AND provider = 'coupon'
+          AND created_at > now() - interval '2 minutes'`, [user.organization_id]);
+    if (freeOpen) throw new HttpError(409, 'A payment is already in progress. Try again in a moment.', { code: 'PAYMENT_IN_PROGRESS' });
     if (provider === 'paymongo_intent') {
       // A pay-saved charge that is still waiting (3-D Secure, processing) must not be followed by a second charge.
       const { rows: [busy] } = await db.query(

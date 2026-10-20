@@ -41,14 +41,14 @@ test('restoreY clamps to the page height', () => {
 
 test('router: the refusal toast is guarded by otherHome; one scrollTo(0, 0) stays before the view', () => {
   assert.match(app, /if \(!otherHome\(path, state\.user\)\) toast\("That page isn't available for your role or workspace\.", 'error'\)/);
-  assert.match(app, /navigate\(homeRoute\(\), \{ replace: true \}\); return; \}\n\n  document\.querySelectorAll/);
+  assert.match(app, /navigate\(homeRoute\(\), \{ replace: true \}\); return; \}\n\n(?:  \/\/[^\n]*\n)*  const layerHadFocus[^\n]*\n  document\.querySelectorAll/);
   assert.equal(app.split('scrollTo(0, 0)').length - 1, 1);
   assert.ok(app.indexOf('scrollTo(0, 0)') < app.indexOf('await route.view'));
 });
 
 test('router: scroll memory lives in app.js only', () => {
   assert.match(app, /history\.scrollRestoration = 'manual'/);
-  assert.match(app, /history\.replaceState = \(st, title, url\) => replaceState\(st \?\? /);
+  assert.match(app, /history\.replaceState = \(st, title, url\) => \{[\s\S]*?replaceState\(st \?\? /);
   assert.match(app, /window\.addEventListener\('scroll'[\s\S]*?\{ passive: true \}/);
   assert.match(app, /addEventListener\('click'[\s\S]*?closest\('a\.back'\)[\s\S]*?history\.back\(\)[\s\S]*?, true\);/);
   assert.match(app, /if \(restoreTo !== null\) restoreScroll\(restoreTo\)/);

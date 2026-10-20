@@ -21,7 +21,7 @@ extendTranslations({
   'Your check-in details': 'Ang check-in details mo',
   'House rules': 'Mga patakaran sa bahay',
   'I have read and agree to the house rules.': 'Nabasa ko at sumasang-ayon ako sa mga patakaran sa bahay.',
-  'Please accept the house rules to continue.': 'Pakisang-ayunan ang mga patakaran sa bahay para magpatuloy.',
+  'Please read and agree to the house rules.': 'Basahin at sang-ayunan ang house rules.',
   'You accepted the house rules on {when}.': 'Sinang-ayunan mo ang mga patakaran sa bahay noong {when}.',
   'Please check the highlighted fields.': 'Pakitingnan ang mga naka-highlight.',
   'Please enter your full name, as on your ID.': 'Pakilagay ang buong pangalan mo, gaya ng nasa ID.',
@@ -216,7 +216,7 @@ export async function guestCheckinView(el, { params }, kept) {
     if (blankGuests.length) problems.guests = t('Enter the name of each guest, or remove the empty row.');
     if (picked.some((f) => !ID_PHOTO_TYPE.test(f.type))) problems.id_photos = t('Your ID must be a JPG, PNG or WEBP photo.');
     if (!picked.length && !(r?.id_count > 0)) problems.id_photos = t('Add a photo of a valid ID for at least one guest.');
-    if (rules && !rulesAt && !form.elements.accept_rules.checked) problems.accept_rules = t('Please accept the house rules to continue.');
+    if (rules && !rulesAt && !form.elements.accept_rules.checked) problems.accept_rules = t('Please read and agree to the house rules.');
     if (!form.elements.consent.checked) problems.consent = t('Please agree so your host can register you with the building.');
     if (Object.keys(problems).length) {
       formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, t('Please check the highlighted fields.')));

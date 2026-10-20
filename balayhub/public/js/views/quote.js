@@ -44,7 +44,6 @@ extendTranslations({
   'I agree to the house rules': 'Sumasang-ayon ako sa house rules',
   'Please read and agree to the house rules.': 'Basahin at sang-ayunan ang house rules.',
   'Something went wrong. Please try again.': 'May mali. Subukan ulit.',
-  'Please tick this box to continue.': 'I-tick ang box na ito para makapagpatuloy.',
   '{n} nights': '{n} na gabi',
   '1 night': '1 gabi',
   'Loading…': 'Naglo-load…',
@@ -141,7 +140,7 @@ export async function quoteView(el, { params, kept = {} }) {
     if (!String(v.phone || '').trim()) problems.phone = t('Please enter your mobile number.');
     else if (!PHONE_RE.test(String(v.phone).trim())) problems.phone = tServer('Enter a valid phone number.');
     if (rules && !form.elements.accept_rules.checked) problems.accept_rules = t('Please read and agree to the house rules.');
-    if (!form.elements.consent.checked) problems.consent = t('Please tick this box to continue.');
+    if (!form.elements.consent.checked) problems.consent = tServer('Please agree to continue.');
     if (Object.keys(problems).length) { formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, t('Please check the highlighted fields.'))); showErrors(form, problems); return; }
     busy = true;
     submit.disabled = true;

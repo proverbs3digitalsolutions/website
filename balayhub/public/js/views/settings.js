@@ -80,6 +80,10 @@ let carriedNotice = null;
 // PAYMENT_IN_PROGRESS carries the server's "try again" sentence too, but the redrawn page shows the waiting view instead when one is pending.
 let carriedUnlessWaiting = false;
 let billWaiting = false; // set by planCard: the loaded billing has a payment waiting at the bank
+let billPaidUntil = null; // set by planCard: the loaded billing's paid_until
+let carriedSentPaidUntil = null; // the paid_until the page had when the PAYMENT_IN_PROGRESS answer came back
+// The coupon code typed in the pay box when a card row was saved: the redrawn box starts with it (D-106).
+let keptCoupon = null;
 
 // What the plan card shows depends on these; if another tab changes them, this tab is stale.
 const billSigOf = (bill) => JSON.stringify([bill.pending_payment, bill.paid_until, bill.renewal_plan, bill.plan]);
@@ -123,6 +127,7 @@ export async function settingsView(el, { rerender, query = {} }) {
   let billingNotice = null;
   let carriedEl = null;
   const unlessWaiting = carriedUnlessWaiting; carriedUnlessWaiting = false;
+  const sentPaidUntil = carriedSentPaidUntil; carriedSentPaidUntil = null;
   if (carriedNotice) { billingNotice = h('div', { class: 'alert alert--error', role: 'alert', tabindex: '-1' }, carriedNotice); carriedEl = billingNotice; carriedNotice = null; }
   // Back from PayMongo checkout: confirm the payment with the server.
   if (query.billing) {
@@ -266,7 +271,12 @@ export async function settingsView(el, { rerender, query = {} }) {
       : 'BalayHub stores guest, booking and property records to help you run your stays. Collect only what you need: guest ID photos are deleted automatically after the stay, and the owner can export or delete the workspace data under the Data Privacy Act.'),
     h('p', { style: { marginTop: '10px' } }, h('a', { class: 'link-tap', href: '#/privacy' }, 'Read the Privacy Notice'))));
 
-  if (unlessWaiting && billWaiting && billingNotice === carriedEl) billingNotice = null;
+  if (unlessWaiting && billingNotice === carriedEl) {
+    // The "try again" sentence was true when sent. If that payment has finished since, say so; if nothing changed, drop it.
+    if (billWaiting) billingNotice = null;
+    else if (billPaidUntil !== sentPaidUntil) billingNotice.textContent = 'That payment was just received. Check your plan before paying again.';
+    else billingNotice = null;
+  }
   el.replaceChildren(pageHead({ title: 'Settings', sub: u.organization_name }), h('div', { class: 'stack' }, billingNotice, sections));
   if (billingNotice) focusWhenAttached(el, billingNotice);
   if (u.role === 'owner' && u.plan && !u.plan.is_demo) startBillWatch(rerender);
@@ -472,6 +482,7 @@ export async function planCard(u, rerender) {
   let bill = { online: false, options: [], history: [] };
   try { bill = await get('/billing'); } catch { /* ignore */ }
   billWaiting = !!bill.pending_payment;
+  billPaidUntil = bill.paid_until ?? null;
   billSig = billSigOf(bill);
   const status = p.read_only
     ? h('div', { class: 'alert alert--error' }, p.reason === 'trial_ended' ? 'Your free trial has ended. Your workspace is view-only until you choose a plan.' : 'Your payment is overdue. Your workspace is view-only until you renew.')
@@ -584,7 +595,8 @@ export function payOnline(p, bill, rerender, bc) {
   h('span', { class: 'muted small' }, `Up to ${o.listings} listings${o.ai ? ' · AI drafts' : ''}`))));
   const monthSel = h('select', { class: 'input input--sm', 'aria-label': 'Months', onchange: (e) => { months = Number(e.target.value); selectionChanged(); } },
     [[1, '1 month'], [3, '3 months'], [12, '12 months (2 months free)']].map(([m, t]) => h('option', { value: m }, t)));
-  const box = bc.couponBox({ current: bill.coupon, getSelection: () => ({ plan, months }), onQuote: (q) => { quote = q; update(); } });
+  const initial = keptCoupon; keptCoupon = null;
+  const box = bc.couponBox({ current: bill.coupon, initialCode: initial, getSelection: () => ({ plan, months }), onQuote: (q) => { quote = q; update(); } });
   const autoOn = !!(bill.subscriptions && bill.auto_renew?.on);
   const couponNote = h('span', { hidden: true }, autoOn ? ' Your coupon is applied automatically to the months it covers.' : ' BalayHub never charges your card on its own; you renew here.');
   const saved = !!(bill.saved_card_pay && bill.card);
@@ -623,7 +635,7 @@ export function payOnline(p, bill, rerender, bc) {
       location.href = r.checkout_url;
     } catch (err) {
       if (err.code === 'PAYMENT_RECEIVED') { carriedNotice = err.message; await refreshUser(); rerender(); return; }
-      if (err.code === 'PAYMENT_IN_PROGRESS') { carriedNotice = err.message; carriedUnlessWaiting = true; await refreshUser(); rerender(); return; }
+      if (err.code === 'PAYMENT_IN_PROGRESS') { carriedNotice = err.message; carriedUnlessWaiting = true; carriedSentPaidUntil = bill.paid_until ?? null; await refreshUser(); rerender(); return; }
       if (/^(COUPON|COMPED|CARD_OFF)/.test(err.code || '')) box.showError(err.message); else toast(err.message, 'error');
       btn.disabled = false;
       update();
@@ -646,7 +658,7 @@ export function payOnline(p, bill, rerender, bc) {
       msgEl.textContent = 'Your payment is being confirmed. Check back in a moment.';
     } catch (err) {
       if (err.code === 'PAYMENT_RECEIVED') { carriedNotice = err.message; await refreshUser(); rerender(); return; }
-      if (err.code === 'PAYMENT_IN_PROGRESS') { carriedNotice = err.message; carriedUnlessWaiting = true; await refreshUser(); rerender(); return; }
+      if (err.code === 'PAYMENT_IN_PROGRESS') { carriedNotice = err.message; carriedUnlessWaiting = true; carriedSentPaidUntil = bill.paid_until ?? null; await refreshUser(); rerender(); return; }
       savedBtn.disabled = false; btn.disabled = false; update();
       if (err.code === 'SAVED_CARD_FAILED' || err.code === 'SAVED_CARD_NONE') {
         msgEl.textContent = "Your saved card couldn't be charged. Pay another way, or use a different card.";
@@ -656,9 +668,9 @@ export function payOnline(p, bill, rerender, bc) {
   });
   drawCards();
   update();
-  if (!pending) box.refresh();
+  if (!pending) box.refresh(Boolean(initial)); // a carried code is asked again, so it is previewed for the plan now chosen
   return h('div', { class: 'payonline' },
-    cardBlock(p, bill, rerender),
+    cardBlock(p, bill, () => { keptCoupon = box.getCode() || null; rerender(); }),
     h('h3', { class: 'subhead', style: { marginTop: '16px' } }, p.plan === 'trial' || p.read_only ? 'Choose your plan' : 'Renew or change plan'),
     cards,
     h('div', { class: 'payonline__row' }, monthSel, h('span', null, 'Total: ', strikeEl, ' ', amountEl), savedBtn, btn),

@@ -587,7 +587,7 @@ export async function reservationDetailView(el, { params, rerender }) {
       field({ name: 'amount', label: 'Amount received', type: 'money', required: true, value: Number(r.balance) > 0 ? r.balance : '' }),
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'payment_date', label: 'Date received', type: 'date', required: true, value: today, max: today }),
-        field({ name: 'payment_method', label: 'Method', type: 'select', required: r.channel !== 'direct', value: r.channel === 'direct' ? '' : r.channel === 'airbnb' ? 'cash' : 'channel_payout', placeholderOption: r.channel === 'direct' ? 'Choose…' : false, options: paymentMethodOptions(r.channel) })),
+        field({ name: 'payment_method', label: 'Method', type: 'select', required: r.channel !== 'direct', markRequired: r.channel === 'direct', value: r.channel === 'direct' ? '' : r.channel === 'airbnb' ? 'cash' : 'channel_payout', placeholderOption: r.channel === 'direct' ? 'Choose…' : false, options: paymentMethodOptions(r.channel) })),
       field({ name: 'reference_number', label: 'Reference no.', maxlength: 100 }),
       // Channel payouts come from Airbnb/Booking.com, not the guest: no guest receipt by default.
       (r.guest_email || r.guest_has_email) && field({ name: 'send_receipt', label: r.guest_email ? `Email a receipt to ${r.guest_email}` : 'Email a receipt to the guest', type: 'checkbox', value: r.channel === 'direct' }),
@@ -614,6 +614,8 @@ export async function reservationDetailView(el, { params, rerender }) {
     let clash = null;
     const modal = formModal({
       title: 'Edit reservation', submitText: 'Save changes',
+      // The date order is reported with the guest-count message in one pass; an iCal stay has no date boxes, so d.check_in is absent.
+      check: (d) => (d.check_in && d.check_out && d.check_out <= d.check_in ? { check_out: 'Check-out must be after check-in.' } : null),
       fields: [
         r.ical_feed_id && h('p', { class: 'muted small' }, `Dates come from ${CHANNEL_LABEL[r.channel]} and update automatically. You can add the amounts here.`),
         r.channel_fee_ignored && h('p', { class: 'muted small' }, `Direct bookings have no channel fee. Saving this form removes the ${peso(r.channel_fee)} fee that is stored on it.`),

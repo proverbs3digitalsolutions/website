@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-21 (QA round 25: section 38, 5.10 and 30 corrected; D-107). Before that: 2026-10-21 (QA round 24: section 37; D-106). Before that: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
+Last updated: 2026-10-21 (QA round 26: section 39 and 33.1; D-108). Before that: 2026-10-21 (QA round 25: section 38, 5.10 and 30 corrected; D-107). Before that: 2026-10-21 (QA round 24: section 37; D-106). Before that: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
 
 ---
 
@@ -1450,6 +1450,7 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 - While a plan payment is open, a second one does not start. Under **Pay another way**, while a one-tap payment waits at the bank, the page says "This cancels the payment waiting at your bank."
 - **Pay another way** while a one-tap payment waits: BalayHub ends the older payment at PayMongo first. If the bank payment is dead, the hosted checkout opens. If it is still alive: "A payment is still waiting for your bank. Finish it there, or try again later." If it turns out to have been paid (including during the check): the owner is told the payment was received (no second charge).
 - **Stale page:** if another tab or window already completed a payment, pressing Pay (or Pay with the saved card) on the old page answers "payment received", refreshes the plan summary and history, and moves focus to the notice. No new charge starts. Paying ahead from a freshly loaded page is still allowed.
+- A free coupon activation in progress also counts as an open payment (D-108): a second payment is refused with "A payment is already in progress. Try again in a moment."
 - **Pay with the saved card** while a hosted checkout is open: "A payment is already open in another window. Finish it there, or try again later."
 - An applied coupon states its discount once (the green box with the code and **Remove**).
 - **Payment history** rows show the card brand and last four digits of the card used, even after **Remove card**.
@@ -1613,3 +1614,29 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 - **Cleaner pay, Add rate:** the rate select is labelled "Rate type".
 - **Record payment, restored draft:** a restored tenant draws its Current balance line; a restored Add expense keeps its property and unit.
 - **Receipts on a monthly-rental workspace:** `#/receipts/<id>` goes home with the module toast (stays-only page; not changed).
+
+## 39. QA round 26 changes (D-108; 2026-10-21)
+
+### 39.1 Plan & billing
+- **Free coupon activation counts as an open payment.** While it is being applied, a second plan payment (hosted, one-tap or another free one) is refused: "A payment is already in progress. Try again in a moment." A pending free activation blocks for at most 2 minutes.
+- **Coupon kept across card-row changes:** saving "Plan after your trial", turning automatic payment on or off, or Remove card redraws the page, and a coupon the owner had applied is still in the box and is checked again for the current plan (the green line, or the server's refusal). A redraw after a payment, or after another tab paid, starts without it.
+- **The tab that lost a two-tab race** says what is true now. If the other payment finished and the plan is paid further: "That payment was just received. Check your plan before paying again." If the other payment failed: no message, and the Pay buttons work. If it is still waiting: the waiting view.
+
+### 39.2 Forms, drafts and receipts
+- **Dialogs that back out of a question** ("Check the amount", Record more than the balance, a high nightly rate, Change this rate, an ended discount code, End lease's question): answering "Change it" or pressing Escape keeps the typed draft, so reopening shows it. Cancel still discards it.
+- **Receipt file:** an empty file is refused before saving: "This file is empty. Choose the receipt file again." (the type and size messages are unchanged).
+- **Receipt upload fails after the save** (Add expense, Record payment): one error message names both: "Expense saved, but the receipt didn't upload: {reason}" or "Payment saved, but the receipt didn't upload: {reason}". "Expense saved." / "Payment saved." is not shown.
+- **Edit reservation:** check-out on or before check-in shows "Check-out must be after check-in." together with the guest-count message in one save.
+- **Add a season:** a fixed price of zero or less shows "Nightly rate must be greater than zero." together with a bad minimum stay in one save.
+- **Required marks:** Method on a direct booking's Record payment and on Record refund shows the red asterisk.
+
+### 39.3 Address, focus and tabs
+- **A `?new=1` dialog and an address change:** when the page is redrawn for a new address (for example `?view=arrivals_today`), the dialog closes and focus goes to the page heading.
+- **Back or Forward from a `?new=1` dialog** closes the dialog even when the address text looks the same (the page had replaced `new=1` in the address). Same on every page with a `?new=1` dialog.
+- **Tab lists** (Rent, Housekeeping, Listings, Maintenance, Help, Home, Reports and the rest): one Tab stop, the selected tab. Arrow keys, Home and End move between tabs and open them.
+- **Filters, active-filter chips:** the chips and Clear all sit directly under the bar, above the open Filters panel, on phones and on desktop.
+
+### 39.4 Wording
+- **Manager on Cleaner pay:** with no amounts, the empty text and the row text tell the manager to ask the owner about rates. Owners see the old texts about adding a rate.
+- **Guest pages:** full name blank: "Please enter your full name." (booking, quote); mobile blank: "Please enter your mobile number." (booking changes); house rules: "Please read and agree to the house rules." (check-in changes); consent: "Please agree to continue." (quote changes). Check-in keeps "Please enter your full name, as on your ID." and "Please agree so your host can register you with the building." Tagalog follows each.
+- **Add listing, Type:** starts on Studio (no "Choose..."); changeable in Edit listing (works as decided, D-108).

@@ -30,6 +30,8 @@ extendTranslations({
   'Add-ons ({n})': 'Mga add-on ({n})',
   'I agree that my details are shared with {host} to manage my booking (see the ': 'Sumasang-ayon ako na ibabahagi ang details ko kay {host} para sa booking ko (tingnan ang ',
   'I agree to the house rules': 'Sumasang-ayon ako sa house rules',
+  'Please enter your full name.': 'Ilagay ang buong pangalan mo.',
+  'Please enter your mobile number.': 'Ilagay ang mobile number mo.',
   'Please read and agree to the house rules.': 'Basahin at sang-ayunan ang house rules.',
   'Please tick this box to continue.': 'I-tick ang box na ito para makapagpatuloy.',
   'House rules': 'House rules',
@@ -444,12 +446,12 @@ export async function bookListingView(el, { params, query }) {
     const email = String(d.email).trim();
     const phone = String(d.phone).trim();
     const errors = {};
-    if (!String(d.name).trim()) errors.name = tServer('Full name is required.');
+    if (!String(d.name).trim()) errors.name = t('Please enter your full name.');
     if (!Number.isInteger(guests) || guests < 1) errors.num_guests = guestCountMsg();
     else if (guests > (l.max_guests || 50)) errors.num_guests = t('This place allows up to {n} guests.', { n: l.max_guests || 50 });
     if (!email) errors.email = tServer('Email is required.');
     else if (!EMAIL_RE.test(email)) errors.email = tServer('Enter a valid email address.');
-    if (!phone) errors.phone = tServer('Mobile number is required.');
+    if (!phone) errors.phone = t('Please enter your mobile number.');
     else if (!PHONE_RE.test(phone)) errors.phone = tServer('Enter a valid phone number.');
     if (rulesBox && !d.accept_rules) errors.accept_rules = t('Please read and agree to the house rules.');
     if (!d.consent) errors.consent = tServer('Please agree to continue.');

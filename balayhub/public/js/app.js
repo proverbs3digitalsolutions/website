@@ -326,7 +326,12 @@ const entryKey = () => history.state?.bhEntry || null;
 try { history.scrollRestoration = 'manual'; } catch { /* ignore */ }
 // Views call history.replaceState(null, ...) for filter URLs; that must not wipe the entry's key.
 const replaceState = history.replaceState.bind(history);
-history.replaceState = (st, title, url) => replaceState(st ?? (entryKey() ? { bhEntry: entryKey() } : null), title, url);
+history.replaceState = (st, title, url) => {
+  const was = location.hash;
+  replaceState(st ?? (entryKey() ? { bhEntry: entryKey() } : null), title, url);
+  // A page rewriting its own address (?new=1 becomes ?view=upcoming) is still the page on screen, so keep lastHash in step (popstate compares it).
+  if (lastHash === was) lastHash = location.hash;
+};
 window.addEventListener('scroll', () => {
   const k = entryKey();
   if (!k) return;
@@ -624,6 +629,8 @@ export async function render() {
   // Pages this role or workspace module can't use go home instead of opening by URL.
   if (route.access === APP && !routeAllowed(path, state.user)) { if (!otherHome(path, state.user)) toast("That page isn't available for your role or workspace.", 'error'); viaRedirect = true; navigate(homeRoute(), { replace: true }); return; }
 
+  // The sweep below removes any open layer; if one held focus, the new page's heading takes it (D-89, D-108).
+  const layerHadFocus = Boolean(document.activeElement?.closest?.('dialog.modal, .morenav, .tb-sheet'));
   document.querySelectorAll('dialog.modal, .morenav, .tb-sheet').forEach((d) => d.remove());
   delete document.documentElement.dataset.h1title; // set below when a guest page's tab title is taken from its heading
   const ctx = { params: route.params, query, state, navigate, rerender: render };
@@ -676,6 +683,8 @@ export async function render() {
     document.title = title ? `${title} — BalayHub` : 'BalayHub';
     // A page drawn under a skeleton (no old page kept) lost the old heading's focus, even when a redirect landed on the page it left (Reports to Stay reports).
     if (headingFocusDue({ drawnPath, path, prevKept: Boolean(prev), redirected, addressChange })) focusPageHeading(mount);
+    if (layerHadFocus) focusPageHeading(mount);
+    rovingTabs(mount);
     drawnPath = path;
   } else {
     lastDrawing = null;
@@ -694,6 +703,8 @@ export async function render() {
     }
     if (seq === renderSeq) {
       if (headingFocusDue({ drawnPath, path, prevKept: true, redirected, addressChange })) focusPageHeading(mount);
+      if (layerHadFocus) focusPageHeading(mount);
+      rovingTabs(mount);
       drawnPath = path;
     }
   }
@@ -814,6 +825,14 @@ function updateOnline() {
 window.addEventListener('online', () => { updateOnline(); toast('Back online.'); });
 window.addEventListener('offline', updateOnline);
 window.addEventListener('hashchange', () => { viaAddress = focusFree(); render(); });
+// Back or Forward onto the same address text fires popstate but no hashchange (a page that rewrote its address, such as a ?new=1 dialog
+// whose page replaced it). With a layer open the page is stale, so draw it again; a different hash is drawn by hashchange (D-108).
+window.addEventListener('popstate', () => {
+  if (location.hash !== lastHash) return;
+  if (!document.querySelector('dialog.modal[open], .morenav[open], .tb-sheet')) return;
+  viaAddress = focusFree();
+  render();
+});
 
 // Below 960px the bottom bar covers the lower edge of the screen, and the browser only scrolls a focused control to that edge, so Tab can
 // reach a control hidden under the bar (WCAG 2.4.11). Scroll such a control clear of the bar.
@@ -833,6 +852,23 @@ function tabKeyTarget(key, i, n) {
   if (key === 'Home') return 0;
   if (key === 'End') return n - 1;
   return -1;
+}
+// One Tab stop per tab list (D-108): the selected tab (else the first enabled one) is tabindex 0, the others -1. Arrows, Home and End
+// (the handler below) still reach every tab. Only writes a value that differs, so the observer in boot() cannot loop.
+// True when a batch of DOM changes could change a tab list: an aria-selected write, or nodes added or removed in or around a tab list.
+export function touchesTabs(records) {
+  const isTabby = (n) => n.nodeType === 1 && (n.matches('[role="tablist"], [role="tab"]') || n.querySelector('[role="tablist"], [role="tab"]'));
+  return records.some((r) => r.type === 'attributes'
+    || r.target.closest?.('[role="tablist"]')
+    || [...r.addedNodes, ...r.removedNodes].some(isTabby));
+}
+export function rovingTabs(root) {
+  if (!root?.querySelectorAll) return;
+  root.querySelectorAll('[role="tablist"]').forEach((list) => {
+    const tabs = [...list.querySelectorAll('[role="tab"]')].filter((t) => t.closest('[role="tablist"]') === list);
+    const stop = tabs.find((t) => t.getAttribute('aria-selected') === 'true') || tabs.find((t) => !t.disabled);
+    tabs.forEach((t) => { const v = t === stop ? '0' : '-1'; if (t.getAttribute('tabindex') !== v) t.setAttribute('tabindex', v); });
+  });
 }
 // One handler for every tablist (D-81): arrows, Home and End move to a tab and open it. A tablist with its own handler
 // (the landing page) calls preventDefault, so it is skipped here.
@@ -861,4 +897,5 @@ document.addEventListener('keydown', (e) => {
   installTopbarKeys(topbarCtx);
   installFocusGuard();
   render();
+  if (typeof MutationObserver === 'function') new MutationObserver((records) => { if (touchesTabs(records)) rovingTabs(document.body); }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-selected'] });
 }());

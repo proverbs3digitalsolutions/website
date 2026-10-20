@@ -73,6 +73,8 @@ export const overlapLine = (winner, ...losers) => `${losers.join(', ')} also cov
 export function seasonModeProblem({ mode, nightly_rate: rate, adjust_pct: pct }) {
   const blank = (v) => v === undefined || v === null || String(v).trim() === '';
   if (mode === 'fixed' && blank(rate)) return { nightly_rate: 'Enter a nightly rate for a fixed price.' };
+  // The server's positive rule, so a price of 0 is reported with the other problems (QA round 26, MNY-2).
+  if (mode === 'fixed' && parseAmount(rate) <= 0) return { nightly_rate: 'Nightly rate must be greater than zero.' };
   if (mode === 'pct' && blank(pct)) return { adjust_pct: 'Enter a percentage change.' };
   return null;
 }

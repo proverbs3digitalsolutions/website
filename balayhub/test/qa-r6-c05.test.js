@@ -61,7 +61,7 @@ test('#3 N3 the typed box is read with parseAmount from ui.js, not by stripping 
 
 test('#4 with no valid dates the quote box says the price shows once the dates are set; the rule stays at the field', () => {
   assert.match(resSrc, /quoteBox\.textContent = 'The price shows once the dates are set\.'/);
-  assert.equal(resSrc.match(/Check-out must be after check-in\./g).length, 1, 'the rule is said once, in the check hook (field error), never in the quote box');
+  assert.equal(resSrc.match(/Check-out must be after check-in\./g).length, 2, 'the rule is said once in each form\'s check hook (field error), never in the quote box');
   assert.match(resSrc, /f\.check_out = 'Check-out must be after check-in\.'/);
 });
 

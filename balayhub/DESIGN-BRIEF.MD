@@ -1,6 +1,6 @@
 # BalayHub design brief
 
-Last updated: 2026-10-21 (QA round 25: section 33; D-107). Before that: 2026-10-21 (QA round 24: section 32; D-106). Before that: 2026-10-21 (QA round 23: section 31; D-105). Before that: 2026-10-21 (QA round 22: section 30; D-104). Before that: 2026-10-21 (QA round 21: section 29; D-103). Before that: 2026-10-20 (QA round 20: section 28; D-102). Before that: 2026-10-20 (QA round 19: landing links hidden below 768px; D-101). Before that: 2026-10-19 (QA round 18: section 27, phone filter bar, theme switch label; D-100). Before that: 2026-10-15 (QA round 17: section 26, the wordmark logotype exemption, the focus key table; D-98 and D-99)
+Last updated: 2026-10-21 (QA round 26: section 34 and the Validation row; D-108). Before that: 2026-10-21 (QA round 25: section 33; D-107). Before that: 2026-10-21 (QA round 24: section 32; D-106). Before that: 2026-10-21 (QA round 23: section 31; D-105). Before that: 2026-10-21 (QA round 22: section 30; D-104). Before that: 2026-10-21 (QA round 21: section 29; D-103). Before that: 2026-10-20 (QA round 20: section 28; D-102). Before that: 2026-10-20 (QA round 19: landing links hidden below 768px; D-101). Before that: 2026-10-19 (QA round 18: section 27, phone filter bar, theme switch label; D-100). Before that: 2026-10-15 (QA round 17: section 26, the wordmark logotype exemption, the focus key table; D-98 and D-99)
 
 **Summary.** BalayHub is a phone-first web app (also an installable PWA) for Filipino rental and staycation hosts. It is built with plain CSS, one stylesheet (`public/css/app.css`), and small JavaScript helpers (`public/js/ui.js`). There is no framework and no CSS preprocessor. The look is calm and practical: Forest Green on soft off-white, Sand and Sun as warm accents, Poppins for headings, Inter for text, rounded cards, and large touch targets. Colours come from CSS custom properties on `:root`. A dark theme redefines the same tokens, so any component that uses tokens gets dark mode automatically. This brief records what is **actually built**. Every value below comes from the code. Where the code doesn't define a token (spacing, type sizes), the brief lists the values in use and says so.
 
@@ -294,7 +294,7 @@ See 2.4 and 2.5. Always build badges with `badge(status, text?)`.
 | Money | `type: 'money'` wraps the input in `.input-money` with a "₱" prefix and `inputmode="decimal"`. |
 | Checkbox | `.check`: a 20px box with `accent-color: --teal` |
 | Layout | `.form` (14px gap), `.form-row--2` (two columns from 560px), `.form-actions` (right-aligned, buttons stretch on phones) |
-| Validation | When a required field is empty, `makeForm` shows the alert "Please fill in the highlighted fields." and a "{Label} is required." message on each field. Server errors (`err.fields`) are shown the same way. Invalid fields get `.field--invalid` (red border) and `aria-invalid="true"`, and the first invalid field gets focus. When offline, an amber alert says the input is kept. |
+| Validation | When a required field is empty, `makeForm` shows the alert "Please fill in the highlighted fields." and a "{Label} is required." message on each field. Server errors (`err.fields`) are shown the same way. Invalid fields get `.field--invalid` (red border) and `aria-invalid="true"`, and the first invalid field gets focus. When any highlighted value is wrong (not only empty), the alert says "Please check the highlighted fields." (the server's sentence). When offline, an amber alert says the input is kept. |
 | Safety | Double submits are blocked, an idempotency key is optional, and `persistDraft` keeps unsaved input in `sessionStorage` (never passwords). |
 
 ### Modals and confirm dialogs
@@ -739,3 +739,13 @@ Decision D-107. CSS in `public/css/app.css`.
 - **Capped pick list.** A pick list that would grow long (Bulk changes listings, `.pr-picklist`) shows about six rows (`max-height: 300px`) and scrolls. When rows are hidden it shows a soft shadow at the edge that has more (a pure-CSS scroll shadow: `background` layers with `background-attachment: local, local, scroll, scroll`, existing tokens, both themes).
 - **Required mark.** Every field the form insists on shows the red asterisk and `aria-required="true"`, also when the form's own sentence is used for the message (the field carries the mark without the `required` attribute).
 - **Messages name a short noun.** A field whose visible label is a question or a phrase ("How many pcs?", "Keep at least") gives a short noun for messages ("Quantity", "Low-stock level"), never the question itself.
+
+## 34. Patterns added in QA round 26 (2026-10-21)
+
+Decision D-108. Behaviour in `public/js/app.js` and `public/js/ui.js`; layout in `public/js/filters.js`.
+
+- **Tab lists have one Tab stop.** In every `role="tablist"`, the selected tab has `tabindex="0"` and the others `tabindex="-1"`. Arrow keys, Home and End move between tabs and open them. This is set app-wide in one place (after each page draw and when a tab's selected state changes), so a new tab list needs no code of its own.
+- **Active-filter chips** sit between the filter bar and an open Filters panel at every width, so a choice shows without scrolling past the panel.
+- **A save that worked but whose attachment failed** shows one error-style message that names both ("Expense saved, but the receipt didn't upload: ..."). It is never followed or replaced by a plain success message.
+- **A dialog that backs out of a question keeps its draft.** Cancel discards it; Escape and "Change it" keep it.
+- **Validation banner pair.** "Please fill in the highlighted fields." when every highlighted field is only empty; "Please check the highlighted fields." when any value is wrong. They say different things on purpose.
