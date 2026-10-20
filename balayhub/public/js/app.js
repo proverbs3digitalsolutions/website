@@ -950,6 +950,7 @@ document.addEventListener('keydown', (e) => {
     await refreshUser();
   } catch {
     document.getElementById('app').replaceChildren(pageError({ message: "Can't reach BalayHub. Check your internet connection." }, () => location.reload()));
+    focusPageHeading(document.getElementById('app')); // the page is no longer a live region (D-113), so its heading takes focus as on every other draw
     return;
   }
   installTopbarKeys(topbarCtx);

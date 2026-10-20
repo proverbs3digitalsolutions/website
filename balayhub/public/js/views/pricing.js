@@ -97,7 +97,8 @@ export async function pricingView(el, { rerender }) {
     title: 'Add a season', submitText: 'Save season',
     fields: [
       field({ name: 'name', label: 'Name', required: true, maxlength: 80, placeholder: 'e.g. Summer peak, Holy Week, Sinulog' }),
-      field({ name: 'unit_id', label: 'Listing', type: 'select', required: !isOwner, placeholderOption: false,
+      // A manager has no "All listings": the box starts on "Select…", never on a listing nobody chose (D-113).
+      field({ name: 'unit_id', label: 'Listing', type: 'select', required: !isOwner, placeholderOption: isOwner ? false : undefined,
         options: [...(isOwner ? [['', 'All listings']] : []), ...listings.map((l) => [l.unit_id, `${l.unit_name} · ${l.property_name}`])] }),
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'start_date', label: 'First night', type: 'date', required: true }),
@@ -150,7 +151,7 @@ export async function pricingView(el, { rerender }) {
       options: Object.entries(RULE_KINDS).map(([k, v]) => [k, v.label]) });
     const daysHint = h('p', { class: 'muted small', 'aria-live': 'polite' });
     const daysField = field({ name: 'days', label: 'Days', type: 'number', required: true, value: r?.days ?? 3, step: 1, inputmode: 'numeric' });
-    const scopeField = field({ name: 'unit_id', label: 'Applies to', type: 'select', required: !isOwner, value: r?.unit_id || '', placeholderOption: false,
+    const scopeField = field({ name: 'unit_id', label: 'Applies to', type: 'select', required: !isOwner, value: r?.unit_id || '', placeholderOption: isOwner ? false : undefined,
       options: [...(isOwner ? [['', 'All listings']] : []), ...listings.map((l) => [l.unit_id, `${l.unit_name} · ${l.property_name}`])] });
     if (r) { kindSel.querySelector('select').disabled = true; scopeField.querySelector('select').disabled = true; }
     const m = formModal({

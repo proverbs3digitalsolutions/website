@@ -2,7 +2,7 @@
 
 import { get, post, patch, api, uploadFile, fileContentError, qs, ApiError } from '../api.js';
 import {
-  h, icon, manilaDay, fmtDate, fmtDateTime, badge, field, formModal, confirmDialog, emptyState, errorState, toast, todayManila, filesList, openModal, peso,
+  h, icon, manilaDay, fmtDate, fmtDateTime, badge, field, formModal, confirmDialog, emptyState, errorState, toast, todayManila, filesList, openModal, peso, uploadField, fileRefused,
 } from '../ui.js';
 import { t, initGuestLang, extendTranslations, locale } from '../i18n.js';
 import { state } from '../app.js';
@@ -733,13 +733,15 @@ export async function housekeepingDetailView(el, { params, rerender }) {
     onclick: (e) => { if (uploading) e.preventDefault(); },
     onchange: async () => {
       if (uploading || !upload.files[0]) return;
+      up.clear();
       const bad = photoProblem(upload.files[0]);
-      if (bad) { toast(bad, 'error'); upload.value = ''; return; }
+      if (bad) { upload.value = ''; up.show(bad); return; }
       uploading = true;
       upload.setAttribute('aria-disabled', 'true');
-      try { await uploadFile('cleaning', t.task_id, upload.files[0]); upload.value = ''; toast(T('Photo uploaded.')); rerender(); } catch (err) { toast(err.code === 'EMPTY_FILE' ? T('This file is empty. Choose the file again.') : err.code === 'BAD_FILE_CONTENT' || err.message === "The file content doesn't match its type." ? T("This file isn't a real PDF, JPG, PNG or WEBP. Choose the file again.") : err.code === 'UNSUPPORTED_FILE' || err.status === 413 ? T('Upload a JPG, PNG or WEBP photo up to 10 MB.') : err.message, 'error'); upload.value = ''; } finally { uploading = false; upload.removeAttribute('aria-disabled'); }
+      try { await uploadFile('cleaning', t.task_id, upload.files[0]); upload.value = ''; toast(T('Photo uploaded.')); rerender(); } catch (err) { const msg = err.code === 'EMPTY_FILE' ? T('This file is empty. Choose the file again.') : err.code === 'BAD_FILE_CONTENT' || err.message === "The file content doesn't match its type." ? T("This file isn't a real PDF, JPG, PNG or WEBP. Choose the file again.") : err.code === 'UNSUPPORTED_FILE' || err.status === 413 ? T('Upload a JPG, PNG or WEBP photo up to 10 MB.') : err.message; if (fileRefused(err) || err.message === "The file content doesn't match its type.") up.show(msg); else toast(err.message, 'error'); upload.value = ''; } finally { uploading = false; upload.removeAttribute('aria-disabled'); }
     },
   });
+  const up = uploadField(upload);
   const actionBtn = (text, fn) => h('button', { class: 'btn btn--secondary hk-action', type: 'button', onclick: () => fn(t, rerender) }, text);
 
   // The link to Cleaner pay only where the route is open to this role; staff get the same words as plain text.
@@ -823,5 +825,5 @@ export async function housekeepingDetailView(el, { params, rerender }) {
           h('div', { class: 'card__head' }, h('h2', null, T('Photos'))),
           h('p', { class: 'muted small' }, T('Add photos of the finished unit or any damage found.')),
           files?.length ? filesList(files) : h('p', { class: 'muted small' }, T('No photos yet.')),
-          h('div', { class: 'form', style: { marginTop: '12px' } }, upload)))));
+          h('div', { class: 'form', style: { marginTop: '12px' } }, up.wrap)))));
 }

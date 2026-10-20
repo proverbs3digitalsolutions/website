@@ -59,6 +59,8 @@ export const todayManila = () => '2026-10-14';
 export const unitLabel = (x) => String(x);
 export const options = (xs) => xs.map((x) => [x, x]);
 export const label = (x) => String(x);
+export const uploadField = (i) => ({ wrap: i, show() {}, clear() {} });
+export const fileRefused = () => false;
 export const fmtDate = (x) => String(x);
 export const fmtDateTime = (x) => String(x);
 export const fmtMonth = (x) => String(x);

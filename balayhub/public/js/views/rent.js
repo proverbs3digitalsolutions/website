@@ -3,7 +3,7 @@
 import { get, post, patch, qs, uploadFile, fileContentError } from '../api.js';
 import {
   h, icon, peso, fmtDate, fmtDateTime, fmtMonth, badge, label, options, field, formModal, confirmDialog, emptyState,
-  pageHead, toast, todayManila, filesList, openModal, unitLabel, parseAmount } from '../ui.js';
+  pageHead, toast, todayManila, filesList, openModal, unitLabel, parseAmount, uploadField, fileRefused } from '../ui.js';
 import { state, navigate } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed, apiFilters } from '../filters.js';
 
@@ -502,6 +502,8 @@ export async function paymentDetailView(el, { params, rerender }) {
   const { payment: p, files } = await get(`/payments/${params.id}`);
   const canVoid = state.user.role !== 'staff' && !p.voided_at;
   const upload = h('input', { type: 'file', class: 'input', 'aria-label': 'Choose a receipt or proof file', accept: 'application/pdf,image/jpeg,image/png,image/webp' });
+  const up = uploadField(upload);
+  upload.addEventListener('change', up.clear);
   // The header (back link, title) is screen-only; the print-only block below is the receipt.
   const head = pageHead({
     title: `Payment · ${peso(p.amount_paid)}`, sub: `${p.tenant_name} · ${p.property_name}, ${unitLabel(p.unit_name)}`,
@@ -538,13 +540,14 @@ export async function paymentDetailView(el, { params, rerender }) {
       h('div', { class: 'card no-print' },
         h('h2', { style: { marginBottom: '12px' } }, 'Receipt / proof'),
         filesList(files),
-        !p.voided_at && h('div', { class: 'form', style: { marginTop: '12px' } }, upload,
+        !p.voided_at && h('div', { class: 'form', style: { marginTop: '12px' } }, up.wrap,
           h('button', {
             class: 'btn btn--secondary', onclick: async (e) => {
-              if (!upload.files[0]) { toast('Choose a file first.', 'error'); return; }
-              const bad = fileProblem(upload.files[0]); if (bad) { toast(bad, 'error'); return; }
+              up.clear();
+              if (!upload.files[0]) { up.show('Choose a file first.'); return; }
+              const bad = fileProblem(upload.files[0]); if (bad) { up.show(bad); return; }
               e.target.disabled = true;
-              try { await uploadFile('payment', p.payment_id, upload.files[0]); toast('Uploaded.'); rerender(); } catch (err) { toast(err.message, 'error'); e.target.disabled = false; }
+              try { await uploadFile('payment', p.payment_id, upload.files[0]); toast('Uploaded.'); rerender(); } catch (err) { e.target.disabled = false; if (fileRefused(err)) up.show(err.message); else toast(err.message, 'error'); }
             },
           }, 'Upload attachment')))),
     h('div', { class: 'card print-only' },
@@ -566,6 +569,8 @@ export async function expenseDetailView(el, { params, rerender }) {
   const { expense: x, files } = await get(`/expenses/${params.id}`);
   const canEdit = state.user.role !== 'staff' && !x.voided_at;
   const upload = h('input', { type: 'file', class: 'input', 'aria-label': 'Choose a receipt or proof file', accept: 'application/pdf,image/jpeg,image/png,image/webp' });
+  const up = uploadField(upload);
+  upload.addEventListener('change', up.clear);
   el.replaceChildren(
     pageHead({
       title: `Expense · ${peso(x.amount)}`, sub: `${label(x.category)} · ${x.property_name}${x.unit_name ? `, ${unitLabel(x.unit_name)}` : ''}`,
@@ -595,13 +600,14 @@ export async function expenseDetailView(el, { params, rerender }) {
       h('div', { class: 'card' },
         h('h2', { style: { marginBottom: '12px' } }, 'Receipts'),
         filesList(files),
-        !x.voided_at && h('div', { class: 'form', style: { marginTop: '12px' } }, upload,
+        !x.voided_at && h('div', { class: 'form', style: { marginTop: '12px' } }, up.wrap,
           h('button', {
             class: 'btn btn--secondary', onclick: async (e) => {
-              if (!upload.files[0]) { toast('Choose a file first.', 'error'); return; }
-              const bad = fileProblem(upload.files[0]); if (bad) { toast(bad, 'error'); return; }
+              up.clear();
+              if (!upload.files[0]) { up.show('Choose a file first.'); return; }
+              const bad = fileProblem(upload.files[0]); if (bad) { up.show(bad); return; }
               e.target.disabled = true;
-              try { await uploadFile('expense', x.expense_id, upload.files[0]); toast('Uploaded.'); rerender(); } catch (err) { toast(err.message, 'error'); e.target.disabled = false; }
+              try { await uploadFile('expense', x.expense_id, upload.files[0]); toast('Uploaded.'); rerender(); } catch (err) { e.target.disabled = false; if (fileRefused(err)) up.show(err.message); else toast(err.message, 'error'); }
             },
           }, 'Upload receipt')))));
 }

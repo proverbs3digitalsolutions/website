@@ -261,9 +261,10 @@ function pendingList(list, token, reload) {
         add.addEventListener('click', async () => {
           const f = file.files[0];
           msg.replaceChildren();
-          if (!f) { msg.replaceChildren(h('div', { class: 'alert alert--error' }, t('Choose a screenshot or receipt.'))); return; }
-          if (!f.size) { msg.replaceChildren(h('div', { class: 'alert alert--error' }, t('This file is empty. Choose the file again.'))); return; } // D-111
-          if (f.size > MAX_PROOF_BYTES || !PROOF_TYPES.includes(f.type)) { msg.replaceChildren(h('div', { class: 'alert alert--error' }, t('Upload a JPG, PNG, WEBP or PDF file up to 10 MB.'))); return; }
+          if (!f) { msg.replaceChildren(h('div', { class: 'alert alert--error' }, t('Choose a screenshot or receipt.'))); file.focus(); return; }
+          if (!f.size) { msg.replaceChildren(h('div', { class: 'alert alert--error' }, t('This file is empty. Choose the file again.'))); file.focus(); return; } // D-111
+          if (f.size > MAX_PROOF_BYTES || !PROOF_TYPES.includes(f.type)) { msg.replaceChildren(h('div', { class: 'alert alert--error' }, t('Upload a JPG, PNG, WEBP or PDF file up to 10 MB.'))); file.focus(); return; }
+          const bad = await fileContentError(f); if (bad) { msg.replaceChildren(h('div', { class: 'alert alert--error' }, t(bad))); file.focus(); return; } // D-113
           add.disabled = true; back.disabled = true;
           add.textContent = t('Uploading the screenshot…');
           try {

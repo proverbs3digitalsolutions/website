@@ -363,6 +363,14 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
 }
 
 // ---------------------------------------------------------------- list
+// An empty saved view names the view, so a host with bookings is never told "Nothing here yet" (D-113).
+const EMPTY_VIEW = {
+  upcoming: 'No upcoming bookings', hosting: 'No guests staying right now', arrivals_today: 'No check-ins today',
+  departures_today: 'No check-outs today', arrivals_tomorrow: 'No check-ins tomorrow', departures_tomorrow: 'No check-outs tomorrow',
+  unpaid: 'No unpaid reservations', past: 'No past stays', cancelled: 'No cancelled reservations',
+  recent: 'No reservations created recently', all: 'Nothing here yet',
+};
+
 export async function reservationsView(el, { query }) {
   const canManage = !['staff', 'cleaner'].includes(state.user.role);
   const defaults = { view: 'upcoming', q: '', channel: '', property_id: '', unit_id: '', payment: '', guest: '', from: '', to: '', out_from: '', out_to: '', min_nights: '', min_guests: '', checkin_form: '', sort: '' };
@@ -386,8 +394,8 @@ export async function reservationsView(el, { query }) {
     if (!reservations.length) {
       listBox.replaceChildren(emptyState({
         iconName: 'inbox',
-        title: filtered ? 'No results found' : 'Nothing here yet',
-        text: filtered ? 'Try removing a filter or choosing another view.' : 'Reservations you add, or import from Airbnb/Booking.com, appear here.',
+        title: filtered ? 'No results found' : EMPTY_VIEW[filters.view],
+        text: filtered ? 'Try removing a filter or choosing another view.' : ['all', 'upcoming'].includes(filters.view) ? 'Reservations you add, or import from Airbnb/Booking.com, appear here.' : 'Choose another saved view to see your other reservations.',
         action: !filtered && canManage && h('button', { class: 'btn btn--primary', onclick: () => newReservationModal() }, icon('plus'), 'New reservation'),
       }));
       return;
@@ -543,7 +551,7 @@ async function moveModal(r, rerender) {
     title: 'Move to another listing', submitText: 'Move reservation',
     fields: [
       h('p', { class: 'muted small' }, `${r.unit_name} · ${fmtDate(r.check_in)} – ${fmtDate(r.check_out)}. The dates and the price stay the same.`),
-      field({ name: 'unit_id', label: 'Move to', type: 'select', required: true, placeholderOption: false, options: others.map((l) => [l.unit_id, `${l.unit_name} — ${l.property_name}`]) }),
+      field({ name: 'unit_id', label: 'Move to', type: 'select', required: true, options: others.map((l) => [l.unit_id, `${l.unit_name} — ${l.property_name}`]) }),
     ],
     onSubmit: async (d) => { await patch(`/reservations/${r.booking_id}`, { unit_id: d.unit_id }); toast('Reservation moved.'); rerender(); },
   });

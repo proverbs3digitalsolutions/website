@@ -668,6 +668,21 @@ export function showErrors(form, fields = {}) {
   return unplaced;
 }
 
+// A file refused on the device or by the server: empty, too big, not really its type (D-110 to D-113).
+export const fileRefused = (err) => ['EMPTY_FILE', 'BAD_FILE_CONTENT', 'UNSUPPORTED_FILE'].includes(err?.code) || err?.status === 413 || err?.status === 415;
+
+// An upload control's own message line (D-113): a refused file is said under the control, which is marked invalid and keeps
+// focus; the next pick clears it. Render `wrap` where the input was. One message, read once: no toast for a file refusal.
+let uploadSeq = 0;
+export function uploadField(input) {
+  const line = h('div', { class: 'error', id: `upload-err-${++uploadSeq}`, role: 'alert' });
+  input.setAttribute('aria-describedby', [input.getAttribute('aria-describedby'), line.id].filter(Boolean).join(' '));
+  const wrap = h('div', { class: 'field' }, input, line);
+  const clear = () => { line.textContent = ''; wrap.classList.remove('field--invalid'); input.removeAttribute('aria-invalid'); };
+  const show = (msg) => { line.textContent = msg; wrap.classList.add('field--invalid'); input.setAttribute('aria-invalid', 'true'); input.focus(); };
+  return { wrap, show, clear };
+}
+
 // Keep unsaved form input in sessionStorage so it survives an expired session
 // or a dropped connection. Passwords are never stored.
 export function persistDraft(form, key) {

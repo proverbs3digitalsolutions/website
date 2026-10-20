@@ -32,7 +32,7 @@ test('receiptProblem uses fileProblem on the form box', () => {
 
 test('both detail upload buttons check the file before sending', () => {
   for (const [kind, id] of [['payment', 'p.payment_id'], ['expense', 'x.expense_id']]) {
-    const re = new RegExp(`Choose a file first\\.[\\s\\S]{0,120}?fileProblem\\(upload\\.files\\[0\\]\\)[\\s\\S]{0,120}?toast\\(bad, 'error'\\); return;[\\s\\S]{0,80}?e\\.target\\.disabled = true;[\\s\\S]{0,60}?uploadFile\\('${kind}', ${id.replace('.', '\\.')}`);
+    const re = new RegExp(`Choose a file first\\.[\\s\\S]{0,120}?fileProblem\\(upload\\.files\\[0\\]\\)[\\s\\S]{0,120}?up\\.show\\(bad\\); return;[\\s\\S]{0,80}?e\\.target\\.disabled = true;[\\s\\S]{0,60}?uploadFile\\('${kind}', ${id.replace('.', '\\.')}`);
     assert.match(src, re, kind);
   }
 });

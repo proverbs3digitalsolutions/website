@@ -116,6 +116,8 @@ export const filesList = () => null;
 export const openModal = () => {};
 export const toast = () => {};
 export const todayManila = () => '2026-10-14';
+export const uploadField = (i) => ({ wrap: i, show() {}, clear() {} });
+export const fileRefused = () => false;
 // Same as the real ui.js: the Manila calendar day of a timestamp, plain dates unchanged.
 export function manilaDay(ts) {
   if (!ts) return '';

@@ -1,8 +1,8 @@
 // Listings (units rented per night), cleaning status and channel connections.
 
-import { get, post, patch, qs, api, ApiError } from '../api.js';
+import { get, post, patch, qs, api, ApiError, fileContentError } from '../api.js';
 import {
-  h, icon, peso, pesoShort, parseAmount, fmtDate, fmtDateTime, badge, field, formModal, makeForm, openModal, confirmDialog, emptyState, toast, options, todayManila, manilaDay, clearErrors, showErrors,
+  h, icon, peso, pesoShort, parseAmount, fmtDate, fmtDateTime, badge, field, formModal, makeForm, openModal, confirmDialog, emptyState, toast, options, todayManila, manilaDay, clearErrors, showErrors, uploadField, fileRefused,
 } from '../ui.js';
 import { state } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed, apiFilters } from '../filters.js';
@@ -313,6 +313,7 @@ async function shrink(file) {
 
 async function photosModal(listing) {
   const box = h('div', { class: 'stack' });
+  let refusal = ''; // a refused file is said on the box's own line after the redraw (D-113)
   const m = openModal({ title: `Photos · ${listing.unit_name}`, body: box, wide: true });
   // Each change redraws the dialog, so focus goes back to a control in it: the one the person used, or its replacement.
   async function draw(focus) {
@@ -325,16 +326,19 @@ async function photosModal(listing) {
       input.disabled = true;
       try {
         for (const [i, f] of files.entries()) {
-          if (!f.size) throw new Error('This file is empty. Choose the file again.'); // D-111 (round 29): a 0-byte file is refused before sending
+          if (!f.size) throw new ApiError('This file is empty. Choose the file again.', { status: 400, code: 'EMPTY_FILE' }); // D-111 (round 29): a 0-byte file is refused before sending
+          const bad = await fileContentError(f); // D-112: a renamed file is refused before it is shrunk or sent
+          if (bad) throw new ApiError(bad, { status: 415, code: 'BAD_FILE_CONTENT' });
           status.textContent = `Uploading ${i + 1} of ${files.length}…`;
           const blob = await shrink(f);
           await api('POST', `/units/${listing.unit_id}/photos`, undefined, { rawBody: blob, headers: { 'Content-Type': blob.type || 'image/jpeg' } });
         }
         toast('Photos uploaded.');
-      } catch (err) { toast(err.message, 'error'); }
+      } catch (err) { if (fileRefused(err)) refusal = err.message; else toast(err.message, 'error'); }
       input.value = '';
       draw((root) => root.querySelector('input[type="file"]')?.focus());
     } });
+    const up = uploadField(input);
     box.replaceChildren(
       h('p', { class: 'muted small' }, 'Shown on your booking page. The first photo is the cover. Up to 12 photos; large photos are resized automatically.'),
       photos.length ? h('div', { class: 'ph-grid' }, photos.map((p, i) => h('figure', { class: 'ph-item', tabindex: '-1' },
@@ -343,8 +347,9 @@ async function photosModal(listing) {
           i === 0 ? h('span', { class: 'badge badge--paid' }, 'Cover') : h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Make cover, photo ${i + 1}`, onclick: async () => { await post(`/listing-photos/${p.file_id}/cover`); draw((root) => root.querySelector('.ph-item')?.focus()); } }, 'Make cover'),
           h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Delete, photo ${i + 1}`, onclick: async () => { if (!await confirmDialog({ title: 'Delete this photo?', text: 'It is removed from your booking page.', confirmText: 'Delete photo', danger: true })) return; await post(`/listing-photos/${p.file_id}/remove`); draw((root) => (root.querySelectorAll('.ph-item')[i]?.querySelector('button[aria-label^="Delete,"]') ?? root.querySelector('input[type="file"]')).focus()); } }, 'Delete')))))
         : h('p', { class: 'muted' }, 'No photos yet.'),
-      h('div', { class: 'form' }, input, h('div', { class: 'chips' }, status)));
+      h('div', { class: 'form' }, up.wrap, h('div', { class: 'chips' }, status)));
     focus?.(box);
+    if (refusal) { up.show(refusal); refusal = ''; }
   }
   try { await draw(); } catch (err) { m.close(); toast(err.message, 'error'); }
 }

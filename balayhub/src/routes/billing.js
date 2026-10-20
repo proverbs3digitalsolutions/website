@@ -7,7 +7,7 @@ const express = require('express');
 const { query, pool } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
 const { validate, uuidParam } = require('../lib/validate');
-const { requireRole, rateLimit } = require('../lib/auth');
+const { requireRole, rateLimit, rateLimitRefusal } = require('../lib/auth');
 const { PLANS, PUBLIC_PLANS } = require('../lib/plans');
 const billing = require('../lib/billing');
 const coupons = require('../lib/coupons');
@@ -176,7 +176,15 @@ router.get('/billing/card-check', owners, ah(async (req, res) => {
   res.json({ ...v, plans: v.plans.map((p) => ({ ...p, listings: PLANS[p.key].listings })) });
 }));
 
-router.post('/billing/card-check/start', owners, cardStartAllLimiter, cardStartLimiter, ah(async (req, res) => {
+// CARD-1 (the longest wait first, D-112): a start the day's attach limits would refuse is answered first, with the longer of
+// their waits. It counts nothing and starts nothing. An hourly start block that lasts longer is left to cardStartLimiter.
+const attachDayGate = (req, res, next) => {
+  const day = Math.max(attachLimiter.blockedFor(req), attachAllLimiter.blockedFor(req));
+  if (day && day >= cardStartLimiter.blockedFor(req)) return next(rateLimitRefusal(res, day));
+  next();
+};
+
+router.post('/billing/card-check/start', owners, attachDayGate, cardStartAllLimiter, cardStartLimiter, ah(async (req, res) => {
   const body = validate(req.body, {
     renewal_plan: { type: 'enum', values: PUBLIC_PLANS, required: true, label: 'Plan' },
     consent: { type: 'bool' },

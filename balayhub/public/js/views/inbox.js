@@ -402,7 +402,10 @@ function mentionPicker(body, people, picked) {
   body.setAttribute('aria-controls', list.id);
   body.addEventListener('input', () => { active = 0; update(); });
   body.addEventListener('click', update);
-  body.addEventListener('blur', close);
+  // A press inside the composer holds the list until the press lands: closing it on blur moved Save note up from under
+  // the pointer, so the first press was lost (D-113). The list stays in the flow under the box (O10).
+  let held = false;
+  body.addEventListener('blur', () => { if (!held) close(); });
   body.addEventListener('keydown', (e) => {
     if (list.hidden) return;
     if (e.key === 'ArrowDown') { e.preventDefault(); active = (active + 1) % items.length; mark(); }
@@ -410,7 +413,7 @@ function mentionPicker(body, people, picked) {
     else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pick(items[active]); }
     else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
   });
-  return { list, close };
+  return { list, close, hold: (v) => { held = v; } };
 }
 
 // A template goes below the typed message. Null when the result would be over the message limit, so nothing is added part way.
@@ -573,6 +576,7 @@ function composer(c, templates, status, rerender, assignees = []) {
         try { sessionStorage.removeItem(draftKey); sessionStorage.removeItem(modeKey); sessionStorage.removeItem(subjKey); sessionStorage.removeItem(subjTplKey); } catch { /* ignore */ }
         if (r.message.status === 'failed') toast(`Saved, but the email was not sent: ${r.message.error}`, 'error');
         else if (r.mentions.length) toast(`Note saved. ${r.mentions.map((x) => x.full_name).join(', ')} mentioned.`);
+        else if (r.message.status === 'note' && /(^|\s)@[^\s@]/.test(body.value)) toast('Note saved. Nobody was notified: pick a name from the @ list to mention someone.');
         else toast({ note: 'Note saved.', scheduled: `Scheduled for ${fmtDateTime(r.message.scheduled_at)}.`, sent: 'Sent.' }[r.message.status] || 'Saved.');
         rerender();
       } catch (ex) {
@@ -591,6 +595,8 @@ function composer(c, templates, status, rerender, assignees = []) {
   h('div', { class: 'composer__actions' },
     h('label', { class: 'composer__later small muted' }, 'Send later (Philippine time, optional) ', sendAt),
     sendBtn));
+  form.addEventListener('pointerdown', (e) => { if (!picker.list.contains(e.target)) picker.hold(true); });
+  for (const ev of ['click', 'pointercancel']) form.addEventListener(ev, () => { picker.hold(false); if (document.activeElement !== body) picker.close(); });
   setMode(mode);
   return form;
 }

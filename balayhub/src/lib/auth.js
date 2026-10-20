@@ -181,6 +181,12 @@ function rateText(seconds) {
   return `Too many tries. Please try again in about ${hrs === 1 ? 'an hour' : `${hrs} hours`}.`;
 }
 
+// The 429 a limit gives: the same sentence and retry_after wherever the limit is used (D-111, D-112).
+function rateLimitRefusal(res, wait) {
+  res.set('Retry-After', wait);
+  return new HttpError(429, rateText(wait), { code: 'RATE_LIMITED', retry_after: wait });
+}
+
 // Very small in-memory fixed-window limiter (per process).
 // Every request is counted on arrival, so a burst of parallel requests can't slip past the cap.
 // giveBack(status): the count is given back when the response ends with a status it accepts
@@ -192,24 +198,27 @@ function rateLimit({ windowMs, max, key, failedOnly = false, giveBack = failedOn
     const now = Date.now();
     for (const [k, v] of hits) if (v.reset < now) hits.delete(k);
   }, windowMs).unref();
-  return (req, res, next) => {
+  const limit = (req, res, next) => {
     const k = key(req);
     const now = Date.now();
     let h = hits.get(k);
     if (!h || h.reset < now) { h = { count: 0, reset: now + windowMs }; hits.set(k, h); }
     h.count += 1;
-    if (h.count > max) {
-      const wait = Math.ceil((h.reset - now) / 1000);
-      res.set('Retry-After', wait);
-      return next(new HttpError(429, rateText(wait), { code: 'RATE_LIMITED', retry_after: wait }));
-    }
+    if (h.count > max) return next(rateLimitRefusal(res, Math.ceil((h.reset - now) / 1000)));
     if (giveBack) res.on('finish', () => { if (giveBack(res.statusCode)) h.count = Math.max(0, h.count - 1); });
     next();
   };
+  // Read only: the seconds this limit would refuse the caller for right now, or 0. It counts nothing and resets nothing (CARD-1).
+  limit.blockedFor = (req) => {
+    const h = hits.get(key(req));
+    const now = Date.now();
+    return h && h.reset >= now && h.count >= max ? Math.ceil((h.reset - now) / 1000) : 0;
+  };
+  return limit;
 }
 
 module.exports = {
   hashPassword, verifyPassword, burnPasswordCheck, newToken, hashToken,
-  createSession, destroySession, loadSession, requireAuth, requireWorkspace, requireRole, rateLimit, planGuard,
+  createSession, destroySession, loadSession, requireAuth, requireWorkspace, requireRole, rateLimit, rateLimitRefusal, planGuard,
   purgeExpiredAuth,
 };

@@ -3,7 +3,7 @@
 import { get, post, patch, qs, uploadFile } from '../api.js';
 import {
   h, icon, peso, fmtDate, fmtDateTime, manilaDay, badge, label, options, field, formModal, emptyState, pageHead, toast,
-  todayManila, filesList, openModal, unitLabel, confirmDialog, showErrors, parseAmount } from '../ui.js';
+  todayManila, filesList, openModal, unitLabel, confirmDialog, showErrors, parseAmount, uploadField, fileRefused } from '../ui.js';
 import { state, navigate } from '../app.js';
 import { expenseNeedsAsk } from './rent.js';
 import { initFilters, filterBar, rememberFilters, changed, apiFilters } from '../filters.js';
@@ -274,10 +274,16 @@ export async function maintenanceDetailView(el, { params, rerender }) {
     // Picking a file uploads it at once (no second step); the input is off while the upload runs.
     onchange: async () => {
       if (!upload.files[0]) return;
+      up.clear();
       upload.disabled = true;
-      try { await uploadFile('maintenance', m.request_id, upload.files[0]); upload.value = ''; toast('Uploaded.'); rerender(); } catch (err) { toast(err.message, 'error'); upload.disabled = false; upload.value = ''; }
+      try { await uploadFile('maintenance', m.request_id, upload.files[0]); upload.value = ''; toast('Uploaded.'); rerender(); } catch (err) {
+        // Enabled before the line is shown, so focus can land on the box (D-113).
+        upload.disabled = false; upload.value = '';
+        if (fileRefused(err)) up.show(err.message); else toast(err.message, 'error');
+      }
     },
   });
+  const up = uploadField(upload);
 
   el.replaceChildren(
     pageHead({
@@ -309,6 +315,6 @@ export async function maintenanceDetailView(el, { params, rerender }) {
         h('div', { class: 'card' },
           h('div', { class: 'card__head' }, h('h2', null, 'Photos & documents')),
           filesList(files),
-          h('div', { class: 'form', style: { marginTop: '12px' } }, upload)))),
+          h('div', { class: 'form', style: { marginTop: '12px' } }, up.wrap)))),
   );
 }

@@ -1,7 +1,7 @@
 // Security deposit card on a reservation, and the Home reminder for deposits to return.
 
 import { get, post, uploadFile, qs } from '../api.js';
-import { h, peso, fmtDate, fmtDateTime, field, formModal, confirmDialog, toast, badge, todayManila, emptyState, parseAmount } from '../ui.js';
+import { h, peso, fmtDate, fmtDateTime, field, formModal, confirmDialog, toast, badge, uploadField, fileRefused, todayManila, emptyState, parseAmount } from '../ui.js';
 import { initFilters, filterBar, changed, apiFilters } from '../filters.js';
 import { state } from '../app.js';
 
@@ -106,10 +106,12 @@ export async function depositCard(r, rerender) {
     try { await post(`/reservations/${r.booking_id}/deposit/reopen`); toast('Back to held.'); rerender(); } catch (err) { toast(err.message, 'error'); }
   };
   const upload = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', class: 'input', 'aria-label': 'Add damage photo', onchange: async () => {
+    up.clear();
     if (!upload.files[0]) return;
     upload.disabled = true;
-    try { await uploadFile('deposit', dep.deposit_id, upload.files[0]); upload.value = ''; toast('Photo added.'); rerender(); } catch (err) { toast(err.message, 'error'); upload.disabled = false; upload.value = ''; }
+    try { await uploadFile('deposit', dep.deposit_id, upload.files[0]); upload.value = ''; toast('Photo added.'); rerender(); } catch (err) { upload.disabled = false; upload.value = ''; if (fileRefused(err)) up.show(err.message); else toast(err.message, 'error'); }
   } });
+  const up = uploadField(upload);
 
   if (!dep) {
     if (r.status !== 'confirmed') return null;
@@ -131,7 +133,7 @@ export async function depositCard(r, rerender) {
       dep.status === 'held' && isManager && h('button', { class: `btn ${due ? 'btn--primary' : 'btn--secondary'} btn--sm`, type: 'button', 'data-focus-key': 'deposit-action', onclick: settle }, 'Return deposit'),
       dep.status !== 'held' && state.user.role === 'owner' && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'data-focus-key': 'deposit-action', onclick: reopen }, 'Undo')),
     h('div', { class: 'form', style: { marginTop: '10px' } },
-      h('label', { class: 'small muted' }, 'Damage / condition photos'), upload));
+      h('label', { class: 'small muted' }, 'Damage / condition photos'), up.wrap));
 }
 
 // Home: deposits still held after check-out.

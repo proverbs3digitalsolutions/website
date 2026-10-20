@@ -1,8 +1,8 @@
 // Guest check-in (registration) form, opened from the private link the host sends.
 // Also: the host's "Guest check-in form" card on the reservation page.
 
-import { get, post, api, ApiError } from '../api.js';
-import { h, brand, field, fmtDateTime, toast, clearErrors, showErrors, readForm, confirmDialog, EMAIL_RE, PHONE_RE } from '../ui.js';
+import { get, post, api, ApiError, fileContentError } from '../api.js';
+import { h, brand, field, fmtDateTime, toast, clearErrors, showErrors, readForm, confirmDialog, fileRefused, EMAIL_RE, PHONE_RE } from '../ui.js';
 import { t, tServer, tFields, extendTranslations, initGuestLang, langToggle, keepFormValues, restoreFormValues, fmtDateL, fmtDateTimeL } from '../i18n.js';
 import { copyText } from './quotes.js';
 
@@ -35,6 +35,8 @@ extendTranslations({
   'Remove guest {n}': 'Alisin ang guest {n}',
   'Choose the photos again after changing the language.': 'Piliin ulit ang mga litrato pagkatapos magpalit ng wika.',
   'Add a photo of a valid ID for at least one guest.': 'Mag-upload ng litrato ng valid ID ng kahit isang guest.',
+  "This file isn't a real PDF, JPG, PNG or WEBP. Choose the file again.": 'Hindi totoong PDF, JPG, PNG o WEBP ang file na ito. Piliin ulit ang file.',
+  'Upload a photo (JPG, PNG or WEBP) up to 10 MB.': 'Mag-upload ng litrato (JPG, PNG o WEBP) na hanggang 10 MB.',
   'Your answers are saved. Add a photo of your ID to finish registering.': 'Naka-save na ang mga sagot mo. Mag-upload ng litrato ng ID mo para matapos ang registration.',
 });
 
@@ -216,6 +218,7 @@ export async function guestCheckinView(el, { params }, kept) {
     if (blankGuests.length) problems.guests = t('Enter the name of each guest, or remove the empty row.');
     if (picked.some((f) => f.size === 0)) problems.id_photos = t('This file is empty. Choose the file again.'); // D-111: a 0-byte photo is refused here, before anything is sent
     else if (picked.some((f) => !ID_PHOTO_TYPE.test(f.type))) problems.id_photos = t('Your ID must be a JPG, PNG or WEBP photo.');
+    else for (const f of picked) { const bad = await fileContentError(f); if (bad) { problems.id_photos = t(bad); break; } } // D-113: a renamed file is refused before the answers are saved
     if (!picked.length && !(r?.id_count > 0)) problems.id_photos = t('Add a photo of a valid ID for at least one guest.');
     if (rules && !rulesAt && !form.elements.accept_rules.checked) problems.accept_rules = t('Please read and agree to the house rules.');
     if (!form.elements.consent.checked) problems.consent = t('Please agree so your host can register you with the building.');
@@ -255,8 +258,15 @@ export async function guestCheckinView(el, { params }, kept) {
         h('p', null, h('button', { class: 'linkbtn', onclick: () => guestCheckinView(el, { params }) }, t('Review or change my answers'))))));
     } catch (err) {
       progress.textContent = '';
+      // A photo the server refuses after the answers were saved is said on the ID box; the banner keeps only the saved-answers note.
+      const photoRefused = savedDraft && fileRefused(err);
+      if (photoRefused) {
+        if (!r) formError.replaceChildren(h('div', { class: 'alert alert--warn' }, draftNote)); // a page that loaded a saved record already shows the note at the top
+        showErrors(form, { id_photos: tServer(err.message) });
+        return;
+      }
       // Each message shows once: one whose field is on the form sits at that field; the banner names only the rest.
-      if (savedDraft) formError.replaceChildren(h('div', { class: 'alert alert--warn' }, draftNote));
+      if (savedDraft && !r) formError.replaceChildren(h('div', { class: 'alert alert--warn' }, draftNote)); // same rule: a saved record already shows the note at the top
       const unplaced = err.fields ? showErrors(form, tFields(err.fields)) : [];
       const msg = !(err instanceof ApiError) ? (err.message || t('Something went wrong. Please try again.'))
         : unplaced.length ? unplaced.join(' ')
