@@ -314,6 +314,9 @@ export const backTarget = (linkHref, from, currentKey) => Boolean(from?.fromHash
 export const restoreY = (saved, maxY) => Math.max(0, Math.min(saved, maxY));
 // One step of a pending restore: 'stop' once the person acted, 'scroll' when the page is tall enough (or time is up), else 'wait'.
 export const shouldRestore = (savedY, pageHeight, viewport, elapsed, userActed) => (userActed ? 'stop' : pageHeight - viewport >= savedY || elapsed >= RESTORE_MS ? 'scroll' : 'wait');
+// A link or address to the page already on screen makes the browser replace its history entry with a null state. When that entry is the one
+// the router last drew, its key goes back, so its scroll is still remembered and Back still returns to it (D-97, D-109).
+export const keptKey = (stateKey, hash, lastHashNow, lastKeyNow) => (!stateKey && lastKeyNow && hash === lastHashNow ? lastKeyNow : null);
 // nav-helpers:end
 const SCROLL_KEEP = 50;
 const positions = new Map(); // entry key -> scrollY
@@ -332,7 +335,13 @@ history.replaceState = (st, title, url) => {
   // A page rewriting its own address (?new=1 becomes ?view=upcoming) is still the page on screen, so keep lastHash in step (popstate compares it).
   if (lastHash === was) lastHash = location.hash;
 };
+// The original replaceState, not the wrapper, so lastHash stays as it is.
+function keepEntryKey() {
+  const k = keptKey(entryKey(), location.hash, lastHash, lastKey);
+  if (k) replaceState({ bhEntry: k }, '');
+}
 window.addEventListener('scroll', () => {
+  keepEntryKey();
   const k = entryKey();
   if (!k) return;
   positions.delete(k);
@@ -342,6 +351,7 @@ window.addEventListener('scroll', () => {
 document.addEventListener('click', (e) => {
   const a = e.target instanceof Element ? e.target.closest('a.back') : null;
   if (!a || e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  keepEntryKey();
   if (backTarget(a.getAttribute('href'), lastForward, entryKey())) { e.preventDefault(); history.back(); }
 }, true);
 
@@ -828,6 +838,7 @@ window.addEventListener('hashchange', () => { viaAddress = focusFree(); render()
 // Back or Forward onto the same address text fires popstate but no hashchange (a page that rewrote its address, such as a ?new=1 dialog
 // whose page replaced it). With a layer open the page is stale, so draw it again; a different hash is drawn by hashchange (D-108).
 window.addEventListener('popstate', () => {
+  keepEntryKey();
   if (location.hash !== lastHash) return;
   if (!document.querySelector('dialog.modal[open], .morenav[open], .tb-sheet')) return;
   viaAddress = focusFree();

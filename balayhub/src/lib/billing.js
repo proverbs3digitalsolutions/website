@@ -105,12 +105,17 @@ async function prepareCharge(user, plan, months, { couponCode, provider, seenPai
     const { rows: [org] } = await db.query(
       'SELECT organization_id, plan, is_demo, trial_ends_at, paid_until FROM organizations WHERE organization_id = $1 FOR UPDATE',
       [user.organization_id]);
+    // A refusal because another payment is open reads as "received" when a plan payment was marked paid a moment ago:
+    // the other tab's payment just finished, so "try again" would mislead. Which requests are refused does not change.
+    const { rows: [justPaid] } = await db.query(
+      `SELECT 1 FROM billing_payments WHERE organization_id = $1 AND kind = 'plan' AND status = 'paid' AND paid_at > now() - interval '2 minutes'`, [user.organization_id]);
+    const openError = (message) => (justPaid || stale(org) ? paymentReceived() : new HttpError(409, message, { code: 'PAYMENT_IN_PROGRESS' }));
     // A free activation is written pending and marked paid in its own transaction; until then it is an open payment too
     // (BIL-1, D-108). Bounded to 2 minutes so a row left pending by a crash never blocks for long.
     const { rows: [freeOpen] } = await db.query(
       `SELECT 1 FROM billing_payments WHERE organization_id = $1 AND kind = 'plan' AND status = 'pending' AND provider = 'coupon'
           AND created_at > now() - interval '2 minutes'`, [user.organization_id]);
-    if (freeOpen) throw new HttpError(409, 'A payment is already in progress. Try again in a moment.', { code: 'PAYMENT_IN_PROGRESS' });
+    if (freeOpen) throw openError('A payment is already in progress. Try again in a moment.');
     if (provider === 'paymongo_intent') {
       // A pay-saved charge that is still waiting (3-D Secure, processing) must not be followed by a second charge.
       const { rows: [busy] } = await db.query(
@@ -119,8 +124,8 @@ async function prepareCharge(user, plan, months, { couponCode, provider, seenPai
           ORDER BY created_at DESC LIMIT 1`, [user.organization_id, PENDING_MINUTES]);
       if (busy) {
         // Past the window the row is still open because PayMongo shows it open (or could not be read): no minutes to name.
-        if (busy.mins <= 0) throw new HttpError(409, "We're still waiting for your bank to finish an earlier payment. Pay another way, or try again later.", { code: 'PAYMENT_IN_PROGRESS' });
-        throw new HttpError(409, `A payment is already in progress. Try again in ${busy.mins} minute${busy.mins === 1 ? '' : 's'}.`, { code: 'PAYMENT_IN_PROGRESS' });
+        if (busy.mins <= 0) throw openError("We're still waiting for your bank to finish an earlier payment. Pay another way, or try again later.");
+        throw openError(`A payment is already in progress. Try again in ${busy.mins} minute${busy.mins === 1 ? '' : 's'}.`);
       }
     }
     if (stale(org)) throw paymentReceived();
@@ -131,14 +136,14 @@ async function prepareCharge(user, plan, months, { couponCode, provider, seenPai
     if (provider === 'paymongo') {
       const { rows: [openHosted] } = await db.query(
         `SELECT 1 FROM billing_payments WHERE organization_id = $1 AND kind = 'plan' AND status = 'pending' AND provider = 'paymongo'`, [user.organization_id]);
-      if (openHosted) throw new HttpError(409, 'A payment is already open in another window. Finish it there, or try again later.', { code: 'PAYMENT_IN_PROGRESS' });
+      if (openHosted) throw openError('A payment is already open in another window. Finish it there, or try again later.');
       const { rows: [waiting] } = await db.query(
         `SELECT 1 FROM billing_payments WHERE organization_id = $1 AND kind = 'plan' AND status = 'pending' AND provider = 'paymongo_intent'`, [user.organization_id]);
-      if (waiting) throw new HttpError(409, 'A payment is still waiting for your bank. Finish it there, or try again later.', { code: 'PAYMENT_IN_PROGRESS' });
+      if (waiting) throw openError('A payment is still waiting for your bank. Finish it there, or try again later.');
     } else if (provider === 'paymongo_intent') {
       const { rows: [open] } = await db.query(
         `SELECT 1 FROM billing_payments WHERE organization_id = $1 AND kind = 'plan' AND status = 'pending' AND provider = 'paymongo'`, [user.organization_id]);
-      if (open) throw new HttpError(409, 'A payment is already open in another window. Finish it there, or try again later.', { code: 'PAYMENT_IN_PROGRESS' });
+      if (open) throw openError('A payment is already open in another window. Finish it there, or try again later.');
     }
     const q = await coupons.resolve(db, { org, code: couponCode, plan, months });
     const ahead = couponAheadError(org, q);

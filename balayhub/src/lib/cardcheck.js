@@ -103,7 +103,7 @@ async function start(user, { renewalPlan, consent } = {}) {
       // 404: the intent is gone at PayMongo (test keys swapped for live keys), so it can never be paid: retire it.
       // A network failure, a 5xx or a rejected key says nothing about the intent: stay safe and charge nothing.
       if (err.httpStatus !== 404) {
-        throw new HttpError(503, "We couldn't reach our payment provider to check your earlier payment, so nothing was charged. Please try again in a minute.", { code: 'PAYMENT_PROVIDER_UNAVAILABLE' });
+        throw new HttpError(503, "We couldn't reach the payment service. Nothing was charged. Please try again in a moment.", { code: 'PAYMENT_PROVIDER_UNAVAILABLE' });
       }
       st = 'gone';
       await query(`UPDATE billing_payments SET status = 'expired' WHERE billing_id = $1 AND status = 'pending'`, [prior.billing_id]);
@@ -126,7 +126,7 @@ async function start(user, { renewalPlan, consent } = {}) {
         return iv.status;
       }).catch(() => null);
       if (retired === null) {
-        throw new HttpError(503, "We couldn't reach our payment provider to check your earlier payment, so nothing was charged. Please try again in a minute.", { code: 'PAYMENT_PROVIDER_UNAVAILABLE' });
+        throw new HttpError(503, "We couldn't reach the payment service. Nothing was charged. Please try again in a moment.", { code: 'PAYMENT_PROVIDER_UNAVAILABLE' });
       }
       if (retired === 'succeeded' || retired === 'moved') {
         // Paid (or settled) in the meantime: let refresh apply it, and answer from the result.

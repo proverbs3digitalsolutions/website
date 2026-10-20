@@ -28,6 +28,7 @@ test.before(async () => {
   for (const f of ['api.js', 'ui.js', 'i18n.js', 'filters.js']) fs.copyFileSync(path.join(__dirname, '../public/js', f), path.join(dir, f));
   fs.writeFileSync(path.join(dir, 'app.js'), 'export const state = { user: null, requireEmailVerification: true };\nexport const navigate = () => {};\n');
   for (const f of ['maintenance.js', 'cleanerpay.js']) fs.copyFileSync(path.join(VIEWS, f), path.join(dir, 'views', f));
+  fs.writeFileSync(path.join(dir, 'views', 'rent.js'), 'export const expenseNeedsAsk = () => false;\n'); // maintenance.js imports expenseNeedsAsk from rent.js
   maint = await import(pathToFileURL(path.join(dir, 'views', 'maintenance.js')));
   pay = await import(pathToFileURL(path.join(dir, 'views', 'cleanerpay.js')));
 });

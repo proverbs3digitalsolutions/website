@@ -25,7 +25,10 @@ test('toast: error is role alert, others role status', () => {
   const box = { children: [], append(e) { this.children.push(e); } };
   globalThis.document = { getElementById: () => box, createElement: (t) => ({ tagName: t, attrs: {}, children: [], classList: { add() {} }, setAttribute(k, v) { this.attrs[k] = v; }, append() {}, remove() {}, addEventListener() {} }) };
   const src = fs.readFileSync(path.join(JS, 'ui.js'), 'utf8');
-  assert.match(src, /role: kind === 'error' \? 'alert' : 'status'/);
+  const start = src.indexOf('export function toast(');
+  assert.ok(start > 0, 'toast() is in ui.js');
+  const body = src.slice(start, src.indexOf('\n}\n', start) + 2);
+  assert.doesNotMatch(body, /role:/, 'toast() has no role: #toasts is the one live region (D-109)');
 });
 
 const rect = (top, bottom) => () => ({ top, bottom });

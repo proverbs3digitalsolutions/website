@@ -15,10 +15,13 @@ const CATEGORIES =['repairs', 'utilities', 'taxes', 'insurance', 'association_du
 // The server's own limit (api.js uploadFile) and the types the box accepts, checked on the device so a bad file is caught in the same pass as every other problem.
 const RECEIPT_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
 const RECEIPT_MAX = 10 * 1024 * 1024;
-export function receiptProblem(form) {
-  const f = form.querySelector('input[name="__receipt"]')?.files?.[0];
+// One check for the Add forms and both detail-page upload buttons (an empty file is caught on the device, not by the server).
+export function fileProblem(f) {
   if (f && f.size === 0) return 'This file is empty. Choose the receipt file again.';
   if (f && (!RECEIPT_TYPES.includes(f.type) || f.size > RECEIPT_MAX)) return 'Upload a PDF, JPG, PNG or WEBP file up to 10 MB.';
+}
+export function receiptProblem(form) {
+  return fileProblem(form.querySelector('input[name="__receipt"]')?.files?.[0]);
 }
 
 function receiptField() {
@@ -533,6 +536,7 @@ export async function paymentDetailView(el, { params, rerender }) {
           h('button', {
             class: 'btn btn--secondary', onclick: async (e) => {
               if (!upload.files[0]) { toast('Choose a file first.', 'error'); return; }
+              const bad = fileProblem(upload.files[0]); if (bad) { toast(bad, 'error'); return; }
               e.target.disabled = true;
               try { await uploadFile('payment', p.payment_id, upload.files[0]); toast('Uploaded.'); rerender(); } catch (err) { toast(err.message, 'error'); e.target.disabled = false; }
             },
@@ -589,6 +593,7 @@ export async function expenseDetailView(el, { params, rerender }) {
           h('button', {
             class: 'btn btn--secondary', onclick: async (e) => {
               if (!upload.files[0]) { toast('Choose a file first.', 'error'); return; }
+              const bad = fileProblem(upload.files[0]); if (bad) { toast(bad, 'error'); return; }
               e.target.disabled = true;
               try { await uploadFile('expense', x.expense_id, upload.files[0]); toast('Uploaded.'); rerender(); } catch (err) { toast(err.message, 'error'); e.target.disabled = false; }
             },

@@ -24,7 +24,7 @@ test('d3: popstate on the same hash with a layer open redraws; otherwise nothing
   // Run the handler body with fakes: location, lastHash, document, focusFree, render, and a setter for viaAddress.
   const handler = (hash, last, layer) => {
     const log = { drew: 0, via: 'unset' };
-    const src = body.replace("window.addEventListener('popstate', () => {", '').trim().replace('viaAddress = focusFree();', 'set(focusFree());');
+    const src = body.replace("window.addEventListener('popstate', () => {", '').trim().replace('keepEntryKey();', '').replace('viaAddress = focusFree();', 'set(focusFree());');
     new Function('location', 'lastHash', 'document', 'focusFree', 'render', 'set', src)(
       { hash }, last, { querySelector: () => (layer ? {} : null) }, () => true, () => { log.drew += 1; }, (v) => { log.via = v; });
     return log;

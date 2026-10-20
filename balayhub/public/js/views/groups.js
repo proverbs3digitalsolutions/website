@@ -4,7 +4,7 @@ import { get, post, patch, qs, ApiError } from '../api.js';
 import { h, icon, peso, fmtDate, field, formModal, openModal, makeForm, confirmDialog, emptyState, toast, todayManila } from '../ui.js';
 import { state, navigate } from '../app.js';
 import { initFilters, filterBar, changed } from '../filters.js';
-import { addDays, boxValue, guestsProblem } from './reservations.js';
+import { addDays, boxValue, guestsProblem, matchedGuestNote } from './reservations.js';
 
 const canManageNow = () => !['staff', 'cleaner'].includes(state.user.role);
 const nightsOf = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
@@ -294,7 +294,9 @@ export async function newGroupModal({ onSaved } = {}) {
       const owners = rows.flatMap((r) => r.rooms().map(() => r));
       try {
         const res = await post('/booking-groups', { name: d.name.trim(), guest, rooms: list, ...(d.notes && { notes: d.notes }) });
-        toast('Group booking created.');
+        // The server joins a typed lead guest to a saved one with the same email and first name; say so (D-99 S1).
+        const note = guest.full_name ? matchedGuestNote(guest.full_name, res.guest_name) : null;
+        toast(note ? `Group booking created. ${note}` : 'Group booking created.');
         if (res.guest_do_not_rebook) toast(`Heads up: ${res.guest_do_not_rebook_name || res.guest_name || 'this guest'} is marked "Do not rebook" in Guests.`, 'error');
         modal.close();
         if (onSaved) onSaved(res); else navigate(`#/groups/${res.group.group_id}`);

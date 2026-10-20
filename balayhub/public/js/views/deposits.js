@@ -1,6 +1,6 @@
 // Security deposit card on a reservation, and the Home reminder for deposits to return.
 
-import { get, post, uploadFile, qs, ApiError } from '../api.js';
+import { get, post, uploadFile, qs } from '../api.js';
 import { h, peso, fmtDate, fmtDateTime, field, formModal, confirmDialog, toast, badge, todayManila, emptyState, parseAmount } from '../ui.js';
 import { initFilters, filterBar, changed, apiFilters } from '../filters.js';
 import { state } from '../app.js';
@@ -17,6 +17,23 @@ export function deductionProblem(typedText, held) {
   const typed = parseAmount(String(typedText ?? ''));
   if (typed < 0) return 'Deduction cannot be negative.';
   return typed > Number(held) ? `The deduction can't be more than the deposit (${peso(held)}).` : null;
+}
+
+// Every problem with the Return deposit form, reported together before the early-return question: the deduction above the deposit,
+// and a deduction with no reason (the server's sentence, so the guest-facing rule is the same in both places). null when clean.
+export function settleProblems(d, held) {
+  const p = {};
+  const tooMuch = deductionProblem(d.deduction_amount, held);
+  if (tooMuch) p.deduction_amount = tooMuch;
+  if (parseAmount(String(d.deduction_amount ?? '')) > 0 && !String(d.deduction_reason ?? '').trim()) p.deduction_reason = 'Explain the deduction (the guest sees this).';
+  return Object.keys(p).length ? p : null;
+}
+
+// The Reason field's required mark follows the deduction: shown while it is above 0, gone at 0.
+export function markReason(el, on) {
+  el.querySelector('.req').hidden = !on;
+  const box = el.querySelector('textarea');
+  if (on) box.setAttribute('aria-required', 'true'); else box.removeAttribute('aria-required');
 }
 
 export function returnLine(typedText, deposit) {
@@ -57,15 +74,19 @@ export async function depositCard(r, rerender) {
   const settle = () => {
     const suggested = Math.min(Number(d.suggested_deduction) || 0, Number(dep.amount));
     const dedInput = field({ name: 'deduction_amount', label: 'Deduction for damage / missing items', type: 'money', value: suggested > 0 ? String(suggested) : '0', hint: `Deposit: ${peso(dep.amount)}. Leave 0 to return it all.${suggested > 0 ? ' From damage reports: you can change it.' : ''}` });
+    const reasonField = field({ name: 'deduction_reason', label: 'Reason (the guest sees this)', type: 'textarea', markRequired: true, maxlength: 1000, placeholder: 'e.g. Broken drinking glass (₱150) and late check-out (₱300).' });
     const refundLine = h('p', { class: 'small' });
-    const update = () => { refundLine.textContent = returnLine(dedInput.querySelector('input').value, dep); };
+    const update = () => {
+      refundLine.textContent = returnLine(dedInput.querySelector('input').value, dep);
+      markReason(reasonField, parseAmount(String(dedInput.querySelector('input').value || '')) > 0);
+    };
     dedInput.querySelector('input').addEventListener('input', update);
     update();
     formModal({
       title: 'Return the deposit', submitText: 'Save',
       fields: [
         dedInput,
-        field({ name: 'deduction_reason', label: 'Reason (the guest sees this)', type: 'textarea', maxlength: 1000, placeholder: 'e.g. Broken drinking glass (₱150) and late check-out (₱300).' }),
+        reasonField,
         refundLine,
         h('div', { class: 'form-row form-row--2' },
           field({ name: 'refund_method', label: 'Returned by', type: 'select', value: dep.method === 'card' ? 'bank_transfer' : dep.method, placeholderOption: false, options: METHODS }),
@@ -73,9 +94,8 @@ export async function depositCard(r, rerender) {
         h('p', { class: 'muted small' }, 'Damage photos: add them on the deposit card (before or after saving).'),
         (r.guest_email || r.guest_has_email) && field({ name: 'send_receipt', label: r.guest_email ? `Email the summary to ${r.guest_email}` : 'Email the summary to the guest', type: 'checkbox', value: true }),
       ],
+      check: (d) => settleProblems(d, dep.amount),
       onSubmit: async (v) => {
-        const tooMuch = deductionProblem(v.deduction_amount, dep.amount);
-        if (tooMuch) throw new ApiError(tooMuch, { status: 400, fields: { deduction_amount: tooMuch } });
         if (askEarlyReturn(r, todayManila()) && !await confirmDialog({ title: 'Return the deposit before check-out?', text: `The stay ends ${fmtDate(r.check_out)}. Damage is usually checked after check-out.`, confirmText: 'Return deposit' })) return false;
         sent(await post(`/reservations/${r.booking_id}/deposit/settle`, v), 'Deposit settled.'); rerender();
       },

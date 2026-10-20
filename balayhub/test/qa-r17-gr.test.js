@@ -20,7 +20,7 @@ test.before(async () => {
   fs.writeFileSync(path.join(dir, 'filters.js'), stub(['initFilters', 'filterBar', 'changed']));
   fs.writeFileSync(path.join(dir, 'app.js'), 'export const state = {}; export const navigate = () => {};\n');
   fs.mkdirSync(path.join(dir, 'views'));
-  fs.writeFileSync(path.join(dir, 'views', 'reservations.js'), stub(['addDays', 'boxValue', 'guestsProblem']));
+  fs.writeFileSync(path.join(dir, 'views', 'reservations.js'), stub(['addDays', 'boxValue', 'guestsProblem', 'matchedGuestNote']));
   fs.writeFileSync(path.join(dir, 'views', 'groups.js'), src);
   g = await import(pathToFileURL(path.join(dir, 'views', 'groups.js')));
   ({ ApiError } = await import(pathToFileURL(path.join(dir, 'api.js'))));

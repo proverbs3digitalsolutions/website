@@ -1,6 +1,6 @@
 # BalayHub design brief
 
-Last updated: 2026-10-21 (QA round 26: section 34 and the Validation row; D-108). Before that: 2026-10-21 (QA round 25: section 33; D-107). Before that: 2026-10-21 (QA round 24: section 32; D-106). Before that: 2026-10-21 (QA round 23: section 31; D-105). Before that: 2026-10-21 (QA round 22: section 30; D-104). Before that: 2026-10-21 (QA round 21: section 29; D-103). Before that: 2026-10-20 (QA round 20: section 28; D-102). Before that: 2026-10-20 (QA round 19: landing links hidden below 768px; D-101). Before that: 2026-10-19 (QA round 18: section 27, phone filter bar, theme switch label; D-100). Before that: 2026-10-15 (QA round 17: section 26, the wordmark logotype exemption, the focus key table; D-98 and D-99)
+Last updated: 2026-10-21 (QA round 27: section 35 and the toast and ARIA lines; D-109). Before that: 2026-10-21 (QA round 26: section 34 and the Validation row; D-108). Before that: 2026-10-21 (QA round 25: section 33; D-107). Before that: 2026-10-21 (QA round 24: section 32; D-106). Before that: 2026-10-21 (QA round 23: section 31; D-105). Before that: 2026-10-21 (QA round 22: section 30; D-104). Before that: 2026-10-21 (QA round 21: section 29; D-103). Before that: 2026-10-20 (QA round 20: section 28; D-102). Before that: 2026-10-20 (QA round 19: landing links hidden below 768px; D-101). Before that: 2026-10-19 (QA round 18: section 27, phone filter bar, theme switch label; D-100). Before that: 2026-10-15 (QA round 17: section 26, the wordmark logotype exemption, the focus key table; D-98 and D-99)
 
 **Summary.** BalayHub is a phone-first web app (also an installable PWA) for Filipino rental and staycation hosts. It is built with plain CSS, one stylesheet (`public/css/app.css`), and small JavaScript helpers (`public/js/ui.js`). There is no framework and no CSS preprocessor. The look is calm and practical: Forest Green on soft off-white, Sand and Sun as warm accents, Poppins for headings, Inter for text, rounded cards, and large touch targets. Colours come from CSS custom properties on `:root`. A dark theme redefines the same tokens, so any component that uses tokens gets dark mode automatically. This brief records what is **actually built**. Every value below comes from the code. Where the code doesn't define a token (spacing, type sizes), the brief lists the values in use and says so.
 
@@ -307,7 +307,7 @@ See 2.4 and 2.5. Always build badges with `badge(status, text?)`.
 
 ### Toasts
 
-`toast(message, kind)` appends `.toast` (`role="status"`) to `#toasts` (`aria-live="polite"`). It uses `--ink-bg` / `--ink-text`, radius 12 and weight 650; the error kind uses a `--red` background. At most 2 show at once, each lasts 4 seconds, and they are centred above the bottom nav on phones and 24px from the bottom on desktop.
+`toast(message, kind)` appends a `.toast` (no role of its own) to `#toasts` (`aria-live="polite"`), the one live region, so each toast is read once (D-109). ~~`toast(message, kind)` appends `.toast` (`role="status"`) to `#toasts` (`aria-live="polite"`).~~ It uses `--ink-bg` / `--ink-text`, radius 12 and weight 650; the error kind uses a `--red` background. At most 2 show at once, each lasts 4 seconds, and they are centred above the bottom nav on phones and 24px from the bottom on desktop.
 
 ### Alerts and banners
 
@@ -369,7 +369,7 @@ Icons are inline SVG on a 24×24 grid with no fill, a `currentColor` stroke at 1
 |---|---|
 | Focus | A global `:focus-visible` draws a 2px solid outline in `--focus-ring` (Forest `#0f5132` in light, `#8fd0a6` in dark) with a 2px offset, so it keeps 3:1 contrast on the page (QA round 2). `--focus` is now a two-layer ring (surface gap, then `--focus-ring`) for inputs. Inputs add a `--teal` border. Clickable table rows, review stars and booking days use 2px outlines. The assistant button uses a 3px `--sand` outline. |
 | Landmarks and nav | `<aside>` sidebar, `<header>` topbar, `<nav aria-label="Main">` (both the sidebar and bottom navs), and `<main id="main">`. The current page has `aria-current="page"`. |
-| ARIA | The theme switch is a radiogroup with radios and `aria-checked`. The language toggle uses `aria-pressed`. The Filters button has `aria-expanded` and the name "Filters, N active". Filter chips are labelled "Remove filter …". Field errors use `role="alert"` and `aria-describedby`, and invalid inputs get `aria-invalid`. Toasts use `role="status"` in an `aria-live` region. Modals are native `<dialog>` with `aria-label`. Charts use `role="img"` with an `aria-label` and offer a table. The tracker step has `aria-current="step"`. The unread badge is labelled "{n} unread". Icons are `aria-hidden`, and `.sr-only` exists. |
+| ARIA | The theme switch is a radiogroup with radios and `aria-checked`. The language toggle uses `aria-pressed`. The Filters button has `aria-expanded` and the name "Filters, N active". Filter chips are labelled "Remove filter …". Field errors use `role="alert"` and `aria-describedby`, and invalid inputs get `aria-invalid`. Toasts are read through the `#toasts` live region (the toast itself has no role; D-109). ~~Toasts use `role="status"` in an `aria-live` region.~~ Modals are native `<dialog>` with `aria-label`. Charts use `role="img"` with an `aria-label` and offer a table. The tracker step has `aria-current="step"`. The unread badge is labelled "{n} unread". Icons are `aria-hidden`, and `.sr-only` exists. |
 | Reduced motion | `@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }` stops the skeleton shimmer, the typing dots and button transitions. |
 | Contrast (WCAG ratios computed from the tokens) | Light: text on bg 13.9:1, muted on surface 5.9:1, white on Forest 9.4:1. Status pairs are 4.7–5.8:1 (amber is the lowest at 4.7). Dark: text on bg 15.3:1, muted on surface 7.4:1, accent on surface 9.4:1, status pairs 6.1–7.8:1, white on dark Forest 5.3:1. See section 10 for the known failures. |
 | Tap targets | *Round 13: on phones every button, tab, chip, back link and standalone link is at least 44px (section 22).* Buttons are at least 46px (small ones 38px), inputs at least 48px, the modal close button is 40×40, the hk checklist boxes are 24px, and bottom-nav items are about 56px tall across a fifth of the screen width. Smaller controls exist (see section 10). |
@@ -652,7 +652,7 @@ Decisions D-94 and D-95. All new rules are in one block at the end of `public/cs
 - **The theme switch is one radio group.** `role="radiogroup"` with `role="radio"` buttons and a roving `tabindex` (only the selected one is a Tab stop); the arrow keys, Home and End move and select. Its buttons are updated in place, never rebuilt, so focus stays on them.
 - **Labels on the phone bottom bar:** "Groups" and "Help" for the long names (`BOTTOM_LABELS` in `app.js`: "Rent & Expenses" is "Rent"); the sidebar keeps the full names.
 - **Page title of My account:** the h1 reads "My account"; the person's name is `.acct-hero__name`, an h2.
-- **The scroll keeper never reveals an off-screen control.** When focus is put back after a redraw (`focusIt`), the control is scrolled into view only if it was visible before the redraw; error toasts are `role="alert"`.
+- **The scroll keeper never reveals an off-screen control.** When focus is put back after a redraw (`focusIt`), the control is scrolled into view only if it was visible before the redraw; error toasts are read through the `#toasts` live region with the others (D-109). ~~error toasts are `role="alert"`.~~
 
 ## 25. Patterns added in QA round 16 (2026-10-15)
 
@@ -749,3 +749,11 @@ Decision D-108. Behaviour in `public/js/app.js` and `public/js/ui.js`; layout in
 - **A save that worked but whose attachment failed** shows one error-style message that names both ("Expense saved, but the receipt didn't upload: ..."). It is never followed or replaced by a plain success message.
 - **A dialog that backs out of a question keeps its draft.** Cancel discards it; Escape and "Change it" keep it.
 - **Validation banner pair.** "Please fill in the highlighted fields." when every highlighted field is only empty; "Please check the highlighted fields." when any value is wrong. They say different things on purpose.
+
+## 35. Patterns added in QA round 27 (2026-10-21)
+
+Decision D-109. Behaviour in `public/js/ui.js` (the toast rule), `public/js/views/rent.js` (the file check), `public/js/views/maintenance.js` (Add cost) and `public/js/views/deposits.js` (the reason rule).
+
+- **One live region for toasts.** `#toasts` is the only `aria-live` region for toasts. A toast carries no role of its own, so each toast is read once. Error toasts keep their red style.
+- **The expense amount question on every expense screen.** Any control that saves an expense asks **Check the amount** above ₱50,000 (title "Check the amount", "This expense is ₱… . Save anyway?", **Save anyway** / **Change it**; Change it keeps the form and puts focus in the amount box). Maintenance's Add cost is the screen added in round 27.
+- **A required mark that depends on the case.** A field that is required only in some cases shows its red asterisk and `aria-required="true"` only while the case applies. Return deposit's Reason is marked while the deduction is above 0, and not at 0.

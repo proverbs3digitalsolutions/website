@@ -29,10 +29,11 @@ test('#5 deductionProblem gives the server sentence above the deposit, null othe
 });
 
 test('#5 settle checks the deduction before the early-return question', () => {
-  const i = dep.indexOf('deductionProblem(v.deduction_amount');
+  const i = dep.indexOf('check: (d) => settleProblems(d, dep.amount)');
   const j = dep.indexOf('askEarlyReturn(r, todayManila()) &&');
-  assert.ok(i > 0 && j > 0 && i < j, 'deductionProblem must run before askEarlyReturn');
-  assert.match(dep, /fields: \{ deduction_amount: /);
+  assert.ok(i > 0 && j > 0 && i < j, 'the settle check (settleProblems) must run before askEarlyReturn');
+  assert.match(dep, /export function settleProblems[\s\S]*?deductionProblem\(d\.deduction_amount, held\)/, 'settleProblems calls deductionProblem');
+  assert.match(dep, /if \(tooMuch\) p\.deduction_amount = tooMuch;/, 'and sets p.deduction_amount');
 });
 
 test('N4 New and Edit reservation ask highStayTotalOk with the nights', () => {

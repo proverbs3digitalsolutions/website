@@ -51,7 +51,7 @@ test('D-84 owners: ApiError is no longer imported, because nothing in owners.js 
 });
 
 test('groups: a room\'s guests box uses the reservation rule and marks its own row, so a blank, 0, negative or decimal count is "At least 1 guest." and nothing posts', () => {
-  assert.match(grpSrc, /import \{ addDays, boxValue, guestsProblem \} from '\.\/reservations\.js';/);
+  assert.match(grpSrc, /import \{ addDays, boxValue, guestsProblem, matchedGuestNote \} from '\.\/reservations\.js';/);
   assert.doesNotMatch(grpSrc, /Number\(guests\.value\) \|\| 1/, 'a blank count is no longer sent as 1');
   const row = grpSrc.slice(grpSrc.indexOf('function roomRow'), grpSrc.indexOf('// A 409 is ROOMS_TAKEN'));
   assert.match(row, /const guestsKey = `num_guests-\$\{uid\}`;/, 'the error key names this row');

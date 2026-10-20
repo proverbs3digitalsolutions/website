@@ -55,6 +55,7 @@ const RESERVATIONS_STUB = [
   'export function addDays(d, n) { const x = new Date(`${d}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); }',
   'export function boxValue({ typed, mode, suggestion, current }) { if (typed) return current; return mode === "type" || suggestion == null ? "" : String(suggestion); }',
   'export function newReservationModal() {}',
+  'export function matchedGuestNote() { return null; }',
   'export const CHANNEL_LABEL = {};',
 ].join('\n');
 

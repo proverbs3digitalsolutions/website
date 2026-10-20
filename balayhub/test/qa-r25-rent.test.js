@@ -13,8 +13,10 @@ const src = fs.readFileSync(file, 'utf8');
 function loadReceiptProblem() {
   const m = src.match(/export function receiptProblem[\s\S]*?\n\}\n/);
   assert.ok(m, 'receiptProblem is exported from rent.js');
+  const f = src.match(/export function fileProblem[\s\S]*?\n\}\n/);
+  assert.ok(f, 'fileProblem is exported from rent.js');
   const consts = src.match(/const RECEIPT_[A-Z_]+ = [^\n]+\n/g) || [];
-  return new Function(`${consts.join('')}${m[0].replace('export ', '')}; return receiptProblem;`)();
+  return new Function(`${consts.join('')}${f[0].replace('export ', '')}${m[0].replace('export ', '')}; return receiptProblem;`)();
 }
 const formWith = (f) => ({ querySelector: (s) => (s === 'input[name="__receipt"]' ? { files: f ? [f] : [] } : null) });
 const MSG = 'Upload a PDF, JPG, PNG or WEBP file up to 10 MB.';

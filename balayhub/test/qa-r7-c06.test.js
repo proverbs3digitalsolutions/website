@@ -73,6 +73,7 @@ async function loadView() {
   for (const f of ['api.js', 'ui.js', 'i18n.js', 'filters.js']) fs.copyFileSync(path.join(__dirname, '../public/js', f), path.join(dir, f));
   fs.writeFileSync(path.join(dir, 'app.js'), 'export const state = { user: null, requireEmailVerification: true };\nexport const navigate = () => {};\n');
   fs.copyFileSync(path.join(__dirname, '../public/js/views/maintenance.js'), path.join(dir, 'views', 'maintenance.js'));
+  fs.writeFileSync(path.join(dir, 'views', 'rent.js'), 'export const expenseNeedsAsk = () => false;\n'); // maintenance.js imports expenseNeedsAsk from rent.js
   return { dir, mod: await import(pathToFileURL(path.join(dir, 'views', 'maintenance.js'))) };
 }
 

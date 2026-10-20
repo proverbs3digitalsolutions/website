@@ -11,7 +11,7 @@ const src = fs.readFileSync(path.join(__dirname, '../public/js/views/rent.js'), 
 function loadReceiptProblem() {
   const start = src.indexOf('const RECEIPT_TYPES');
   const end = src.indexOf('function receiptField');
-  const body = src.slice(start, end).replace('export function', 'function');
+  const body = src.slice(start, end).replace(/export function/g, 'function');
   return new Function(`${body}; return receiptProblem;`)();
 }
 const formWith = (file) => ({ querySelector: () => ({ files: file ? [file] : [] }) });

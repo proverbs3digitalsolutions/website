@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-21 (QA round 26: section 39 and 33.1; D-108). Before that: 2026-10-21 (QA round 25: section 38, 5.10 and 30 corrected; D-107). Before that: 2026-10-21 (QA round 24: section 37; D-106). Before that: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
+Last updated: 2026-10-21 (QA round 27: section 40 and the notes in 29.1 and 30.6; D-109). Before that: 2026-10-21 (QA round 26: section 39 and 33.1; D-108). Before that: 2026-10-21 (QA round 25: section 38, 5.10 and 30 corrected; D-107). Before that: 2026-10-21 (QA round 24: section 37; D-106). Before that: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
 
 ---
 
@@ -1233,7 +1233,7 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 ## 29. QA round 16 changes (D-97; 2026-10-15)
 
 ### 29.1 Navigation
-- **Back keeps your place.** Browser Back, or a page's `‹ Back` link that points at the page you came from, returns to the same scroll place. The page waits up to 1.5 seconds for the list to load, then restores the place; any scroll, tap or key press cancels it. A new page starts at the top.
+- **Back keeps your place.** Browser Back, or a page's `‹ Back` link that points at the page you came from, returns to the same scroll place. The page waits up to 1.5 seconds for the list to load, then restores the place; any scroll, tap or key press cancels it. A new page starts at the top. This holds after a link or address to the page already on screen (D-109).
 - **The other module's home goes home quietly.** Opening `#/dashboard` on a stays workspace, or `#/home` on a rentals workspace, goes to the workspace's own home with no message. Any other refused page still says "That page isn't available for your role or workspace." The Privacy page logo goes to the workspace's own home.
 
 ### 29.2 Reservations
@@ -1316,7 +1316,7 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 - Non-owners read "These automatic messages are off until the workspace owner turns them on." on the automations card.
 
 ### 30.6 Rent & Expenses
-- Rent due **Sort** default reads **Overdue first**. A voided payment prints one VOID line. An expense above ₱50,000 asks **Check the amount** ("This expense is ₱… . Save anyway?"; Save anyway / Change it), on add and on a correction whose amount changed.
+- Rent due **Sort** default reads **Overdue first**. A voided payment prints one VOID line. An expense above ₱50,000 asks **Check the amount** ("This expense is ₱… . Save anyway?"; Save anyway / Change it), on add and on a correction whose amount changed, and on a maintenance repair cost (D-109).
 
 ### 30.7 Platform admin coupons (`#/admin/coupons`)
 - A fixed amount above the highest plan price (today ₱1,799.00) asks **Check the amount off** (Save anyway / Change it; Change it focuses the amount). **Total discount given** counts every coupon, not only the page shown, with two decimals. Offers show thousands separators.
@@ -1640,3 +1640,22 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 - **Manager on Cleaner pay:** with no amounts, the empty text and the row text tell the manager to ask the owner about rates. Owners see the old texts about adding a rate.
 - **Guest pages:** full name blank: "Please enter your full name." (booking, quote); mobile blank: "Please enter your mobile number." (booking changes); house rules: "Please read and agree to the house rules." (check-in changes); consent: "Please agree to continue." (quote changes). Check-in keeps "Please enter your full name, as on your ID." and "Please agree so your host can register you with the building." Tagalog follows each.
 - **Add listing, Type:** starts on Studio (no "Choose..."); changeable in Edit listing (works as decided, D-108).
+
+## 40. QA round 27 changes (D-109; 2026-10-21)
+
+### 40.1 Back and scroll
+- **Back keeps your place after a link to the page already on screen.** When a link or an address points at the page that is already showing (for example a reservation's date link, or a list's own address typed again), the browser loses track of the page's place. The app now puts it back, so Browser Back and the "‹" links still return to the saved scroll place, on every page. Extends 29.1 (D-97, D-109).
+- **Back from a window opened by a button** (New reservation, Add expense and the rest) still leaves the page, as it did before. Only windows opened from an address that names them (`?new=1`) close on Back. This is a founder question (BLOCKERS round 27 (a)).
+
+### 40.2 Money rules and forms
+- **Repair cost above ₱50,000.** Maintenance > a repair request > **Add cost** asks **Check the amount** ("This expense is ₱… . Save anyway?"; **Save anyway** / **Change it**), the same as every expense screen. Change it keeps the form and puts focus in the amount box. Save anyway records the cost ("Cost recorded."). Exactly ₱50,000 does not ask (30.6, D-109).
+- **Return deposit: one save reports every problem.** The reason is checked together with the other fields, before the early-return question: a deduction above the deposit (the existing sentence), and a deduction above 0 with no reason: "Explain the deduction (the guest sees this)." Reason shows its red asterisk and `aria-required` while the deduction is above 0, and neither at 0. The early-return question appears only after the form is clean.
+- **An empty receipt or attachment on an existing expense or payment.** Upload receipt (expense) and Upload attachment (payment) refuse a 0-byte file before anything is sent: "This file is empty. Choose the receipt file again." The button stays enabled. The type and size messages are unchanged (extends 39.2).
+
+### 40.3 Guests and groups
+- **A group booking that joins a saved guest says so.** When a new lead guest's email and first name match a saved guest under a different name, the toast reads "Group booking created. Saved under the existing guest {name} (same email and first name)." The typed name is not stored. A brand-new email, a guest picked from the list, or the same name (case and spaces aside) gives "Group booking created." only (30.2, D-99 S1).
+
+### 40.4 Card, daily close and messages
+- **Confirm your card, with the payment provider unreachable.** The one outage sentence, "We couldn't reach the payment service. Nothing was charged. Please try again in a moment.", now also appears when an earlier ₱20 attempt is still open (before, a different sentence was shown in that case). Same on both pay buttons (32.2, D-107 CARD-3).
+- **Daily close, a closed day.** The closed line names the day first: "Oct 17, 2026 was closed on Oct 20, 2026, 7:51 PM by {name}" and, only when there is a note, ": {note}".
+- **Toasts are read once.** Each toast is read through the one toast area. A toast carries no role of its own, so a screen reader does not say it twice. Error toasts keep their red style and are read politely with the others. A form's own error summary is still announced at once (DESIGN-BRIEF 35).

@@ -92,7 +92,7 @@ export async function dailyCloseView(el, { query, rerender }) {
       h('div', { class: 'page-head__actions', role: 'group', 'aria-label': 'Daily close actions' }, picker, closed?.can_change && h('button', { class: 'btn btn--secondary', 'data-focus-key': 'dc-reopen', onclick: reopen }, 'Reopen day'), (!closed || closed.can_change) && h('button', { class: 'btn btn--primary', 'data-focus-key': 'dc-close', onclick: closeDay }, closed ? 'Update close' : 'Close the day'))),
     message && h('div', { class: 'alert alert--warn', id: 'dc-date-msg', role: 'alert' }, message),
     closed
-      ? h('div', { class: 'alert alert--ok', role: 'status' }, `Closed ${fmtDateTime(closed.closed_at)} by ${closed.closed_by_name || 'a team member'}${closed.note ? `: ${closed.note}` : ''}`)
+      ? h('div', { class: 'alert alert--ok', role: 'status' }, `${fmtDate(date)} was closed on ${fmtDateTime(closed.closed_at)} by ${closed.closed_by_name || 'a team member'}${closed.note ? `: ${closed.note}` : ''}`)
       : h('div', { class: `alert ${open ? 'alert--warn' : 'alert--info'}`, role: 'status' }, `${fmtDate(date)} is not closed yet.${open ? ` ${open} item${open === 1 ? '' : 's'} to look at.` : ''}`),
     closed && !closed.can_change && h('p', { class: 'muted small' }, lockedCloseText(closed)),
     sections.length ? h('div', { class: 'dc-grid' }, sections.map(section)) : emptyState({ iconName: 'file', title: 'Nothing to check', text: 'No checklist items for this day.' }),

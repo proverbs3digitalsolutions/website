@@ -175,7 +175,8 @@ export const options = (keys) => keys.map((k) => [k, label(k)]);
 
 // ---------------------------------------------------------------- feedback
 export function toast(message, kind = 'info') {
-  const el = h('div', { class: `toast${kind === 'error' ? ' toast--error' : ''}`, role: kind === 'error' ? 'alert' : 'status' }, message);
+  // #toasts is the one live region (index.html, aria-live polite, there from page load); a role here would nest a second one (D-109).
+  const el = h('div', { class: `toast${kind === 'error' ? ' toast--error' : ''}` }, message);
   const box = document.getElementById('toasts');
   // The same message replaces the one on screen instead of stacking beside it.
   for (const old of [...box.children]) if (old.textContent === String(message)) old.remove();

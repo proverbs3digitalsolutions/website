@@ -3,8 +3,9 @@
 import { get, post, patch, qs, uploadFile } from '../api.js';
 import {
   h, icon, peso, fmtDate, fmtDateTime, manilaDay, badge, label, options, field, formModal, emptyState, pageHead, toast,
-  todayManila, filesList, openModal, unitLabel, confirmDialog, showErrors } from '../ui.js';
+  todayManila, filesList, openModal, unitLabel, confirmDialog, showErrors, parseAmount } from '../ui.js';
 import { state, navigate } from '../app.js';
+import { expenseNeedsAsk } from './rent.js';
 import { initFilters, filterBar, rememberFilters, changed, apiFilters } from '../filters.js';
 
 const PRIORITIES = ['low', 'medium', 'high', 'urgent'];
@@ -262,7 +263,11 @@ export async function maintenanceDetailView(el, { params, rerender }) {
       field({ name: 'vendor_name', label: 'Paid to', value: m.assigned_to, maxlength: 120 }),
       field({ name: 'description', label: 'Description', placeholder: `Repair: ${m.title}`, maxlength: 300 }),
     ],
-    onSubmit: async (data, { idempotencyKey }) => { await post(`/maintenance/${m.request_id}/costs`, data, { idempotencyKey }); toast('Cost recorded.'); rerender(); },
+    onSubmit: async (data, { idempotencyKey, form }) => {
+      // A repair cost is saved as an expense, so it asks the expense question (D-109; the rule lives in rent.js).
+      if (expenseNeedsAsk(data.amount) && !await confirmDialog({ title: 'Check the amount', text: `This expense is ${peso(parseAmount(data.amount))}. Save anyway?`, confirmText: 'Save anyway', cancelText: 'Change it' })) { form.elements.amount.focus(); return false; }
+      await post(`/maintenance/${m.request_id}/costs`, data, { idempotencyKey }); toast('Cost recorded.'); rerender();
+    },
   });
 
   const upload = h('input', { type: 'file', class: 'input', accept: 'image/jpeg,image/png,image/webp,application/pdf', 'aria-label': 'Upload photo or document',

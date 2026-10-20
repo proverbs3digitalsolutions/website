@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const config = require('../config');
-const { one } = require('../db');
+const { one, tx } = require('../db');
 const { HttpError, ah, notFound, forbidden } = require('../lib/http');
 const { uuidParam } = require('../lib/validate');
 const { audit } = require('../lib/audit');
@@ -181,10 +181,22 @@ router.post('/files',
     const full = path.resolve(config.storageDir, key);
     await fs.promises.mkdir(path.dirname(full), { recursive: true });
     await fs.promises.writeFile(full, req.body, { mode: 0o600 });
-    const file = await one(
-      `INSERT INTO files (organization_id, related_record_type, related_record_id, storage_key, file_name, mime_type, size_bytes, uploaded_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING file_id, file_name, mime_type, size_bytes, uploaded_at`,
-      [req.user.organization_id, type, recordId, key, fileName, mime, req.body.length, req.user.user_id]);
+    // The file row and the expense link save together, or neither does.
+    const file = await tx(async (db) => {
+      const { rows: [f] } = await db.query(
+        `INSERT INTO files (organization_id, related_record_type, related_record_id, storage_key, file_name, mime_type, size_bytes, uploaded_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING file_id, file_name, mime_type, size_bytes, uploaded_at`,
+        [req.user.organization_id, type, recordId, key, fileName, mime, req.body.length, req.user.user_id]);
+      // The newest receipt is the one owner statements and the owner portal link to. Staff only link an expense that
+      // has no receipt yet, so they never replace one. A voided expense is never linked.
+      if (type === 'expense') {
+        await db.query(`UPDATE expenses SET receipt_file_id = $1
+                         WHERE expense_id = $2 AND organization_id = $3 AND voided_at IS NULL
+                           AND ($4::boolean OR receipt_file_id IS NULL)`,
+          [f.file_id, recordId, req.user.organization_id, ['owner', 'manager'].includes(req.user.role)]);
+      }
+      return f;
+    });
     await audit(null, req.user, 'file.uploaded', type, recordId, { file_id: file.file_id, name: fileName });
     res.status(201).json({ file });
   }));
