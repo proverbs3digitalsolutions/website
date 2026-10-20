@@ -79,6 +79,6 @@ test('#6 a cancelled group room shows a dash for its total', () => {
 test('K5 the room type message names the room and sits on that row', () => {
   assert.equal(roomTypeProblem(3), 'Choose a room type for room 3.');
   assert.equal(roomTypeProblem(0), 'Choose a room type for this room.');
-  assert.match(grp, /fields: \{ \[typeKey\]: roomTypeProblem\(num\) \}/);
+  assert.match(grp, /add\(typeKey, roomTypeProblem\(num\)\)/);
   assert.match(grp, /dataset: \{ field: typeKey \}/);
 });

@@ -13,7 +13,7 @@
 .cc-form [aria-invalid="true"] { border-color: var(--red); }
 .cc-success, .cc-wait { display: grid; gap: 12px; padding: 16px; border-radius: var(--radius-sm); background: var(--green-soft); color: var(--text); }
 .cc-wait { background: var(--surface-2); }
-.cc-success h2:focus, .cc-wait h2:focus, .cc-form .alert:focus { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.cc-form .alert:focus { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .cc-success .btn, .cc-wait .btn { min-height: 44px; justify-self: start; }
 .cc-form .btn--block { min-height: 44px; }
 .cc-footer { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; margin: 0; }

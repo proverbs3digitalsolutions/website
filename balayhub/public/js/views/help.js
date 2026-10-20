@@ -142,7 +142,7 @@ export async function helpNewView(el, { query }) {
   };
 
   const screenshot = h('input', { type: 'file', name: 'screenshot', id: 'support-screenshot', class: 'input', 'aria-describedby': 'support-screenshot-err', accept: 'image/jpeg,image/png,image/webp,application/pdf', 'aria-label': 'Screenshot or file' });
-  const subject = field({ name: 'subject', label: 'Subject', required: true, maxlength: 150, placeholder: longTerm ? 'e.g. Rent reminder not sent to my tenant' : 'e.g. Airbnb not syncing', value: query.subject || '' });
+  const subject = field({ name: 'subject', label: 'Subject', required: true, maxlength: 150, placeholder: longTerm ? 'e.g. Rent reminder not sent to my tenant' : 'e.g. Airbnb not syncing', value: query.subject || '', fromLink: Boolean(query.subject) });
   subject.querySelector('input').addEventListener('input', (e) => suggest(e.target.value));
 
   const form = makeForm({
@@ -150,7 +150,7 @@ export async function helpNewView(el, { query }) {
     draftKey: 'support-new',
     fields: [
       h('div', { class: 'form-row form-row--2' },
-        field({ name: 'category', label: 'Topic', type: 'select', required: true, value: query.topic || '', options: TOPICS }),
+        field({ name: 'category', label: 'Topic', type: 'select', required: true, value: query.topic || '', fromLink: Boolean(query.topic), options: TOPICS }),
         field({ name: 'priority', label: 'How urgent?', type: 'select', required: true, value: 'normal', placeholderOption: false,
           options: [['normal', 'Normal'], ['urgent', 'Urgent — guests or payments affected now']] })),
       subject,

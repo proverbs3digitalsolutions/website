@@ -35,7 +35,7 @@ test('Get started step 2: a mobile number that is not a phone number is refused 
   assert.ok(step2Start > 0, 'step 2 submit handler is found');
   assert.match(step2, /data\.phone && !PHONE_RE\.test\(data\.phone\)/, 'a typed number is checked; a blank one is allowed');
   assert.match(step2, /errs\.phone = t\('Enter a valid phone number\.'\)/, 'the message sits at the phone field');
-  assert.match(step2, /if \(Object\.keys\(errs\)\.length\) \{ showErrors\(errs\); return; \}/, 'the step does not move on while a check fails');
+  assert.match(step2, /if \(Object\.keys\(errs\)\.length\) \{\s*showErrors\(errs\);\s*formError\.replaceChildren\([^;]*\);\s*return;\s*\}/, 'the step does not move on while a check fails');
 });
 
 test('Get started step 2: the phone message has Taglish wording registered in landing.js', () => {

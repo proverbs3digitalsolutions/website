@@ -17,6 +17,8 @@ let clearAskError = () => {};
 export async function assistantEnabled() {
   // Cleaners are refused the assistant, so don't ask the server for them (rbac#4).
   if (state.user?.role === 'cleaner') return false;
+  // While the card check is due the top bar is Help and account only (D-106, APP-FLOW 5.10): no assistant anywhere. Not cached, so it returns once the card passes.
+  if (state.user?.plan?.card_check_due) return false;
   if (enabled === null) {
     try { enabled = (await get('/assistant')).enabled; } catch { enabled = false; }
   }
@@ -163,6 +165,7 @@ export function assistantButton() {
 export function placeAssistantButton() {
   const btn = document.querySelector('.assist-fab');
   if (!btn) return;
+  if (state.user?.plan?.card_check_due) { closeAssistant(); btn.hidden = true; } else if (enabled === true) btn.hidden = false;
   const slot = document.querySelector('.topbar__assist');
   const inBar = Boolean(slot && globalThis.matchMedia?.(PHONE).matches);
   btn.classList.toggle('assist-fab--bar', inBar);

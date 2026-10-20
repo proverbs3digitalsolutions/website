@@ -12,6 +12,7 @@ const OWNER_TEXT = 'Full access: listings, reservations, money, reports, team, p
 
 function planLine(p) {
   if (!p) return '—';
+  if (p.card_check_due) return 'Waiting for your card check'; // the trial hasn't started (APP-FLOW 5.10)
   if (p.is_demo) return 'Demo workspace (view only)';
   if (p.reason === 'deleting') return 'Scheduled for deletion (view only)';
   if (p.reason === 'trial_ended') return 'Free trial ended (view only)';
@@ -91,6 +92,7 @@ export async function accountView(el, { rerender }) {
   const roleText = !w ? '' : isOwner ? OWNER_TEXT
     : (w.business_type === 'long_term' ? ROLE_TEXT.long_term : ROLE_TEXT.short_term)[w.role];
   const initials = u.full_name.split(/\s+/).filter(Boolean).slice(0, 2).map((s) => s[0].toUpperCase()).join('');
+  const cardDue = Boolean(w?.plan?.card_check_due);
   const others = d.sessions.filter((s) => !s.current);
   // Only a subscription on this device counts for "on this device"; the server's answer alone may be another device's.
   u.notifications_on = u.notifications_on && await thisDeviceSubscribed();
@@ -153,8 +155,9 @@ export async function accountView(el, { rerender }) {
             w.members != null && [h('dt', null, 'Team'), h('dd', null, `${w.members} member${w.members === 1 ? '' : 's'}`)],
             d.owner && [h('dt', null, 'Workspace owner'), h('dd', null, d.owner.full_name, h('div', { class: 'muted small' }, d.owner.email))]),
           h('div', { class: 'chips', style: { marginTop: '12px' } },
-            isOwner && h('a', { class: 'btn btn--secondary btn--sm', href: '#/settings' }, w.plan?.plan === 'trial' || w.plan?.read_only ? 'Choose a plan' : 'Plan & billing'),
-            isOwner && h('a', { class: 'btn btn--secondary btn--sm', href: '#/settings' }, 'Manage team'),
+            isOwner && cardDue && h('a', { class: 'btn btn--primary btn--sm', href: '#/confirm-card' }, 'Confirm your card'),
+            isOwner && !cardDue && h('a', { class: 'btn btn--secondary btn--sm', href: '#/settings' }, w.plan?.plan === 'trial' || w.plan?.read_only ? 'Choose a plan' : 'Plan & billing'),
+            isOwner && !cardDue && h('a', { class: 'btn btn--secondary btn--sm', href: '#/settings' }, 'Manage team'),
             !isOwner && h('p', { class: 'muted small' }, 'Your access is set by the workspace owner. Ask them if you need more.'))),
 
         w && h('div', { class: 'card' },

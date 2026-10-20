@@ -1,7 +1,7 @@
 // Guest reviews (private) and direct-booking discount codes.
 
 import { get, post, qs } from '../api.js';
-import { h, peso, fmtDate, manilaDay, field, parseAmount, formModal, emptyState, pageHead, toast, badge } from '../ui.js';
+import { h, peso, fmtDate, manilaDay, todayManila, confirmDialog, field, parseAmount, formModal, emptyState, pageHead, toast, badge } from '../ui.js';
 import { state } from '../app.js';
 import { initFilters, filterBar, changed, apiFilters } from '../filters.js';
 
@@ -77,6 +77,13 @@ export function discountCodeProblems(d) {
   return Object.keys(out).length ? out : null;
 }
 
+// What the toast says after a code is created: the truth about whether guests can use it yet.
+export function codeSavedToast({ valid_from: from, valid_until: until } = {}, today) {
+  if (until && until < today) return "Code created. It has already ended, so guests can't use it.";
+  if (from && from > today) return `Code created. It starts ${fmtDate(from)}.`;
+  return 'Code created. Share it with your guests.';
+}
+
 export async function discountCodesView(el, { rerender, query = {} }) {
   const defaults = { q: '', status: '', type: '', returning: '', sort: '' };
   const filters = initFilters('discount-codes', query, defaults);
@@ -99,11 +106,14 @@ export async function discountCodesView(el, { rerender, query = {} }) {
       field({ name: 'returning_only', label: 'Only for returning guests (email of a past stay)', type: 'checkbox' }),
       h('p', { class: 'muted small' }, 'Codes work on your direct booking page and come off the accommodation (not the cleaning fee).'),
     ],
-    onSubmit: async (d) => {
+    onSubmit: async (d, { form: f }) => {
       if (!d.percent_off) delete d.percent_off;
       if (!d.amount_off) delete d.amount_off;
+      const today = todayManila();
+      // An ended code is asked about, not refused (a host may be recording an old one); "Change it" keeps the form open.
+      if (d.valid_until && d.valid_until < today && !await confirmDialog({ title: 'This code has already ended', text: `Valid until ${fmtDate(d.valid_until)} is in the past, so guests can't use it. Save it anyway?`, confirmText: 'Save anyway', cancelText: 'Change it' })) { f.elements.valid_until.focus(); return false; }
       await post('/discount-codes', d);
-      toast('Code created. Share it with your guests.');
+      toast(codeSavedToast(d, today));
       rerender();
     },
   });

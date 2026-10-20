@@ -386,10 +386,10 @@ export async function ownerStatementView(el, { params, query = {}, rerender }) {
   const recordPayout = () => formModal({
     title: 'Record payout', submitText: 'Save payout', idempotent: true,
     fields: [
-      field({ name: 'amount', label: 'Amount paid', type: 'money', required: true, value: remaining > 0 ? remaining.toFixed(2) : '', hint: owes ? 'This month the owner owes you, so there is nothing to pay out.' : `${peso(remaining)} of the ${s.month_label} payout is still unpaid.` }),
+      field({ name: 'amount', label: 'Amount paid', type: 'money', required: true, positive: true, value: remaining > 0 ? remaining.toFixed(2) : '', hint: owes ? 'This month the owner owes you, so there is nothing to pay out.' : `${peso(remaining)} of the ${s.month_label} payout is still unpaid.` }),
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'paid_on', label: 'Date paid', type: 'date', required: true, value: todayManila(), max: todayManila() }),
-        field({ name: 'method', label: 'Method', type: 'select', placeholderOption: 'Choose…', options: PAYOUT_METHODS })),
+        field({ name: 'method', label: 'Method', type: 'select', placeholderOption: 'Choose…', options: PAYOUT_METHODS, markRequired: true })),
       field({ name: 'reference_number', label: 'Reference number (optional)', maxlength: 100 }),
       field({ name: 'note', label: 'Note (optional)', type: 'textarea', maxlength: 500 }),
     ],

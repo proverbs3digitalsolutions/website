@@ -2,7 +2,7 @@
 // Also: the host's "Guest check-in form" card on the reservation page.
 
 import { get, post, api, ApiError } from '../api.js';
-import { h, brand, field, fmtDateTime, toast, clearErrors, showErrors, readForm, confirmDialog } from '../ui.js';
+import { h, brand, field, fmtDateTime, toast, clearErrors, showErrors, readForm, confirmDialog, EMAIL_RE, PHONE_RE } from '../ui.js';
 import { t, tServer, tFields, extendTranslations, initGuestLang, langToggle, keepFormValues, restoreFormValues, fmtDateL, fmtDateTimeL } from '../i18n.js';
 import { copyText } from './quotes.js';
 
@@ -29,6 +29,9 @@ extendTranslations({
   'Enter the name of each guest, or remove the empty row.': 'Pakilagay ang pangalan ng bawat guest, o alisin ang walang laman na row.',
   'Your ID must be a JPG, PNG or WEBP photo.': 'Dapat JPG, PNG o WEBP na litrato ang ID mo.',
   'Please agree so your host can register you with the building.': 'Paki-agree para ma-register ka ng host sa building.',
+  'This place allows up to {n} guests.': 'Hanggang {n} guests lang ang puwede sa lugar na ito.',
+  'Enter a valid email address.': 'Maglagay ng tamang email address.',
+  'Enter a valid phone number.': 'Maglagay ng tamang mobile number.',
   'Remove guest {n}': 'Alisin ang guest {n}',
   'Choose the photos again after changing the language.': 'Piliin ulit ang mga litrato pagkatapos magpalit ng wika.',
   'Add a photo of a valid ID for at least one guest.': 'Mag-upload ng litrato ng valid ID ng kahit isang guest.',
@@ -103,7 +106,7 @@ export async function guestCheckinView(el, { params }, kept) {
       : '';
   };
   const addGuest = (value = '') => {
-    if (others.children.length + 1 >= s.guests_allowed) { toast(t('This unit allows up to {n} guests.', { n: s.guests_allowed }), 'error'); return; }
+    if (others.children.length + 1 >= s.guests_allowed) { toast(t('This place allows up to {n} guests.', { n: s.guests_allowed }), 'error'); return; }
     const row = h('div', { class: 'gc__guest' },
       h('input', { class: 'input', name: 'guest', value, maxlength: 120, placeholder: t('Full name'), 'aria-label': t('Guest {n} full name', { n: others.children.length + 2 }) }),
       h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': t('Remove guest {n}', { n: others.children.length + 2 }), onclick: () => { row.remove(); renumber(); } }, '✕'));
@@ -205,6 +208,8 @@ export async function guestCheckinView(el, { params }, kept) {
     const problems = {};
     if (!d.lead_name.trim()) problems.lead_name = t('Please enter your full name, as on your ID.');
     if (!d.phone.trim()) problems.phone = t('Please enter your mobile number.');
+    else if (!PHONE_RE.test(d.phone.trim())) problems.phone = t('Enter a valid phone number.'); // the server's `phone` type
+    if (d.email.trim() && !EMAIL_RE.test(d.email.trim())) problems.email = t('Enter a valid email address.');
     // A blank guest row is marked here, and the server refuses it too: fill it in or remove it.
     const blankGuests = [...others.querySelectorAll('.gc__guest')].filter((row) => !row.querySelector('input').value.trim());
     blankGuests.forEach((row) => row.classList.add('field--invalid'));

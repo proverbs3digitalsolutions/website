@@ -33,7 +33,7 @@ test('#42 showErrors: focus moves to the first field that has a message, read in
 
 test('#42 step 2: a missing name or business name shows its message through showErrors and stays on step 2', () => {
   assert.ok(step2.length > 0, 'step 2 submit handler is found');
-  assert.match(step2, /showErrors\(errs\); return;/, 'step 2 shows its messages through showErrors, which focuses the first one');
+  assert.match(step2, /showErrors\(errs\);\s*formError\.replaceChildren\(h\('div', \{ class: 'alert alert--error', role: 'alert' \}, t\('Please check the highlighted fields\.'\)\)\);\s*return;/, 'step 2 shows its messages through showErrors, which focuses the first one, then the summary line');
 });
 
 test('#42 step 3: the email, password and Terms checks and the sign-up error all show through showErrors, which focuses the first one', () => {

@@ -76,7 +76,7 @@ export async function stayReportsView(el, { query = {} }) {
   const tab = ['tax', 'deposits'].includes(query.tab) ? query.tab : 'performance';
   const thisYear = Number(todayManila().slice(0, 4));
   const setUrl = (q) => history.replaceState(null, '', `#/stay-reports${qs({ tab: tab === 'performance' ? '' : tab, ...q })}`);
-  const tabBtn = (key, text) => h('button', { role: 'tab', 'aria-selected': String(tab === key), class: tab === key ? 'is-active' : '', onclick: () => navigate(key === 'performance' ? '#/stay-reports' : `#/stay-reports?tab=${key}`) }, text);
+  const tabBtn = (key, text) => h('button', { role: 'tab', 'aria-selected': String(tab === key), tabindex: tab === key ? '0' : '-1', class: tab === key ? 'is-active' : '', onclick: () => navigate(key === 'performance' ? '#/stay-reports' : `#/stay-reports?tab=${key}`) }, text);
   const tabs = h('div', { class: 'tabs', role: 'tablist', 'aria-label': 'Report type' }, tabBtn('performance', 'Performance'), tabBtn('tax', 'Income summary (for taxes)'), tabBtn('deposits', 'Deposits'));
 
   if (tab === 'deposits') {

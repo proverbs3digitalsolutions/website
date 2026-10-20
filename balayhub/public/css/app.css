@@ -172,6 +172,8 @@ p { margin: 0; }
 a { color: var(--accent); }
 button, input, select, textarea { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; box-shadow: none; }
+/* A heading the app focuses for screen readers (D-104) is not a control: no ring (D-107). */
+h1[tabindex="-1"]:focus-visible, h2[tabindex="-1"]:focus-visible { outline: none; }
 [hidden] { display: none !important; }
 .tb__search[hidden] { display: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -1675,7 +1677,15 @@ a.op__row:hover { background: var(--surface-2); }
 .pr-swatch { display: inline-block; width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--line-2); }
 .pr-fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 8px; min-width: 0; }
 .pr-fieldset legend { font-weight: 700; font-size: .9rem; padding: 0; margin-bottom: 6px; }
-.pr-picklist { display: grid; gap: 2px; max-height: 200px; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 6px 10px; }
+/* About six listings show before it scrolls; a soft shadow marks the edge that has more (scroll shadow). */
+.pr-picklist {
+  display: grid; gap: 2px; max-height: 300px; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 6px 10px;
+  background:
+    linear-gradient(var(--surface) 30%, transparent) top / 100% 24px no-repeat local,
+    linear-gradient(transparent, var(--surface) 70%) bottom / 100% 24px no-repeat local,
+    linear-gradient(color-mix(in srgb, var(--text) 22%, transparent), transparent) top / 100% 10px no-repeat scroll,
+    linear-gradient(transparent, color-mix(in srgb, var(--text) 22%, transparent)) bottom / 100% 10px no-repeat scroll;
+}
 .pr-pick { min-height: 44px; display: flex; align-items: center; }
 .pr-table { max-height: 280px; overflow: auto; margin: 8px 0; }
 .tag-chips { display: flex; flex-wrap: wrap; gap: 4px; }

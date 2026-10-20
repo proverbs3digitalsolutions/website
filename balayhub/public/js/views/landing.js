@@ -348,20 +348,27 @@ export function openGetStarted(preset = {}) {
       const type = h('select', { class: 'input', id: 'gs-business_type', name: 'business_type' },
         [['short_term', 'Short-term stays (Airbnb, staycations)'], ['long_term', 'Long-term rentals (monthly tenants)'], ['both', 'Both']]
           .map(([k, text]) => h('option', { value: k, selected: data.business_type === k }, t(text))));
+      const formError = h('div', { class: 'gs-form-error' });
       box.replaceChildren(steps(), h('h2', { class: 'gs-title' }, t('Tell us about your hosting business')),
         h('p', { class: 'gs-sub' }, t('We\'ll set up BalayHub for the way you host.')),
         data.units_band === '10+' && h('p', { class: 'alert alert--info' }, t('BalayHub is made for 1 to 10 units. For more, we\'ll set up a custom plan with you after your trial.')),
         h('form', { class: 'form', novalidate: true, onsubmit: (e) => {
           e.preventDefault(); read();
+          formError.replaceChildren();
           const errs = {};
           if (!data.first_name) errs.first_name = t('Enter your first name.');
           if (!data.last_name) errs.last_name = t('Enter your last name.');
           if (!data.business_name) errs.business_name = t('Enter your business name.');
           // The number is optional, but one that is typed must be a phone number; the server would refuse it at setup.
           if (data.phone && !PHONE_RE.test(data.phone)) errs.phone = t('Enter a valid phone number.');
-          if (Object.keys(errs).length) { showErrors(errs); return; }
+          if (Object.keys(errs).length) {
+            showErrors(errs);
+            formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, t('Please check the highlighted fields.')));
+            return;
+          }
           step = 3; draw();
         } },
+        formError,
         h('div', { class: 'form-row form-row--2' },
           input('first_name', t('First name'), { required: true, maxlength: 60, autocomplete: 'given-name' }),
           input('last_name', t('Last name'), { required: true, maxlength: 60, autocomplete: 'family-name' })),

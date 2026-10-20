@@ -1,6 +1,6 @@
 # BalayHub design brief
 
-Last updated: 2026-10-21 (QA round 24: section 32; D-106). Before that: 2026-10-21 (QA round 23: section 31; D-105). Before that: 2026-10-21 (QA round 22: section 30; D-104). Before that: 2026-10-21 (QA round 21: section 29; D-103). Before that: 2026-10-20 (QA round 20: section 28; D-102). Before that: 2026-10-20 (QA round 19: landing links hidden below 768px; D-101). Before that: 2026-10-19 (QA round 18: section 27, phone filter bar, theme switch label; D-100). Before that: 2026-10-15 (QA round 17: section 26, the wordmark logotype exemption, the focus key table; D-98 and D-99)
+Last updated: 2026-10-21 (QA round 25: section 33; D-107). Before that: 2026-10-21 (QA round 24: section 32; D-106). Before that: 2026-10-21 (QA round 23: section 31; D-105). Before that: 2026-10-21 (QA round 22: section 30; D-104). Before that: 2026-10-21 (QA round 21: section 29; D-103). Before that: 2026-10-20 (QA round 20: section 28; D-102). Before that: 2026-10-20 (QA round 19: landing links hidden below 768px; D-101). Before that: 2026-10-19 (QA round 18: section 27, phone filter bar, theme switch label; D-100). Before that: 2026-10-15 (QA round 17: section 26, the wordmark logotype exemption, the focus key table; D-98 and D-99)
 
 **Summary.** BalayHub is a phone-first web app (also an installable PWA) for Filipino rental and staycation hosts. It is built with plain CSS, one stylesheet (`public/css/app.css`), and small JavaScript helpers (`public/js/ui.js`). There is no framework and no CSS preprocessor. The look is calm and practical: Forest Green on soft off-white, Sand and Sun as warm accents, Poppins for headings, Inter for text, rounded cards, and large touch targets. Colours come from CSS custom properties on `:root`. A dark theme redefines the same tokens, so any component that uses tokens gets dark mode automatically. This brief records what is **actually built**. Every value below comes from the code. Where the code doesn't define a token (spacing, type sizes), the brief lists the values in use and says so.
 
@@ -730,3 +730,12 @@ Decision D-106. CSS in `public/css/app.css`.
 - **Top bar while the card is due.** Only Help and the account menu are drawn. No new style; the full bar returns when the card passes.
 - **Revenue card footnote.** On Performance, the Revenue card's long note sits in a footnote so the card's detail stays at three lines at 390 px.
 - **Empty reason box.** A confirm dialog's reason box uses the existing invalid-field pattern (`aria-invalid` on the box together with the `.error` line).
+
+## 33. Patterns added in QA round 25 (2026-10-21)
+
+Decision D-107. CSS in `public/css/app.css`.
+
+- **Focus ring on controls only.** A heading the app focuses by itself (`h1[tabindex="-1"]`, `h2[tabindex="-1"]`) shows no focus ring (`:focus-visible { outline: none; }`, placed after the global rule). Buttons, links and boxes keep theirs. Focus still goes to the heading on arrival (D-104).
+- **Capped pick list.** A pick list that would grow long (Bulk changes listings, `.pr-picklist`) shows about six rows (`max-height: 300px`) and scrolls. When rows are hidden it shows a soft shadow at the edge that has more (a pure-CSS scroll shadow: `background` layers with `background-attachment: local, local, scroll, scroll`, existing tokens, both themes).
+- **Required mark.** Every field the form insists on shows the red asterisk and `aria-required="true"`, also when the form's own sentence is used for the message (the field carries the mark without the `required` attribute).
+- **Messages name a short noun.** A field whose visible label is a question or a phrase ("How many pcs?", "Keep at least") gives a short noun for messages ("Quantity", "Low-stock level"), never the question itself.

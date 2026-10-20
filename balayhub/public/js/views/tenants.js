@@ -236,7 +236,15 @@ export async function tenantDetailView(el, { params, query, rerender }) {
       field({ name: 'lease_status', label: 'Reason', type: 'select', required: true, value: 'ended', placeholderOption: false, options: [['ended', 'Lease ended / tenant moved out'], ['terminated', 'Terminated early']] }),
       field({ name: 'note', label: 'Note (optional)', type: 'textarea', maxlength: 500 }),
     ],
-    onSubmit: async (data) => { await post(`/leases/${lease.lease_id}/end`, data); toast('Lease ended.'); rerender(); },
+    // One press must not end a tenancy (LT-1): the form's defaults are today and "Lease ended", so ask a question that names who and what. Keep lease returns false and the dialog stays open.
+    onSubmit: async (data) => {
+      if (!await confirmDialog({
+        title: `End ${tenant.full_name}’s lease?`,
+        text: `${lease.property_name}, ${unitLabel(lease.unit_name)} becomes vacant from ${fmtDate(data.end_date)}. Rent after that date is removed. This can’t be undone in the app.`,
+        confirmText: 'End lease', cancelText: 'Keep lease', danger: true,
+      })) return false;
+      await post(`/leases/${lease.lease_id}/end`, data); toast('Lease ended.'); rerender();
+    },
   });
 
   const cancelLease = async (lease) => {

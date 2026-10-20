@@ -60,14 +60,14 @@ test('groups: a room\'s guests box uses the reservation rule and marks its own r
   assert.match(row, /'aria-describedby': `gr-guests-\$\{uid\}-err`/, 'the guests input is tied to its error text');
   const check = row.indexOf('const problem = guestsProblem(guests.value);');
   assert.ok(check > 0, 'rooms() checks the count');
-  assert.ok(row.indexOf('throw new ApiError(problem, { status: 400, fields: { [guestsKey]: problem } });') > check, 'the refusal names this row');
+  assert.ok(row.indexOf('add(guestsKey, problem, new ApiError(problem, { status: 400, fields: { [guestsKey]: problem } }))') > check, 'the refusal names this row');
   assert.ok(check < row.indexOf('const base = {'), 'the count is checked before the room is built');
   assert.match(row, /num_guests: Number\(guests\.value\)/);
 });
 
 test('groups: the new group and add-a-room paths keep the row field error and check every room before anything is posted', () => {
   const ng = grpSrc.slice(grpSrc.indexOf('export async function newGroupModal'), grpSrc.indexOf("modal = openModal({ title: 'New group booking'"));
-  assert.match(ng, /catch \(e\) \{ if \(e instanceof ApiError\) throw e; fail\(e\.message\); \}/, 'a row error reaches the form with its field key');
+  assert.match(ng, /throw mapRoomError\(err, owners\);/, 'a row error reaches the form with its field key');
   assert.ok(ng.indexOf('rows.flatMap((r) => r.rooms())') < ng.indexOf("post('/booking-groups'"), 'every row is checked before the group is posted');
   const ar = grpSrc.slice(grpSrc.indexOf('async function addRoomModal'), grpSrc.indexOf('// ---------------------------------------------------------------- list'));
   assert.match(ar, /throw e instanceof ApiError \? e : new ApiError\(e\.message, \{ status: 400 \}\);/, 'a row error reaches the form with its field key');

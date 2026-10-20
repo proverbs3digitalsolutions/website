@@ -248,7 +248,7 @@ export async function cleanerPayView(el, { query = {} } = {}) {
           // An outside cleaner's name is the key their past pay is filed under, so an existing rate shows it as text, not a box.
           r && outside && h('div', null, h('p', null, 'Name: ', h('strong', null, r.assignee_name)), h('p', { class: 'hint' }, 'To rename, remove this rate and add it again.')),
           h('div', { class: 'form-row form-row--2' },
-            field({ name: 'rate_type', label: 'Paid', type: 'select', required: true, value: r?.rate_type || 'per_clean', placeholderOption: false, options: [['per_clean', 'Per clean'], ['per_hour', 'Per hour']] }),
+            field({ name: 'rate_type', label: 'Rate type', type: 'select', required: true, value: r?.rate_type || 'per_clean', placeholderOption: false, options: [['per_clean', 'Per clean'], ['per_hour', 'Per hour']] }),
             field({ name: 'amount', label: 'Amount', type: 'money', required: true, positive: true, value: r?.amount })),
         ],
         submitText: 'Save rate',

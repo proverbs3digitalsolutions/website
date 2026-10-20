@@ -38,8 +38,8 @@ export async function suppliesView(el, { query = {} } = {}) {
         field({ name: 'name', label: 'Item', required: true, value: s?.name, placeholder: 'e.g. Toilet paper', maxlength: 80 }),
         field({ name: 'unit_label', label: 'Counted in', value: s?.unit_label || 'pcs', placeholder: 'pcs, rolls, bottles', maxlength: 20 })),
       h('div', { class: 'form-row form-row--2' },
-        field({ name: 'par_level', label: 'Keep at least', type: 'number', min: 0, step: 1, required: true, value: s?.par_level ?? 0, hint: 'You get a low-stock warning below this.' }),
-        !s && field({ name: 'on_hand', label: 'On hand now', type: 'number', min: 0, step: 1, required: true, value: 0 })),
+        field({ name: 'par_level', label: 'Keep at least', type: 'number', min: 0, step: 1, required: true, msgLabel: 'Low-stock level', value: s?.par_level ?? 0, hint: 'You get a low-stock warning below this.' }),
+        !s && field({ name: 'on_hand', label: 'On hand now', type: 'number', min: 0, step: 1, required: true, msgLabel: 'On hand', value: 0 })),
     ],
     onSubmit: async (d) => {
       const body = { name: d.name, unit_label: d.unit_label || 'pcs', par_level: Number(d.par_level) };
@@ -56,7 +56,7 @@ export async function suppliesView(el, { query = {} } = {}) {
       cancel: () => modal.close(),
       fields: [
         h('p', { class: 'muted small' }, `On hand now: ${qtyLabel(s.on_hand, s.unit_label)}. Keep at least ${qtyLabel(s.par_level, s.unit_label)}.`),
-        field({ name: 'quantity', label: kind === 'count' ? `How many ${s.unit_label} are there now?` : `How many ${s.unit_label}?`, type: 'number', min: kind === 'count' ? 0 : 1, step: 1, required: true, value: kind === 'count' ? s.on_hand : '' }),
+        field({ name: 'quantity', label: kind === 'count' ? `How many ${s.unit_label} are there now?` : `How many ${s.unit_label}?`, type: 'number', min: kind === 'count' ? 0 : 1, step: 1, required: true, msgLabel: 'Quantity', value: kind === 'count' ? s.on_hand : '' }),
         field({ name: 'note', label: 'Note (optional)', maxlength: 200 }),
       ],
       onSubmit: async (d) => {

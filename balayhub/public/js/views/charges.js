@@ -38,7 +38,7 @@ function addCharge(reservationId, rerender) {
   const cat = field({ name: 'category', label: 'Category', type: 'select', required: true, options: Object.entries(CATEGORY) });
   const desc = field({ name: 'description', label: 'Description', required: true, maxlength: 200, hint: 'Picking a category fills this in. You can type your own.' });
   const qty = field({ name: 'quantity', label: 'Quantity', type: 'number', required: true, min: 1, max: 99, value: 1 });
-  const price = field({ name: 'unit_price', label: 'Price per unit', type: 'money', required: true });
+  const price = field({ name: 'unit_price', label: 'Price per unit', type: 'money', required: true, positive: true });
   const total = h('p', { class: 'muted small', 'aria-live': 'polite' });
   const catIn = inputOf(cat);
   const descIn = inputOf(desc);

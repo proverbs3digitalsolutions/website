@@ -70,8 +70,9 @@ test.after(() => { fs.rmSync(dir, { recursive: true, force: true }); });
 // One room row with its check-in and check-out set; returns roomRow()'s handle.
 function roomWith(values = {}) {
   const r = groups.roomRow({ listings: LISTINGS, roomTypes: ROOM_TYPES, defaults: DEFAULTS });
-  const set = { ci: '2028-07-05', co: '2028-07-06', ...values };
-  for (const [k, prefix] of [['ci', 'gr-ci-'], ['co', 'gr-co-']]) {
+  // The price box is read by the row's checks now; a real input always has a string value, so the stand-in gives it one.
+  const set = { ci: '2028-07-05', co: '2028-07-06', price: '', ...values };
+  for (const [k, prefix] of [['ci', 'gr-ci-'], ['co', 'gr-co-'], ['price', 'gr-price-']]) {
     const [el] = walk(r.el, (n) => n.attrs.id?.startsWith(prefix));
     el.value = set[k];
   }
@@ -95,21 +96,23 @@ test("#3 quotes passes its date check through makeForm's check hook, naming chec
 
 test("#3 the New group form checks every room's dates in the same first pass as the required check", () => {
   const ng = between(groupsSrc, 'export async function newGroupModal', "modal = openModal({ title: 'New group booking'");
-  assert.match(ng, /check: \(\) => \{ const bad = Object\.assign\(\{\}, \.\.\.rows\.map\(\(r\) => r\.dateProblem\(\)\)\); return Object\.keys\(bad\)\.length \? bad : null; \}/);
+  assert.match(ng, /check: \(d\) => \{ const bad = collect\(d\); return Object\.keys\(bad\)\.length \? bad : null; \}/);
+  assert.match(ng, /const collect = \(d\) => groupProblems\([\s\S]*?,\s*rows\);/,'collect() reads every row, so each room\'s dates are in that same pass');
 });
 
-test("#3 a room row marks a backwards stay on its own check-out box, and reports nothing for a real or blank stay", () => {
-  const bad = roomWith({ co: '2028-07-05' }).dateProblem();
+test("#3 a room row marks a backwards stay on its own check-out box, and reports nothing for a real stay", () => {
+  const bad = roomWith({ co: '2028-07-05' }).problems();
   const [key] = Object.keys(bad);
   assert.match(key, /^check_out-/);
-  assert.deepEqual(bad, { [key]: CHECK_OUT_MSG });
-  assert.equal(roomWith({ co: '2028-07-07' }).dateProblem(), null);
-  assert.equal(roomWith({ co: '' }).dateProblem(), null, "a blank date is rooms()'s job");
+  assert.equal(bad[key], CHECK_OUT_MSG);
+  assert.equal(Object.keys(roomWith({ co: '2028-07-07' }).problems()).filter((k) => k.startsWith('check_out-')).length, 0);
+  const blank = roomWith({ co: '' }).problems();
+  assert.equal(blank[Object.keys(blank).find((k) => k.startsWith('check_out-'))], 'Enter the check-in and check-out dates.', 'a blank date now gets its own message on the row, from the same pass');
 });
 
 test('#3 the check-out box is a field the form can mark: its wrapper carries the row key and holds the input and its own error line', () => {
   const r = roomWith({ co: '2028-07-05' });
-  const [key] = Object.keys(r.dateProblem());
+  const [key] = Object.keys(r.problems());
   const [wrap] = walk(r.el, (n) => n.dataset.field === key);
   assert.ok(wrap, 'the wrapper carries the key showErrors looks for');
   assert.equal(walk(wrap, (n) => n.tagName === 'input' && n.attrs.id?.startsWith('gr-co-')).length, 1, 'the check-out input is inside it');

@@ -572,7 +572,11 @@ export function confirmDialog({ title, text, confirmText = 'Confirm', cancelText
  */
 export function field(f) {
   const id = `f-${f.name}-${Math.random().toString(36).slice(2, 7)}`;
-  const common = { id, name: f.name, required: f.required, placeholder: f.placeholder, autocomplete: f.autocomplete || 'off', 'aria-describedby': `${id}-err` };
+  const common = { id, name: f.name, required: f.required, placeholder: f.placeholder, autocomplete: f.autocomplete || 'off', 'aria-describedby': `${id}-err`,
+    // markRequired: the asterisk and aria-required without `required`, so the view's own check sentence is the one shown (LT-2).
+    'aria-required': f.markRequired && !f.required ? 'true' : undefined,
+    // fromLink: the page filled this box from its link; a saved draft never overwrites it (INB-3). msgLabel: the short noun used in messages (OPS-1).
+    'data-from-link': f.fromLink ? true : undefined, 'data-msg-label': f.msgLabel };
   let input;
   // A required choice with only one possible answer is preselected.
   if (f.type === 'select' && f.required && (f.value === undefined || f.value === null || f.value === '') && f.options?.length === 1) {
@@ -602,7 +606,7 @@ export function field(f) {
     if (isMoney) input = h('div', { class: 'input-money' }, input);
   }
   return h('div', { class: 'field', dataset: { field: f.name } },
-    h('label', { for: id }, f.label, f.required && h('span', { class: 'req', 'aria-hidden': 'true' }, ' *')),
+    h('label', { for: id }, f.label, (f.required || f.markRequired) && h('span', { class: 'req', 'aria-hidden': 'true' }, ' *')),
     input,
     f.hint && h('div', { class: 'hint' }, f.hint),
     h('div', { class: 'error', id: `${id}-err`, role: 'alert' }));
@@ -668,15 +672,18 @@ export function persistDraft(form, key) {
   // `mine` maps a field name to the JSON of that value. A value code wrote (a quote, a suggested amount, a default) never gets in.
   const mine = new Map();
   const storable = (el) => el.name && el.type !== 'password' && el.type !== 'file';
+  const linkFilled = (el) => el.dataset?.fromLink !== undefined && String(el.value ?? '') !== '';
   try {
     const saved = JSON.parse(sessionStorage.getItem(storeKey) || 'null');
     if (saved) {
       for (const el of form.elements) {
         if (!storable(el) || !(el.name in saved)) continue;
+        // A value the page filled from its link is the newer instruction; a draft never overwrites it (D-107). Defaults are not from the link.
+        if (linkFilled(el)) continue;
         if (el.type === 'checkbox') { if (!el.dataset.multi) el.checked = saved[el.name]; } else el.value = saved[el.name];
       }
       const now = readForm(form);
-      for (const el of form.elements) if (storable(el) && el.name in saved) mine.set(el.name, JSON.stringify(now[el.name]));
+      for (const el of form.elements) if (storable(el) && el.name in saved && !linkFilled(el)) mine.set(el.name, JSON.stringify(now[el.name]));
     }
   } catch { /* storage unavailable */ }
   const given = (e) => {
@@ -752,6 +759,7 @@ export function typeProblems(form, missing, labelOf) {
     const step = el.getAttribute('step');
     const whole = !step || (step !== 'any' && Number.isInteger(Number(step)));
     if (!Number.isFinite(n) || (whole && !Number.isInteger(n))) out[el.name] = `${labelOf(el)} must be a whole number.`;
+    else if (el.min !== '' && Number(el.min) === 0 && n < 0) out[el.name] = `${labelOf(el)} cannot be negative.`;
     else if (el.min !== '' && n < Number(el.min)) out[el.name] = `${labelOf(el)} must be at least ${el.min}.`;
     else if (el.max !== '' && n > Number(el.max)) out[el.name] = `${labelOf(el)} must be at most ${el.max}.`;
   }
@@ -805,7 +813,7 @@ export function makeForm({ fields, submitText = 'Save', onSubmit, cancel, draftK
     // the server still validates everything.
     const missing = {};
     let requiredOnly = true;
-    const labelOf = (el) => form.querySelector(`label[for="${CSS.escape(el.id)}"]`)?.firstChild?.textContent?.trim() || 'This field';
+    const labelOf = (el) => el.dataset?.msgLabel || form.querySelector(`label[for="${CSS.escape(el.id)}"]`)?.firstChild?.textContent?.trim() || 'This field';
     for (const el of form.elements) {
       if (el.required && el.name && el.type !== 'checkbox' && !String(el.value).trim()) missing[el.name] = `${labelOf(el)} is required.`;
     }

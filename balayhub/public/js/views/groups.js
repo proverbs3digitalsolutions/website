@@ -36,17 +36,17 @@ function roomRow({ listings, roomTypes, defaults, onRemove, number = 0 }) {
   const type = h('select', { class: 'input', id: `gr-type-${uid}`, 'aria-describedby': `gr-type-${uid}-err` },
     h('option', { value: '' }, 'Choose a room type…'),
     roomTypes.map((t) => h('option', { value: `${t.property_id}|${t.room_type}` }, `${t.room_type} · ${propName.get(t.property_id) || 'Property'} (${t.count})`)));
-  const count = h('input', { class: 'input', id: `gr-count-${uid}`, type: 'number', min: 1, max: 20, value: 1, inputmode: 'numeric' });
-  const ci = h('input', { class: 'input', id: `gr-ci-${uid}`, type: 'date', value: defaults.check_in });
+  const count = h('input', { class: 'input', id: `gr-count-${uid}`, type: 'number', min: 1, max: 20, value: 1, inputmode: 'numeric', 'aria-describedby': `gr-count-${uid}-err` });
+  const ci = h('input', { class: 'input', id: `gr-ci-${uid}`, type: 'date', value: defaults.check_in, 'aria-describedby': `gr-ci-${uid}-err` });
   const co = h('input', { class: 'input', id: `gr-co-${uid}`, type: 'date', value: defaults.check_out, 'aria-describedby': `gr-co-${uid}-err` });
   const guests = h('input', { class: 'input', id: `gr-guests-${uid}`, type: 'number', min: 1, max: 50, value: defaults.num_guests || 2, inputmode: 'numeric', 'aria-describedby': `gr-guests-${uid}-err` });
   // The key names this row, so a refused count is marked at its own guests box (showErrors finds the first box with the key).
   const guestsKey = `num_guests-${uid}`;
   const guestsBox = h('div', { class: 'field', dataset: { field: guestsKey } }, h('label', { for: `gr-guests-${uid}` }, 'Guests in this room'), guests, h('div', { class: 'error', id: `gr-guests-${uid}-err`, role: 'alert' }));
-  // The check-out box is a field the form can mark, so a stay that runs no night shows at its own row (see dateProblem).
+  // The check-out box is a field the form can mark, so a stay that runs no night shows at its own row (see found()).
   const coKey = `check_out-${uid}`;
   const coBox = h('div', { class: 'field', dataset: { field: coKey } }, h('label', { for: `gr-co-${uid}` }, 'Check-out'), co, h('div', { class: 'error', id: `gr-co-${uid}-err`, role: 'alert' }));
-  const price = h('input', { class: 'input', id: `gr-price-${uid}`, type: 'text', inputmode: 'decimal', placeholder: 'Per room' });
+  const price = h('input', { class: 'input', id: `gr-price-${uid}`, type: 'text', inputmode: 'decimal', placeholder: 'Per room', 'aria-describedby': `gr-price-${uid}-err` });
   const cleaning = h('input', { class: 'input', id: `gr-clean-${uid}`, type: 'text', inputmode: 'decimal', placeholder: '0' });
   const note = h('p', { class: 'hint', 'aria-live': 'polite' });
   // Each money box has its own flag: a box the host typed in is never overwritten by a suggestion, and a blank box is open to one again.
@@ -57,7 +57,12 @@ function roomRow({ listings, roomTypes, defaults, onRemove, number = 0 }) {
   // The room type box is a field the form can mark, like the listing box below, so a row with no type shows its message on this row (see rooms()).
   const typeKey = `room_type-${uid}`;
   const typeBox = h('div', { class: 'field', dataset: { field: typeKey } }, h('label', { for: `gr-type-${uid}` }, 'Room type'), type, h('div', { class: 'error', id: `gr-type-${uid}-err`, role: 'alert' }));
-  const countBox = mk('count', 'How many', count);
+  // The count, check-in and total boxes are fields the form can mark too, so every problem of a row shows on its own box (see found()).
+  const keyed = (name, lbl, input, wrap) => h('div', { class: 'field', dataset: { field: `${name}-${uid}` } }, h('label', { for: `gr-${wrap}-${uid}` }, lbl), input, h('div', { class: 'error', id: `gr-${wrap}-${uid}-err`, role: 'alert' }));
+  const countKey = `count-${uid}`; const ciKey = `check_in-${uid}`; const priceKey = `accommodation_total-${uid}`;
+  const countBox = keyed('count', 'How many', count, 'count');
+  const ciBox = keyed('check_in', 'Check-in', ci, 'ci');
+  const priceBox = keyed('accommodation_total', 'Accommodation total', h('div', { class: 'input-money' }, price), 'price');
   // The listing box is a field the form can mark, so a row with no listing shows its message on this row (see rooms()).
   const unitKey = `unit_id-${uid}`;
   const unitBox = h('div', { class: 'field', dataset: { field: unitKey } }, h('label', { for: `gr-unit-${uid}` }, 'Listing'), unit, h('div', { class: 'error', id: `gr-unit-${uid}-err`, role: 'alert' }));
@@ -101,47 +106,72 @@ function roomRow({ listings, roomTypes, defaults, onRemove, number = 0 }) {
     h('legend', null, 'Room'),
     h('div', { class: 'grp-room__grid' },
       roomTypes.length > 0 && mk('mode', 'Pick', mode), unitBox, typeBox, countBox,
-      mk('ci', 'Check-in', ci), coBox, guestsBox,
-      mk('price', 'Accommodation total', h('div', { class: 'input-money' }, price)), mk('clean', 'Cleaning fee', h('div', { class: 'input-money' }, cleaning))),
+      ciBox, coBox, guestsBox,
+      priceBox, mk('clean', 'Cleaning fee', h('div', { class: 'input-money' }, cleaning))),
     note,
     removeBtn);
+
+  // The row's problems in the order the boxes read, each with the error rooms() throws for it. A message on a box shows the summary once,
+  // not the sentence twice; the guests and date messages keep their own wording.
+  function found() {
+    const out = [];
+    const add = (key, msg, err) => out.push({ key, msg, err: err || new ApiError('Please check the highlighted fields.', { status: 400, fields: { [key]: msg } }) });
+    if (!ci.value || !co.value) {
+      const msg = 'Enter the check-in and check-out dates.';
+      for (const k of [!ci.value && ciKey, !co.value && coKey]) if (k) add(k, msg, new Error(msg));
+    } else if (co.value <= ci.value) add(coKey, 'Check-out must be after check-in.', new Error('Check-out must be after check-in.'));
+    // A blank, zero, negative or decimal count is refused at this room's guests box, the same rule the reservation form uses.
+    const problem = guestsProblem(guests.value);
+    if (problem) add(guestsKey, problem, new ApiError(problem, { status: 400, fields: { [guestsKey]: problem } }));
+    // A typed 0 would make the night free. A blank total still means "use the listing's price".
+    if (price.value.trim() && Number(price.value) === 0) {
+      const msg = "Accommodation total must be greater than zero. Leave it blank to use the listing's price.";
+      add(priceKey, msg, new Error(msg));
+    }
+    if (mode.value === 'type') {
+      if (!type.value) add(typeKey, roomTypeProblem(num));
+      const n = Number(count.value);
+      if (!Number.isInteger(n) || n < 1 || n > 20) add(countKey, 'Count must be a whole number from 1 to 20.', new Error('Count must be a whole number from 1 to 20.'));
+    } else if (!unit.value) add(unitKey, num ? `Choose a listing for room ${num}.` : 'Choose a listing for this room.');
+    return out;
+  }
 
   return {
     el,
     // The key of this row's box for a server field name, or null when the row has no box for it.
-    fieldKey: (name) => ({ num_guests: guestsKey, unit_id: unitKey, check_out: coKey, room_type: typeKey })[name] ?? null,
+    fieldKey: (name) => ({ num_guests: guestsKey, unit_id: unitKey, check_out: coKey, check_in: ciKey, accommodation_total: priceKey, room_type: typeKey })[name] ?? null,
     // Renumbers the row after a room above it is removed.
     setNumber(n) { num = n; removeBtn?.setAttribute('aria-label', `Remove this room, room ${n}`); },
-    // The check-out message for a stay that runs no night, keyed to this row's check-out box. A blank date is rooms()'s job.
-    dateProblem() { return ci.value && co.value && co.value <= ci.value ? { [coKey]: 'Check-out must be after check-in.' } : null; },
-    // Returns the rooms to send (a room type with a count becomes that many rows), or throws a message.
+    // Every problem this row can name, each keyed to its own box, in the order the boxes read; {} when the row is fine.
+    problems() { return Object.fromEntries(found().map((x) => [x.key, x.msg])); },
+    // How many rooms this row books (a room type with a count books that many); a count that is not usable counts as one.
+    roomCount() { const n = Number(count.value); return mode.value === 'type' && Number.isInteger(n) && n >= 1 && n <= 20 ? n : 1; },
+    // Returns the rooms to send (a room type with a count becomes that many rows), or throws the first problem.
     rooms() {
-      if (!ci.value || !co.value) throw new Error('Enter the check-in and check-out dates.');
-      if (co.value <= ci.value) throw new Error('Check-out must be after check-in.');
-      // A blank, zero, negative or decimal count is refused at this room's guests box, the same rule the reservation form uses.
-      const problem = guestsProblem(guests.value);
-      if (problem) throw new ApiError(problem, { status: 400, fields: { [guestsKey]: problem } });
+      const [first] = found();
+      if (first) throw first.err;
       const base = { check_in: ci.value, check_out: co.value, num_guests: Number(guests.value) };
-      // A typed 0 would make the night free. A blank total still means "use the listing's price".
-      if (price.value.trim() && Number(price.value) === 0) throw new Error("Accommodation total must be greater than zero. Leave it blank to use the listing's price.");
       if (price.value.trim()) base.accommodation_total = price.value.trim();
       if (cleaning.value.trim()) base.cleaning_fee = cleaning.value.trim();
       if (mode.value === 'type') {
-        if (!type.value) throw new ApiError('Please check the highlighted fields.', { status: 400, fields: { [typeKey]: roomTypeProblem(num) } });
         const [property_id, ...rt] = type.value.split('|');
         // Never adjusted into range: a count the owner did not mean would book real rooms.
         const n = Number(count.value);
-        if (!Number.isInteger(n) || n < 1 || n > 20) throw new Error('Count must be a whole number from 1 to 20.');
         return Array.from({ length: n }, () => ({ ...base, property_id, room_type: rt.join('|') }));
-      }
-      if (!unit.value) {
-        // The message names the room and sits on this row's listing box; the summary is the generic one, as for the refund cap.
-        const msg = num ? `Choose a listing for room ${num}.` : 'Choose a listing for this room.';
-        throw new ApiError('Please check the highlighted fields.', { status: 400, fields: { [unitKey]: msg } });
       }
       return [{ ...base, unit_id: unit.value }];
     },
   };
+}
+
+// Everything wrong with a new group in one pass: the lead guest problems ({ field: message }), every row's problems and the room count.
+// The count line has no box, so it shows in the form's summary.
+export function groupProblems(guestProblems, rows) {
+  const out = { ...guestProblems };
+  for (const r of rows) Object.assign(out, r.problems());
+  const total = rows.reduce((n, r) => n + r.roomCount(), 0);
+  if (total < 2 || total > 20) out._rooms = 'A group needs between 2 and 20 rooms.';
+  return out;
 }
 
 // A server 400 names the failing room by its place in the list sent (room_index). Moves its field messages onto that row's own boxes;
@@ -229,12 +259,19 @@ export async function newGroupModal({ onSaved } = {}) {
   const conflicts = h('div');
   let takenBanner = false; // the form's error line is the ROOMS_TAKEN message
 
+  // The lead guest's own problems: a new guest needs a name; an existing guest must be picked (that line has no box, so it shows in the summary).
+  const collect = (d) => groupProblems(
+    guestMode.value === 'existing'
+      ? (picked ? {} : { _guest: 'Search for the lead guest and pick them, or switch to "New guest".' })
+      : (String(d.guest_name ?? '').trim() ? {} : { guest_name: 'Lead guest name is required.' }),
+    rows);
+
   let modal;
   const form = makeForm({
     submitText: 'Create group booking',
     cancel: () => modal.close(),
-    // Every room's dates are checked in the first pass, so a blank group name can't hide a date error.
-    check: () => { const bad = Object.assign({}, ...rows.map((r) => r.dateProblem())); return Object.keys(bad).length ? bad : null; },
+    // The lead guest, every room row and the room count are checked in the first pass, so a blank group name can't hide any of them.
+    check: (d) => { const bad = collect(d); return Object.keys(bad).length ? bad : null; },
     fields: [
       field({ name: 'name', label: 'Group name', required: true, maxlength: 120, placeholder: 'Santos family reunion' }),
       h('div', { class: 'field' }, h('label', null, 'Lead guest'), guestMode),
@@ -247,19 +284,14 @@ export async function newGroupModal({ onSaved } = {}) {
     ],
     onSubmit: async (d) => {
       conflicts.replaceChildren();
-      const fail = (m, fields) => { throw new ApiError(m, { status: 400, fields }); };
-      let guest;
-      if (guestMode.value === 'existing') {
-        if (!picked) fail('Search for the lead guest and pick them, or switch to "New guest".');
-        guest = { guest_id: picked.guest_id };
-      } else {
-        if (!d.guest_name.trim()) fail('Enter the lead guest name.', { guest_name: 'Lead guest name is required.' });
-        guest = { full_name: d.guest_name.trim(), ...(d.guest_phone && { phone: d.guest_phone }), ...(d.guest_email && { email: d.guest_email }) };
-      }
-      let list;
-      let owners;
-      try { list = rows.flatMap((r) => r.rooms()); owners = rows.flatMap((r) => r.rooms().map(() => r)); } catch (e) { if (e instanceof ApiError) throw e; fail(e.message); }
-      if (list.length < 2 || list.length > 20) fail('A group needs between 2 and 20 rooms.');
+      const bad = collect(d);
+      if (Object.keys(bad).length) throw new ApiError('Please check the highlighted fields.', { status: 400, fields: bad });
+      const guest = guestMode.value === 'existing'
+        ? { guest_id: picked.guest_id }
+        : { full_name: d.guest_name.trim(), ...(d.guest_phone && { phone: d.guest_phone }), ...(d.guest_email && { email: d.guest_email }) };
+      // rooms() cannot throw now: collect() found no row problems.
+      const list = rows.flatMap((r) => r.rooms());
+      const owners = rows.flatMap((r) => r.rooms().map(() => r));
       try {
         const res = await post('/booking-groups', { name: d.name.trim(), guest, rooms: list, ...(d.notes && { notes: d.notes }) });
         toast('Group booking created.');

@@ -12,11 +12,20 @@ const METHODS = ['cash', 'bank_transfer', 'gcash', 'maya', 'check', 'other'];
 const tenantTag = (x) => (x.tenant_status === 'archived' ? ' (archived)' : x.lease_status !== 'active' ? ' (former)' : '');
 const CATEGORIES =['repairs', 'utilities', 'taxes', 'insurance', 'association_dues', 'supplies', 'salaries', 'cleaning', 'other'];
 
+// The server's own limit (api.js uploadFile) and the types the box accepts, checked on the device so a bad file is caught in the same pass as every other problem.
+const RECEIPT_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+const RECEIPT_MAX = 10 * 1024 * 1024;
+export function receiptProblem(form) {
+  const f = form.querySelector('input[name="__receipt"]')?.files?.[0];
+  if (f && (!RECEIPT_TYPES.includes(f.type) || f.size > RECEIPT_MAX)) return 'Upload a PDF, JPG, PNG or WEBP file up to 10 MB.';
+}
+
 function receiptField() {
-  return h('div', { class: 'field' },
+  return h('div', { class: 'field', 'data-field': '__receipt' },
     h('label', { for: 'receipt-input' }, 'Receipt or proof of payment (optional)'),
-    h('input', { id: 'receipt-input', type: 'file', class: 'input', name: '__receipt', accept: 'application/pdf,image/jpeg,image/png,image/webp' }),
-    h('div', { class: 'hint' }, 'Photo or PDF, up to 10 MB.'));
+    h('input', { id: 'receipt-input', type: 'file', class: 'input', name: '__receipt', accept: RECEIPT_TYPES.join(','), 'aria-describedby': 'receipt-input-hint receipt-input-err' }),
+    h('div', { class: 'hint', id: 'receipt-input-hint' }, 'Photo or PDF, up to 10 MB.'),
+    h('div', { class: 'error', id: 'receipt-input-err', role: 'alert' }));
 }
 
 async function attachReceipt(form, type, id) {
@@ -88,14 +97,19 @@ export async function recordPaymentModal({ leaseId, amount, period, onSaved } = 
       leaseField, balanceInfo, amountField,
       h('div', { class: 'form-row form-row--2' },
         field({ name: 'payment_date', label: 'Date received', type: 'date', required: true, value: todayManila(), max: todayManila() }),
-        field({ name: 'payment_method', label: 'Method', type: 'select', placeholderOption: 'Choose…', options: options(METHODS) })),
+        field({ name: 'payment_method', label: 'Method', type: 'select', markRequired: true, placeholderOption: 'Choose…', options: options(METHODS) })),
       field({ name: 'reference_number', label: 'Reference no. (GCash, Maya, bank)', maxlength: 100 }),
       field({ name: 'notes', label: 'Notes', type: 'textarea', maxlength: 500 }),
       receiptField(),
       h('p', { class: 'hint muted small' }, 'Recording a payment does not verify it with the bank or e-wallet. Check the transfer before saving.'),
     ],
     // No default method: a payment saved without a choice must never become cash by accident (D-92).
-    check: (d) => (!d.payment_method ? { payment_method: 'Choose how the money was received.' } : null),
+    check: (d, form) => {
+      const out = {};
+      if (!d.payment_method) out.payment_method = 'Choose how the money was received.';
+      const r = receiptProblem(form); if (r) out.__receipt = r;
+      return out;
+    },
     onSubmit: async (data, { idempotencyKey, form }) => {
       delete data.__receipt;
       let res;
@@ -110,6 +124,9 @@ export async function recordPaymentModal({ leaseId, amount, period, onSaved } = 
       if (onSaved) onSaved(res.payment); else navigate(`#/payments/${res.payment.payment_id}`);
     },
   });
+  // A restored draft sets the tenant without a change event, so draw its balance line here. The restored amount counts as typed (D-106): not re-suggested.
+  const restored = leaseField.querySelector('select').value;
+  if (restored && !balanceInfo.firstChild) showBalance(restored);
 }
 
 // ---------------------------------------------------------------- add expense
@@ -158,6 +175,7 @@ export async function addExpenseModal({ onSaved, expense } = {}) {
       !expense && receiptField(),
       expense && h('p', { class: 'hint muted small' }, 'Corrections are saved in the audit log with the previous values.'),
     ],
+    check: (d, form) => { const r = !expense && receiptProblem(form); return r ? { __receipt: r } : null; },
     onSubmit: async (data, { idempotencyKey, form }) => {
       delete data.__receipt;
       // "Change it" keeps the form open with focus on the amount.
@@ -174,6 +192,14 @@ export async function addExpenseModal({ onSaved, expense } = {}) {
       onSaved?.(res.expense);
     },
   });
+  // A restored draft sets the property without a change event, so the unit list still belongs to the first property: refill it and put the restored unit back.
+  if (!expense) {
+    let savedUnit = '';
+    try { savedUnit = JSON.parse(sessionStorage.getItem('bh-draft:expense-new') || 'null')?.unit_id || ''; } catch { /* storage unavailable */ }
+    fillUnits(propField.querySelector('select').value);
+    const sel = unitField.querySelector('select');
+    if (savedUnit && [...sel.options].some((o) => o.value === savedUnit)) sel.value = savedUnit;
+  }
 }
 
 // ---------------------------------------------------------------- Screen 6

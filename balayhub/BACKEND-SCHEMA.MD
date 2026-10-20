@@ -2,7 +2,7 @@
 
 This document describes BalayHub's PostgreSQL schema as it stands after migrations `001`–`026` in `db/migrations/`, where uploaded files are stored, and who can see or change each kind of data. It was checked against the migrations and the route code in `src/routes/*.js` and `src/lib/*.js`. Anything not confirmed in the code is marked **unverified**.
 
-Last updated: 2026-10-21 (QA round 24: section 30 and the receipt note in 2.5; D-106). Before that: 2026-10-21 (QA round 23: section 29, paid-day weighting, owner-only Team count, discount-code route; D-105). Before that: 2026-10-21 (QA round 22: section 28, markPaid free-day rule; D-104). Before that: 2026-10-21 (QA round 21: section 27; D-103). Before that: 2026-10-20 (QA round 20: migration 039, section 26, 2.15 card columns, support tickets row; D-102). Before that: 2026-10-20 (QA round 19: section 25, section 6 guest_has_email, billing 'attached' and expiry notes; D-101). Before that: 2026-10-19 (QA round 18: section 24, admin delete routes in matrix 6.4, null-workspace platform audit rows; D-100). Before that: 2026-10-15 (QA round 17: migrations 037 and 038, section 2.19, matrix 6.5, section 23; D-98 and D-99)
+Last updated: 2026-10-21 (QA round 25: note under leases; D-107, no table changes). Before that: 2026-10-21 (QA round 24: section 30 and the receipt note in 2.5; D-106). Before that: 2026-10-21 (QA round 23: section 29, paid-day weighting, owner-only Team count, discount-code route; D-105). Before that: 2026-10-21 (QA round 22: section 28, markPaid free-day rule; D-104). Before that: 2026-10-21 (QA round 21: section 27; D-103). Before that: 2026-10-20 (QA round 20: migration 039, section 26, 2.15 card columns, support tickets row; D-102). Before that: 2026-10-20 (QA round 19: section 25, section 6 guest_has_email, billing 'attached' and expiry notes; D-101). Before that: 2026-10-19 (QA round 18: section 24, admin delete routes in matrix 6.4, null-workspace platform audit rows; D-100). Before that: 2026-10-15 (QA round 17: migrations 037 and 038, section 2.19, matrix 6.5, section 23; D-98 and D-99)
 
 ---
 
@@ -507,6 +507,8 @@ Money in these tables is `numeric(12,2)`. Cleaner pay is recorded on the job (`p
 | ended_at, created_by, created_at | | |
 
 Key constraint: **`leases_one_active_per_unit`**, a unique index on `(unit_id) WHERE lease_status = 'active'`. Occupancy is derived from active leases, not stored.
+
+*Round 25 (D-107, no table changes):* ending a lease (`POST /leases/:id/end`) overwrites `end_date` and deletes the rent charges after the move-out date. There is no reopen: `PATCH` refuses a closed lease and cancel refuses an ended one. A reopen would need the previous end date stored first (a migration) and the deleted charges re-made; asked in BLOCKERS round 25 (a). The app now asks for confirmation before it ends a lease.
 
 **rent_charges**: what is due. Generated monthly from leases.
 

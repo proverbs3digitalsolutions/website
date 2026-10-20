@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-21 (QA round 24: section 37; D-106). Before that: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
+Last updated: 2026-10-21 (QA round 25: section 38, 5.10 and 30 corrected; D-107). Before that: 2026-10-21 (QA round 24: section 37; D-106). Before that: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
 
 ---
 
@@ -219,6 +219,8 @@ Open to everyone. Linked from sign-up, guest pages and footers.
 ### 5.10 Confirm your payment card `#/confirm-card` (owners; D-98)
 
 *2026-10-20 (D-101): a second tab opened after the card already passed goes home with no message. See 32.2.*
+
+*2026-10-21 (D-107): while the card check is due, My account says "Waiting for your card check" with one Confirm your card button, and the Ask assistant button is hidden. See 38.3.*
 
 *Numbered 5.10 because 5.9 was already Privacy and Terms.* The page appears right after workspace setup (and whenever a gated owner signs in or opens any other page). It is the only app page a gated owner can use besides Help (`#/help`) and Account (`#/account`).
 
@@ -1334,7 +1336,7 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 ### 30.11 Plan & billing: card on file (owners; D-98; adds to 28.1)
 - **Card on file: Visa ending 4242** with **Remove card**. The dialog is **Remove your card?** — Stage 1: "BalayHub forgets this card. You can still pay another way."; Stage 2: "BalayHub forgets this card and turns off automatic payment. Your plan stays active until {date}." Buttons **Keep card** / **Remove card**; toast **Card removed.**
 - **Plan after your trial: Growth** (after the trial: **Next plan: Growth**) with **Change**, which shows a plan drop-down and **Save** (toast **Saved.**).
-- **Stage 1 pay:** the primary button **Pay ₱999 with Visa ending 4242** (the amount follows plan, months and coupon preview; a free coupon keeps **Activate free plan**) and a secondary **Pay another way** (the hosted PayMongo checkout). If the saved card is declined: "Your saved card couldn't be charged. Pay another way, or use a different card." If the bank asks for a code, the browser goes to the bank and comes back to Plan & billing with the usual "Payment received" message.
+- **Stage 1 pay:** the primary button **Pay ₱999.00 with Visa ending 4242** *(corrected in round 25: amounts show two decimals, D-107; the card ending is the saved card's own)* (the amount follows plan, months and coupon preview; a free coupon keeps **Activate free plan**) and a secondary **Pay another way** (the hosted PayMongo checkout). If the saved card is declined: "Your saved card couldn't be charged. Pay another way, or use a different card." If the bank asks for a code, the browser goes to the bank and comes back to Plan & billing with the usual "Payment received" message.
 - The note "BalayHub never charges your card on its own; you renew here." stays in Stage 1.
 - **Stage 2 (when switched on):** "Automatic payment is on. Next charge: ₱999 to Visa ending 4242 on {date}." with **Cancel automatic payment** (dialog **Cancel automatic payment?**, buttons **Keep it on** / **Cancel automatic payment**, toast **Automatic payment is off.**). Off with a saved card: "Automatic payment is off." and **Turn on automatic payment** (shows the consent tick box). Past due: "Your card payment on {date} didn't go through. Pay now to keep making changes."
 - **History:** a card check row reads **Card check**, "Paid {date} · Visa ending 4242", ₱20.00, badge **Paid**. Dates on this page read "Nov 14, 2026" (D-99).
@@ -1585,3 +1587,29 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 - **Under 560 px, compact tabs** (for example Housekeeping's "Today & overdue (6)") wrap their label inside the cell and never clip it, down to 320 px.
 - **Reports, Performance (390 px):** the Revenue card detail is three lines or fewer; the note sits in a footnote.
 - **Tables:** a cell holding only an action button (Discount codes, Turn off / Turn on) centres the button on the row's first line.
+
+## 38. QA round 25 changes (D-107; 2026-10-21)
+
+### 38.1 Leases, focus and filters
+- **Tenants, End lease:** the dialog keeps its date, reason and note. When it passes, a question follows: "End {tenant}'s lease?" with "{Property}, {Unit} becomes vacant from {move-out date}. Rent after that date is removed. This can't be undone in the app." The buttons are **End lease** and **Keep lease**; focus starts on Keep lease, so Enter never ends a lease. Keep lease returns to the End lease dialog with its values. There is no reopen yet (BLOCKERS round 25 a).
+- **Filter bars (Inbox Show, Reservations Saved view, Profit and loss Month, Cleaner pay Month, Help and Housekeeping tabs):** after Back, Forward or an address change rebuilds the bar, focus returns to the same control. It goes to Filters only when that control no longer exists (a removed chip).
+
+### 38.2 Forms
+- **All problems in one save:** New group booking (lead guest name and every room row together), Add charge (a price of 0 together with the quantity), Record payout (an amount of 0 together with the method), guest Check-in (email and mobile shape together with the other fields), Get started step 2 (the same summary line as step 3).
+- **Receipt file (Record payment, Add expense):** the file's type and size are checked with the other problems, before anything is saved.
+- **Supplies:** a low-stock level or quantity out of range names a short noun ("Low-stock level cannot be negative.", "Quantity must be at least 1."), not the whole question label. A number box that cannot go below zero says "cannot be negative".
+- **Help, follow-up link:** a subject or topic filled from the link wins over an older unsent draft.
+- **Record payment and Record payout, Method:** shows the required mark and still uses the form's own sentence ("Choose how the money was received.", "Choose how you paid the owner.").
+- **Discount codes, New discount code:** a Valid until date in the past asks "This code has already ended. Valid until {date} is in the past, so guests can't use it. Save it anyway?" with **Save anyway** and **Change it** (Change it returns to the Valid until box). The toast says "Code created. It has already ended, so guests can't use it.", "Code created. It starts {date}." for a code not yet started, and "Code created. Share it with your guests." otherwise.
+- **Inbox, template insert:** a template inserted into a guest message is kept in that conversation's draft, like typing.
+
+### 38.3 My account, shell and pages
+- **My account while the card check is due:** "Waiting for your card check" and one **Confirm your card** button; no "Free trial" line and no Choose a plan.
+- **Ask assistant button:** hidden while the card check is due, on desktop and phone; it returns when the card passes.
+- **A heading the app focuses on arrival** (every page title, guest pages included) shows no focus ring. Controls keep theirs.
+- **Reports tabs:** one Tab stop (the selected tab); arrow keys move between tabs.
+- **Bulk changes, listing box:** shows about six listings; when more are hidden a soft shadow marks the edge that has more.
+- **Guest pages:** one wording per rule: "This place allows up to N guests." and "Enter a valid email address."
+- **Cleaner pay, Add rate:** the rate select is labelled "Rate type".
+- **Record payment, restored draft:** a restored tenant draws its Current balance line; a restored Add expense keeps its property and unit.
+- **Receipts on a monthly-rental workspace:** `#/receipts/<id>` goes home with the module toast (stays-only page; not changed).

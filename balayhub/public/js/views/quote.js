@@ -1,7 +1,7 @@
 // Guest's quote page (#/quote/:token): the host's offer, house rules, details and the pay button.
 
 import { get, post, ApiError } from '../api.js';
-import { h, brand, field, readForm, clearErrors, showErrors } from '../ui.js';
+import { h, brand, field, readForm, clearErrors, showErrors, EMAIL_RE } from '../ui.js';
 import { t, tServer, tFields, guestLang, initGuestLang, langToggle, extendTranslations, fmtDateL as fmtDate, fmtDateTimeL } from '../i18n.js';
 
 // The same mobile rule as book.js (and the server), kept local so this page loads on its own.
@@ -12,7 +12,7 @@ extendTranslations({
   'Something went wrong': 'May nagkaproblema',
   'Please enter your full name.': 'Ilagay ang buong pangalan mo.',
   'Please enter your mobile number.': 'Ilagay ang mobile number mo.',
-  'Please enter a valid email address.': 'Maglagay ng tamang email address.',
+  'Enter a valid email address.': 'Maglagay ng tamang email address.',
   'Your quote': 'Quote mo',
   'Quote from {host}': 'Quote mula kay {host}',
   'Accommodation': 'Tuluyan',
@@ -137,7 +137,7 @@ export async function quoteView(el, { params, kept = {} }) {
     const v = readForm(form);
     const problems = {};
     if (!String(v.name || '').trim()) problems.name = t('Please enter your full name.');
-    if (!String(v.email || '').trim() || !/^\S+@\S+\.\S+$/.test(String(v.email).trim())) problems.email = t('Please enter a valid email address.');
+    if (!String(v.email || '').trim() || !EMAIL_RE.test(String(v.email).trim())) problems.email = t('Enter a valid email address.');
     if (!String(v.phone || '').trim()) problems.phone = t('Please enter your mobile number.');
     else if (!PHONE_RE.test(String(v.phone).trim())) problems.phone = tServer('Enter a valid phone number.');
     if (rules && !form.elements.accept_rules.checked) problems.accept_rules = t('Please read and agree to the house rules.');

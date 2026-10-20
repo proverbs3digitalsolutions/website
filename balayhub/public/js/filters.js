@@ -15,7 +15,7 @@
 // so a link with ?rating=9 shows the full list and no chip, and the address loses ?rating=9 too. Dates outside 2000 to 2100 are dropped the same way. A field whose options arrive after the bar is built
 // sets `keepUnknown: true` to keep the value.
 
-import { h, fmtDate } from './ui.js';
+import { h, fmtDate, focusKeyOf, pickFocusMatch } from './ui.js';
 import { state } from './app.js';
 
 const storeKey = (key) => `bh-filters:${state.user?.user_id || 'anon'}:${key}`;
@@ -427,6 +427,8 @@ export function filterBar({ key, values, defaults, search, quick = [], more = []
   // A selected control of the bar being replaced: once this bar is in the page, focus goes to the control with the same name.
   const old = typeof document !== 'undefined' && document.activeElement?.closest?.('.flt');
   const focusName = old ? document.activeElement.getAttribute?.('data-flt') : null;
+  // A page's own control in the bar (`extra`: Show, Month, a tabs row) has no data-flt: read its identity now, while it is still in the page (D-107).
+  const oldKey = old && !focusName ? focusKeyOf(document.activeElement) : null;
   const byLabel = !more.length && quick.some((f) => !f.type || f.type === 'select');
   const root = h('div', { class: 'flt' }, h('div', { class: 'toolbar flt__bar' }, extra, searchEl, byLabel && h('span', { class: 'flt__by muted small' }, filterIcon(), 'Filter by'), quickEls, moreBtn), panel, chips);
   // Escape closes the open Filters panel from inside it (or from its button) and puts focus on the button. An open dialog keeps its own Escape.
@@ -462,7 +464,13 @@ export function filterBar({ key, values, defaults, search, quick = [], more = []
     let tries = 0;
     const land = () => {
       if (!root.isConnected) { if (++tries < FOCUS_TRIES) setTimeout(land, 50); return; }
-      const next = (focusName && root.querySelector(`[data-flt="${focusName}"]`)) || root.querySelector('.flt__more') || root.querySelector('input[type="search"]');
+      // The same control by name and role; a control that is gone (a removed chip) falls through to Filters.
+      const byKey = () => {
+        const shown = (el) => { for (let p = el; p; p = p.parentElement) if (p.hidden) return false; return !el.disabled; };
+        const ctrls = [...(root.querySelectorAll?.('a[href], button, input:not([type=hidden]), select, textarea, [role="tab"]') || [])].filter(shown);
+        return ctrls[pickFocusMatch(oldKey, ctrls.map(focusKeyOf))];
+      };
+      const next = (focusName && root.querySelector(`[data-flt="${focusName}"]`)) || (oldKey && byKey()) || root.querySelector('.flt__more') || root.querySelector('input[type="search"]');
       next?.focus?.({ preventScroll: true });
     };
     setTimeout(land, 0);
