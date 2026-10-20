@@ -267,7 +267,8 @@ export async function ownersView(el, { rerender, query = {} }) {
     }),
     showBar ? bar : '', listBox);
   // Once per visit: rerender() reuses this query, so the flag is dropped before the dialog opens.
-  query.new && (delete query.new, history.replaceState(null, '', '#/owners'), add());
+  // Opened after the page is drawn, so closing it with Escape returns focus to the heading (the router focuses it after this call).
+  query.new && (delete query.new, history.replaceState(null, '', '#/owners'), setTimeout(() => { if (el.isConnected) add(); }, 0));
 }
 
 export async function ownerStatementsView(el, { query = {} }) {

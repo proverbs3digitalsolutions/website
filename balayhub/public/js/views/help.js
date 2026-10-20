@@ -10,6 +10,13 @@ import { currentTheme } from '../themeswitch.js';
 import { assistantEnabled, openAssistant } from '../assistant.js';
 import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
 
+// A screenshot is checked before the ticket is created, so a refused file never leaves the ticket without it.
+export function screenshotError(file) {
+  if (!file) return null;
+  const ok = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.type) && file.size <= 10 * 1024 * 1024;
+  return ok ? null : 'Upload a PDF, JPG, PNG or WEBP file up to 10 MB.';
+}
+
 const TOPICS = [
   ['question', 'Question — how do I…?'],
   ['problem', 'Something isn\'t working'],
@@ -134,7 +141,7 @@ export async function helpNewView(el, { query }) {
     }, 400);
   };
 
-  const screenshot = h('input', { type: 'file', class: 'input', accept: 'image/jpeg,image/png,image/webp,application/pdf', 'aria-label': 'Screenshot or file' });
+  const screenshot = h('input', { type: 'file', name: 'screenshot', id: 'support-screenshot', class: 'input', 'aria-describedby': 'support-screenshot-err', accept: 'image/jpeg,image/png,image/webp,application/pdf', 'aria-label': 'Screenshot or file' });
   const subject = field({ name: 'subject', label: 'Subject', required: true, maxlength: 150, placeholder: longTerm ? 'e.g. Rent reminder not sent to my tenant' : 'e.g. Airbnb not syncing', value: query.subject || '' });
   subject.querySelector('input').addEventListener('input', (e) => suggest(e.target.value));
 
@@ -150,11 +157,13 @@ export async function helpNewView(el, { query }) {
       suggestBox,
       field({ name: 'body', label: 'What happened?', type: 'textarea', required: true, maxlength: 8000,
         placeholder: 'What were you trying to do, and what happened instead?' }),
-      h('div', { class: 'field' }, h('label', null, 'Screenshot (optional)'), screenshot,
-        h('div', { class: 'hint' }, 'Please hide passwords and guests’ ID numbers before you send a screenshot.')),
+      h('div', { class: 'field', dataset: { field: 'screenshot' } }, h('label', { for: 'support-screenshot' }, 'Screenshot (optional)'), screenshot,
+        h('div', { class: 'hint' }, 'Please hide passwords and guests’ ID numbers before you send a screenshot.'),
+        h('div', { class: 'error', id: 'support-screenshot-err', role: 'alert' })),
       h('p', { class: 'muted small' }, 'We also send which page you came from, your browser and screen size, so we can see what you see.'),
     ],
     cancel: () => navigate('#/help'),
+    check: () => (screenshotError(screenshot.files[0]) ? { screenshot: screenshotError(screenshot.files[0]) } : null),
     onSubmit: async (data) => {
       const res = await post('/support/tickets', {
         ...data,

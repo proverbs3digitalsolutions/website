@@ -1012,7 +1012,6 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .bk-cal__day.is-taken { text-decoration: line-through; }
 .bk-cal__day.is-range { background: var(--teal-soft); }
 .bk-cal__day.is-picked { background: var(--teal); color: #fff; }
-.bk-cal__day.is-picked small { color: rgba(255,255,255,.85); }
 .bk-done { text-align: center; display: grid; gap: 12px; justify-items: center; max-width: 560px; margin: 0 auto; }
 .bk-done .dl { text-align: left; width: 100%; }
 
@@ -1170,6 +1169,9 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 @media (max-width: 420px) { .lp-top__inner { gap: 8px; } .lp-top .brand { font-size: 1rem; gap: 6px; min-width: 0; } .lp-top .brand svg { width: 28px; height: 28px; } .lp-top__nav { gap: 8px; font-size: .85rem; min-width: 0; } .lp-top .btn--sm { padding: 0 10px; } }
 .bk-cal__day.is-holiday { background: color-mix(in srgb, var(--sand) 45%, var(--surface)); }
 .bk-cal__day.is-holiday small { color: var(--accent); }
+/* Picked comes last so a picked holiday keeps the teal fill and white price (4.5:1 in dark mode). */
+.bk-cal__day.is-picked.is-holiday { background: var(--teal); color: var(--on-forest); }
+.bk-cal__day.is-picked small, .bk-cal__day.is-picked.is-holiday small { color: var(--on-forest); }
 
 /* ================================================================ theme switch */
 .themeswitch { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; border: 1px solid var(--line-2); border-radius: 99px; padding: 3px; gap: 2px; background: var(--surface); }
@@ -1263,8 +1265,8 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 @media print { .assist-fab, .assist { display: none !important; } }
 .assist { position: fixed; right: 20px; bottom: 20px; z-index: 60; width: min(400px, calc(100vw - 24px)); height: min(620px, calc(100vh - 40px));
   display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 18px 48px rgba(0, 0, 0, .28); overflow: hidden; }
-/* On phones the sheet starts where the top bar's panels start (topbar.css .tb-pop), so the bar's icons stay in reach. */
-@media (max-width: 559px) { .assist { right: 0; left: 0; bottom: 0; top: calc(max(12px, env(safe-area-inset-top)) + 56px); width: 100%; height: calc(100dvh - (max(12px, env(safe-area-inset-top)) + 56px)); border-radius: 18px 18px 0 0; } }
+/* On phones the sheet starts where the top bar's panels start (topbar.css .tb-pop) and ends just above the bottom bar, so both stay in reach. */
+@media (max-width: 559px) { .assist { right: 0; left: 0; bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom)); top: calc(max(12px, env(safe-area-inset-top)) + 56px); width: 100%; height: calc(100dvh - (max(12px, env(safe-area-inset-top)) + 56px) - var(--bottomnav-h) - env(safe-area-inset-bottom)); border-radius: 18px; } }
 .assist__head { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 14px; background: var(--forest); color: #fff; }
 .assist__head .small { opacity: .85; }
 .assist__actions { display: flex; gap: 4px; }

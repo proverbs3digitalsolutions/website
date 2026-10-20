@@ -153,7 +153,7 @@ export async function propertiesView(el, { query }) {
     tabs, barBox,
     listCard);
 
-  if (query.new && isOwner) newPropertyModal();
+  if (query.new && isOwner) { delete query.new; setTimeout(() => { if (el.isConnected) newPropertyModal(); }, 0); }
 }
 
 // ---------------------------------------------------------------- detail

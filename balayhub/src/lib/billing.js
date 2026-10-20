@@ -275,6 +275,11 @@ function couponAheadError(org, quote) {
   return new HttpError(409, 'Your plan is already paid ahead. Your coupon applies at your next renewal.', { code: 'COUPON_AHEAD' });
 }
 
+// Days left on the old plan become days on the new one: paid days at the price ratio, free days at most day for day.
+function convertDays({ paidDays, freeDays, oldPrice, newPrice }) {
+  return Math.floor((paidDays * oldPrice) / newPrice) + Math.floor(freeDays * Math.min(1, oldPrice / newPrice));
+}
+
 // Apply a confirmed payment once: switch the plan and extend "paid until".
 async function markPaid(billingId, { method } = {}) {
   return tx(async (db) => {
@@ -295,8 +300,14 @@ async function markPaid(billingId, { method } = {}) {
       } else {
         // Changing plan: the new plan starts today, and the unused days of the old
         // plan are converted at the two plans' prices.
+        // Only days someone paid for convert at the price ratio; free days (coupon, trial) never grow. period_end is inclusive.
         const remaining = daysBetween(today, paidUntil) + 1;
-        bonusDays = Math.floor((remaining * PLANS[org.plan].price) / PLANS[b.plan].price);
+        const { rows: [{ n }] } = await db.query(
+          `SELECT COUNT(DISTINCT d)::int AS n FROM generate_series($2::date, $3::date, '1 day') d
+             JOIN billing_payments p ON d BETWEEN p.period_start AND p.period_end
+            WHERE p.organization_id = $1 AND p.kind = 'plan' AND p.status = 'paid' AND p.amount > 0 AND p.billing_id <> $4`,
+          [b.organization_id, today, paidUntil, b.billing_id]);
+        bonusDays = convertDays({ paidDays: n, freeDays: remaining - n, oldPrice: PLANS[org.plan].price, newPrice: PLANS[b.plan].price });
       }
     }
     const end = addDays(periodEnd(start, b.months), bonusDays);
@@ -414,4 +425,4 @@ function nextChargeOn(org) {
   return last ? dayAfter(last) : null;
 }
 
-module.exports = { SAVED_CARD_PAY, PENDING_MINUTES, paySaved, settlePending, nextChargeOn, periodEnd, enabled, price, MONTH_OPTIONS, createCheckout, refresh, markPaid, verifySignature, reconcile, addMonths, couponAheadError };
+module.exports = { convertDays, SAVED_CARD_PAY, PENDING_MINUTES, paySaved, settlePending, nextChargeOn, periodEnd, enabled, price, MONTH_OPTIONS, createCheckout, refresh, markPaid, verifySignature, reconcile, addMonths, couponAheadError };

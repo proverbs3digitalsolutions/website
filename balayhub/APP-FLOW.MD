@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
+Last updated: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
 
 ---
 
@@ -1416,7 +1416,7 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 - Phone search hints: Rent due **Tenant, unit or property**; Payments **Tenant, unit, ref, notes**; Expenses **Description or vendor**.
 
 ### 32.5 Inbox: Send later (changes 7.8)
-- The label reads **Send later (Philippine time, optional)**. The chosen time is Philippine time wherever the device is; the scheduled time shown is Philippine time. Search hint **Guest, listing or code**.
+- The label reads **Send later (Philippine time, optional)**. The chosen time is Philippine time wherever the device is; the scheduled time shown is Philippine time. Search hint **Guest or code** (screen-reader name "Search guest, listing or booking code"; round 22).
 
 ### 32.6 Notification settings (changes 14.7)
 - Settings and My account list **every type the person can receive**, each with on or off, saved per person: mentions, assigned conversations, calendar sync problems and unit-owner activity are included. Owners see 9 types, managers 8 (the seven stay alerts plus Cleaning tasks), staff the cleaning alerts only (cleaners the same).
@@ -1499,3 +1499,33 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 
 ### 34.5 Cleaner pay
 - The bulk bar counts **unpaid cleans only**: "N unpaid", or "Nothing unpaid" when none are left.
+
+## 35. QA round 22 changes (D-104; 2026-10-21)
+
+### 35.1 Keyboard focus
+- **First page after loading, and pages reached by a redirect:** the page heading takes keyboard focus (no scroll), the same as any page change. This covers a fresh Home, Home after the confirm-card redirect, guest pages opened directly (including "Quote not found" and "Booking not found"), and a redirect onto the page already open (for example demo@ typing a calendar link while on Dashboard).
+- **Opening Unit owners, Tenants or Properties with `?new=1`:** the Add dialog opens after the page has drawn. Escape closes it and focus returns to the page heading. The **+ Add** button route still returns focus to the button.
+- **Filters:** **Escape** closes the open Filters panel and puts focus on the **Filters** button. Escape inside an open select list closes only the list.
+- **Cleaner pay:** **Clear all** or removing a filter chip keeps the scroll position; focus stays on a control in the bar.
+- **Booking, Charges:** voiding one of two charges with the same description keeps focus on the page heading and the page does not move. The two Void buttons read "(1 of 2)" and "(2 of 2)".
+- **Rent:** changing the Property filter while a typed Amount is waiting no longer shows a page error; the amount is applied once.
+
+### 35.2 Forms
+- **Add owner:** a bad email and a missing fee show together on the first Save; focus goes to the first wrong field in page order.
+- **Add season:** a missing price and a last night before the first night show together.
+- **Quote and Check-in (guest pages):** a field's message disappears as soon as that field is fixed; the banner goes when the last one clears.
+- **Edit reservation, date clash:** both date boxes are marked, the banner says it once, and focus goes to Check-in (as New reservation).
+- **Help, new ticket:** the file in "Screenshot or file" is checked before sending. A file that is not a PDF, JPG, PNG or WEBP, or is over 10 MB, shows "Upload a PDF, JPG, PNG or WEBP file up to 10 MB." on the field; no ticket is created and the text stays.
+
+### 35.3 Listings and Settings
+- **Listings, Channels, Connect calendar:** the Channel box starts on **Choose the channel**. A link from a known site (Airbnb, Booking.com, Agoda, Vrbo, Expedia, Trip.com) picks that site; any other link needs the host to choose, otherwise "Choose which site this calendar link is from." shows on Channel. A channel the host picked by hand is not changed by the link. After **Save anyway** on an odd link, focus lands on the new row's **Sync now**.
+- **Edit listing:** the "Booking page and payments" section is open by itself while no listing in the workspace is on the booking page.
+- **Settings, Direct booking:** with no listing on the page it reads "None yet: on Listings, press Edit and tick "Show this listing on my booking page"." with a **Go to Listings** link.
+
+### 35.4 Plan & billing
+- **Two tabs, Pay in both at once:** one charge. The refused tab redraws to the waiting view ("A payment of ... is waiting for your bank..."); it keeps no Pay button and no "Try again in 15 minutes" alert. When no payment is waiting (the hosted "already open in another window" case), the message shows as before.
+- **Changing plan after a free coupon or trial days:** paid days convert at the price ratio as before; free days move day for day to a cheaper plan and never grow.
+
+### 35.5 Phones and Inbox
+- **Assistant panel (under 560px):** the open panel ends just above the bottom bar, so the bar's tabs can be tapped. Tapping a tab changes the page and closes the panel.
+- **Inbox search box:** the hint reads "Guest or code" and is not cut at 390px with a filter count showing.

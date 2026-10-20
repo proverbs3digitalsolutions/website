@@ -186,6 +186,17 @@ export const voidedOnlyLine = (n) => `Voided only: ${n} entr${n === 1 ? 'y' : 'i
 // Where the expenses Vendor filter reads its names: voided entries only while the voided filter shows them.
 export const vendorSource = (values = {}) => (values.include_voided ? '/expenses?include_voided=1' : '/expenses');
 
+// Wraps an async redraw so a call made while it runs (a blur-time change on a box the redraw removes) queues once and runs after it, not inside it.
+export function noReentry(fn) {
+  let busy = false;
+  let again = false;
+  return async function run() {
+    if (busy) { again = true; return; }
+    busy = true;
+    try { do { again = false; await fn(); } while (again); } finally { busy = false; }
+  };
+}
+
 // The last 24 months, newest first, for the rent roll's month filter.
 function recentMonths(today) {
   const [y, m] = today.split('-').map(Number);
@@ -375,7 +386,7 @@ export async function rentView(el, { query }) {
   // Vendor names already used, for the expenses vendor filter.
   let vendors = [];
   let vendorsFrom = '';
-  async function renderBar() {
+  const renderBar = noReentry(async () => {
     const f = valuesFor(tab);
     if (tab === 'payments' && !tenants) tenants = (await get('/tenants').catch(() => ({ tenants: [] }))).tenants;
     if (tab === 'expenses' && vendorSource(f) !== vendorsFrom) {
@@ -390,6 +401,7 @@ export async function rentView(el, { query }) {
       onChange: () => {
         // A new property changes the unit choices; drop a unit from another property.
         if (f.property_id !== lastProperty || (tab === 'expenses' && vendorSource(f) !== vendorsFrom)) {
+          lastProperty = f.property_id; // before the redraw: the removed Amount box blurs and calls this again mid-replace
           if (f.unit_id && f.unit_id !== 'none' && !units.some((u) => u.unit_id === f.unit_id && (!f.property_id || u.property_id === f.property_id))) f.unit_id = '';
           rememberFilters(TABS[tab].key, f);
           renderBar();
@@ -397,7 +409,7 @@ export async function rentView(el, { query }) {
         load();
       },
     }));
-  }
+  });
 
   const mainTabs = h('div', { class: 'tabs', role: 'tablist' }, [['rent', 'Rent due'], ['payments', 'Payments'], ['expenses', 'Expenses']].map(([t, txt]) =>
     h('button', {

@@ -130,7 +130,7 @@ test('(d) pageError has an h1 title; retry only when allowed', () => {
 test('(e) source: router focuses the page heading after a path change, keeps the old main on a same-path render, calls useHostLang', () => {
   const r = appSrc.slice(appSrc.indexOf('export async function render'));
   assert.match(appSrc, /function focusPageHeading/);
-  assert.match(appSrc, /drawnPath !== null && drawnPath !== path\) focusPageHeading\(mount\)/);
+  assert.match(appSrc, /headingFocusDue\(\{ drawnPath, path, prevKept: true, redirected \}\)\) focusPageHeading\(mount\)/);
   assert.match(r, /if \(seq !== renderSeq\) return;\n\s*shell\.content\.replaceWith\(mount\)/);
   assert.match(r, /aria-busy/);
   assert.match(r, /i18n\.useHostLang\?\.\(/);

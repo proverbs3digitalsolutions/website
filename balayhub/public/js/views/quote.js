@@ -116,6 +116,18 @@ export async function quoteView(el, { params, kept = {} }) {
       h('div', { class: 'error', role: 'alert' })),
     submit);
   let busy = false;
+  // A field's message clears as soon as the guest changes that field (a checkbox, when ticked); the banner goes with the last marked field.
+  const clearFieldError = (e) => {
+    const wrap = e.target.closest?.('[data-field]');
+    if (!wrap?.classList.contains('field--invalid')) return;
+    wrap.classList.remove('field--invalid');
+    wrap.querySelectorAll('[aria-invalid]').forEach((f) => f.removeAttribute('aria-invalid'));
+    const err = wrap.querySelector('.error');
+    if (err) err.textContent = '';
+    if (!form.querySelector('.field--invalid')) formError.replaceChildren();
+  };
+  form.addEventListener('input', clearFieldError);
+  form.addEventListener('change', clearFieldError);
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (busy) return;
@@ -130,7 +142,7 @@ export async function quoteView(el, { params, kept = {} }) {
     else if (!PHONE_RE.test(String(v.phone).trim())) problems.phone = tServer('Enter a valid phone number.');
     if (rules && !form.elements.accept_rules.checked) problems.accept_rules = t('Please read and agree to the house rules.');
     if (!form.elements.consent.checked) problems.consent = t('Please tick this box to continue.');
-    if (Object.keys(problems).length) { showErrors(form, problems); return; }
+    if (Object.keys(problems).length) { formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, t('Please check the highlighted fields.'))); showErrors(form, problems); return; }
     busy = true;
     submit.disabled = true;
     submit.textContent = t('Opening secure payment…');

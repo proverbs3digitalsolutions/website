@@ -53,7 +53,7 @@ test('the basics stay open and every required field sits above the first collaps
 
 test('the optional groups are details.form-section elements with the titles the plan names', () => {
   assert.deepEqual(groups().map(titleOf), ['More details', 'Price extras', 'Guest info', 'Booking page and payments', 'Booking rules']);
-  for (const g of groups()) assert.match(g, /^, \{ class: 'form-section', open: holds\(u, \[/, 'each group opens when holds() says so');
+  for (const g of groups()) assert.match(g, /^, \{ class: 'form-section', open: (openBooking \|\| )?holds\(u, \[/, 'each group opens when holds() says so');
 });
 
 test('each field sits in its group or the basics, and none was dropped', () => {
@@ -98,7 +98,7 @@ test('an Edit opens a group only when the listing holds a value other than its s
 
 test('Add listing passes an empty listing, and Edit passes the saved unit to the same form', () => {
   assert.match(src, /fields: \[savedLine, \.\.\.listingFields\(\{\}, roomTypes, newPropMore, \[h\('hr', \{ class: 'divider' \}\), propSelect, newProp\]\)\]/); // QA round 12 (#30): building in Basics; QA round 13 (#39): the saved-building line goes first
-  assert.match(src, /listingFields\(\{ \.\.\.unit, tags: unit\.tags \}, roomTypes\)/);
+  assert.match(src, /listingFields\(\{ \.\.\.unit, tags: unit\.tags \}, roomTypes, null, \[\], !bookable\.size\)/);
 });
 
 test('the channel link reset button reads "Create a new link" and names its listing', () => {

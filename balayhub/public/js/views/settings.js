@@ -63,10 +63,15 @@ async function focusWhenAttached(el, node) {
 
 // Set when a Pay press found the plan already paid elsewhere (PAYMENT_RECEIVED); the redrawn page shows it and takes focus.
 let carriedNotice = null;
+// PAYMENT_IN_PROGRESS carries the server's "try again" sentence too, but the redrawn page shows the waiting view instead when one is pending.
+let carriedUnlessWaiting = false;
+let billWaiting = false; // set by planCard: the loaded billing has a payment waiting at the bank
 
 export async function settingsView(el, { rerender, query = {} }) {
   let billingNotice = null;
-  if (carriedNotice) { billingNotice = h('div', { class: 'alert alert--error', role: 'alert', tabindex: '-1' }, carriedNotice); carriedNotice = null; }
+  let carriedEl = null;
+  const unlessWaiting = carriedUnlessWaiting; carriedUnlessWaiting = false;
+  if (carriedNotice) { billingNotice = h('div', { class: 'alert alert--error', role: 'alert', tabindex: '-1' }, carriedNotice); carriedEl = billingNotice; carriedNotice = null; }
   // Back from PayMongo checkout: confirm the payment with the server.
   if (query.billing) {
     history.replaceState(null, '', '#/settings');
@@ -208,6 +213,7 @@ export async function settingsView(el, { rerender, query = {} }) {
       : 'BalayHub stores guest, booking and property records to help you run your stays. Collect only what you need: guest ID photos are deleted automatically after the stay, and the owner can export or delete the workspace data under the Data Privacy Act.'),
     h('p', { style: { marginTop: '10px' } }, h('a', { class: 'link-tap', href: '#/privacy' }, 'Read the Privacy Notice'))));
 
+  if (unlessWaiting && billWaiting && billingNotice === carriedEl) billingNotice = null;
   el.replaceChildren(pageHead({ title: 'Settings', sub: u.organization_name }), h('div', { class: 'stack' }, billingNotice, sections));
   if (billingNotice) focusWhenAttached(el, billingNotice);
   // The top bar's "Invite a teammate" link (#/settings?invite=1) opens the dialog once the page is drawn.
@@ -411,6 +417,7 @@ export async function planCard(u, rerender) {
   try { ({ listings } = await get('/listings')); } catch { /* ignore */ }
   let bill = { online: false, options: [], history: [] };
   try { bill = await get('/billing'); } catch { /* ignore */ }
+  billWaiting = !!bill.pending_payment;
   const status = p.read_only
     ? h('div', { class: 'alert alert--error' }, p.reason === 'trial_ended' ? 'Your free trial has ended. Your workspace is view-only until you choose a plan.' : 'Your payment is overdue. Your workspace is view-only until you renew.')
     : p.plan === 'trial' ? h('div', { class: 'alert alert--info' }, `Free trial: ${p.trial_days_left} day${p.trial_days_left === 1 ? '' : 's'} left. All features are included.`)
@@ -561,6 +568,7 @@ export function payOnline(p, bill, rerender, bc) {
       location.href = r.checkout_url;
     } catch (err) {
       if (err.code === 'PAYMENT_RECEIVED') { carriedNotice = err.message; await refreshUser(); rerender(); return; }
+      if (err.code === 'PAYMENT_IN_PROGRESS') { carriedNotice = err.message; carriedUnlessWaiting = true; await refreshUser(); rerender(); return; }
       if (/^(COUPON|COMPED|CARD_OFF)/.test(err.code || '')) box.showError(err.message); else toast(err.message, 'error');
       btn.disabled = false;
       update();
@@ -583,6 +591,7 @@ export function payOnline(p, bill, rerender, bc) {
       msgEl.textContent = 'Your payment is being confirmed. Check back in a moment.';
     } catch (err) {
       if (err.code === 'PAYMENT_RECEIVED') { carriedNotice = err.message; await refreshUser(); rerender(); return; }
+      if (err.code === 'PAYMENT_IN_PROGRESS') { carriedNotice = err.message; carriedUnlessWaiting = true; await refreshUser(); rerender(); return; }
       savedBtn.disabled = false; btn.disabled = false; update();
       if (err.code === 'SAVED_CARD_FAILED' || err.code === 'SAVED_CARD_NONE') {
         msgEl.textContent = "Your saved card couldn't be charged. Pay another way, or use a different card.";
@@ -789,7 +798,7 @@ async function bookingCard(rerender) {
       h('dt', null, 'PayMongo'), h('dd', null,
         b.paymongo_connected ? (b.paymongo_checked ? `Connected (${b.paymongo_key_hint})` : `Saved, not checked yet (${b.paymongo_key_hint})`) : 'Not connected',
         b.paymongo_connected && !b.paymongo_checked && h('p', { class: 'muted small' }, "BalayHub couldn't reach PayMongo to check this key. It is checked again when you turn on your booking page.")),
-      h('dt', null, 'Listings on the page'), h('dd', null, listed.length ? `${listed.length} of ${b.listings.length}` : 'None yet: edit a listing and tick "Show this listing on my booking page"'),
+      h('dt', null, 'Listings on the page'), h('dd', null, listed.length ? `${listed.length} of ${b.listings.length}` : [h('span', null, 'None yet: on Listings, press Edit and tick "Show this listing on my booking page". '), h('a', { class: 'link-tap', href: '#/listings' }, 'Go to Listings')]),
       b.url && [h('dt', null, 'Your link'), h('dd', null, h('a', { class: 'link-tap', href: b.url.slice(b.url.indexOf('#')), target: '_blank' }, b.url))]),
     b.test_mode && h('div', { class: 'alert alert--warn', style: { marginTop: '10px' } }, 'TEST MODE: you connected a PayMongo test key, so payments on your page are not real and guests see a test-mode notice. Switch to your live key (Change key) before sharing the link.'),
     listed.some((l) => !l.photo_count) && h('p', { class: 'muted small' }, 'Tip: add photos to every listing (Listings → Photos). Pages with photos get far more bookings.'),

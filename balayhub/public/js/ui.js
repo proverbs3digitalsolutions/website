@@ -706,6 +706,17 @@ export function formErrorText(err, unplaced = []) {
   return { text: err.message, fieldNote: false };
 }
 
+// The address shape every view checks; makeForm applies it to every filled email box in the same pass as the required ones.
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+export function emailProblems(form, missing) {
+  const out = {};
+  for (const el of form.querySelectorAll('input[type=email]')) {
+    const v = String(el.value ?? '').trim();
+    if (el.name && !missing[el.name] && v && !EMAIL_RE.test(v)) out[el.name] = 'Enter a valid email address.';
+  }
+  return out;
+}
+
 export function makeForm({ fields, submitText = 'Save', onSubmit, cancel, draftKey, idempotent = false, extra, check }) {
   const submitBtn = h('button', { class: 'btn btn--primary', type: 'submit' }, submitText);
   const formError = h('div', { class: 'form-error' });
@@ -751,6 +762,9 @@ export function makeForm({ fields, submitText = 'Save', onSubmit, cancel, draftK
     for (const el of form.querySelectorAll('input[type=date]')) {
       if (el.name && !missing[el.name] && dateOutOfRange(el.value)) { missing[el.name] = `${labelOf(el)} must be between 2000 and 2100.`; requiredOnly = false; }
     }
+    // A filled email box that is not an address is marked now too, not only after a missing field is fixed.
+    const badEmails = emailProblems(form, missing);
+    if (Object.keys(badEmails).length) { Object.assign(missing, badEmails); requiredOnly = false; }
     // The view's own checks (check(data, form) returns null or { field: message }) run in the same pass, so every message shows at once.
     const more = check?.(readForm(form), form);
     if (more && Object.keys(more).length) { mergeChecks(missing, more); requiredOnly = false; }

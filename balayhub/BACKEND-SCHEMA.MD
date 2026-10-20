@@ -2,7 +2,7 @@
 
 This document describes BalayHub's PostgreSQL schema as it stands after migrations `001`–`026` in `db/migrations/`, where uploaded files are stored, and who can see or change each kind of data. It was checked against the migrations and the route code in `src/routes/*.js` and `src/lib/*.js`. Anything not confirmed in the code is marked **unverified**.
 
-Last updated: 2026-10-21 (QA round 21: section 27; D-103). Before that: 2026-10-20 (QA round 20: migration 039, section 26, 2.15 card columns, support tickets row; D-102). Before that: 2026-10-20 (QA round 19: section 25, section 6 guest_has_email, billing 'attached' and expiry notes; D-101). Before that: 2026-10-19 (QA round 18: section 24, admin delete routes in matrix 6.4, null-workspace platform audit rows; D-100). Before that: 2026-10-15 (QA round 17: migrations 037 and 038, section 2.19, matrix 6.5, section 23; D-98 and D-99)
+Last updated: 2026-10-21 (QA round 22: section 28, markPaid free-day rule; D-104). Before that: 2026-10-21 (QA round 21: section 27; D-103). Before that: 2026-10-20 (QA round 20: migration 039, section 26, 2.15 card columns, support tickets row; D-102). Before that: 2026-10-20 (QA round 19: section 25, section 6 guest_has_email, billing 'attached' and expiry notes; D-101). Before that: 2026-10-19 (QA round 18: section 24, admin delete routes in matrix 6.4, null-workspace platform audit rows; D-100). Before that: 2026-10-15 (QA round 17: migrations 037 and 038, section 2.19, matrix 6.5, section 23; D-98 and D-99)
 
 ---
 
@@ -1445,3 +1445,10 @@ Decision D-103. **No migration.**
 
 - **`GET /api/account` `notifications_on`** (`src/routes/account.js`) is now true when the user has at least one row in `push_subscriptions` (it was true when `notify_prefs` was non-empty). The page narrows this to the current browser (service worker registration and subscription, permission granted). The saved `notify_prefs` choices are unchanged.
 - **PayMongo intent status (`src/lib/billing.js`).** The "intent is dead" test accepts both `cancelled` and `canceled` (the exact spelling at PayMongo is unconfirmed, see BLOCKERS). When `expirePending` finds an intent still not dead after the cancel call, it logs one line, `[billing] intent for <id> still <status> after cancel` (billing id and status only, no secrets). The hosted checkout still goes ahead only when the older payment is dead (D-102 unchanged).
+
+## 28. API notes from QA round 22 (2026-10-21)
+
+Decision D-104. **No migration.**
+
+- **Billing, plan change at payment (`markPaid` in `src/lib/billing.js`).** When the paid plan differs from the current one, the unused days (today to `paid_until`) are split. *Paid days* are the days inside a `billing_payments` row with `kind = 'plan'`, `status = 'paid'` and `amount > 0` (from `period_start` to `period_end`; overlapping rows count a day once; the ₱20 `card_check` rows never count). They convert at the price ratio: `floor(paidDays x old / new)`. *Free days* are every other unused day (free coupon rows with amount 0, and trial days). They never grow: `floor(freeDays x min(1, old / new))`, so day for day to a cheaper plan and fewer days to a dearer one. The sum is the bonus added after the new period. The pure helper `convertDays({ paidDays, freeDays, oldPrice, newPrice })` holds the maths. Unchanged: renewing the same plan early, paying during a trial, coupon months already used. No new column: the rule uses the existing `period_start`, `period_end`, `amount`, `kind` and `status`. Days bought with a partly discounted coupon still convert at list prices (BLOCKERS a).
+- **`PAYMENT_IN_PROGRESS` (409)** is unchanged on the server; the Settings page now refreshes on it (D-104).

@@ -111,11 +111,11 @@ test('#43 compactCalendarFilters folds for 3 or fewer listings', () => {
 });
 
 test('#28 the season save asks about a fixed price through highRateOk, with the mode check first', () => {
+  assert.match(pricing, /check: \(d\) => seasonProblems\(d\),/);
   const save = pricing.slice(pricing.indexOf("onSubmit: async (d, { form }) => {\n      const { price_mode"));
-  const problem = save.indexOf('seasonModeProblem(');
   const ask = save.indexOf('highRateOk(');
   const post_ = save.indexOf("post('/pricing/seasons'");
-  assert.ok(problem > 0 && ask > problem && post_ > ask, 'mode check, then the question, then the save');
+  assert.ok(ask > 0 && post_ > ask, 'the question, then the save');
   assert.match(save, /mode === 'fixed' && !await highRateOk\(/);
 });
 

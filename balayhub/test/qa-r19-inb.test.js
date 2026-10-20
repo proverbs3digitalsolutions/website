@@ -21,6 +21,6 @@ test('empty or invalid gives null', () => {
 test('inbox uses the helper, the label and the short hint', () => {
   assert.match(src, /manilaDateTime\(sendAt\.value\)/);
   assert.match(src, /Send later \(Philippine time, optional\)/);
-  assert.match(src, /placeholder: 'Guest, listing or code'/);
+  assert.match(src, /placeholder: 'Guest or code', label: 'Search guest, listing or booking code'/);
   assert.doesNotMatch(src, /new Date\(sendAt\.value\)/);
 });

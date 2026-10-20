@@ -127,7 +127,7 @@ test('the More details and Booking page groups open on Edit only for a saved val
 
 // ---- the Edit form keeps the same signature (the building block is only for Add)
 test('Edit passes the saved unit to the same form without a building block', () => {
-  assert.match(src, /listingFields\(\{ \.\.\.unit, tags: unit\.tags \}, roomTypes\)/);
+  assert.match(src, /listingFields\(\{ \.\.\.unit, tags: unit\.tags \}, roomTypes, null, \[\], !bookable\.size\)/);
 });
 
 // ---- #22: Turn on needs a listing

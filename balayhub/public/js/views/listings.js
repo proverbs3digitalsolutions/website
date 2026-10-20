@@ -138,7 +138,7 @@ function holds(u, keys) {
 // The basics are what a new listing needs: the name, type, base rate and cleaning fee, then the building (Add only, passed in
 // as `buildingBasics`). The new building's property type (Add only, passed in as `building`), room type and tags sit in
 // More details, closed; the deposit is under Booking page and payments.
-function listingFields(u = {}, roomTypes = [], building = null, buildingBasics = []) {
+function listingFields(u = {}, roomTypes = [], building = null, buildingBasics = [], openBooking = false) {
   // The line under the payment fields follows them as they change, so a guest's cost is never a silent default (#40).
   const payLine = h('p', { class: 'muted small', 'aria-live': 'polite' });
   const paintPayLine = () => {
@@ -194,7 +194,7 @@ function listingFields(u = {}, roomTypes = [], building = null, buildingBasics =
       field({ name: 'checkin_instructions', label: 'Check-in instructions', type: 'textarea', value: u.checkin_instructions, maxlength: 3000,
         placeholder: 'e.g. Show your ID at the lobby, get the key from the guard, unit is on the 12th floor…' }),
       field({ name: 'house_rules', label: 'House rules', type: 'textarea', value: u.house_rules, maxlength: 3000, placeholder: 'e.g. No smoking. No parties. Quiet hours 10 PM – 7 AM.' })),
-    h('details', { class: 'form-section', open: holds(u, ['bookable_online', 'description', 'payment_option', 'deposit_pct', 'balance_due_days']) },
+    h('details', { class: 'form-section', open: openBooking || holds(u, ['bookable_online', 'description', 'payment_option', 'deposit_pct', 'balance_due_days']) },
       h('summary', null, 'Booking page and payments'),
       field({ name: 'bookable_online', label: 'Show this listing on my booking page', type: 'checkbox', value: Boolean(u.bookable_online) }),
       field({ name: 'description', label: 'Description for guests', type: 'textarea', value: u.description, maxlength: 3000,
@@ -356,7 +356,17 @@ async function syncToastText(unitId, feedId, sync) {
   return feed?.problem_message || "Couldn't reach the calendar link. Check the link on the listing's Channels page.";
 }
 
-async function channelsModal(listing, onChange) {
+// The site a calendar link comes from, by its host ('' when it is none of the six BalayHub knows: the host chooses).
+export function channelFromLink(url) {
+  const text = String(url ?? '').trim();
+  let host;
+  try { host = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `https://${text}`).hostname.toLowerCase(); } catch { return ''; }
+  const sites = [['airbnb', /(^|\.)airbnb\.(com?(\.[a-z]{2})?|[a-z]{2})$/], ['booking', /(^|\.)booking\.com$/], ['agoda', /(^|\.)agoda\.(com?(\.[a-z]{2})?|[a-z]{2})$/],
+    ['vrbo', /(^|\.)vrbo\.(com?(\.[a-z]{2})?|[a-z]{2})$/], ['expedia', /(^|\.)expedia\.(com?(\.[a-z]{2})?|[a-z]{2})$/], ['tripcom', /(^|\.)trip\.com$/]];
+  return (sites.find(([, re]) => re.test(host)) || [''])[0];
+}
+
+async function channelsModal(listing, onChange, { focusFeedId } = {}) {
   let data;
   try { data = await get(`/units/${listing.unit_id}/channels`); } catch (err) { toast(err.message, 'error'); return; }
   const exportInput = h('input', { class: 'input', readonly: true, value: data.export_url, 'aria-label': 'BalayHub calendar link' });
@@ -372,18 +382,18 @@ async function channelsModal(listing, onChange) {
     h('div', { class: 'row__end' }, h('div', { class: 'chips' },
       h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `Sync now, ${channelName(f)}`, onclick: async (e) => {
         e.target.disabled = true;
-        try { const r = await post(`/ical-feeds/${f.feed_id}/sync`); toast(await syncToastText(listing.unit_id, f.feed_id, r.sync), r.sync.ok ? 'info' : 'error'); m.close(); channelsModal(listing, onChange); onChange(); } catch (err) { toast(err.message, 'error'); e.target.disabled = false; }
+        try { const r = await post(`/ical-feeds/${f.feed_id}/sync`); toast(await syncToastText(listing.unit_id, f.feed_id, r.sync), r.sync.ok ? 'info' : 'error'); m.close(); channelsModal(listing, onChange, { focusFeedId: f.feed_id }); onChange(); } catch (err) { toast(err.message, 'error'); e.target.disabled = false; }
       } }, 'Sync now'),
       h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Disconnect ${channelName(f)}`, onclick: async () => {
         if (!await confirmDialog({ title: `Disconnect ${CHANNEL_LABEL[f.channel]}?`, text: 'Future stays from this channel are cancelled, and its calendar blocks are removed. Past stays and any stays with payments are kept.', confirmText: 'Disconnect', danger: true })) return;
-        try { await post(`/ical-feeds/${f.feed_id}/remove`); toast('Calendar disconnected.'); m.close(); channelsModal(listing, onChange); onChange(); } catch (err) { toast(err.message, 'error'); }
+        try { await post(`/ical-feeds/${f.feed_id}/remove`); toast('Calendar disconnected.'); m.close(); channelsModal(listing, onChange, { focusFeedId: null }); onChange(); } catch (err) { toast(err.message, 'error'); }
       } }, 'Disconnect')))));
   const status = h('div');
   status.setAttribute('role', 'alert');
   const addForm = h('form', { class: 'form', novalidate: true },
     status,
     h('div', { class: 'form-row form-row--2' },
-      field({ name: 'channel', label: 'Channel', type: 'select', value: 'airbnb', placeholderOption: false, options: [['airbnb', 'Airbnb'], ['booking', 'Booking.com'], ['agoda', 'Agoda'], ['vrbo', 'Vrbo'], ['expedia', 'Expedia'], ['tripcom', 'Trip.com'], ['other', 'Other (any site with a calendar link)']] }),
+      field({ name: 'channel', label: 'Channel', type: 'select', value: '', placeholderOption: 'Choose the channel', options: [['airbnb', 'Airbnb'], ['booking', 'Booking.com'], ['agoda', 'Agoda'], ['vrbo', 'Vrbo'], ['expedia', 'Expedia'], ['tripcom', 'Trip.com'], ['other', 'Other (any site with a calendar link)']] }),
       field({ name: 'url', label: 'Calendar link from Airbnb, Booking.com or Agoda (ends in .ics)', type: 'url', placeholder: 'https://www.airbnb.com/calendar/ical/…', hint: 'In Airbnb or Booking.com, look for Export calendar or Sync calendars and copy the link that ends in .ics.' })),
     h('div', { class: 'form-actions' }, h('button', { class: 'btn btn--primary', type: 'submit' }, 'Connect calendar')));
   addForm.addEventListener('submit', async (e) => {
@@ -393,6 +403,7 @@ async function channelsModal(listing, onChange) {
     // 'Connecting…' shows only while a request is really running, never while the 'Save it anyway?' question is open.
     const busy = () => { btn.disabled = true; btn.textContent = 'Connecting…'; };
     try {
+      if (!addForm.elements.channel.value) { showErrors(addForm, { channel: 'Choose which site this calendar link is from.' }); return; }
       const body = { unit_id: listing.unit_id, channel: addForm.elements.channel.value, url: addForm.elements.url.value };
       let r;
       busy();
@@ -409,7 +420,7 @@ async function channelsModal(listing, onChange) {
       const text = await syncToastText(listing.unit_id, r.feed_id, r.sync);
       // A failed first sync is not toasted: the reopened Channels dialog shows it under the channel.
       if (r.sync.ok) toast(`Connected. ${text}`);
-      m.close(); channelsModal(listing, onChange); onChange();
+      m.close(); channelsModal(listing, onChange, { focusFeedId: r.feed_id }); onChange();
     } catch (err) {
       // A link problem is written under the link field, which is marked and takes focus; any other problem goes in the alert above.
       if (err.fields?.url) showErrors(addForm, { url: err.fields.url });
@@ -417,6 +428,23 @@ async function channelsModal(listing, onChange) {
       btn.disabled = false; btn.textContent = 'Connect calendar';
     }
   });
+  // The link names the site unless the host chose one by hand.
+  let chosenByHand = false;
+  const channelSelect = addForm.elements.channel;
+  // A field's mark and message go as soon as it changes, also when the link fills the channel (no change event then).
+  const clearFieldError = (name) => {
+    const wrap = addForm.querySelector(`[data-field="${name}"]`);
+    if (!wrap?.classList.contains('field--invalid')) return;
+    wrap.classList.remove('field--invalid');
+    wrap.querySelectorAll('[aria-invalid]').forEach((f) => f.removeAttribute('aria-invalid'));
+    const err = wrap.querySelector('.error');
+    if (err) err.textContent = '';
+  };
+  channelSelect.addEventListener('change', () => { chosenByHand = true; clearFieldError('channel'); });
+  const inferChannel = () => { if (!chosenByHand) { channelSelect.value = channelFromLink(addForm.elements.url.value); if (channelSelect.value) clearFieldError('channel'); } };
+  addForm.elements.url.addEventListener('input', () => clearFieldError('url'));
+  addForm.elements.url.addEventListener('input', inferChannel);
+  addForm.elements.url.addEventListener('change', inferChannel);
   const m = openModal({
     title: `Channels · ${listing.unit_name}`, wide: true,
     body: h('div', { class: 'stack' },
@@ -435,6 +463,13 @@ async function channelsModal(listing, onChange) {
         data.feeds.length ? h('ul', { class: 'list' }, data.feeds.map(feedRow)) : h('p', { class: 'muted small' }, 'No channels connected yet.'),
         addForm)),
   });
+  // A rebuilt dialog starts on the row just acted on (its Sync now), else on its heading, never the read-only calendar link box.
+  if (focusFeedId !== undefined) {
+    const row = data.feeds.find((f) => f.feed_id === focusFeedId);
+    const heading = m.el.querySelector('.modal__head h2');
+    heading.tabIndex = -1;
+    (row && m.el.querySelector(`button[aria-label="Sync now, ${channelName(row).replace(/"/g, '\\"')}"]`) || heading).focus();
+  }
 }
 
 // Guest pages: the guidebook (English and Taglish), the public page address and share links.
@@ -669,7 +704,7 @@ export async function listingsView(el, { query }) {
           const unit = units.find((u) => u.unit_id === l.unit_id);
           const roomTypes = await roomTypeNames();
           // Not formModal: a cancelled question must leave the form open with what was typed.
-          const modal = openModal({ title: `Edit ${l.unit_name}`, body: makeForm({ submitText: 'Save changes', fields: listingFields({ ...unit, tags: unit.tags }, roomTypes),
+          const modal = openModal({ title: `Edit ${l.unit_name}`, body: makeForm({ submitText: 'Save changes', fields: listingFields({ ...unit, tags: unit.tags }, roomTypes, null, [], !bookable.size),
             check: (d) => (String(d.nightly_rate ?? '').trim() && baseRateError(d.nightly_rate) ? { nightly_rate: baseRateError(d.nightly_rate) } : null), // with the required-field messages, in one pass
             cancel: () => modal.close(),
             onSubmit: async (d, { form }) => {

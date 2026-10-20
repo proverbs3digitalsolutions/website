@@ -631,7 +631,7 @@ export async function reservationDetailView(el, { params, rerender }) {
         // Dates moved and the amount box still holds the old price: ask whether to use the rates' price. Keep, or closing the question, saves as typed.
         if (!r.ical_feed_id && ('check_in' in changes || 'check_out' in changes)) {
           await pending;
-          if (clash) throw new ApiError(clash.message, { status: 409, fields: { check_out: clash.message } });
+          if (clash) throw new ApiError(clash.message, { status: 409, code: 'DATES_TAKEN', fields: { check_out: clash.message } });
           const typed = parseAmount(d.accommodation_total);
           const stored = Number(r.accommodation_total);
           if (askNewPrice({ changedDates: true, typed, stored, suggested })) {

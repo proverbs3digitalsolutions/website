@@ -1,6 +1,6 @@
 # BalayHub design brief
 
-Last updated: 2026-10-21 (QA round 21: section 29; D-103). Before that: 2026-10-20 (QA round 20: section 28; D-102). Before that: 2026-10-20 (QA round 19: landing links hidden below 768px; D-101). Before that: 2026-10-19 (QA round 18: section 27, phone filter bar, theme switch label; D-100). Before that: 2026-10-15 (QA round 17: section 26, the wordmark logotype exemption, the focus key table; D-98 and D-99)
+Last updated: 2026-10-21 (QA round 22: section 30; D-104). Before that: 2026-10-21 (QA round 21: section 29; D-103). Before that: 2026-10-20 (QA round 20: section 28; D-102). Before that: 2026-10-20 (QA round 19: landing links hidden below 768px; D-101). Before that: 2026-10-19 (QA round 18: section 27, phone filter bar, theme switch label; D-100). Before that: 2026-10-15 (QA round 17: section 26, the wordmark logotype exemption, the focus key table; D-98 and D-99)
 
 **Summary.** BalayHub is a phone-first web app (also an installable PWA) for Filipino rental and staycation hosts. It is built with plain CSS, one stylesheet (`public/css/app.css`), and small JavaScript helpers (`public/js/ui.js`). There is no framework and no CSS preprocessor. The look is calm and practical: Forest Green on soft off-white, Sand and Sun as warm accents, Poppins for headings, Inter for text, rounded cards, and large touch targets. Colours come from CSS custom properties on `:root`. A dark theme redefines the same tokens, so any component that uses tokens gets dark mode automatically. This brief records what is **actually built**. Every value below comes from the code. Where the code doesn't define a token (spacing, type sizes), the brief lists the values in use and says so.
 
@@ -705,3 +705,10 @@ Decision D-100. CSS in `public/css/app.css`, behaviour in `public/js/filters.js`
 - **Plan cards (`.plan-mini`, also on the confirm-card picker) sit one per row below 560px,** full width. Three columns did not fit the labels and left one card alone on a second row at 390px. At 560px and above the columns are unchanged.
 - **The Pay button on Plan & billing (`.payonline__row .btn`) wraps its label** (`white-space: normal`, `max-width: 100%`) so it stays inside its box at 320px and the page does not scroll sideways. The button keeps its 44px minimum height.
 - **Stable filter buttons.** Clear all and the chip remove buttons are built once and relabelled in place; the row is rebuilt only when the set of chips changes. No new token.
+
+## 30. Patterns added in QA round 22 (2026-10-21)
+
+Decision D-104. CSS in `public/css/app.css`.
+
+- **Picked-day price contrast.** `.bk-cal__day.is-picked small` (the small price on a picked check-in or check-out day on the booking calendar) is white in every theme. White on the dark teal is about 5.3:1, and on the light-theme forest green `#0f5132` it is higher; 4.5:1 is needed (WCAG 1.4.3). No new token.
+- **Assistant panel above the phone bottom bar.** Under 560px, `.assist` ends above `.bottomnav`: its `bottom` is `calc(var(--bottomnav-h, 56px) + env(safe-area-inset-bottom))` and its height shrinks by the same amount. `--bottomnav-h` is set on `:root` to the bar's measured height and used by both rules. The bar stays visible and tappable. Pages with no bottom bar (guest pages) and desktop are unchanged.

@@ -566,27 +566,33 @@ function focusPageHeading(root) {
   const h1 = root.querySelector('h1');
   if (h1) { h1.setAttribute('tabindex', '-1'); h1.focus({ preventScroll: true }); }
 }
+let viaRedirect = false; // set just before a redirect so the draw it triggers knows it is one
+// Whether the router should move focus to the page heading after a draw: a new page, the first page drawn, a page drawn
+// under a skeleton, or a redirect (even onto the page already open). Same-page redraws stay with the focus guard in ui.js.
+export const headingFocusDue = ({ drawnPath, path, prevKept, redirected }) => drawnPath === null || drawnPath !== path || !prevKept || redirected;
 export async function render() {
   const seq = ++renderSeq;
   stopRestore();
+  const redirected = viaRedirect; // this draw came from one of the redirects below (even onto the page already open)
+  viaRedirect = false;
   const { path, query } = parseHash();
   const app = document.getElementById('app');
   const route = match(path);
-  if (!route) { navigate(state.user ? homeRoute() : '#/', { replace: true }); return; }
+  if (!route) { viaRedirect = true; navigate(state.user ? homeRoute() : '#/', { replace: true }); return; }
 
-  if (route.access === PUBLIC && isReady(state.user)) { navigate(homeRoute(), { replace: true }); return; }
-  if (route.access === SIGNED_IN && !state.user) { navigate('#/login', { replace: true }); return; }
+  if (route.access === PUBLIC && isReady(state.user)) { viaRedirect = true; navigate(homeRoute(), { replace: true }); return; }
+  if (route.access === SIGNED_IN && !state.user) { viaRedirect = true; navigate('#/login', { replace: true }); return; }
   if (route.access === APP && !isReady(state.user)) {
     if (!state.user) { try { sessionStorage.setItem('bh-return', location.hash); } catch { /* ignore */ } }
-    navigate(setupRedirect(), { replace: true });
+    viaRedirect = true; navigate(setupRedirect(), { replace: true });
     return;
   }
 
   // A cleaner opening anything that isn't theirs goes to their jobs, not an error page.
-  if (route.access === APP && state.user?.role === 'cleaner' && !state.user.plan?.card_check_due && !isCleanerPath(path)) { navigate('#/housekeeping', { replace: true }); return; }
+  if (route.access === APP && state.user?.role === 'cleaner' && !state.user.plan?.card_check_due && !isCleanerPath(path)) { viaRedirect = true; navigate('#/housekeeping', { replace: true }); return; }
 
   // Pages this role or workspace module can't use go home instead of opening by URL.
-  if (route.access === APP && !routeAllowed(path, state.user)) { if (!otherHome(path, state.user)) toast("That page isn't available for your role or workspace.", 'error'); navigate(homeRoute(), { replace: true }); return; }
+  if (route.access === APP && !routeAllowed(path, state.user)) { if (!otherHome(path, state.user)) toast("That page isn't available for your role or workspace.", 'error'); viaRedirect = true; navigate(homeRoute(), { replace: true }); return; }
 
   document.querySelectorAll('dialog.modal, .morenav, .tb-sheet').forEach((d) => d.remove());
   delete document.documentElement.dataset.h1title; // set below when a guest page's tab title is taken from its heading
@@ -649,7 +655,7 @@ export async function render() {
     const title = mount.querySelector('h1')?.textContent;
     document.title = title ? `${title} — BalayHub` : 'BalayHub';
     // A page drawn under a skeleton (no old page kept) lost the old heading's focus, even when a redirect landed on the page it left (Reports to Stay reports).
-    if (drawnPath !== null && (!prev || drawnPath !== path)) focusPageHeading(mount);
+    if (headingFocusDue({ drawnPath, path, prevKept: Boolean(prev), redirected })) focusPageHeading(mount);
     drawnPath = path;
   } else {
     lastDrawing = null;
@@ -667,7 +673,7 @@ export async function render() {
       if (!PUBLIC_TITLES[path]) document.documentElement.dataset.h1title = '1';
     }
     if (seq === renderSeq) {
-      if (drawnPath !== null && drawnPath !== path) focusPageHeading(mount);
+      if (headingFocusDue({ drawnPath, path, prevKept: true, redirected })) focusPageHeading(mount);
       drawnPath = path;
     }
   }

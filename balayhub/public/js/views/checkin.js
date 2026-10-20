@@ -174,6 +174,23 @@ export async function guestCheckinView(el, { params }, kept) {
       h('div', { class: 'error', role: 'alert' })),
     submit);
 
+  // A field's message clears as soon as the guest changes that field (a checkbox, when ticked); the banner goes with the last marked field.
+  // Guest rows added later are covered because the listener sits on the form. The Other guests message waits until no blank row is left.
+  const clearFieldError = (e) => {
+    const row = e.target.closest?.('.gc__guest');
+    if (row) row.classList.remove('field--invalid');
+    const wrap = e.target.closest?.('[data-field]');
+    if (!wrap?.classList.contains('field--invalid')) return;
+    if (row && others.querySelector('.field--invalid')) return;
+    wrap.classList.remove('field--invalid');
+    wrap.querySelectorAll('[aria-invalid]').forEach((f) => f.removeAttribute('aria-invalid'));
+    const err = wrap.querySelector('.error');
+    if (err) err.textContent = '';
+    if (!form.querySelector('.field--invalid')) formError.replaceChildren();
+  };
+  form.addEventListener('input', clearFieldError);
+  form.addEventListener('change', clearFieldError);
+
   let busy = false;
   form.addEventListener('submit', async (e) => {
     e.preventDefault();

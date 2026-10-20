@@ -96,6 +96,12 @@ async function askToSendPayLink(reservationId) {
   if (send) await sendPayLink(reservationId);
 }
 
+// Void button name. Charges sharing a description get "(n of total)" by list place; voided rows count too, so the place never shifts after a void.
+export function voidLabel(charges, c) {
+  const same = charges.filter((x) => x.description === c.description);
+  return same.length > 1 ? `Void ${c.description} (${same.indexOf(c) + 1} of ${same.length})` : `Void ${c.description}`;
+}
+
 export async function chargesCard(reservation, rerender) {
   const id = reservation.booking_id;
   let data;
@@ -132,7 +138,7 @@ export async function chargesCard(reservation, rerender) {
       h('div', { style: { textAlign: 'right', whiteSpace: 'nowrap' } },
         h('div', { class: voided ? 'strike muted' : undefined, style: { fontWeight: 700, fontVariantNumeric: 'tabular-nums' } }, peso(c.amount)),
         canEdit && !voided && h('button', {
-          class: 'btn btn--secondary btn--sm', type: 'button', 'aria-label': `Void ${c.description}`, onclick: () => voidCharge(c),
+          class: 'btn btn--secondary btn--sm', type: 'button', 'aria-label': voidLabel(data.charges, c), 'data-focus-key': `charge-void-${c.charge_id}`, onclick: () => voidCharge(c),
         }, 'Void')));
   };
 

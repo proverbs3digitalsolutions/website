@@ -206,7 +206,8 @@ export async function tenantsView(el, { query }) {
     tabs, barBox,
     listCard);
   // The top bar's Add new (?new=1) opens the tenant dialog once: the flag leaves the route's query, and load() has already written the address without it. Saving reloads the list.
-  if (query?.new && canManage) { delete query.new; newTenantModal({ onSaved: () => load() }); }
+  // It opens after the page is drawn (setTimeout 0): opened during the draw, Escape would hand focus to the body instead of the heading (PHN-1).
+  if (query?.new && canManage) { delete query.new; setTimeout(() => { if (el.isConnected) newTenantModal({ onSaved: () => load() }); }, 0); }
 }
 
 // ---------------------------------------------------------------- detail

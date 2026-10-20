@@ -361,30 +361,34 @@ export function filterBar({ key, values, defaults, search, quick = [], more = []
     // chip or Clear all, and a button replaced mid-press loses its click. The row is touched only when its buttons change.
     const next = [
       ...(q ? [chip('q', `Remove search ${q}`, `“${q}”`, () => { values[search.name || 'q'] = ''; searchInput.value = ''; })] : []),
-      ...active.map(([f, t]) => chip('f:' + (f.name || rangeKeys(f)[0]), `Remove filter ${t}`, t, () => { clearField(f, values, defaults); controls.forEach((c) => c.sync()); })),
+      ...active.map(([f, t]) => chip('f:' + (f.name || rangeKeys(f)[0]), `Remove filter ${t}`, t, () => { clearField(f, values, defaults); controls.forEach((c) => c.sync()); }, f.name)),
     ];
     if (q || active.length > 0) next.push(clearBtn);
     if (next.length !== chips.children.length || next.some((b, i) => b !== chips.children[i])) chips.replaceChildren(...next);
   }
   const chipBtns = new Map();
-  const clearBtn = h('button', { type: 'button', class: 'flt__clear', onclick: () => { keepPlace(); clearAll(); } }, 'Clear all');
+  const clearBtn = h('button', { type: 'button', class: 'flt__clear', onclick: () => { keepPlace(''); clearAll(); } }, 'Clear all');
   // A mouse press on a chip button must not take focus: that would blur a half-typed number box, commit it and redraw the row
   // under the pointer, and the click would be lost. The click still fires; keyboard focus and activation are unchanged.
   const noFocusSteal = (b) => b.addEventListener('mousedown', (e) => e.preventDefault());
   noFocusSteal(clearBtn);
-  function chip(k, label, text, undo) {
+  function chip(k, label, text, undo, name) {
     let c = chipBtns.get(k);
-    if (!c) { c = { btn: h('button', { type: 'button', class: 'flt__chip' }), text: null, undo: null }; c.btn.addEventListener('click', () => { keepPlace(); c.undo(); emit(); }); noFocusSteal(c.btn); chipBtns.set(k, c); }
+    if (!c) { c = { btn: h('button', { type: 'button', class: 'flt__chip' }), text: null, undo: null }; c.btn.addEventListener('click', () => { keepPlace(c.name); c.undo(); emit(); }); noFocusSteal(c.btn); chipBtns.set(k, c); }
     c.undo = undo;
+    c.name = name;
     if (c.text !== text) { c.text = text; c.btn.replaceChildren(text, h('span', { 'aria-hidden': 'true' }, ' ×')); }
     c.btn.setAttribute('aria-label', label);
     return c.btn;
   }
   function emit() { rememberFilters(key, values); paint(); onChange(); }
   // A chip that was removed leaves the row, so a keyboard user's focus moves to the Filters button first (else the
-  // search box). It is the point of the action, and a page that rebuilds its bar lands on the same button (see `old` below).
-  function keepPlace() {
-    const el = moreBtn && moreBtn.style.display !== 'none' ? moreBtn : searchInput;
+  // search box, else the filter's own control, else the first control in the bar). A quick-only bar on a wide screen has
+  // no Filters button or search box (Cleaner pay), and focus on the page body would send the page back to the top.
+  // It is the point of the action, and a page that rebuilds its bar lands on the same control (see `old` below).
+  function keepPlace(name) {
+    const own = (n) => (n ? root.querySelector(`[data-flt="${n}"]`) : null);
+    const el = moreBtn && moreBtn.style.display !== 'none' ? moreBtn : searchInput || own(name) || root.querySelector('.flt__bar [data-flt]');
     el?.focus?.({ preventScroll: true });
   }
   function clearAll() {
@@ -425,6 +429,15 @@ export function filterBar({ key, values, defaults, search, quick = [], more = []
   const focusName = old ? document.activeElement.getAttribute?.('data-flt') : null;
   const byLabel = !more.length && quick.some((f) => !f.type || f.type === 'select');
   const root = h('div', { class: 'flt' }, h('div', { class: 'toolbar flt__bar' }, extra, searchEl, byLabel && h('span', { class: 'flt__by muted small' }, filterIcon(), 'Filter by'), quickEls, moreBtn), panel, chips);
+  // Escape closes the open Filters panel from inside it (or from its button) and puts focus on the button. An open dialog keeps its own Escape.
+  if (panel) root.addEventListener('keydown', (e) => {
+    const a = document.activeElement;
+    if (e.key !== 'Escape' || panel.hidden || moreBtn.style.display === 'none' || document.querySelector?.('dialog.modal[open]')) return;
+    if (a !== moreBtn && !panel.contains?.(a)) return;
+    toggle(false);
+    moreBtn.focus({ preventScroll: true });
+    e.preventDefault();
+  });
   // Phones: the quick filters sit in the Filters panel, so the search box and the button share one row and the list starts near the top.
   const byEl = root.querySelector?.('.flt__by');
   const grid = panel?.firstChild;

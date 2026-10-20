@@ -1,6 +1,6 @@
 // Pricing rules: how nightly prices are worked out, seasons, and the PH holiday calendar.
 
-import { get, post, patch, qs, ApiError } from '../api.js';
+import { get, post, patch, qs } from '../api.js';
 import { h, peso, parseAmount, fmtDate, field, formModal, openModal, confirmDialog, emptyState, pageHead, toast, todayManila, showErrors } from '../ui.js';
 import { highRateOk } from '../rates.js';
 import { state } from '../app.js';
@@ -76,7 +76,13 @@ export function seasonModeProblem({ mode, nightly_rate: rate, adjust_pct: pct })
   if (mode === 'pct' && blank(pct)) return { adjust_pct: 'Enter a percentage change.' };
   return null;
 }
-const pctNum = (v) => (v === '' || v === undefined || v === null ? v : Number(v));
+// The price-box problem and the date-order problem together, so one Save shows both (QA round 22, MNY-1b).
+export function seasonProblems(d) {
+  const p = { ...seasonModeProblem({ mode: d.price_mode, ...d }) };
+  if (d.start_date && d.end_date && d.end_date < d.start_date) p.end_date = 'The last night must be on or after the first night.';
+  return Object.keys(p).length ? p : null;
+}
+const pctNum =(v) => (v === '' || v === undefined || v === null ? v : Number(v));
 
 export async function pricingView(el, { rerender }) {
   const { listings, seasons, holidays, rules } = await get('/pricing');
@@ -99,10 +105,9 @@ export async function pricingView(el, { rerender }) {
         field({ name: 'adjust_pct', label: 'Change (%)', type: 'number', min: -90, max: 300, step: 1, inputmode: 'numeric', hint: 'From -90 to 300. Use a minus for a discount, e.g. -10.' })),
       field({ name: 'min_nights', label: 'Minimum nights', type: 'number', min: 1, max: 60, inputmode: 'numeric', hint: 'For stays that include any of these nights.' }),
     ],
+    check: (d) => seasonProblems(d),
     onSubmit: async (d, { form }) => {
       const { price_mode: mode, ...body } = d;
-      const problem = seasonModeProblem({ mode, ...d });
-      if (problem) throw new ApiError('Please check the highlighted fields.', { status: 400, code: 'VALIDATION', fields: problem });
       if (mode !== 'fixed') body.nightly_rate = '';
       if (mode !== 'pct') body.adjust_pct = '';
       else body.adjust_pct = pctNum(body.adjust_pct);

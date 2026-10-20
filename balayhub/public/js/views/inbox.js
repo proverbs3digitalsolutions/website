@@ -149,7 +149,7 @@ export async function inboxView(el, { params, query, rerender }) {
   const bar = filterBar({
     key: 'inbox', values: filters, defaults, onChange: load,
     extra: viewSelect,
-    search: { placeholder: 'Guest, listing or code' },
+    search: { placeholder: 'Guest or code', label: 'Search guest, listing or booking code' },
     quick: [{ name: 'unread', label: 'Unread only', type: 'check' }],
     more: [
       { name: 'stay', label: 'Stay', all: 'Any stay', options: [['upcoming', 'Upcoming'], ['in_house', 'Staying now'], ['past', 'Checked out'], ['cancelled', 'Cancelled']] },

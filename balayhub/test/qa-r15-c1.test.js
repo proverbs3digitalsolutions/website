@@ -188,7 +188,8 @@ test('on phones the Ask sheet starts under the top bar, using the same offset as
   const d = declsOf(small, '.assist');
   const offset = 'calc(max(12px, env(safe-area-inset-top)) + 56px)';
   assert.ok(d.includes(`top: ${offset}`), 'top offset');
-  assert.ok(d.includes('height: calc(100dvh - (max(12px, env(safe-area-inset-top)) + 56px))'), 'height reduced by the same amount');
+  assert.ok(d.includes('height: calc(100dvh - (max(12px, env(safe-area-inset-top)) + 56px) - var(--bottomnav-h) - env(safe-area-inset-bottom))'), 'height reduced by the top offset and the bottom bar');
+  assert.ok(d.includes('bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom))'), 'sheet ends above the bottom bar');
   assert.ok(topbar.includes(`top: ${offset}`), 'top bar panels use the same offset');
 });
 
