@@ -24,7 +24,7 @@ export async function pnlView(el, { query = {} } = {}) {
   const filters = initFilters('pnl', query, defaults);
   const thisMonth = todayManila().slice(0, 7);
   const exportLink = h('a', { class: 'btn btn--secondary', download: '' }, 'Download CSV');
-  const box = h('div', { 'aria-live': 'polite' }, h('p', { class: 'muted' }, 'Loading…'));
+  const box = h('div', null, h('p', { class: 'muted' }, 'Loading…')); // the whole table is never a live region (D-114)
   const notice = h('div');
   // Says which stays the month counts (the check-out rule), and where the check-in counts are.
   const basis = h('p', { class: 'muted small' });

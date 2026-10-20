@@ -81,7 +81,7 @@ export async function cleanerPayView(el, { query = {} } = {}) {
   const filters = initFilters('cleaner-pay', query, defaults);
   const thisMonth = todayManila().slice(0, 7);
   const isOwner = state.user.role === 'owner';
-  const box = h('div', { 'aria-live': 'polite' }, skeleton(3));
+  const box = h('div', null, skeleton(3)); // a whole table is never a live region; Mark paid is said by its toast (D-114)
   const ratesBox = h('div');
   const barBox = h('div');
   const selected = new Set();
@@ -336,7 +336,7 @@ export async function myPayView(el, { query = {} } = {}) {
   initGuestLang(state.user?.guest_language);
   const thisMonth = todayManila().slice(0, 7);
   let month = monthOk(query.month) ? query.month : thisMonth;
-  const box = h('div', { 'aria-live': 'polite', class: 'mypay' });
+  const box = h('div', { class: 'mypay' });
   const shift = (m, d) => { const [y, mo] = m.split('-').map(Number); const dt = new Date(Date.UTC(y, mo - 1 + d, 1)); return dt.toISOString().slice(0, 7); };
   const monthName = (m) => new Date(`${m}-01T00:00:00Z`).toLocaleDateString(state.user?.guest_language === 'tl' ? 'fil-PH' : 'en-PH', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
@@ -367,7 +367,7 @@ export async function myPayView(el, { query = {} } = {}) {
         : h('div', { class: 'card' }, emptyState({ iconName: 'inbox', title: t('No cleans finished this month'), text: t('When you finish a clean, your pay shows up here.') })));
   }
 
-  const label1 = h('span', { class: 'mypay__month' });
+  const label1 = h('span', { class: 'mypay__month', 'aria-live': 'polite' }); // the month name says which month now shows (D-114)
   const go = (d) => () => { month = shift(month, d); sync(); load(); };
   const prev = h('button', { class: 'btn btn--secondary mypay__nav', type: 'button', 'aria-label': t('Previous month'), onclick: go(-1) }, '‹');
   const next = h('button', { class: 'btn btn--secondary mypay__nav', type: 'button', 'aria-label': t('Next month'), onclick: go(1) }, '›');

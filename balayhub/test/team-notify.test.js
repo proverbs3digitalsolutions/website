@@ -76,7 +76,7 @@ test('a mention is refused when the person cannot see the reservation, and nothi
   const staffOnly = await owner.post(`/api/inbox/${convA}/messages`, { body: `Hi ${mention(staffU)}`, note: true });
   assert.equal(staffOnly.data.fields.body, 'Only owners and managers can be mentioned.', 'staff cannot be mentioned');
   const made = await owner.post(`/api/inbox/${convA}/messages`, { body: 'Hi @[Nobody](00000000-0000-0000-0000-000000000000)', note: true });
-  assert.equal(made.data.fields.body, 'Unknown person');
+  assert.equal(made.data.fields.body, "That person can't be mentioned. Pick a name from the @ list.");
   assert.equal(await count(), before, 'a refused note is not saved');
 });
 
@@ -249,7 +249,7 @@ test('other workspaces and signed-out visitors get nothing, and staff and cleane
   assert.equal((await other.get(`/api/inbox/assignees?conversation_id=${convA}`)).status, 404);
   assert.equal((await other.get('/api/inbox/assigned-count')).data.count, 0);
   assert.deepEqual((await other.get('/api/inbox/assignees')).data.assignees.map((a) => a.full_name), ['Maria Santos'], 'only their own workspace');
-  assert.equal((await owner.post(`/api/inbox/${convA}/messages`, { body: `Hi ${mention(otherU)}`, note: true })).data.fields.body, 'Unknown person');
+  assert.equal((await owner.post(`/api/inbox/${convA}/messages`, { body: `Hi ${mention(otherU)}`, note: true })).data.fields.body, "That person can't be mentioned. Pick a name from the @ list.");
 
   const anon = client(srv.base);
   assert.equal((await anon.get('/api/inbox/assigned-count')).status, 401);

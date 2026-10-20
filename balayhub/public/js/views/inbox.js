@@ -282,7 +282,8 @@ async function renderThread(pane, id, { status, back, rerender }) {
       meta);
   };
 
-  const thread = h('div', { class: 'inbox__messages', tabindex: '0', role: 'region', 'aria-label': 'Conversation messages', 'aria-live': 'polite' },
+  // The pane is rebuilt on every save, so a live region here never reported a new message; the toast says the save (D-114).
+  const thread = h('div', { class: 'inbox__messages', tabindex: '0', role: 'region', 'aria-label': 'Conversation messages' },
     messages.length ? messages.map(bubble) : h('p', { class: 'muted small center' }, 'No messages yet. Write the first one below.'));
 
   pane.replaceChildren(

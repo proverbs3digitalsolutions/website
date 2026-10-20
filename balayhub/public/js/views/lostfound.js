@@ -13,7 +13,7 @@ export async function lostFoundView(el, { query = {} } = {}) {
   const filters = initFilters('lost-found', query, defaults);
   if (!TABS.some(([s]) => s === filters.status)) filters.status = 'held';
   const tabs = h('div', { class: 'tabs', role: 'tablist' });
-  const box = h('div', { 'aria-live': 'polite' }, skeleton(3));
+  const box = h('div', null, skeleton(3)); // a whole list is never a live region; Mark returned is said by its toast (D-114)
 
   const resolve = (it, status) => formModal({
     title: status === 'returned' ? `Returned: ${it.description}` : `Disposed: ${it.description}`, submitText: status === 'returned' ? 'Mark returned' : 'Mark disposed',

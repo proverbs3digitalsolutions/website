@@ -269,7 +269,7 @@ function losingSeasons(n, seasons, unitId) {
   return lost.length ? h('p', { class: 'muted small' }, overlapLine(n.label, ...lost.map((s) => s.name))) : null;
 }
 function previewCard(listings, seasons) {
-  const out = h('div', { 'aria-live': 'polite' });
+  const out = h('div'); // the 60-night grid is never a live region; the night detail below is (D-114)
   if (!listings.length) return h('div', { class: 'card' }, h('div', { class: 'card__head' }, h('h2', null, 'Price preview')), h('p', { class: 'muted' }, 'Add a listing to see its prices.'));
   const sel = h('select', { class: 'input', id: 'pr-unit', 'aria-label': 'Listing' }, listings.map((l) => h('option', { value: l.unit_id }, `${l.unit_name} · ${l.property_name}`)));
   const from = h('input', { class: 'input', type: 'date', id: 'pr-from', value: todayManila() });
@@ -380,7 +380,10 @@ async function bulkModal({ listings, rerender }) {
   const pctF = wrap('bk-pct', 'Change (%)', pct, 'Use a minus for a discount, e.g. -10. Works from each night\'s current price.', { hidden: true });
   const reasonF = wrap('bk-reason', 'Reason for the block', reason, 'Required. Kept in the audit log.', { hidden: true });
   const err = h('div', { role: 'alert' });
-  const result = h('div', { 'aria-live': 'polite' });
+  // Only the summary line is live; the table of nights is read when the person moves to it (D-114).
+  const resultLine = h('div', { 'aria-live': 'polite' });
+  const resultRest = h('div');
+  const result = h('div', null, resultLine, resultRest);
   const previewBtn = h('button', { class: 'btn btn--secondary', type: 'submit' }, 'Preview');
   const applyBtn = h('button', { class: 'btn btn--primary', type: 'button', disabled: true }, 'Apply');
   const form = h('form', { class: 'form', novalidate: true },
@@ -403,7 +406,7 @@ async function bulkModal({ listings, rerender }) {
     if (b.action === 'block') b.reason = reason.value.trim();
     return b;
   };
-  const stale = () => { applyBtn.disabled = true; result.replaceChildren(); };
+  const stale = () => { applyBtn.disabled = true; resultLine.replaceChildren(); resultRest.replaceChildren(); };
   const sync = () => {
     priceF.hidden = actSel.value !== 'set'; pctF.hidden = actSel.value !== 'percent'; reasonF.hidden = actSel.value !== 'block';
     const tagMode = form.elements.by.value === 'tag';
@@ -453,21 +456,23 @@ async function bulkModal({ listings, rerender }) {
     if (isBlocks()) {
       const rows = r.created || r.cancelled || [];
       total = r.count;
-      result.replaceChildren(
-        h('p', null, h('strong', null, `${total} ${actSel.value === 'block' ? 'block' : 'manual block'}${total === 1 ? '' : 's'} would be ${actSel.value === 'block' ? 'created' : 'cancelled'}.`)),
+      resultLine.replaceChildren(
+        h('p', null, h('strong', null, `${total} ${actSel.value === 'block' ? 'block' : 'manual block'}${total === 1 ? '' : 's'} would be ${actSel.value === 'block' ? 'created' : 'cancelled'}.`)));
+      resultRest.replaceChildren(
         rows.length ? tableOf(['Listing', 'From', 'Last night'], rows.map((x) => [x.unit_name, fmtDate(x.check_in), fmtDate(addDays(x.check_out, -1))])) : null,
         skipped(r.skipped));
     } else {
       const rows = r.changes;
       total = r.count;
-      result.replaceChildren(
+      resultLine.replaceChildren(
         h('p', null, h('strong', null, total ? `${total} night${total === 1 ? '' : 's'} would change.` : 'None of these nights would change.'), total > rows.length ? ` Showing the first ${rows.length}.` : ''),
-        r.below_lowest ? h('div', { class: 'alert alert--warn' }, `${r.below_lowest} night${r.below_lowest === 1 ? '' : 's'} will be below their listing's lowest price. Those prices will be used as set.`) : null,
+        r.below_lowest ? h('div', { class: 'alert alert--warn' }, `${r.below_lowest} night${r.below_lowest === 1 ? '' : 's'} will be below their listing's lowest price. Those prices will be used as set.`) : null);
+      resultRest.replaceChildren(
         rows.length ? tableOf(['Listing', 'Night', 'Now', 'New'], rows.map((x) => [x.unit_name, fmtDate(x.date), x.from_price === null ? '—' : peso(x.from_price), x.to_price === null ? 'Usual price' : peso(x.to_price)])) : null,
         skipped(r.skipped));
     }
     applyBtn.disabled = total === 0;
-    if (total === 0 && isBlocks()) result.append(h('p', { class: 'muted small' }, 'Nothing to change for these choices.'));
+    if (total === 0 && isBlocks()) resultLine.append(h('p', { class: 'muted small' }, 'Nothing to change for these choices.'));
   });
   applyBtn.addEventListener('click', async () => {
     // A typed price above the ceiling is asked about before it is applied; "Change it" puts focus back in the price box.

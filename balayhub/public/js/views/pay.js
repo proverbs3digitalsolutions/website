@@ -194,7 +194,7 @@ function addonsCard(token, reload, snap) {
         btn.textContent = t('Add selected to my bill');
       }
     });
-    card.replaceChildren(h('h2', null, t('Add to your stay')), h('p', { class: 'muted small' }, t('Pick extras before you arrive. They are added to your bill.')), h('div', { class: 'stack' }, h('div', { class: 'gp-addons' }, rows), err, btn)); // .stack puts the same gap above the button as between rows
+    card.replaceChildren(h('h2', null, t('Add to your stay')), h('p', { class: 'muted small' }, t('Pick extras before you arrive. They are added to your bill.')), h('div', { class: 'stack' }, h('div', { class: 'gp-addons', oninput: () => err.replaceChildren() }, rows), err, btn)); // Picking or changing an extra clears the last message about the extras (D-105, D-114). .stack puts the same gap above the button as between rows
     card.hidden = false;
     restoreFormValues(card, snap); // the extras load after the page, so their choices go back here
   }).catch(() => {}); // not offered, or too late: simply don't show the card

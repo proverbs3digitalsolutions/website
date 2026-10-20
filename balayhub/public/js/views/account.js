@@ -69,7 +69,7 @@ function notifyCard(role) {
           const body = { types };
           if (showProps) {
             body.property_ids = all ? null : propBoxes.filter((b) => b.querySelector('input').checked).map((b) => b.querySelector('input').value);
-            if (!all && !body.property_ids.length) { err.textContent = 'Pick at least one property, or choose all properties.'; return; }
+            if (!all && !body.property_ids.length) { err.textContent = 'Pick at least one property, or choose all properties.'; propBoxes[0]?.querySelector('input').focus(); return; } // D-103: the first wrong field gets focus
           }
           save.disabled = true;
           try { await patch('/account/notify-prefs', body); toast('Notification settings saved.'); } catch (ex) { err.textContent = ex.fields.property_ids || ex.fields.types || ex.message; } finally { save.disabled = false; }

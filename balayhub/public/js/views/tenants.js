@@ -3,7 +3,7 @@
 import { get, post, patch, qs, uploadFile, ApiError } from '../api.js';
 import {
   h, icon, peso, fmtDate, badge, label, field, formModal, confirmDialog, emptyState, pageHead, toast,
-  todayManila, manilaDay, filesList, openModal, unitLabel } from '../ui.js';
+  todayManila, manilaDay, filesList, openModal, unitLabel, uploadField, fileRefused } from '../ui.js';
 import { state, navigate } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed, apiFilters } from '../filters.js';
 import { recordPaymentModal } from './rent.js';
@@ -270,21 +270,29 @@ export async function tenantDetailView(el, { params, query, rerender }) {
 
   const leaseDocs = async (lease) => {
     const { files } = await get(`/leases/${lease.lease_id}`);
-    const input = h('input', { type: 'file', accept: 'application/pdf,image/jpeg,image/png,image/webp', class: 'input', 'aria-label': 'Lease document' });
-    const status = h('div');
+    // Named by its visible label (WCAG 2.5.3); a refused file is said on its own line under it, with focus there (D-113, D-114).
+    const input = h('input', { type: 'file', id: 'lease-doc-file', accept: 'application/pdf,image/jpeg,image/png,image/webp', class: 'input', 'aria-describedby': 'lease-doc-hint' });
+    const up = uploadField(input);
+    input.addEventListener('change', up.clear);
+    const status = h('div', { role: 'alert' });
     openModal({
       title: `Lease documents — ${unitLabel(lease.unit_name)}`,
       body: h('div', { class: 'form' },
         filesList(files),
-        h('div', { class: 'field' }, h('label', null, 'Upload signed lease or tenant document'), input, h('div', { class: 'hint' }, 'PDF, JPG, PNG or WEBP up to 10 MB. Stored privately.')),
+        h('div', { class: 'field' }, h('label', { for: 'lease-doc-file' }, 'Upload signed lease or tenant document'), up.wrap, h('div', { class: 'hint', id: 'lease-doc-hint' }, 'PDF, JPG, PNG or WEBP up to 10 MB. Stored privately.')),
         status,
         h('div', { class: 'form-actions' }, h('button', {
           class: 'btn btn--primary', type: 'button',
           onclick: async (e) => {
+            up.clear(); status.replaceChildren();
             const file = input.files[0];
-            if (!file) { status.replaceChildren(h('div', { class: 'alert alert--error' }, 'Choose a file first.')); return; }
+            if (!file) { up.show('Choose a file first.'); return; }
             e.target.disabled = true;
-            try { await uploadFile('lease', lease.lease_id, file); toast('Document uploaded.'); document.querySelector('dialog.modal')?.close(); } catch (err) { status.replaceChildren(h('div', { class: 'alert alert--error' }, err.message)); }
+            try { await uploadFile('lease', lease.lease_id, file); toast('Document uploaded.'); document.querySelector('dialog.modal')?.close(); } catch (err) {
+              e.target.disabled = false;
+              if (fileRefused(err)) up.show(err.message); else status.replaceChildren(h('div', { class: 'alert alert--error' }, err.message));
+              return;
+            }
             e.target.disabled = false;
           },
         }, 'Upload'))),
@@ -361,13 +369,14 @@ export async function tenantDetailView(el, { params, query, rerender }) {
           payments.length ? h('ul', { class: 'list' }, payments.map((p) => h('li', null, h('a', { class: 'row', href: `#/payments/${p.payment_id}` },
             h('div', { class: 'row__main' }, h('span', { class: `row__title${p.voided_at ? ' strike' : ''}` }, fmtDate(p.payment_date)), h('span', { class: 'row__sub' }, `${label(p.payment_method)}${p.reference_number ? ` · Ref ${p.reference_number}` : ''} · ${unitLabel(p.unit_name)}`)),
             h('div', { class: 'row__end' }, h('span', { class: `amount${p.voided_at ? ' strike muted' : ''}` }, peso(p.amount_paid)), p.voided_at && badge('voided', 'Voided'))))))
-            : emptyState({ title: 'No payments recorded', text: 'Recorded payments will appear here.' })),
-        charges.length > 0 && h('div', { class: 'card' },
-          h('div', { class: 'card__head' }, h('h2', null, 'Monthly rent charges')),
-          h('div', { class: 'table-wrap' }, h('table', { class: 'table' },
-            h('thead', null, h('tr', null, h('th', null, 'Due'), h('th', { class: 'num' }, 'Rent'), h('th', { class: 'num' }, 'Paid'), h('th', { class: 'num' }, 'Balance'), h('th', null, 'Status'))),
-            h('tbody', null, chargeRows))),
-          h('p', { class: 'muted small', style: { marginTop: '8px' } }, 'Payments are applied to the oldest unpaid month first.')))),
+            : emptyState({ title: 'No payments recorded', text: 'Recorded payments will appear here.' })))),
+    // Full width under the two columns, so the five columns fit at 1280 (D-114).
+    charges.length > 0 && h('div', { class: 'card' },
+      h('div', { class: 'card__head' }, h('h2', null, 'Monthly rent charges')),
+      h('div', { class: 'table-wrap' }, h('table', { class: 'table' },
+        h('thead', null, h('tr', null, h('th', null, 'Due'), h('th', { class: 'num' }, 'Rent'), h('th', { class: 'num' }, 'Paid'), h('th', { class: 'num' }, 'Balance'), h('th', null, 'Status'))),
+        h('tbody', null, chargeRows))),
+      h('p', { class: 'muted small', style: { marginTop: '8px' } }, 'Payments are applied to the oldest unpaid month first.')),
   );
 
   if (query.assign && canManage && !active) {

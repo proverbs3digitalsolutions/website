@@ -351,9 +351,10 @@ export async function newReservationModal({ unitId, checkIn, onSaved } = {}) {
       quoted = q;
       const nights = q.nights.length;
       const guide = typeMode() ? ` From about ${peso(q.accommodation_total)}${Number(q.cleaning_fee) ? ` + ${peso(q.cleaning_fee)} cleaning` : ''} (${q.unit_name}, the free listing BalayHub would pick now). Each room is priced from the listing BalayHub picks; leave the boxes empty to use that price.` : '';
+      // The line is the rates' price; the Accommodation total box is what saves, and "Use ₱X from your rates" offers the difference (D-114).
       quoteBox.textContent = typeMode() && !q.missing_rates ? `${nights} night${nights > 1 ? 's' : ''}.${guide}` : q.missing_rates
         ? `${nights} night${nights > 1 ? 's' : ''}. This listing has no nightly rate for some nights — enter the total yourself.`
-        : `${nights} night${nights > 1 ? 's' : ''} · ${peso(q.accommodation_total)} for the stay${q.discount_pct ? ` (after ${q.discount_label})` : ''}${Number(q.cleaning_fee) ? ` + ${peso(q.cleaning_fee)} cleaning` : ''}${q.max_guests ? ` · up to ${q.max_guests} guests` : ''}${nightsNote(q)}${q.min_nights > nights ? ` · Note: minimum stay is ${q.min_nights} nights${q.min_nights_reason ? ` during ${q.min_nights_reason}` : ''}.` : ''}`;
+        : `From your rates: ${nights} night${nights > 1 ? 's' : ''} · ${peso(q.accommodation_total)} for the stay${q.discount_pct ? ` (after ${q.discount_label})` : ''}${Number(q.cleaning_fee) ? ` + ${peso(q.cleaning_fee)} cleaning` : ''}${q.max_guests ? ` · up to ${q.max_guests} guests` : ''}${nightsNote(q)}${q.min_nights > nights ? ` · Note: minimum stay is ${q.min_nights} nights${q.min_nights_reason ? ` during ${q.min_nights_reason}` : ''}.` : ''}`;
       applyQuote(q);
     } catch (err) { if (mySeq === seq) { applyQuote(null); quoteBox.textContent = err.message; } }
   }

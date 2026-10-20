@@ -25,7 +25,7 @@ export async function suppliesView(el, { query = {} } = {}) {
   const defaults = { property_id: '', low: '', q: '' };
   const filters = initFilters('supplies', query, defaults);
   const canManage = ['owner', 'manager'].includes(state.user.role);
-  const box = h('div', { 'aria-live': 'polite' }, skeleton(3));
+  const box = h('div', null, skeleton(3)); // a whole list is never a live region; saves are said by their toast (D-114)
   const barBox = h('div');
   let properties = [];
   try { ({ properties } = await get('/properties')); } catch { /* filter stays hidden */ }
@@ -83,7 +83,7 @@ export async function suppliesView(el, { query = {} } = {}) {
 
   // The last 20 movements on one item, loaded when the dialog opens.
   function showHistory(s) {
-    const body = h('div', { 'aria-live': 'polite' });
+    const body = h('div');
     const paint = async () => {
       body.replaceChildren(skeleton(2));
       try {

@@ -64,7 +64,7 @@ async function checkMentions(user, conv, text) {
         AND u.user_id = ANY($2::uuid[])`,
     [user.organization_id, [...typed.keys()], propertyId]);
   const people = new Map(rows.map((r) => [r.user_id, r]));
-  // Staff (and cleaners) exist in the workspace but can't be mentioned: say so rather than "Unknown person".
+  // Staff (and cleaners) exist in the workspace but can't be mentioned: say so rather than the general refusal.
   const { rows: others } = await query(
     `SELECT user_id FROM users WHERE organization_id = $1 AND account_status = 'active' AND user_id = ANY($2::uuid[])`,
     [user.organization_id, [...typed.keys()].filter((id) => !people.has(id))]);
@@ -73,7 +73,7 @@ async function checkMentions(user, conv, text) {
   const mentions = [];
   for (const id of typed.keys()) {
     const p = people.get(id);
-    if (!p) problems.add(known.has(id) ? 'Only owners and managers can be mentioned.' : 'Unknown person');
+    if (!p) problems.add(known.has(id) ? 'Only owners and managers can be mentioned.' : "That person can't be mentioned. Pick a name from the @ list.");
     else if (!p.can_see) problems.add(`${p.full_name} can't see this reservation`);
     else mentions.push({ user_id: p.user_id, full_name: p.full_name });
   }

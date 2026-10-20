@@ -74,7 +74,8 @@ test('the tenant page shows what an archived tenant still owes, which the archiv
 
 test('the tenants screen names the lease file input, states the archive balance, and the dashboard labels archived rows', () => {
   const read = (f) => fs.readFileSync(path.join(__dirname, '..', 'public', 'js', f), 'utf8');
-  assert.match(read('views/tenants.js'), /type: 'file'[^\n]*'aria-label': 'Lease document'/);
+  assert.match(read('views/tenants.js'), /type: 'file', id: 'lease-doc-file'/);
+  assert.match(read('views/tenants.js'), /h\('label', \{ for: 'lease-doc-file' \}/);
   assert.match(read('views/tenants.js'), /They still owe \$\{peso\(/);
   assert.match(read('views/dashboard.js'), /tenant_status === 'archived' \? ' \(archived\)'/);
 });

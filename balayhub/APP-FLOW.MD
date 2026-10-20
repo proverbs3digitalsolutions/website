@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-21 (QA round 31: section 44, the notes in 5.10 and 43.2; D-113). Before that: 2026-10-21 (QA round 30: section 43, the notes in 5, 41.2 and 42.2; D-112). Before that: 2026-10-21 (QA round 29: section 42, a line in 39.3 and the notes in 5.10, 14.9 and 25; D-111). Before that: 2026-10-21 (QA round 28: section 41 and the notes in 29.1, 39.2 and 40.2; D-110). Before that: 2026-10-21 (QA round 27: section 40 and the notes in 29.1 and 30.6; D-109). Before that: 2026-10-21 (QA round 26: section 39 and 33.1; D-108). Before that: 2026-10-21 (QA round 25: section 38, 5.10 and 30 corrected; D-107). Before that: 2026-10-21 (QA round 24: section 37; D-106). Before that: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
+Last updated: 2026-10-21 (QA round 32: section 45 and the notes in 14 and 28.7; D-114). Before that: 2026-10-21 (QA round 31: section 44, the notes in 5.10 and 43.2; D-113). Before that: 2026-10-21 (QA round 30: section 43, the notes in 5, 41.2 and 42.2; D-112). Before that: 2026-10-21 (QA round 29: section 42, a line in 39.3 and the notes in 5.10, 14.9 and 25; D-111). Before that: 2026-10-21 (QA round 28: section 41 and the notes in 29.1, 39.2 and 40.2; D-110). Before that: 2026-10-21 (QA round 27: section 40 and the notes in 29.1 and 30.6; D-109). Before that: 2026-10-21 (QA round 26: section 39 and 33.1; D-108). Before that: 2026-10-21 (QA round 25: section 38, 5.10 and 30 corrected; D-107). Before that: 2026-10-21 (QA round 24: section 37; D-106). Before that: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
 
 ---
 
@@ -671,7 +671,7 @@ Spec: `docs/specs/PHASE-4-GUESTS.md`. Decisions D-57 to D-64. Both the English a
 
 ## 14. Phase 5 flows: pricing, team and operations (built 2026-10-13)
 
-Spec: `docs/specs/PHASE-5-PRICING-TEAM.md`. Decisions D-66 to D-74. Staff and cleaners see none of the pricing or daily close screens. Owners and managers see them for their own properties.
+Spec: `docs/specs/PHASE-5-PRICING-TEAM.md`. Decisions D-66 to D-74. Staff and cleaners see none of the pricing or daily close screens. *Corrected 2026-10-21 (D-114, per D-76): staff can open Pricing and the price preview for their assigned properties, read only (14.1); staff and cleaners see no daily close.* Owners and managers see them for their own properties.
 
 ### 14.1 Host: pricing rules `#/pricing` (changes to 7.4)
 
@@ -1222,7 +1222,7 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 ### 28.7 Other changes from the round 15 sweep
 
 - **My account:** the page title (h1) is "My account"; the person's name is a smaller heading in the card. The Tagalog verify toast follows the chosen language.
-- **Phone bottom bar:** staff and cleaners see **Groups** and **Help** (the sidebar keeps "Group bookings" and "Help & support").
+- **Phone bottom bar:** staff and cleaners see **Groups** and **Help** (the sidebar keeps "Group bookings" and "Help & support"). *These are the bar's short labels. The bar shows the first four menu entries; a staff menu has more, so Help is in More (D-114).*
 - **Theme switch** (Settings, sidebar, More sheet): one Tab stop; the arrow keys, Home and End move and pick; the buttons are 44px tall on phones.
 - **Search:** a capped group says "5 of 8 shown"; a guest result names the latest stay ("Last stay: Oct 16, 2026 – Oct 17, 2026"); "In Settings" for settings; "No results" is one disabled line; one Close button in the phone sheet.
 - **Reservation, add-ons:** a quantity over the limit keeps the typed number, says "Up to 3 Extra mattress per stay." and blocks Save. **Cleaner pay → Payout:** Method starts on "Choose…". A refused custom From date stays when To changes.
@@ -1734,3 +1734,21 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 - **Dialog actions stay in view.** In every dialog, Save and Cancel stick to the bottom of the scrolling part, and a focused field scrolls clear of them.
 - **The page is not one live region.** Only the toasts and the small status areas (filter chips, search status, the assistant list, help suggestions) are read out as they change. A page change is said by focus on its heading, including the "Can't reach BalayHub." page when the app cannot start.
 - **The card check gives the longer wait first.** While the day's card tries are used up, Pay gives that wait and starts nothing (5.10).
+
+## 45. QA round 32 changes (D-114; 2026-10-21)
+
+### 45.1 Accessibility
+- **A whole list is never a live region.** Supplies (the list and an item's History), Cleaner pay (the owner's table and My pay's table), Lost and found, Profit and loss, the inbox conversation and Pricing's price grid no longer read their whole box after each save. What changed is said by the toast, by focus on the page heading, by the pressed tab or filter chip, or by a short status line. Extends 44.3 (D-113).
+- **The bulk-change preview on Pricing reads only its summary line** ("N nights would change.", the below-lowest warning and "Nothing to change for these choices."). The table and the skipped list are read when the person moves to them.
+- **My pay's month name is the live line.** Pressing Previous or Next month says the new month.
+- **A control is named by its visible label.** The Contact support screenshot box is "Screenshot (optional)", and the tenant's lease document box is "Upload signed lease or tenant document" (extends 44.1).
+- **Text on a tinted fill is readable in dark mode.** The selected saved view, the Direct badge, the selected @ name, listing tags and the owner portal's feed kind label use the dark ink colour; the owner portal's current tab uses the green text colour. Light mode looks the same.
+- **A notification save with no property picked** says "Pick at least one property, or choose all properties." and puts focus on the first property box (D-103).
+
+### 45.2 Tenants and money
+- **A refused lease document says so on its own line,** under the lease document box, with focus there (extends 44.1). "Choose a file first." shows there too.
+- **Monthly rent charges is a full-width card** under the two columns, so all five columns fit at 1280. Payment history stays in the right column.
+- **The New reservation price line starts "From your rates:".** The Accommodation total box is what saves; the offer "Use ₱X from your rates" is unchanged.
+- **"What happened is required."** is the message when Contact support's body is empty.
+- **A mention of someone not on the team** says "That person can't be mentioned. Pick a name from the @ list." Staff and cleaners keep "Only owners and managers can be mentioned."
+- **The guest's "Choose at least one extra."** clears when the guest picks or changes an extra (extends 43.3).

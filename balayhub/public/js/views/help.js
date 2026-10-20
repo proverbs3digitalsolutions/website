@@ -143,7 +143,7 @@ export async function helpNewView(el, { query }) {
     }, 400);
   };
 
-  const screenshot = h('input', { type: 'file', name: 'screenshot', id: 'support-screenshot', class: 'input', 'aria-describedby': 'support-screenshot-err', accept: 'image/jpeg,image/png,image/webp,application/pdf', 'aria-label': 'Screenshot or file' });
+  const screenshot = h('input', { type: 'file', name: 'screenshot', id: 'support-screenshot', class: 'input', 'aria-describedby': 'support-screenshot-err', accept: 'image/jpeg,image/png,image/webp,application/pdf' });
   const subject = field({ name: 'subject', label: 'Subject', required: true, maxlength: 150, placeholder: longTerm ? 'e.g. Rent reminder not sent to my tenant' : 'e.g. Airbnb not syncing', value: query.subject || '', fromLink: Boolean(query.subject) });
   subject.querySelector('input').addEventListener('input', (e) => suggest(e.target.value));
 
@@ -157,7 +157,7 @@ export async function helpNewView(el, { query }) {
           options: [['normal', 'Normal'], ['urgent', 'Urgent — guests or payments affected now']] })),
       subject,
       suggestBox,
-      field({ name: 'body', label: 'What happened?', type: 'textarea', required: true, maxlength: 8000,
+      field({ name: 'body', label: 'What happened?', msgLabel: 'What happened', type: 'textarea', required: true, maxlength: 8000,
         placeholder: 'What were you trying to do, and what happened instead?' }),
       h('div', { class: 'field', dataset: { field: 'screenshot' } }, h('label', { for: 'support-screenshot' }, 'Screenshot (optional)'), screenshot,
         h('div', { class: 'hint' }, 'Please hide passwords and guests’ ID numbers before you send a screenshot.'),
