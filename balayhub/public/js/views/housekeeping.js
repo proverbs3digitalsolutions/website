@@ -34,6 +34,7 @@ extendTranslations({
   'Add photos of the finished unit or any damage found.': 'Maglagay ng litrato ng natapos na unit o ng anumang sira.',
   'Add photo': 'Magdagdag ng litrato', 'Photo uploaded.': 'Na-upload na ang litrato.',
   'Choose a photo': 'Pumili ng litrato', 'No photos yet.': 'Wala pang litrato.', 'Upload a JPG, PNG or WEBP photo up to 10 MB.': 'Mag-upload ng JPG, PNG o WEBP na litrato, hanggang 10 MB.',
+  'This file is empty. Choose the file again.': 'Walang laman ang file. Piliin ulit ang file.',
   'Report damage': 'I-report ang sira', 'Found an item': 'May nakitang gamit', 'Supplies used': 'Mga gamit na nagamit', 'Something broken?': 'May sira ba?',
   'Description': 'Paglalarawan', 'What happened?': 'Ano ang nangyari?', 'Send report': 'Ipadala ang report',
   'Damage reported. Thank you.': 'Na-report na ang sira. Salamat.',
@@ -227,7 +228,13 @@ const unitChip = (st) => badge(...(UNIT_STATUS[st] ? [UNIT_STATUS[st][0], T(UNIT
 const PRIORITIES = [['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['urgent', 'Urgent']];
 
 const photoInput = () => h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', class: 'input', capture: 'environment', 'aria-label': T('Photo (optional)') });
-const photoField = (input) => h('div', { class: 'field' }, h('label', null, T('Photo (optional)')), input);
+const photoField = (input) => h('div', { class: 'field', 'data-field': 'photo' }, h('label', null, T('Photo (optional)')), input, h('div', { class: 'error', role: 'alert' }));
+// A photo that is empty, the wrong type or over 10 MB is refused before a record is saved or a request sent.
+export function photoProblem(file) {
+  if (!file) return null;
+  if (!file.size) return T('This file is empty. Choose the file again.');
+  return ['image/jpeg', 'image/png', 'image/webp'].includes(file.type) && file.size <= 10 * 1024 * 1024 ? null : T('Upload a JPG, PNG or WEBP photo up to 10 MB.');
+}
 
 // Unticked checklist items, counted from the checkbox states on screen.
 export function uncheckedCount(states) {
@@ -503,6 +510,7 @@ function damageModal(task, onSaved) {
   const photo = photoInput();
   formModal({
     title: T('Report damage'), submitText: T('Send report'),
+    check: () => { const p = photoProblem(photo.files[0]); return p ? { photo: p } : null; },
     fields: [
       field({ name: 'description', label: T('What happened?'), type: 'textarea', required: true, maxlength: 1000 }),
       canManage() && field({ name: 'estimated_cost', label: 'Estimated cost', type: 'money' }),
@@ -523,6 +531,7 @@ function lostFoundModal(task, onSaved) {
   const photo = photoInput();
   formModal({
     title: T('Found an item'), submitText: T('Save item'),
+    check: () => { const p = photoProblem(photo.files[0]); return p ? { photo: p } : null; },
     fields: [
       field({ name: 'description', label: T('What did you find?'), required: true, maxlength: 300 }),
       field({ name: 'found_where', label: T('Where was it found?'), maxlength: 200 }),
@@ -582,7 +591,7 @@ async function suppliesModal(task, onSaved) {
       // A use above what is on hand goes out with record_on_hand only once the owner has confirmed it; the server refuses it otherwise.
       const short = uses.filter((x) => Number(x.qty.value) > Number(x.sp.on_hand));
       const items = filled.map((r) => ({ supply_id: r.sp.supply_id, kind: r.kind.value, quantity: Number(r.qty.value), ...(short.includes(r) ? { record_on_hand: true } : {}) }));
-      if (!items.length) throw new ApiError(T('Enter a quantity for at least one item.'), { status: 400 });
+      if (!items.length) refuse(T('Enter a quantity for at least one item.'), rows.slice(0, 1));
       for (const r of short) {
         const asked = qtyLabel(Number(r.qty.value), r.sp.unit_label);
         const onHand = qtyLabel(Number(r.sp.on_hand), r.sp.unit_label);
@@ -626,6 +635,7 @@ function inspectModal(task, onSaved) {
   });
   formModal({
     title: 'Inspect cleaning', submitText: 'Save inspection',
+    check: () => { const p = photoProblem(photo.files[0]); return p ? { photo: p } : null; },
     fields: [
       h('p', { class: 'hint' }, 'Untick any item that was not done well. A failed inspection reopens the task.'),
       h('ul', { class: 'hk-checklist' }, rows.map((r) => r.node)),
@@ -714,9 +724,11 @@ export async function housekeepingDetailView(el, { params, rerender }) {
     onclick: (e) => { if (uploading) e.preventDefault(); },
     onchange: async () => {
       if (uploading || !upload.files[0]) return;
+      const bad = photoProblem(upload.files[0]);
+      if (bad) { toast(bad, 'error'); upload.value = ''; return; }
       uploading = true;
       upload.setAttribute('aria-disabled', 'true');
-      try { await uploadFile('cleaning', t.task_id, upload.files[0]); upload.value = ''; toast(T('Photo uploaded.')); rerender(); } catch (err) { toast(err.code === 'UNSUPPORTED_FILE' || err.status === 413 ? T('Upload a JPG, PNG or WEBP photo up to 10 MB.') : err.message, 'error'); upload.value = ''; } finally { uploading = false; upload.removeAttribute('aria-disabled'); }
+      try { await uploadFile('cleaning', t.task_id, upload.files[0]); upload.value = ''; toast(T('Photo uploaded.')); rerender(); } catch (err) { toast(err.code === 'EMPTY_FILE' ? T('This file is empty. Choose the file again.') : err.code === 'UNSUPPORTED_FILE' || err.status === 413 ? T('Upload a JPG, PNG or WEBP photo up to 10 MB.') : err.message, 'error'); upload.value = ''; } finally { uploading = false; upload.removeAttribute('aria-disabled'); }
     },
   });
   const actionBtn = (text, fn) => h('button', { class: 'btn btn--secondary hk-action', type: 'button', onclick: () => fn(t, rerender) }, text);

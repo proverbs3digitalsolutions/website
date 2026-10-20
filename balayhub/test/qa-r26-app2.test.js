@@ -16,7 +16,7 @@ test('PHN-2: replaceState wrapper moves lastHash with the address it rewrote', (
   const run = (last) => {
     const loc = { hash: '#/reservations?new=1' };
     const st = { lastHash: last };
-    const fn = new Function('location', 'replaceState', 'entryKey', 'st', `let lastHash = st.lastHash; const history = {}; ${src}; history.replaceState(null, '', 'x'); st.lastHash = lastHash;`);
+    const fn = new Function('location', 'replaceState', 'entryKey', 'st', `let lastHash = st.lastHash; const history = {}; let routerWrite = false; const staleAddress = () => false; const match = () => null; ${src}; history.replaceState(null, '', 'x'); st.lastHash = lastHash;`);
     fn(loc, () => { loc.hash = '#/reservations?view=upcoming'; }, () => null, st);
     return st.lastHash;
   };

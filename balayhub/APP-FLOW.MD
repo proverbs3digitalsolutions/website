@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-21 (QA round 27: section 40 and the notes in 29.1 and 30.6; D-109). Before that: 2026-10-21 (QA round 26: section 39 and 33.1; D-108). Before that: 2026-10-21 (QA round 25: section 38, 5.10 and 30 corrected; D-107). Before that: 2026-10-21 (QA round 24: section 37; D-106). Before that: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
+Last updated: 2026-10-21 (QA round 28: section 41 and the notes in 29.1, 39.2 and 40.2; D-110). Before that: 2026-10-21 (QA round 27: section 40 and the notes in 29.1 and 30.6; D-109). Before that: 2026-10-21 (QA round 26: section 39 and 33.1; D-108). Before that: 2026-10-21 (QA round 25: section 38, 5.10 and 30 corrected; D-107). Before that: 2026-10-21 (QA round 24: section 37; D-106). Before that: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
 
 ---
 
@@ -1233,7 +1233,7 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 ## 29. QA round 16 changes (D-97; 2026-10-15)
 
 ### 29.1 Navigation
-- **Back keeps your place.** Browser Back, or a page's `‹ Back` link that points at the page you came from, returns to the same scroll place. The page waits up to 1.5 seconds for the list to load, then restores the place; any scroll, tap or key press cancels it. A new page starts at the top. This holds after a link or address to the page already on screen (D-109).
+- **Back keeps your place.** Browser Back, or a page's `‹ Back` link that points at the page you came from, returns to the same scroll place. The page waits up to 1.5 seconds for the list to load, then restores the place; any scroll, tap or key press cancels it. A new page starts at the top. This holds after a link or address to the page already on screen (D-109). This holds on guest pages and the owner portal too, and after a link that opens a new view of the page already showing (D-110).
 - **The other module's home goes home quietly.** Opening `#/dashboard` on a stays workspace, or `#/home` on a rentals workspace, goes to the workspace's own home with no message. Any other refused page still says "That page isn't available for your role or workspace." The Privacy page logo goes to the workspace's own home.
 
 ### 29.2 Reservations
@@ -1624,7 +1624,7 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 
 ### 39.2 Forms, drafts and receipts
 - **Dialogs that back out of a question** ("Check the amount", Record more than the balance, a high nightly rate, Change this rate, an ended discount code, End lease's question): answering "Change it" or pressing Escape keeps the typed draft, so reopening shows it. Cancel still discards it.
-- **Receipt file:** an empty file is refused before saving: "This file is empty. Choose the receipt file again." (the type and size messages are unchanged).
+- **Receipt file:** an empty file is refused before saving: "This file is empty. Choose the receipt file again." (the type and size messages are unchanged). *Now "This file is empty. Choose the file again." (D-110).*
 - **Receipt upload fails after the save** (Add expense, Record payment): one error message names both: "Expense saved, but the receipt didn't upload: {reason}" or "Payment saved, but the receipt didn't upload: {reason}". "Expense saved." / "Payment saved." is not shown.
 - **Edit reservation:** check-out on or before check-in shows "Check-out must be after check-in." together with the guest-count message in one save.
 - **Add a season:** a fixed price of zero or less shows "Nightly rate must be greater than zero." together with a bad minimum stay in one save.
@@ -1650,7 +1650,7 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 ### 40.2 Money rules and forms
 - **Repair cost above ₱50,000.** Maintenance > a repair request > **Add cost** asks **Check the amount** ("This expense is ₱… . Save anyway?"; **Save anyway** / **Change it**), the same as every expense screen. Change it keeps the form and puts focus in the amount box. Save anyway records the cost ("Cost recorded."). Exactly ₱50,000 does not ask (30.6, D-109).
 - **Return deposit: one save reports every problem.** The reason is checked together with the other fields, before the early-return question: a deduction above the deposit (the existing sentence), and a deduction above 0 with no reason: "Explain the deduction (the guest sees this)." Reason shows its red asterisk and `aria-required` while the deduction is above 0, and neither at 0. The early-return question appears only after the form is clean.
-- **An empty receipt or attachment on an existing expense or payment.** Upload receipt (expense) and Upload attachment (payment) refuse a 0-byte file before anything is sent: "This file is empty. Choose the receipt file again." The button stays enabled. The type and size messages are unchanged (extends 39.2).
+- **An empty receipt or attachment on an existing expense or payment.** Upload receipt (expense) and Upload attachment (payment) refuse a 0-byte file before anything is sent: "This file is empty. Choose the receipt file again." The button stays enabled. The type and size messages are unchanged (extends 39.2). *Now "This file is empty. Choose the file again." (D-110).*
 
 ### 40.3 Guests and groups
 - **A group booking that joins a saved guest says so.** When a new lead guest's email and first name match a saved guest under a different name, the toast reads "Group booking created. Saved under the existing guest {name} (same email and first name)." The typed name is not stored. A brand-new email, a guest picked from the list, or the same name (case and spaces aside) gives "Group booking created." only (30.2, D-99 S1).
@@ -1659,3 +1659,22 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 - **Confirm your card, with the payment provider unreachable.** The one outage sentence, "We couldn't reach the payment service. Nothing was charged. Please try again in a moment.", now also appears when an earlier ₱20 attempt is still open (before, a different sentence was shown in that case). Same on both pay buttons (32.2, D-107 CARD-3).
 - **Daily close, a closed day.** The closed line names the day first: "Oct 17, 2026 was closed on Oct 20, 2026, 7:51 PM by {name}" and, only when there is a note, ": {note}".
 - **Toasts are read once.** Each toast is read through the one toast area. A toast carries no role of its own, so a screen reader does not say it twice. Error toasts keep their red style and are read politely with the others. A form's own error summary is still announced at once (DESIGN-BRIEF 35).
+
+## 41. QA round 28 changes (D-110; 2026-10-21)
+
+### 41.1 Back, address and focus
+- **Back and the "‹" links keep your place on guest pages and in the owner portal.** Going Back from a listing or a booking page, and "‹ All places", return to the saved scroll place, as they do in the signed-in app. Extends 29.1 (D-110).
+- **Back keeps your place after a link to a new view of the page already on screen.** The sidebar Reservations link opens the list on a new address; a row opened from it and "‹ Reservations" return to the place you saw when the list was drawn. A link to the page already open still keeps its old scroll while the page redraws (D-97).
+- **A slow page never writes the address after you moved on.** A page that finishes loading after you went somewhere else (Calendar arriving after Inbox) does not change the address. A view's own address changes still work: filters, opening a conversation (`/inbox` and `/inbox/<id>` are one page), and the router's own redirects.
+- **Keyboard focus clears the top bar at every width.** A focused control is never under the sticky top bar (WCAG 2.4.11). On phones the reservations list box is no longer a Tab stop; a table box is a Tab stop only while it scrolls sideways.
+- **A tap on a reservation card's guest name opens the reservation on a phone.** A tap no longer scrolls the list to its end (PHONE-TAP, the carry fix that landed before the round).
+
+### 41.2 Files
+- **One sentence for an empty file, before anything is sent:** "This file is empty. Choose the file again." (Housekeeping, for cleaners: "Walang laman ang file. Piliin ulit ang file.") It is said on every upload control: deposit damage photo, housekeeping Photos, maintenance attachment, Help screenshot and reply, tenant documents, and expense and payment receipts and attachments. No request is sent. *Supersedes the receipt wording in 39.2 and 40.2 (D-110).*
+- **Forms that save a record and then attach a file check the file first,** so nothing is saved: Help's Contact support screenshot, and Housekeeping's Report damage, Found an item and Inspect cleaning photo. An empty file, a wrong type or a file over 10 MB is refused on its own field, and no ticket or record is created.
+- **Server:** an empty upload gets 400 `EMPTY_FILE` with the same sentence. The check comes after the role and record checks, so an empty upload to a record the person cannot reach gets the access answer, not the file message. A file of the wrong type with content still gets 415 `UNSUPPORTED_FILE`.
+
+### 41.3 Forms
+- **New group booking, one save:** Accommodation total and Cleaning fee are checked on each room's own box: not a valid amount ("… must be a valid amount (e.g. 8500 or 8500.50)."), negative ("… cannot be negative."), and a typed 0 on Accommodation total. Cleaning fee has its own box, like Accommodation total.
+- **Bulk changes, Change prices by %:** the page checks the server's rules before any request: an empty box ("Enter a percentage between -90 and 300."), not a whole number, below -90, above 300, and 0 ("Choose a change other than 0%."). An empty box no longer counts as 0.
+- **Housekeeping, Supplies used:** with every quantity at 0, "Enter a quantity for at least one item." shows on the first quantity row and focus goes to its box.

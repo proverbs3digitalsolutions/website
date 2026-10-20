@@ -76,6 +76,8 @@ export function qs(params) {
 }
 
 export async function uploadFile(recordType, recordId, file) {
+  // An empty file is refused before any request, on every control that uploads (D-110); the server says the same (files.js).
+  if (!file || !file.size) throw new ApiError('This file is empty. Choose the file again.', { status: 400, code: 'EMPTY_FILE' });
   if (file.size > 10 * 1024 * 1024) throw new ApiError('Files must be 10 MB or smaller.', { status: 413 });
   return api('POST', `/files${qs({ record_type: recordType, record_id: recordId })}`, undefined, {
     rawBody: file,

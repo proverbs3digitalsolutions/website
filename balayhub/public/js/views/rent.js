@@ -17,7 +17,7 @@ const RECEIPT_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp
 const RECEIPT_MAX = 10 * 1024 * 1024;
 // One check for the Add forms and both detail-page upload buttons (an empty file is caught on the device, not by the server).
 export function fileProblem(f) {
-  if (f && f.size === 0) return 'This file is empty. Choose the receipt file again.';
+  if (f && f.size === 0) return 'This file is empty. Choose the file again.';
   if (f && (!RECEIPT_TYPES.includes(f.type) || f.size > RECEIPT_MAX)) return 'Upload a PDF, JPG, PNG or WEBP file up to 10 MB.';
 }
 export function receiptProblem(form) {

@@ -1,7 +1,7 @@
 // Group bookings: one lead guest, several listings, normal reservations linked together (D-70).
 
 import { get, post, patch, qs, ApiError } from '../api.js';
-import { h, icon, peso, fmtDate, field, formModal, openModal, makeForm, confirmDialog, emptyState, toast, todayManila } from '../ui.js';
+import { h, icon, peso, fmtDate, parseAmount, field, formModal, openModal, makeForm, confirmDialog, emptyState, toast, todayManila } from '../ui.js';
 import { state, navigate } from '../app.js';
 import { initFilters, filterBar, changed } from '../filters.js';
 import { addDays, boxValue, guestsProblem, matchedGuestNote } from './reservations.js';
@@ -47,7 +47,7 @@ function roomRow({ listings, roomTypes, defaults, onRemove, number = 0 }) {
   const coKey = `check_out-${uid}`;
   const coBox = h('div', { class: 'field', dataset: { field: coKey } }, h('label', { for: `gr-co-${uid}` }, 'Check-out'), co, h('div', { class: 'error', id: `gr-co-${uid}-err`, role: 'alert' }));
   const price = h('input', { class: 'input', id: `gr-price-${uid}`, type: 'text', inputmode: 'decimal', placeholder: 'Per room', 'aria-describedby': `gr-price-${uid}-err` });
-  const cleaning = h('input', { class: 'input', id: `gr-clean-${uid}`, type: 'text', inputmode: 'decimal', placeholder: '0' });
+  const cleaning = h('input', { class: 'input', id: `gr-clean-${uid}`, type: 'text', inputmode: 'decimal', placeholder: '0', 'aria-describedby': `gr-clean-${uid}-err` });
   const note = h('p', { class: 'hint', 'aria-live': 'polite' });
   // Each money box has its own flag: a box the host typed in is never overwritten by a suggestion, and a blank box is open to one again.
   let priceEdited = false; let cleaningEdited = false;
@@ -59,10 +59,11 @@ function roomRow({ listings, roomTypes, defaults, onRemove, number = 0 }) {
   const typeBox = h('div', { class: 'field', dataset: { field: typeKey } }, h('label', { for: `gr-type-${uid}` }, 'Room type'), type, h('div', { class: 'error', id: `gr-type-${uid}-err`, role: 'alert' }));
   // The count, check-in and total boxes are fields the form can mark too, so every problem of a row shows on its own box (see found()).
   const keyed = (name, lbl, input, wrap) => h('div', { class: 'field', dataset: { field: `${name}-${uid}` } }, h('label', { for: `gr-${wrap}-${uid}` }, lbl), input, h('div', { class: 'error', id: `gr-${wrap}-${uid}-err`, role: 'alert' }));
-  const countKey = `count-${uid}`; const ciKey = `check_in-${uid}`; const priceKey = `accommodation_total-${uid}`;
+  const countKey = `count-${uid}`; const ciKey = `check_in-${uid}`; const priceKey = `accommodation_total-${uid}`; const cleanKey = `cleaning_fee-${uid}`;
   const countBox = keyed('count', 'How many', count, 'count');
   const ciBox = keyed('check_in', 'Check-in', ci, 'ci');
   const priceBox = keyed('accommodation_total', 'Accommodation total', h('div', { class: 'input-money' }, price), 'price');
+  const cleanBox = keyed('cleaning_fee', 'Cleaning fee', h('div', { class: 'input-money' }, cleaning), 'clean');
   // The listing box is a field the form can mark, so a row with no listing shows its message on this row (see rooms()).
   const unitKey = `unit_id-${uid}`;
   const unitBox = h('div', { class: 'field', dataset: { field: unitKey } }, h('label', { for: `gr-unit-${uid}` }, 'Listing'), unit, h('div', { class: 'error', id: `gr-unit-${uid}-err`, role: 'alert' }));
@@ -107,7 +108,7 @@ function roomRow({ listings, roomTypes, defaults, onRemove, number = 0 }) {
     h('div', { class: 'grp-room__grid' },
       roomTypes.length > 0 && mk('mode', 'Pick', mode), unitBox, typeBox, countBox,
       ciBox, coBox, guestsBox,
-      priceBox, mk('clean', 'Cleaning fee', h('div', { class: 'input-money' }, cleaning))),
+      priceBox, cleanBox),
     note,
     removeBtn);
 
@@ -123,8 +124,19 @@ function roomRow({ listings, roomTypes, defaults, onRemove, number = 0 }) {
     // A blank, zero, negative or decimal count is refused at this room's guests box, the same rule the reservation form uses.
     const problem = guestsProblem(guests.value);
     if (problem) add(guestsKey, problem, new ApiError(problem, { status: 400, fields: { [guestsKey]: problem } }));
+    // The server's money rule (src/lib/validate.js), checked here so the bad box is marked itself, not left to a banner.
+    const money = (box, key, label) => {
+      const v = box.value.trim();
+      if (!v) return false;
+      const n = parseAmount(v);
+      if (Number.isNaN(n)) { add(key, `${label} must be a valid amount (e.g. 8500 or 8500.50).`); return true; }
+      if (n < 0) { add(key, `${label} cannot be negative.`); return true; }
+      return false;
+    };
+    const priceBad = money(price, priceKey, 'Accommodation total');
+    money(cleaning, cleanKey, 'Cleaning fee');
     // A typed 0 would make the night free. A blank total still means "use the listing's price".
-    if (price.value.trim() && Number(price.value) === 0) {
+    if (!priceBad && price.value.trim() && Number(price.value) === 0) {
       const msg = "Accommodation total must be greater than zero. Leave it blank to use the listing's price.";
       add(priceKey, msg, new Error(msg));
     }
@@ -139,7 +151,7 @@ function roomRow({ listings, roomTypes, defaults, onRemove, number = 0 }) {
   return {
     el,
     // The key of this row's box for a server field name, or null when the row has no box for it.
-    fieldKey: (name) => ({ num_guests: guestsKey, unit_id: unitKey, check_out: coKey, check_in: ciKey, accommodation_total: priceKey, room_type: typeKey })[name] ?? null,
+    fieldKey: (name) => ({ num_guests: guestsKey, unit_id: unitKey, check_out: coKey, check_in: ciKey, accommodation_total: priceKey, cleaning_fee: cleanKey, room_type: typeKey })[name] ?? null,
     // Renumbers the row after a room above it is removed.
     setNumber(n) { num = n; removeBtn?.setAttribute('aria-label', `Remove this room, room ${n}`); },
     // Every problem this row can name, each keyed to its own box, in the order the boxes read; {} when the row is fine.
@@ -209,10 +221,13 @@ export async function newGroupModal({ onSaved } = {}) {
   // Lead guest: pick an existing guest or type a new one.
   let picked = null;
   const guestMode = h('select', { class: 'input', 'aria-label': 'Lead guest' }, h('option', { value: 'new' }, 'New guest'), h('option', { value: 'existing' }, 'Existing guest'));
-  const search = h('input', { class: 'input', type: 'search', placeholder: 'Search by name, email or mobile', 'aria-label': 'Search guests' });
+  // The existing-guest area is a keyed field box, so the "pick them" sentence and the red mark land on it (showErrors drops a key with no box).
+  const GUEST_KEY = 'lead_guest_pick';
+  const guestErrId = `gr-lead-guest-${Math.random().toString(36).slice(2, 7)}-err`;
+  const search = h('input', { class: 'input', type: 'search', placeholder: 'Search by name, email or mobile', 'aria-label': 'Search guests', 'aria-describedby': guestErrId });
   const results = h('ul', { class: 'list grp-guest-results', 'aria-live': 'polite' });
   const chosen = h('div', { class: 'chips' });
-  const existingBox = h('div', { class: 'stack', hidden: true }, search, results, chosen);
+  const existingBox = h('div', { class: 'stack field', hidden: true, dataset: { field: GUEST_KEY } }, search, results, chosen, h('div', { class: 'error', id: `${guestErrId}`, role: 'alert' }));
   const newBox = h('div', { class: 'stack' },
     field({ name: 'guest_name', label: 'Lead guest name', maxlength: 120 }),
     h('div', { class: 'form-row form-row--2' },
@@ -235,6 +250,7 @@ export async function newGroupModal({ onSaved } = {}) {
         results.replaceChildren(...(guests.length ? shown.map((g) => h('li', null, h('button', {
           type: 'button', class: 'grp-guest', onclick: () => {
             picked = g; results.replaceChildren();
+            search.dispatchEvent(new Event('change', { bubbles: true })); // clears the "pick them" mark through the form's change handler
             chosen.replaceChildren(h('span', { class: 'badge badge--active' }, g.full_name), h('button', { type: 'button', class: 'btn btn--ghost btn--sm', onclick: () => { picked = null; chosen.replaceChildren(); } }, 'Change'));
           },
         }, h('strong', null, g.full_name), g.email || g.phone ? h('span', { class: 'muted small' }, ` · ${g.email || g.phone}`) : null))) : [h('li', { class: 'muted small' }, 'No guest found. Switch to "New guest".')]), ...more);
@@ -259,10 +275,10 @@ export async function newGroupModal({ onSaved } = {}) {
   const conflicts = h('div');
   let takenBanner = false; // the form's error line is the ROOMS_TAKEN message
 
-  // The lead guest's own problems: a new guest needs a name; an existing guest must be picked (that line has no box, so it shows in the summary).
+  // The lead guest's own problems: a new guest needs a name; an existing guest must be picked (on the keyed existing-guest box).
   const collect = (d) => groupProblems(
     guestMode.value === 'existing'
-      ? (picked ? {} : { _guest: 'Search for the lead guest and pick them, or switch to "New guest".' })
+      ? (picked ? {} : { [GUEST_KEY]: 'Search for the lead guest and pick them, or switch to "New guest".' })
       : (String(d.guest_name ?? '').trim() ? {} : { guest_name: 'Lead guest name is required.' }),
     rows);
 

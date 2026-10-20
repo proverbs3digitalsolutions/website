@@ -16,7 +16,7 @@ function load() {
 test('fileProblem: empty, wrong type, too big, good, none', () => {
   assert.equal(typeof load().fileProblem, 'function', 'fileProblem exists');
   const { fileProblem } = load();
-  assert.equal(fileProblem({ type: 'application/pdf', size: 0 }), 'This file is empty. Choose the receipt file again.');
+  assert.equal(fileProblem({ type: 'application/pdf', size: 0 }), 'This file is empty. Choose the file again.');
   assert.match(fileProblem({ type: 'text/plain', size: 10 }), /Upload a PDF, JPG, PNG or WEBP file up to 10 MB\./);
   assert.match(fileProblem({ type: 'image/png', size: 11 * 1024 * 1024 }), /up to 10 MB/);
   assert.equal(fileProblem({ type: 'image/jpeg', size: 1024 * 1024 }), undefined);

@@ -70,9 +70,9 @@ test.after(() => { fs.rmSync(dir, { recursive: true, force: true }); });
 // One room row with its check-in and check-out set; returns roomRow()'s handle.
 function roomWith(values = {}) {
   const r = groups.roomRow({ listings: LISTINGS, roomTypes: ROOM_TYPES, defaults: DEFAULTS });
-  // The price box is read by the row's checks now; a real input always has a string value, so the stand-in gives it one.
-  const set = { ci: '2028-07-05', co: '2028-07-06', price: '', ...values };
-  for (const [k, prefix] of [['ci', 'gr-ci-'], ['co', 'gr-co-'], ['price', 'gr-price-']]) {
+  // The price and cleaning-fee boxes are read by the row's checks now; a real input always has a string value, so the stand-in gives them one.
+  const set = { ci: '2028-07-05', co: '2028-07-06', price: '', clean: '', ...values };
+  for (const [k, prefix] of [['ci', 'gr-ci-'], ['co', 'gr-co-'], ['price', 'gr-price-'], ['clean', 'gr-clean-']]) {
     const [el] = walk(r.el, (n) => n.attrs.id?.startsWith(prefix));
     el.value = set[k];
   }

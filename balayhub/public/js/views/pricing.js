@@ -342,7 +342,15 @@ export function bulkProblems(b) {
     else if (n < 0) p.price = 'New price per night cannot be negative.';
     else if (n === 0) p.price = 'New price per night must be greater than zero.';
   }
-  if (b.action === 'percent' && !Number.isFinite(b.percent)) p.percent = 'Enter a percentage between -90 and 300.';
+  // The server's own rules and words (src/routes/bulk.js), checked before any request (D-110).
+  if (b.action === 'percent') {
+    const n = b.percent;
+    if (!Number.isFinite(n)) p.percent = 'Enter a percentage between -90 and 300.';
+    else if (!Number.isInteger(n)) p.percent = 'Change (%) must be a whole number.';
+    else if (n < -90) p.percent = 'Change (%) must be at least -90.';
+    else if (n > 300) p.percent = 'Change (%) must be at most 300.';
+    else if (n === 0) p.percent = 'Choose a change other than 0%.';
+  }
   if (b.action === 'block' && !b.reason) p.reason = 'Add a reason for the block.';
   return p;
 }
@@ -388,7 +396,7 @@ async function bulkModal({ listings, rerender }) {
     const b = { from: from.value, to: to.value, action: actSel.value, dry_run: dry };
     if (form.elements.by.value === 'tag') b.tag = tagSel.value; else b.unit_ids = [...form.querySelectorAll('input[name=unit]:checked')].map((c) => c.value);
     if (b.action === 'set') b.price = price.value.trim();
-    if (b.action === 'percent') b.percent = Number(pct.value);
+    if (b.action === 'percent') b.percent = pct.value.trim() === '' ? NaN : Number(pct.value);
     if (b.action === 'block') b.reason = reason.value.trim();
     return b;
   };

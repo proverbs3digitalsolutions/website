@@ -13,6 +13,8 @@ import { initFilters, filterBar, rememberFilters, changed } from '../filters.js'
 // A screenshot is checked before the ticket is created, so a refused file never leaves the ticket without it.
 export function screenshotError(file) {
   if (!file) return null;
+  // An empty screenshot is refused before the ticket is created (D-110).
+  if (file.size === 0) return 'This file is empty. Choose the file again.';
   const ok = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.type) && file.size <= 10 * 1024 * 1024;
   return ok ? null : 'Upload a PDF, JPG, PNG or WEBP file up to 10 MB.';
 }

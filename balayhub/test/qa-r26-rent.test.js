@@ -18,7 +18,7 @@ const formWith = (file) => ({ querySelector: () => ({ files: file ? [file] : [] 
 
 test('receiptProblem refuses an empty file, accepts a 1 MB JPG, keeps the type and size messages', () => {
   const rp = loadReceiptProblem();
-  assert.equal(rp(formWith({ type: 'application/pdf', size: 0 })), 'This file is empty. Choose the receipt file again.');
+  assert.equal(rp(formWith({ type: 'application/pdf', size: 0 })), 'This file is empty. Choose the file again.');
   assert.equal(rp(formWith({ type: 'image/jpeg', size: 1024 * 1024 })), undefined);
   assert.equal(rp(formWith(null)), undefined);
   assert.match(rp(formWith({ type: 'text/plain', size: 10 })), /Upload a PDF, JPG, PNG or WEBP file up to 10 MB\./);

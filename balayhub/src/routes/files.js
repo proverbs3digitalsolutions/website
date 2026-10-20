@@ -169,6 +169,9 @@ router.post('/files',
     if (type === 'registration' || type === 'listing') throw new HttpError(400, 'Unsupported attachment type.', { code: 'BAD_REQUEST' });
     const recordId = uuidParam(req.query.record_id);
     await checkRecord(req.user, type, recordId);
+    // An empty file is said as empty, not as a wrong type (D-110). Checked after the access checks, so it never
+    // confirms a record the person can't reach.
+    if (req.get('Content-Length') === '0' || (Buffer.isBuffer(req.body) && !req.body.length)) throw new HttpError(400, 'This file is empty. Choose the file again.', { code: 'EMPTY_FILE' });
     const mime = String(req.get('Content-Type') || '').split(';')[0].trim();
     const spec = ALLOWED[mime];
     if (!spec || !Buffer.isBuffer(req.body) || !req.body.length) {

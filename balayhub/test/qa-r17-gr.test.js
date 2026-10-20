@@ -16,7 +16,7 @@ test.before(async () => {
   fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}');
   fs.copyFileSync(path.join(SRC, 'api.js'), path.join(dir, 'api.js'));
   const stub = (names) => names.map((n) => `export const ${n} = () => {};`).join('\n');
-  fs.writeFileSync(path.join(dir, 'ui.js'), stub(['h', 'icon', 'peso', 'fmtDate', 'field', 'formModal', 'openModal', 'makeForm', 'confirmDialog', 'emptyState', 'toast', 'todayManila']));
+  fs.writeFileSync(path.join(dir, 'ui.js'), stub(['h', 'icon', 'peso', 'fmtDate', 'parseAmount', 'field', 'formModal', 'openModal', 'makeForm', 'confirmDialog', 'emptyState', 'toast', 'todayManila']));
   fs.writeFileSync(path.join(dir, 'filters.js'), stub(['initFilters', 'filterBar', 'changed']));
   fs.writeFileSync(path.join(dir, 'app.js'), 'export const state = {}; export const navigate = () => {};\n');
   fs.mkdirSync(path.join(dir, 'views'));

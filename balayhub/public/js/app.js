@@ -317,6 +317,17 @@ export const shouldRestore = (savedY, pageHeight, viewport, elapsed, userActed) 
 // A link or address to the page already on screen makes the browser replace its history entry with a null state. When that entry is the one
 // the router last drew, its key goes back, so its scroll is still remembered and Back still returns to it (D-97, D-109).
 export const keptKey = (stateKey, hash, lastHashNow, lastKeyNow) => (!stateKey && lastKeyNow && hash === lastHashNow ? lastKeyNow : null);
+// A page that finished loading after the person moved to another page must not write its address over the one on screen.
+// Two addresses of one view (a list and its filters, /inbox and /inbox/:id) are the same page (D-110).
+export const staleAddress = (url, onScreen, viewOf) => {
+  if (url == null) return false;
+  const s = String(url);
+  const i = s.indexOf('#');
+  if (i < 0) return false;
+  const a = viewOf(hashPath(s.slice(i)));
+  const b = viewOf(hashPath(onScreen));
+  return Boolean(a && b && a !== b);
+};
 // nav-helpers:end
 const SCROLL_KEEP = 50;
 const positions = new Map(); // entry key -> scrollY
@@ -329,7 +340,10 @@ const entryKey = () => history.state?.bhEntry || null;
 try { history.scrollRestoration = 'manual'; } catch { /* ignore */ }
 // Views call history.replaceState(null, ...) for filter URLs; that must not wipe the entry's key.
 const replaceState = history.replaceState.bind(history);
+// The router's own redirects may change the page; only a view's late write is checked.
+let routerWrite = false;
 history.replaceState = (st, title, url) => {
+  if (!routerWrite && staleAddress(url, location.hash, (p) => match(p)?.view)) return;
   const was = location.hash;
   replaceState(st ?? (entryKey() ? { bhEntry: entryKey() } : null), title, url);
   // A page rewriting its own address (?new=1 becomes ?view=upcoming) is still the page on screen, so keep lastHash in step (popstate compares it).
@@ -340,13 +354,16 @@ function keepEntryKey() {
   const k = keptKey(entryKey(), location.hash, lastHash, lastKey);
   if (k) replaceState({ bhEntry: k }, '');
 }
-window.addEventListener('scroll', () => {
-  keepEntryKey();
-  const k = entryKey();
-  if (!k) return;
+// An entry the person never scrolled still has a place: the one on screen when it was drawn (a page kept on screen keeps its scroll; D-110).
+function rememberPlace(k) {
   positions.delete(k);
   positions.set(k, window.scrollY);
   if (positions.size > SCROLL_KEEP) positions.delete(positions.keys().next().value);
+}
+window.addEventListener('scroll', () => {
+  keepEntryKey();
+  const k = entryKey();
+  if (k) rememberPlace(k);
 }, { passive: true });
 document.addEventListener('click', (e) => {
   const a = e.target instanceof Element ? e.target.closest('a.back') : null;
@@ -381,7 +398,10 @@ function restoreScroll(savedY) {
 }
 
 export function navigate(hash, { replace = false } = {}) {
-  if (replace) history.replaceState({ bhEntry: newKey() }, '', hash); else history.pushState(null, '', hash);
+  if (replace) {
+    routerWrite = true;
+    try { history.replaceState({ bhEntry: newKey() }, '', hash); } finally { routerWrite = false; }
+  } else history.pushState(null, '', hash);
   render();
 }
 
@@ -688,7 +708,7 @@ export async function render() {
     if (seq !== renderSeq) return;
     shell.content.replaceWith(mount);
     shell.content = mount;
-    if (restoreTo !== null) restoreScroll(restoreTo);
+    if (restoreTo !== null) restoreScroll(restoreTo); else rememberPlace(entry);
     const title = mount.querySelector('h1')?.textContent;
     document.title = title ? `${title} — BalayHub` : 'BalayHub';
     // A page drawn under a skeleton (no old page kept) lost the old heading's focus, even when a redirect landed on the page it left (Reports to Stay reports).
@@ -700,8 +720,17 @@ export async function render() {
     lastDrawing = null;
     shell = null;
     shellSig = null;
+    // Guest pages and the owner portal keep their place on Back too (APP-FLOW 29.1, D-110). While a Back restores a place, the old page
+    // stays on screen until the new one is drawn, as in the app.
+    let entry = entryKey();
+    if (!entry) { entry = newKey(); history.replaceState({ bhEntry: entry }, ''); }
+    const restoreTo = positions.has(entry) && entry !== lastKey ? positions.get(entry) : null;
+    if (restoreTo === null && entry !== lastKey) lastForward = { fromHash: lastHash, toKey: entry };
+    if (restoreTo !== null) armRestore();
+    lastKey = entry;
+    lastHash = location.hash;
     const mount = h('div');
-    app.replaceChildren(mount);
+    if (restoreTo === null) app.replaceChildren(mount);
     document.title = RESET_TITLE;
     try { await route.view(mount, ctx); } catch (err) { mount.replaceChildren(pageError(err, render)); }
     // Landing keeps the site title; sign-in pages have friendly h1s, so name them; others use their h1 (minus a leading brand name).
@@ -712,6 +741,8 @@ export async function render() {
       if (!PUBLIC_TITLES[path]) document.documentElement.dataset.h1title = '1';
     }
     if (seq === renderSeq) {
+      if (!mount.isConnected) app.replaceChildren(mount);
+      if (restoreTo !== null) restoreScroll(restoreTo); else rememberPlace(entry);
       if (headingFocusDue({ drawnPath, path, prevKept: true, redirected, addressChange })) focusPageHeading(mount);
       if (layerHadFocus) focusPageHeading(mount);
       rovingTabs(mount);
@@ -725,7 +756,6 @@ function labelTableWraps(root) {
   root.querySelectorAll('.table-wrap:not([role])').forEach((w) => {
     const heading = w.closest('.card, section, main')?.querySelector('h1, h2, h3') || document.querySelector('main h1');
     w.setAttribute('role', 'region');
-    w.setAttribute('tabindex', '0');
     w.setAttribute('aria-label', `${heading?.textContent.trim() || 'Table'} (scrollable)`);
   });
 }
@@ -735,6 +765,11 @@ const cueResize = typeof ResizeObserver === 'function' ? new ResizeObserver((ent
 function updateScrollCue(box) {
   box.classList.toggle('is-more-left', box.scrollLeft > 1);
   box.classList.toggle('is-more-right', box.scrollLeft + box.clientWidth < box.scrollWidth - 1);
+  // A table box is a Tab stop only while it scrolls sideways; stacked phone cards don't (D-110, WCAG 2.4.11).
+  if (box.classList.contains('table-wrap')) {
+    if (box.scrollWidth > box.clientWidth + 1) box.setAttribute('tabindex', '0');
+    else if (document.activeElement !== box) box.removeAttribute('tabindex');
+  }
 }
 function watchScrollCues(root) {
   root.querySelectorAll('.table-wrap, .cal-scroll').forEach((box) => {
@@ -852,8 +887,20 @@ document.addEventListener('focusin', (e) => {
   if (!bar || !window.matchMedia('(max-width: 959px)').matches || !(e.target instanceof Element)) return;
   // The bar's own controls and the layers above the page (chat panel, More sheet, dialogs) don't move with the page, so scrolling would only shift the page.
   if (e.target.closest('.bottomnav, .assist, .morenav, .tb-pop, dialog')) return;
-  const hidden = e.target.getBoundingClientRect().bottom - bar.getBoundingClientRect().top;
-  if (hidden > 0) window.scrollBy(0, hidden + 16);
+  // Round 28 (D-110, WCAG 2.4.11): only a keyboard move needs the help. A tap on text inside a scroll box (tabindex 0 for keyboard scrolling)
+  // also focuses the box, and scrolling then moved the page before the click landed, so a tapped reservation card never opened.
+  try { if (!e.target.matches(':focus-visible')) return; } catch { /* old browser: treat as keyboard */ }
+  const rect = e.target.getBoundingClientRect();
+  const hidden = rect.bottom - bar.getBoundingClientRect().top;
+  if (!(hidden > 0)) return;
+  // Never scroll its top above the top bar: a box taller than the screen would otherwise send the page to its end.
+  // Stop where the browser's own focus scroll stops (app.css scroll-padding-top), so the two never pull against each other.
+  const padTop = parseFloat(window.getComputedStyle?.(document.documentElement)?.scrollPaddingTop) || 0;
+  const topBar = document.querySelector('.topbar');
+  const topH = padTop || (topBar ? topBar.getBoundingClientRect().height : 0);
+  let by = hidden + 16;
+  if (rect.top - topH < by) by = rect.top - topH;
+  if (by > 0) window.scrollBy(0, by);
 });
 
 // Index of the tab an arrow, Home or End key moves to (wraps at the ends); -1 for any other key.
