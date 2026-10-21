@@ -575,18 +575,21 @@ async function suppliesModal(task, onSaved) {
     });
     return;
   }
-  const rows = (supplies || []).map((sp) => ({
-    sp, key: `qty-${sp.supply_id}`, askFirst: canManage(), qty: h('input', { type: 'number', inputmode: 'numeric', min: 0, max: 9999, class: 'input hk-qty', 'aria-label': `${T('Qty')}: ${sp.name}` }),
-    kind: h('select', { class: 'input', 'aria-label': `${T('Used or restocked')}: ${sp.name}` }, h('option', { value: 'used' }, T('Used')), h('option', { value: 'restocked' }, T('Restocked'))),
-  }));
+  const rows = (supplies || []).map((sp) => {
+    const errId = `hk-supply-${sp.supply_id}-err`;
+    return {
+      sp, key: `qty-${sp.supply_id}`, errId, askFirst: canManage(), qty: h('input', { type: 'number', inputmode: 'numeric', min: 0, max: 9999, class: 'input hk-qty', 'aria-label': `${T('Qty')}: ${sp.name}`, 'aria-describedby': errId }),
+      kind: h('select', { class: 'input', 'aria-label': `${T('Used or restocked')}: ${sp.name}` }, h('option', { value: 'used' }, T('Used')), h('option', { value: 'restocked' }, T('Restocked'))),
+    };
+  });
   formModal({
     title: T('Supplies used'), submitText: T('Save'),
-    // Each row has its own error line (the .error inside .field), so a refused quantity shows on its row.
+    // Each row has its own error line (the .error inside .field), an alert tied to its quantity box, so a refused quantity is said on its row (D-121, D-123).
     fields: h('div', { class: 'hk-supply-list' }, rows.map((r) => h('div', { class: 'field', style: { gap: '0' }, 'data-field': r.key },
       h('div', { class: 'hk-supply' },
         h('div', null, h('strong', null, r.sp.name), h('div', { class: 'small muted' }, r.sp.unit_label || '')),
         r.qty, r.kind),
-      h('div', { class: 'error' })))),
+      h('div', { class: 'error', id: r.errId, role: 'alert' })))),
     onSubmit: async () => {
       // A negative or decimal quantity is refused on its own row, never rounded or dropped: nothing is sent until every quantity is a whole, non-negative number.
       const refuse = (msg, list) => {

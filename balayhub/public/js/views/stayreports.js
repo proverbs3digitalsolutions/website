@@ -271,10 +271,11 @@ export async function stayReportsView(el, { query = {} }) {
         text: narrowed ? 'Nothing matches these filters in this period. Try removing a filter or choosing another period.' : 'Choose another month, or add reservations.' })));
       return;
     }
+    // The stays count is by check-in date (Reports, DECISIONS 1275); owner statements and Profit and loss count check-outs (D-37), so the tile names its basis (D-123).
     box.replaceChildren(
       h('div', { class: 'card' },
         h('div', { class: 'grid grid--4 stats stats--stack-phone' },
-          stat('Revenue', peso(t.revenue), [`${t.stays} stay${t.stays === 1 ? '' : 's'} · ${t.nights} nights`, h('br'), `Rooms ${peso(t.accommodation)}`, h('br'), `Cleaning and extras ${peso(t.fees)}`]),
+          stat('Revenue', peso(t.revenue), [`${t.stays} check-in${t.stays === 1 ? '' : 's'} · ${t.nights} nights`, h('br'), `Rooms ${peso(t.accommodation)}`, h('br'), `Cleaning and extras ${peso(t.fees)}`]),
           stat('Occupancy', pct(t.occupancy), 'booked nights ÷ open nights'),
           stat('Avg nightly rate', peso(t.adr), `RevPAR ${peso(t.revpar)}`),
           stat('Net (before refunds)', peso(t.net), r.expenses_excluded ? `${peso(t.channel_fees)} channel fees · expenses not split by channel` : `${peso(t.channel_fees)} channel fees · ${peso(t.expenses)} expenses`)),

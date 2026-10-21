@@ -165,7 +165,7 @@ Forgets `card_payment_method_id`, `card_brand`, `card_last4` (keeps the customer
 
 ### 3.11 `POST /api/admin/workspaces/:id/card-check` (new, platform admin)
 
-Request: `{ "action": "waive" }`. Sets `card_check = 'waived'`, `card_checked_at = now()`, and `trial_ends_at = now() + TRIAL_DAYS` when it is empty. Response `{ "ok": true, "trial_ends_at": "..." }`. Errors: 404; 409 `DEMO`; 409 `CARD_CHECK_NOT_REQUIRED` (status is not `required`). Audit `platform.card_check_waived`. `GET /api/admin/workspaces` rows gain `card_check`, `card_brand`, `card_last4`; the status filter gains `card_pending`.
+Request: `{ "action": "waive" }`. Sets `card_check = 'waived'`, `card_checked_at = now()`, and `trial_ends_at = now() + TRIAL_DAYS` when it is empty. Response `{ "ok": true, "trial_ends_at": "..." }`. Errors: 404; 409 `DEMO`; 409 `DELETION_SCHEDULED` while the workspace is scheduled for deletion, checked before `CARD_CHECK_NOT_REQUIRED` (D-123); 409 `CARD_CHECK_NOT_REQUIRED` (status is not `required`). Audit `platform.card_check_waived`. `GET /api/admin/workspaces` rows gain `card_check`, `card_brand`, `card_last4`; the status filter gains `card_pending`.
 
 ### 3.12 Gate (every API route)
 
@@ -204,7 +204,7 @@ Where the build differs from, or adds to, the plan text above:
 - **The gate also lets a support screenshot through.** While `reason = 'card_check'`, `POST /api/files?record_type=support` is allowed (and nothing else under `/files`), so a host who is waiting on a card can still send a ticket with a picture. The path allow-list in section 3.12 is otherwise exact (`CARD_CHECK_EXEMPT` in `src/lib/auth.js`).
 - **`GET /billing/card-check` plans carry `listings`** (the plan's listing limit, for "Up to 2 listings"), added in the route from `PLANS`.
 - **`GET /api/public/plans`** gains `card_check: boolean` (true when `cardcheck.enabled()`), which the sign-up page reads for its one muted line.
-- **Admin list:** the status filter value is `card_pending`; the Card column reads Waiting, Visa 4242, Skipped or a dash; rows carry `card_check`, `card_brand`, `card_last4`. The panel shows "Waiting for the owner to save a card. The trial has not started." with the Skip card check button only while Waiting.
+- **Admin list:** the status filter value is `card_pending`; the Card column reads Waiting, Visa 4242, Skipped or a dash; rows carry `card_check`, `card_brand`, `card_last4`. The panel shows "Waiting for the owner to save a card. The trial has not started." with the Skip card check button only while Waiting and not while a deletion is scheduled (the panel shows the reason instead, D-123).
 - **Plan & billing buttons:** Remove card, Change, Turn on automatic payment and Cancel automatic payment are `btn--secondary btn--sm` buttons (not link-style buttons), so they meet the 44px phone rule. With a saved card the Pay button is primary and Pay another way is secondary; with no saved card it is the old single button.
 - **Stage 2 "Next charge" amount ignores a coupon discount** (it shows the plan price). Carried to round 18.
 - **Scheduler jobs:** `trial-reminders` (hourly) and `subscriptions` (hourly, does nothing unless `PAYMONGO_SUBSCRIPTIONS=on`). The card check reconcile (expire a pending check after 24 hours, after one last look) runs inside the existing 10-minute `billing` job.

@@ -30,6 +30,9 @@ export const nameMatches = (typed, name) => typed.trim() === name.trim();
 export const DELETE_LATER = 'The owner and team are locked out now. You can cancel this for 14 days, then everything is deleted.';
 export const DELETE_NOW = 'Everything is deleted right away: bookings, guests, files, and their PayMongo card and plan. This cannot be undone.';
 export const skipCardText = (name) => `Skip the card check for ${name}? Their 14-day trial starts now.`;
+// A workspace scheduled for deletion takes no card check, from the owner or from an admin (D-116, D-123).
+export const canSkipCard = (w) => w.card_check === 'required' && !w.deletion_scheduled_at;
+export const SKIP_CARD_DELETING = 'This workspace is scheduled for deletion, so the card check can\'t be skipped. Cancel the deletion first.';
 // ---- end helpers
 
 function statusBadge(w) {
@@ -144,7 +147,7 @@ export async function adminView(el, { rerender, query = {} }) {
         h('p', { class: 'muted small' }, `${w.owner_name || '—'} · ${w.owner_email || '—'} · ${w.unit_count} units · ${w.member_count} members`),
         ...(w.card_check === 'required' ? [h('div', { class: 'field' },
           h('p', { class: 'muted small' }, 'Waiting for the owner to save a card. The trial has not started.'),
-          h('button', { type: 'button', class: 'btn btn--secondary', id: 'skip-card-check', onclick: skipCard }, 'Skip card check'))] : []),
+          canSkipCard(w) ? h('button', { type: 'button', class: 'btn btn--secondary', id: 'skip-card-check', onclick: skipCard }, 'Skip card check') : h('p', { class: 'muted small' }, SKIP_CARD_DELETING))] : []),
         field({ name: 'plan', label: 'Plan', type: 'select', required: true, value: w.plan, placeholderOption: false,
           options: plans.map((p) => [p.key, `${p.name}${p.price ? ` — ₱${p.price}/mo` : ''} (${p.listings >= 1000 ? 'unlimited' : `${p.listings} listings`})`]) }),
         field({ name: 'paid_until', label: 'Paid until (paid plans)', type: 'date', value: paidUntil,

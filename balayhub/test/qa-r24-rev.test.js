@@ -9,7 +9,7 @@ const src = fs.readFileSync(path.join(__dirname, '..', 'public/js/views/stayrepo
 const revenueCall = src.split('\n').find((l) => l.includes("stat('Revenue', peso(t.revenue)")) || '';
 
 test('Revenue card detail is three short lines with the same numbers', () => {
-  assert.match(revenueCall, /\$\{t\.stays\} stay\$\{t\.stays === 1 \? '' : 's'\} · \$\{t\.nights\} nights/);
+  assert.match(revenueCall, /\$\{t\.stays\} check-in\$\{t\.stays === 1 \? '' : 's'\} · \$\{t\.nights\} nights/);
   assert.match(revenueCall, /Rooms \$\{peso\(t\.accommodation\)\}/);
   assert.match(revenueCall, /Cleaning and extras \$\{peso\(t\.fees\)\}/);
   assert.equal((revenueCall.match(/h\('br'\)/g) || []).length, 2, 'exactly three lines');

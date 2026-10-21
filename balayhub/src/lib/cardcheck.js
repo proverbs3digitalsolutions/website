@@ -304,6 +304,8 @@ async function waive(orgId, adminUser) {
   return tx(async (db) => {
     const { rows: [org] } = await db.query('SELECT * FROM organizations WHERE organization_id = $1 FOR UPDATE', [orgId]);
     if (!org) throw new HttpError(404, "This record doesn't exist or you don't have permission to view it.", { code: 'NOT_FOUND' });
+    // A workspace scheduled for deletion takes no card check, from the owner or from an admin (D-116, D-123). Nothing is written.
+    if (org.deletion_scheduled_at) throw new HttpError(409, DELETING_CARD, { code: 'DELETION_SCHEDULED' });
     if (org.card_check !== 'required') throw notRequired(org);
     const { rows: [o] } = await db.query(
       `UPDATE organizations SET card_check = 'waived', card_checked_at = now(),
