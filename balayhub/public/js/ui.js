@@ -534,6 +534,29 @@ function focusHeadingIfFree() {
 }
 
 // ---------------------------------------------------------------- modal
+// A press that closes a dialog swallows its own second press (D-124). A double click or a double tap on a dialog's button closes the
+// dialog with the first press (D-122), so the second fell on whatever was under it: a file label opened the camera, and on a phone the
+// bottom bar's More sheet opened. Only a real press (mouse, pen or touch, so it has a position) counts; keyboard presses are untouched.
+export const REPEAT_PRESS_MS = 600;
+export const REPEAT_PRESS_PX = 30;
+// Is `ev` the second press of `first` ({ x, y, t })? Pure.
+export function isRepeatPress(first, ev, now) {
+  return Boolean(first) && now - first.t <= REPEAT_PRESS_MS
+    && Math.abs(ev.clientX - first.x) <= REPEAT_PRESS_PX && Math.abs(ev.clientY - first.y) <= REPEAT_PRESS_PX;
+}
+// After a dialog closed on a press, the page ignores a second press at that spot until REPEAT_PRESS_MS after the first.
+const REPEAT_EVENTS = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
+function ignoreRepeatPress(first) {
+  const win = globalThis.window;
+  if (!first || typeof win?.addEventListener !== 'function') return;
+  const left = first.t + REPEAT_PRESS_MS - Date.now();
+  if (left <= 0) return;
+  // A keyboard activation, assistive tech or a script's el.click() is a click with detail 0 and no press position: it is never a second press.
+  const stop = (e) => { if (e.type === 'click' && e.detail === 0) return; if (isRepeatPress(first, e, Date.now())) { e.preventDefault(); e.stopImmediatePropagation(); } };
+  for (const t of REPEAT_EVENTS) win.addEventListener(t, stop, true);
+  setTimeout(() => { for (const t of REPEAT_EVENTS) win.removeEventListener(t, stop, true); }, left);
+}
+
 export function openModal({ title, body, onClose, wide }) {
   // Closing returns focus to the opener (the browser does it while the opener is on the page; the focus guard finds it if a redraw replaced it).
   // With no opener (a page opened with ?new=1) the dialog closes onto the page heading.
@@ -541,12 +564,16 @@ export function openModal({ title, body, onClose, wide }) {
   const dlg = h('dialog', { class: 'modal', 'aria-label': title });
   if (wide) dlg.classList.add('modal--wide');
   const close = () => dlg.close();
+  let lastPress = null; // the last real press inside this dialog: { x, y, t }
   dlg.append(
     h('div', { class: 'modal__head' }, h('h2', null, title), h('button', { class: 'modal__close', type: 'button', 'aria-label': 'Close', onclick: close }, '×')),
     h('div', { class: 'modal__body' }, body),
   );
-  dlg.addEventListener('close', () => { dlg.remove(); onClose?.(); if (!hadOpener) focusHeadingIfFree(); });
-  dlg.addEventListener('click', (e) => { if (e.target === dlg) close(); });
+  dlg.addEventListener('close', () => { dlg.remove(); onClose?.(); if (!hadOpener) focusHeadingIfFree(); ignoreRepeatPress(lastPress); });
+  dlg.addEventListener('click', (e) => {
+    if (e.detail > 0) lastPress = { x: e.clientX, y: e.clientY, t: Date.now() }; // a real press (mouse, pen or touch); a keyboard click has detail 0
+    if (e.target === dlg) close();
+  });
   document.body.append(dlg);
   dlg.showModal();
   // A dialog with no field starts on its first action (a night's menu: New reservation), the × only when the body has none.

@@ -13,6 +13,8 @@ const PNG = Buffer.from('89504e470d0a1a0a0000000d4948445200000001000000010806000
 const HOST = 'Ann & Bob <i>Stays</i>';
 const VILLA_SLUG = 'script-alert-1-script';
 const unesc = (s) => s.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+// Random record ids (photo file ids, unit id) are UUIDs, and about 1 in 215 of them contains "777" by chance.
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 
 let srv; let owner; let prop; let villa; let paris; let hidden; let slug; let photos;
 
@@ -96,7 +98,9 @@ test('listing page: title, meta, Open Graph, escaped name, photos, price, policy
   assert.ok(r.text.includes(`href="/#/book/${slug}/${villa.unit_id}"`));
   assert.ok(r.text.includes('Check dates and book'));
   // Never shown: the street address, exact prices beyond "from", the cleaning fee and Wi-Fi.
-  for (const secret of ['Bicutan', '777', '2,800', 'secret-wifi-99']) assert.ok(!r.text.includes(secret), `leaked ${secret}`);
+  // Blank out the ids first, so a random id that happens to contain "777" is not read as a leaked fee.
+  const visible = r.text.replace(UUID, ' ');
+  for (const secret of ['Bicutan', '777', '2,800', 'secret-wifi-99']) assert.ok(!visible.includes(secret), `leaked ${secret}`);
 });
 
 test('unknown, unbookable, disabled, demo and read-only hosts or listings give a styled 404', async () => {
