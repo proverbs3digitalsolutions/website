@@ -1,4 +1,5 @@
 'use strict';
+const { startServer, ownerAccount } = require('./helpers');
 
 // QA round 8, lane C16 (validate-dates), finding #23. A payment or expense dated 1900-01-01 was accepted.
 // Every `date` field now has to fall between 2000-01-01 and 2100-12-31. Text that is not a real date keeps
@@ -9,7 +10,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { validate } = require('../src/lib/validate');
-const { startServer, ownerAccount } = require('./helpers');
 
 const spec = { payment_date: { type: 'date', required: true, label: 'Payment date' } };
 

@@ -866,7 +866,8 @@ export async function afterLogin() {
   let next = setupRedirect() || (ret && ret.startsWith('#/') && !/^#\/(login|signup|$)/.test(ret) ? ret : null);
   // Owners still setting up start on the Launchpad (until it's finished or they hide the reminder).
   const u = state.user;
-  if (!next && u?.role === 'owner' && u.business_type !== 'long_term' && !u.plan?.is_demo && !u.plan?.card_check_due) {
+  // A read-only workspace (scheduled for deletion, trial ended, payment overdue) can't save Launchpad steps: it starts on its home page, with its banner (D-117, D-119).
+  if (!next && u?.role === 'owner' && u.business_type !== 'long_term' && !u.plan?.is_demo && !u.plan?.card_check_due && !u.plan?.read_only) {
     try {
       const o = await get('/onboarding');
       if (!o.complete && !o.dismissed) next = '#/launchpad';

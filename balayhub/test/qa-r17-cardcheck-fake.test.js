@@ -6,6 +6,7 @@ process.env.PAYMONGO_WEBHOOK_SECRET = 'whsk_test';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { install, TEST_CARDS } = require('./fakes/paymongo');
+require('./helpers');
 const billing = require('../src/lib/billing');
 
 const API = 'https://api.paymongo.com/v1';

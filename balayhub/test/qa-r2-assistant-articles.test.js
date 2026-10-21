@@ -9,6 +9,7 @@ process.env.ASSISTANT_MODEL = 'claude-opus-5-5';
 const http = require('http');
 const test = require('node:test');
 const assert = require('node:assert/strict');
+require('./helpers');
 const { ARTICLES, searchArticles } = require('../src/lib/helpcenter');
 
 const ANY = { mode: 'any' };
@@ -35,6 +36,8 @@ test.before(async () => {
   });
   await new Promise((r) => stub.listen(0, r));
   process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${stub.address().port}`;
+  // ./helpers is now required at the top, so src/config has already read the environment: give it the stub's address too.
+  require('../src/config').anthropicBaseUrl = process.env.ANTHROPIC_BASE_URL;
   h = require('./helpers');
   srv = await h.startServer();
   stays = await h.ownerAccount(srv.base, 'stays@example.com', 'Short Stays');

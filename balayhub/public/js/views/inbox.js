@@ -197,6 +197,21 @@ export async function inboxView(el, { params, query, rerender }) {
 }
 
 // ---------------------------------------------------------------- thread
+// The router draws each page detached and attaches it after the view returns (app.js: "The view always draws into its own
+// detached page"), so a scroll set while drawing does nothing. Scroll to the newest message once the thread is on the page (D-119).
+// Below 960 px the thread is not a scroll box (no max-height), so the page scrolls instead, but only when the newest message
+// is below the screen: scrollIntoView would move the page (and the heading) even when the message is already in view.
+// The bottom bar covers the strip of scroll-padding-bottom, so a message under that strip counts as below the screen.
+export async function scrollToNewest(thread, { wait = (ms) => new Promise((ok) => setTimeout(ok, ms)), maxMs = 10000 } = {}) {
+  const start = Date.now();
+  while (!thread.isConnected && Date.now() - start < maxMs) await wait(50);
+  if (!thread.isConnected) return;
+  if (thread.scrollHeight > thread.clientHeight + 1) { thread.scrollTop = thread.scrollHeight; return; }
+  const last = thread.lastElementChild;
+  const pad = parseFloat(getComputedStyle(document.documentElement).scrollPaddingBottom) || 0;
+  if (last && last.getBoundingClientRect().bottom > window.innerHeight - pad) last.scrollIntoView({ block: 'end' });
+}
+
 async function renderThread(pane, id, { status, back, rerender }) {
   const [{ conversation: c, messages }, { templates }, { assignees }] = await Promise.all([
     get(`/inbox/${id}`), get('/message-templates'), get(`/inbox/assignees${qs({ conversation_id: id })}`),
@@ -291,7 +306,7 @@ async function renderThread(pane, id, { status, back, rerender }) {
   pane.replaceChildren(
     h('div', { class: 'card card--flush inbox__main' }, header, thread, composer(c, templates, status, rerender, assignees)),
     summary(c));
-  thread.scrollTop = thread.scrollHeight;
+  scrollToNewest(thread); // not awaited: the page is attached only after this view returns
 }
 
 // Very long messages show their first part with a "Show more" button.

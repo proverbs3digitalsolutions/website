@@ -14,6 +14,11 @@ const { pathToFileURL } = require('node:url');
 
 const SENTENCE = "This file isn't a real PDF, JPG, PNG or WEBP. Choose the file again.";
 const mk = (bytes, name, type) => new File([typeof bytes === 'string' ? bytes : Uint8Array.from(bytes)], name, { type });
+// Complete images, not only their first bytes: the device checks the whole file as the server does (D-119, QA r37 PINS).
+const ascii = (s) => [...Buffer.from(s, 'latin1')];
+const PNG_OK = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, ...ascii('IHDR'), ...Array(17).fill(0), 0, 0, 0, 10, ...ascii('IDAT'), ...Array(14).fill(0), 0, 0, 0, 0, ...ascii('IEND'), 0, 0, 0, 0];
+const JPEG_OK = [0xff, 0xd8, 0xff, 0xe0, ...Array(60).fill(0), 0xff, 0xd9];
+const WEBP_OK = [...ascii('RIFF'), 60, 0, 0, 0, ...ascii('WEBP'), ...ascii('VP8L'), ...Array(52).fill(0)];
 let api;
 let calls = 0;
 test.before(async () => {
@@ -28,9 +33,9 @@ test.before(async () => {
 });
 
 test('fileContentError accepts real signatures', async () => {
-  const webp = [0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50];
-  assert.equal(await api.fileContentError(mk([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 'a.png', 'image/png')), null);
-  assert.equal(await api.fileContentError(mk([0xff, 0xd8, 0xff, 0xe0], 'a.jpg', 'image/jpeg')), null);
+  const webp = WEBP_OK;
+  assert.equal(await api.fileContentError(mk(PNG_OK, 'a.png', 'image/png')), null);
+  assert.equal(await api.fileContentError(mk(JPEG_OK, 'a.jpg', 'image/jpeg')), null);
   assert.equal(await api.fileContentError(mk('%PDF-1.4', 'a.pdf', 'application/pdf')), null);
   assert.equal(await api.fileContentError(mk(webp, 'a.webp', 'image/webp')), null);
 });
@@ -60,7 +65,7 @@ test('uploadFile refuses a fake PNG with no request', async () => {
 
 test('uploadFile sends a real PNG', async () => {
   calls = 0;
-  await api.uploadFile('cleaning', 't1', mk([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 'a.png', 'image/png'));
+  await api.uploadFile('cleaning', 't1', mk(PNG_OK, 'a.png', 'image/png'));
   assert.equal(calls, 1);
 });
 

@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-21 (QA round 36: section 49 and the notes in 7.10, 17, 24, 30.9, 48.1, 48.2 and 48.3; D-118). Before that: 2026-10-21 (QA round 35: section 48 and the notes in 5.10, 29.11, 35.3, 44.3, 47.1 and 47.2; D-117). Before that: 2026-10-21 (QA round 34: section 47 and the notes in 2, 7.8, 22, 35.4 and 46; D-116). Before that: 2026-10-21 (QA round 33: section 46 and the notes in 26 and 44; D-115). Before that: 2026-10-21 (QA round 32: section 45 and the notes in 14 and 28.7; D-114). Before that: 2026-10-21 (QA round 31: section 44, the notes in 5.10 and 43.2; D-113). Before that: 2026-10-21 (QA round 30: section 43, the notes in 5, 41.2 and 42.2; D-112). Before that: 2026-10-21 (QA round 29: section 42, a line in 39.3 and the notes in 5.10, 14.9 and 25; D-111). Before that: 2026-10-21 (QA round 28: section 41 and the notes in 29.1, 39.2 and 40.2; D-110). Before that: 2026-10-21 (QA round 27: section 40 and the notes in 29.1 and 30.6; D-109). Before that: 2026-10-21 (QA round 26: section 39 and 33.1; D-108). Before that: 2026-10-21 (QA round 25: section 38, 5.10 and 30 corrected; D-107). Before that: 2026-10-21 (QA round 24: section 37; D-106). Before that: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
+Last updated: 2026-10-21 (QA round 37: section 50 and the notes in 1, 29.11 and 48.2; D-119). Before that: 2026-10-21 (QA round 36: section 49 and the notes in 7.10, 17, 24, 30.9, 48.1, 48.2 and 48.3; D-118). Before that: 2026-10-21 (QA round 35: section 48 and the notes in 5.10, 29.11, 35.3, 44.3, 47.1 and 47.2; D-117). Before that: 2026-10-21 (QA round 34: section 47 and the notes in 2, 7.8, 22, 35.4 and 46; D-116). Before that: 2026-10-21 (QA round 33: section 46 and the notes in 26 and 44; D-115). Before that: 2026-10-21 (QA round 32: section 45 and the notes in 14 and 28.7; D-114). Before that: 2026-10-21 (QA round 31: section 44, the notes in 5.10 and 43.2; D-113). Before that: 2026-10-21 (QA round 30: section 43, the notes in 5, 41.2 and 42.2; D-112). Before that: 2026-10-21 (QA round 29: section 42, a line in 39.3 and the notes in 5.10, 14.9 and 25; D-111). Before that: 2026-10-21 (QA round 28: section 41 and the notes in 29.1, 39.2 and 40.2; D-110). Before that: 2026-10-21 (QA round 27: section 40 and the notes in 29.1 and 30.6; D-109). Before that: 2026-10-21 (QA round 26: section 39 and 33.1; D-108). Before that: 2026-10-21 (QA round 25: section 38, 5.10 and 30 corrected; D-107). Before that: 2026-10-21 (QA round 24: section 37; D-106). Before that: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
 
 ---
 
@@ -20,7 +20,7 @@ The app is a single page with hash routes (`#/…`). Each route has an access le
 - **Home page by type:** Long-term workspaces land on `#/dashboard`. Short-term and Both land on `#/home`.
 - **Unknown route:** sends to the home page (signed in) or `#/` (signed out).
 - **Route guard (2026-10-13, D-76):** a signed-in user who types a page their role or workspace type can't use (for example staff on `#/inbox`, a manager on `#/owners`, a long-term workspace on `#/calendar`, a short-term one on `#/dashboard`, `#/admin` for anyone but a platform admin) goes to their home page with the toast "That page isn't available for your role or workspace." The rules are in `public/js/routeaccess.js`, built from the same lists as the menu. *Exception (2026-10-14, round 7): a cleaner is sent to Housekeeping without the toast (`public/js/app.js`), on purpose.*
-- **After login (`afterLogin`):** setup redirect first; else the remembered page; else, for an owner of a short-term or Both workspace (not the demo) whose Launchpad is unfinished and not hidden, `#/launchpad`; else the home page.
+- **After login (`afterLogin`):** setup redirect first; else the remembered page; else, for an owner of a short-term or Both workspace (not the demo) whose Launchpad is unfinished and not hidden, `#/launchpad`; else the home page. *Round 37 (D-119): a read-only workspace (scheduled for deletion, trial ended or payment overdue) is not sent to the Launchpad. Its owner lands on the home page, with its banner, as 48.2 says.*
 
 ## 2. Global states (every app page)
 
@@ -1269,7 +1269,7 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 - A percentage fee over 50% asks "Check the management fee" (Save anyway / Change it); 0% saves without a question. An exact duplicate name asks "Name already used" (Save anyway / Change it). On Edit, the fee question is asked only when the fee model or the value changed.
 
 ### 29.11 Reports
-- Stay reports: a custom range longer than two years keeps the last report and marks the To box "Choose up to two years." Long-term Reports has no range limit (D-99). *Round 35 (D-117): Download CSV is also off for a custom range over two years, with "Choose up to two years to export." under it, so a click never leads to an empty download.*
+- Stay reports: a custom range longer than two years keeps the last report and marks the To box "Choose up to two years." Long-term Reports has no range limit (D-99). *Round 35 (D-117): Download CSV is also off for a custom range over two years, with "Choose up to two years to export." under it, so a click never leads to an empty download.* *Superseded by D-119 (50.1): the range is not sent, and this month shows with "Choose up to two years. Showing this month for now."*
 
 ### 29.12 Rent & Expenses
 - The Vendor list hides vendors seen only on voided expenses unless voided expenses are shown.
@@ -1804,7 +1804,7 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 ### 48.2 Card, deletion and reports
 - **Confirm your card shows the wait when it opens.** While the day's or the hour's card tries are used up, the page shows the server's wait sentence above the form on load, the same sentence a press gives. Pay stays usable: a press still gets the same answer and starts nothing. The page reads the wait from `retry_after` on `GET /api/billing/card-check` (contract 3.2).
 - **A gated owner whose workspace is scheduled for deletion lands on Home** in the deletion state, with **Cancel deletion**, not on Confirm your card. After the deletion is cancelled, the owner goes to Confirm your card.
-- **Stay reports: Download CSV is off for a custom range over two years.** The note under it reads "Choose up to two years to export.", the same limit the export enforces, and a click sends no request. The report itself is unchanged: the server's refusal still shows "Choose up to two years." on the status line and marks the To box. *Stay reports only; long-term Reports has no limit (D-118).*
+- **Stay reports: Download CSV is off for a custom range over two years.** The note under it reads "Choose up to two years to export.", the same limit the export enforces, and a click sends no request. The report itself is unchanged: the server's refusal still shows "Choose up to two years." on the status line and marks the To box. *Stay reports only; long-term Reports has no limit (D-118).* *Superseded by D-119 for a range over two years: the range is not sent, and this month shows (50.1).*
 
 ### 48.3 Channels and phone
 - **A refused calendar link says why.** A link to an IP address and a link with a port number or a password each get their own sentence (the wording is in section 35.3 and D-117). A link that is not https keeps "Paste the full https:// calendar (iCal) link from the channel." The link is still refused; nothing about the check changed. *Also said on the device, in the same press as the channel (D-118).*
@@ -1832,3 +1832,23 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 ### 49.4 Housekeeping and setup
 - **Inspect starts with every item ticked Pass.** Untick any item that was not done well. Saving with nothing unticked records a pass, which scores 100. This is as designed (see 7.10).
 - **Two ways to add a listing.** Listings, then Add listing, and the Add unit form that opens after a property is saved, both save the same record and ask the same questions. Either path is correct.
+
+## 50. QA round 37 changes (D-119; 2026-10-21)
+
+### 50.1 Reports
+- **Dimmed export links stay in the tab order.** On Stay reports, Download CSV, and on long-term Reports, Export (Excel / CSV), are still reached with Tab while they are dimmed, keep focus when clicked, and are announced as unavailable with their reason beside them. A dimmed link does nothing when pressed. When its export is on again, it is a plain link.
+- **Stay reports: a custom range over two years is not sent.** The page shows this month, the status line reads "Choose up to two years. Showing this month for now.", the To box is marked, and Download CSV is off with "Choose up to two years to export.". A date the page refuses (for example 1900-01-01) turns the export off with "Fix the dates to export.".
+- **Long-term Reports: a custom range with no To date** turns Export off with "Pick both dates to export.", and the export comes back once both dates are set. Long-term Reports has no range limit (D-118).
+
+### 50.2 Inbox
+- **A conversation opens at its newest message.** After Save note or Send, the newest message is in view. The page is not scrolled until it is on screen.
+
+### 50.3 Files
+- **Every form that uploads a file checks the whole file on the device first.** A PDF, JPG, PNG or WEBP that starts right but is cut short, or has no picture in it, gets "This file isn't a real PDF, JPG, PNG or WEBP. Choose the file again." in the same press as the form's other problems. Nothing is saved first. The server keeps the same check and still has the last word.
+
+### 50.4 Signing in
+- **A read-only owner lands on the home page.** A workspace that is scheduled for deletion, has ended its trial or is overdue on payment opens on its home page with its banner, not on the Launchpad, whose steps it cannot save (D-117, D-119). The "After login" line in section 1 is annotated.
+
+### 50.5 As designed
+- **The filter chip strip** appears under the bar only while a filter is on (D-108).
+- **The sidebar menu** scrolls, with a fade along its bottom edge while more links are below. Admin is the platform admin's own item.

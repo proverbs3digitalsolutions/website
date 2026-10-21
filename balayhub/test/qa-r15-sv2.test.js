@@ -1,4 +1,5 @@
 'use strict';
+const { startServer, ownerAccount, sql } = require('./helpers');
 
 // QA round 15, lane SV2 (money server). A percentage fee with too many decimals gets the percent sentence,
 // not the peso example (bug #21). A season whose name differs only in inner spaces is a duplicate (bug #22).
@@ -6,7 +7,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { validate } = require('../src/lib/validate');
-const { startServer, ownerAccount, sql } = require('./helpers');
 
 const FEE_SENTENCE = 'Management fee (%) can have up to two decimals (e.g. 20 or 12.5).';
 const SAVED_BEFORE = 'You already saved this season.';

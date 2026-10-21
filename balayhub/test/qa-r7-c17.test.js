@@ -24,7 +24,7 @@ test('#35: a link range that ends before it starts is read from the link, not dr
 
 test('#35: a backwards range shows the server\'s sentence and is never sent to the server', () => {
   assert.match(src, /The end date must be after the start date\. Showing this month for now\./);
-  assert.match(src, /&& !backwards\) periodQ = \{ from: filters\.from, to: filters\.to \}/);
+  assert.match(src, /&& !backwards && !tooLong\) periodQ = \{ from: filters\.from, to: filters\.to \}/);
 });
 
 test('K9: the By listing cleaning column reads "Of which cleaning & extras"', () => {

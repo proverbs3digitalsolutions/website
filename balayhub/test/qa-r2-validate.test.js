@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers');
 
 // QA round 2, lane B26 (calendar#6, settings#5). A well-formed money amount with too many whole
 // digits says "<Label> is too large.", not "must be a valid amount". The 99,999,999.99 cap stays,

@@ -32,12 +32,17 @@ test.before(async () => {
 
 const BAD = "This file isn't a real PDF, JPG, PNG or WEBP. Choose the file again.";
 const f = (bytes, type) => new File([Buffer.from(bytes)], 'x', { type });
+// Complete images, not only their first bytes: the device checks the whole file as the server does (D-119, QA r37 PINS).
+const ascii = (s) => [...Buffer.from(s, 'latin1')];
+const PNG_OK = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, ...ascii('IHDR'), ...Array(17).fill(0), 0, 0, 0, 10, ...ascii('IDAT'), ...Array(14).fill(0), 0, 0, 0, 0, ...ascii('IEND'), 0, 0, 0, 0];
+const JPEG_OK = [0xff, 0xd8, 0xff, 0xe0, ...Array(60).fill(0), 0xff, 0xd9];
+const WEBP_OK = [...ascii('RIFF'), 60, 0, 0, 0, ...ascii('WEBP'), ...ascii('VP8L'), ...Array(52).fill(0)];
 
 test('real signatures pass', async () => {
-  assert.equal(await api.fileContentError(f([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 'image/png')), null);
-  assert.equal(await api.fileContentError(f([0xff, 0xd8, 0xff, 0xe0], 'image/jpeg')), null);
+  assert.equal(await api.fileContentError(f(PNG_OK, 'image/png')), null);
+  assert.equal(await api.fileContentError(f(JPEG_OK, 'image/jpeg')), null);
   assert.equal(await api.fileContentError(f(Buffer.from('%PDF-1.4'), 'application/pdf')), null);
-  assert.equal(await api.fileContentError(f(Buffer.from('RIFF\0\0\0\0WEBP'), 'image/webp')), null);
+  assert.equal(await api.fileContentError(f(WEBP_OK, 'image/webp')), null);
 });
 
 test('a renamed text file gets the sentence', async () => {

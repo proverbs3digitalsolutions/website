@@ -77,8 +77,24 @@ export function qs(params) {
 
 // The first bytes the server checks for each upload type (src/lib/storage.js). Read on the device so a renamed
 // file is refused before anything is sent or saved (D-112). The server still checks the whole file.
+// The server's whole-file check for images (src/lib/storage.js imageIsComplete), mirrored byte for byte, so a file the server would
+// refuse is refused here, in the same press as the form's other problems, before any record is saved (D-112, D-119). Pure.
+const MIN_IMAGE_BYTES = 64;
+const ascii = (b, from, to) => String.fromCharCode(...b.slice(from, to));
+export function imageIsComplete(type, b) {
+  if (b.length < MIN_IMAGE_BYTES) return false;
+  if (type === 'image/png') return ascii(b, 12, 16) === 'IHDR' && ascii(b, b.length - 8, b.length - 4) === 'IEND';
+  // Trailing data after the end marker is allowed: phone motion photos append a video (as on the server).
+  if (type === 'image/jpeg') {
+    if (!(b[3] >= 0xc0 && b[3] <= 0xfe)) return false;
+    for (let i = 4; i < b.length - 1; i += 1) if (b[i] === 0xff && b[i + 1] === 0xd9) return true;
+    return false;
+  }
+  return new DataView(b.buffer, b.byteOffset, b.byteLength).getUint32(4, true) === b.length - 8 && ['VP8 ', 'VP8L', 'VP8X'].includes(ascii(b, 12, 16));
+}
+
 const SIGNATURES = {
-  'image/png': (b) => b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47,
+  'image/png': (b) => [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((x, i) => b[i] === x),
   'image/jpeg': (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
   'image/webp': (b) => String.fromCharCode(...b.slice(0, 4)) === 'RIFF' && String.fromCharCode(...b.slice(8, 12)) === 'WEBP',
   'application/pdf': (b) => String.fromCharCode(...b.slice(0, 4)) === '%PDF',
@@ -86,8 +102,11 @@ const SIGNATURES = {
 // null for no file, an empty file (the empty-file sentence says that) or another type (each control's type sentence says that).
 export async function fileContentError(file) {
   if (!file || !file.size || !SIGNATURES[file.type]) return null;
-  const b = new Uint8Array(await file.slice(0, 12).arrayBuffer());
-  return SIGNATURES[file.type](b) ? null : "This file isn't a real PDF, JPG, PNG or WEBP. Choose the file again.";
+  const bad = "This file isn't a real PDF, JPG, PNG or WEBP. Choose the file again.";
+  if (!SIGNATURES[file.type](new Uint8Array(await file.slice(0, 12).arrayBuffer()))) return bad;
+  // An image up to 10 MB is read whole, as the server reads it; a bigger one gets its size sentence anyway, so it is not read (D-119).
+  if (!file.type.startsWith('image/') || file.size > 10 * 1024 * 1024) return null;
+  return imageIsComplete(file.type, new Uint8Array(await file.arrayBuffer())) ? null : bad;
 }
 
 export async function uploadFile(recordType, recordId, file) {

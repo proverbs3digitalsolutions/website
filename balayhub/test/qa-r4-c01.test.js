@@ -1,4 +1,5 @@
 'use strict';
+const { startServer, sql, ownerAccount, manilaToday } = require('./helpers');
 
 // QA round 4, C01: a comma in an amount is accepted only as a thousands separator ("1,5" must not save as 15).
 
@@ -7,7 +8,6 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const { validate } = require('../src/lib/validate');
-const { startServer, sql, ownerAccount, manilaToday } = require('./helpers');
 const ical = require('../src/lib/ical');
 
 const spec = { amount: { type: 'money', label: 'Amount' } };

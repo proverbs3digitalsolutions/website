@@ -3,6 +3,14 @@
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL || 'postgres://balayhub:balayhub@localhost:5432/balayhub_test';
 process.env.STORAGE_DIR = require('path').join(require('os').tmpdir(), `balayhub-test-${process.pid}`);
+// Tests never run on the dev database: an unset or mistyped TEST_DATABASE_URL must not reach it (D-119).
+// The guard resolves the database pg will really open (URL name, else PGDATABASE, else the user name), so a URL with no name,
+// a percent-encoded name, a fragment or a different case cannot slip past a text match.
+{
+  const cs = require('pg-connection-string').parse(process.env.DATABASE_URL);
+  const dbName = String(cs.database || process.env.PGDATABASE || cs.user || process.env.PGUSER || require('os').userInfo().username).trim();
+  if (dbName.toLowerCase() === 'balayhub') throw new Error('Refusing to run tests on the balayhub database. Set TEST_DATABASE_URL to a test database.');
+}
 
 const { pool } = require('../src/db');
 const { migrate } = require('../scripts/migrate');

@@ -85,6 +85,9 @@ export async function reportsView(el, { query }) {
       if (!ready && (!d[k] || (d.from && d.to && d.from > d.to))) { box.setAttribute('aria-invalid', 'true'); box.setAttribute('aria-describedby', exportNote.id); } else { box.removeAttribute('aria-invalid'); box.removeAttribute('aria-describedby'); }
     }
     if (ready) exportLink.removeAttribute('aria-disabled'); else { exportLink.removeAttribute('href'); exportLink.setAttribute('aria-disabled', 'true'); }
+    // A dimmed export stays in the tab order and keeps focus when clicked: an <a> with no href is not focusable, so it gets
+    // tabindex and the link role until it has an address again (D-117, D-119).
+    if (ready) { exportLink.removeAttribute('tabindex'); exportLink.removeAttribute('role'); exportLink.removeAttribute('aria-describedby'); } else { exportLink.setAttribute('tabindex', '0'); exportLink.setAttribute('role', 'link'); exportLink.setAttribute('aria-describedby', exportNote.getAttribute('id')); }
   };
 
   // The dates the report runs for. A custom range runs only once both dates are set (see load()).

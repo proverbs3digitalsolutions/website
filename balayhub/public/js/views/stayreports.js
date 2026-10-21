@@ -112,6 +112,9 @@ export async function stayReportsView(el, { query = {} }) {
     exportNote.hidden = ready;
     exportNote.textContent = ready ? '' : hint;
     if (ready) exportLink.removeAttribute('aria-disabled'); else { exportLink.removeAttribute('href'); exportLink.setAttribute('aria-disabled', 'true'); }
+    // A dimmed export stays in the tab order and keeps focus when clicked: an <a> with no href is not focusable, so it gets
+    // tabindex and the link role until it has an address again (D-117, D-119).
+    if (ready) { exportLink.removeAttribute('tabindex'); exportLink.removeAttribute('role'); } else { exportLink.setAttribute('tabindex', '0'); exportLink.setAttribute('role', 'link'); }
   };
   const box = h('div');
   const fail = (err) => { toast(err.message, 'error'); box.replaceChildren(h('div', { class: 'card' }, emptyState({ iconName: 'chart', title: 'Couldn\'t load this report', text: err.message }))); };
@@ -184,6 +187,7 @@ export async function stayReportsView(el, { query = {} }) {
     const bad = new Set(Object.keys(typed));
     if (serverField) bad.add(serverField);
     if (filters.from && filters.to && filters.to < filters.from) bad.add('to');
+    if (filters.from && filters.to && filters.to >= filters.from && spanDays(filters.from, filters.to) > 731) bad.add('to'); // a range over two years is not sent (D-119)
     if (!(filters.from && filters.to)) ['from', 'to'].forEach((k) => { if (!filters[k]) bad.add(k); });
     if (windowLink) ['from', 'to'].forEach((k) => { if (isDay(filters[k]) && outOfWindow(filters[k])) bad.add(k); });
     for (const [k, name] of [['from', 'From'], ['to', 'To']]) {
@@ -225,20 +229,22 @@ export async function stayReportsView(el, { query = {} }) {
     setUrl(changed(filters, defaults));
     // A range that ends before it starts is never sent: this month is shown, and the dates stay in the boxes until fixed.
     const backwards = filters.period === 'range' && Boolean(filters.from && filters.to) && filters.to < filters.from;
+    // A range over two years is not sent either: this month is shown and the status line says why, as for a backwards range (D-119).
+    const tooLong = filters.period === 'range' && Boolean(filters.from && filters.to) && !backwards && spanDays(filters.from, filters.to) > 731;
     let periodQ;
     if (filters.period === 'year') periodQ = { year: filters.year || thisYear };
-    else if (filters.period === 'range' && filters.from && filters.to && !backwards) periodQ = { from: filters.from, to: filters.to };
+    else if (filters.period === 'range' && filters.from && filters.to && !backwards && !tooLong) periodQ = { from: filters.from, to: filters.to };
     else periodQ = { month: filters.month || todayManila().slice(0, 7) };
     status.textContent = linkInvalid ? 'The dates in this link aren\'t valid. Showing this month for now.'
       : windowLink ? `${OUT_OF_WINDOW} Showing this month for now.`
       : backwards ? 'The end date must be after the start date. Showing this month for now.'
+      : tooLong ? 'Choose up to two years. Showing this month for now.'
       : filters.period === 'range' && !(filters.from && filters.to) ? 'Choose both dates. Showing this month for now.' : '';
     if (Object.keys(typed).length) status.textContent = `${OUT_OF_WINDOW} ` + refusedDatesText(typed); // refused typed dates win (#20)
     markBoxes();
     const apiQ = qs({ ...periodQ, ...scopeOf(filters) });
     // A custom range is exported only once both dates are set, run forwards (#28), span at most two years (D-117) and no typed date is refused (D-118).
     const refused = Object.keys(typed).length > 0;
-    const tooLong = filters.period === 'range' && Boolean(filters.from && filters.to) && !backwards && spanDays(filters.from, filters.to) > 731;
     const exportOk = !refused && (filters.period !== 'range' || Boolean(filters.from && filters.to && !backwards && !tooLong));
     exportReady(exportOk, refused ? 'Fix the dates to export.' : tooLong ? 'Choose up to two years to export.' : exportHint({ from: filters.from, to: filters.to }));
     if (exportOk) exportLink.href = `/api/stay-reports/export${apiQ}`;

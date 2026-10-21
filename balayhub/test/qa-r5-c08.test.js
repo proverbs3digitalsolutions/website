@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers');
 
 // QA round 5, lane C08 (forms and money reads).
 // - parseAmount in public/js/ui.js reads typed money the way the server does (src/lib/validate.js parseMoney).

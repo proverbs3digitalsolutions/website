@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers');
 
 // QA round 3, help center (lane C16): a long-term workspace must not see guides that describe
 // stay-only pages (Airbnb calendars, cleaning jobs, supplies, profit and loss, unit owners).

@@ -11,6 +11,7 @@ process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+require('./helpers');
 const c = require('../src/lib/coupons');
 const config = require('../src/config');
 const { pool } = require('../src/db');

@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers');
 
 // QA round 7, lane C21: changedKeys must not treat number-looking or boolean-looking TEXT as unchanged
 // (a door code or Wi-Fi password change would go unlogged). Coercion only between a real number/boolean and text.

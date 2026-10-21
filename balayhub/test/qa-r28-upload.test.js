@@ -41,7 +41,14 @@ test('an empty file is refused before any request', async () => {
 
 test('a 70-byte PNG still sends one request', async () => {
   calls = 0;
-  await api.uploadFile('deposit', 'd1', new File([Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(62)])], 'a.png', { type: 'image/png' }));
+  // A complete 70-byte PNG (QA r37 PINS): signature, an IHDR chunk at byte 12, an IDAT chunk, and an IEND chunk ending at byte 70.
+  const png70 = Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]), Buffer.from('IHDR'), Buffer.alloc(17),
+    Buffer.from([0, 0, 0, 13]), Buffer.from('IDAT'), Buffer.alloc(17),
+    Buffer.from([0, 0, 0, 0]), Buffer.from('IEND'), Buffer.alloc(4),
+  ]);
+  assert.equal(png70.length, 70);
+  await api.uploadFile('deposit', 'd1', new File([png70], 'a.png', { type: 'image/png' }));
   assert.equal(calls, 1);
 });
 

@@ -6,6 +6,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+require('./helpers');
 const { pool } = require('../src/db');
 const { migrate } = require('../scripts/migrate');
 const account = require('../src/lib/account');

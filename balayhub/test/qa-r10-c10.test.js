@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers');
 
 // QA round 10, lane C10 (longterm-help): three long-term fixes.
 // #14 the rent payment's Print receipt printed the app screen; it now prints an acknowledgement block

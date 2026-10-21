@@ -7,6 +7,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
+require('./helpers');
 const { pool } = require('../src/db');
 const { migrate } = require('../scripts/migrate');
 const sql = (text, params) => pool.query(text, params).then((r) => r.rows);

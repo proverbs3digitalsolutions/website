@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers');
 
 // QA round 7, lane C00 (audit-helper): changedKeys decides which sent fields really differ from the stored
 // row, so an edit writes an activity row only when something changed. Pure unit test, no database.
