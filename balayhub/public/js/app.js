@@ -642,6 +642,14 @@ export const layerFocus = (active, samePage) => {
   if (!layer) return null;
   return layer.matches('dialog.modal') && samePage ? 'guard' : 'heading';
 };
+// A page swap removed the control the person pressed (a button or link inside the page): while the next page loads, focus waits on the
+// page area, never on the page body; the new page's heading takes it when the page is drawn (D-125). Returns whether it held focus.
+export function holdFocusWhileLoading(content, hadFocus) {
+  if (!hadFocus || !content?.isConnected) return false;
+  content.setAttribute('tabindex', '-1');
+  content.focus({ preventScroll: true });
+  return true;
+}
 export async function render() {
   const seq = ++renderSeq;
   stopRestore();
@@ -702,8 +710,10 @@ export async function render() {
     if (prev) prev.setAttribute('aria-busy', 'true');
     else {
       // A new page starts at the top: one scroll, now, and never again when the view finishes.
+      const pressedInPage = shell.content.contains(document.activeElement); // read before the placeholder removes it
       shell.content.removeAttribute('aria-busy');
       shell.content.replaceChildren(skeleton());
+      holdFocusWhileLoading(shell.content, pressedInPage);
       window.scrollTo(0, 0);
     }
     lastDrawing = path;

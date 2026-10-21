@@ -107,7 +107,7 @@ const ARTICLES = [
     keywords: 'listing unit condo add new property building nightly rate cleaning fee',
     body: [
       'Go to Listings → Add listing.',
-      'Choose the building. If it is not listed, an owner adds it first, then enter the listing name (e.g. Tower 1 - 1201), type, base nightly rate and cleaning fee.',
+      'Choose the building. An owner can add a new one right there with "+ Add a new building / property": its name, street address, city and province (guests see only the city and province); a manager asks the owner to add it. Then enter the listing name (e.g. Tower 1 - 1201), type, base nightly rate and cleaning fee.',
       'Optional: weekend and holiday rates, weekly/monthly discounts, Wi-Fi, check-in instructions and house rules (used in guest messages), and the direct booking settings.',
       'Your plan sets how many listings you can have (Starter 2, Growth 5, Pro 10).',
     ],

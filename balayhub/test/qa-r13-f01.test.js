@@ -342,7 +342,7 @@ test('app.js: the shell is built only when its key changed; one scroll, before t
   assert.match(appSrc, /const shellKey = /);
   assert.equal(appSrc.split('scrollTo(0, 0)').length - 1, 1, 'one scroll in app.js');
   assert.ok(r.indexOf('scrollTo(0, 0)') < r.indexOf('await route.view'));
-  assert.match(r, /shell\.content\.replaceChildren\(skeleton\(\)\);\s*\n\s*window\.scrollTo\(0, 0\)/);
+  assert.match(r, /shell\.content\.replaceChildren\(skeleton\(\)\);\s*\n\s*holdFocusWhileLoading\(shell\.content, pressedInPage\);\s*\n\s*window\.scrollTo\(0, 0\)/);
   assert.match(r, /shell = null;\s*\n\s*shellSig = null;/);
 });
 

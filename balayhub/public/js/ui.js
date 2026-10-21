@@ -565,14 +565,19 @@ export function openModal({ title, body, onClose, wide }) {
   if (wide) dlg.classList.add('modal--wide');
   const close = () => dlg.close();
   let lastPress = null; // the last real press inside this dialog: { x, y, t }
+  let guarded = false; // the second-press guard starts once per dialog
+  const guardRepeat = () => { if (!guarded && lastPress) { guarded = true; ignoreRepeatPress(lastPress); } };
   dlg.append(
     h('div', { class: 'modal__head' }, h('h2', null, title), h('button', { class: 'modal__close', type: 'button', 'aria-label': 'Close', onclick: close }, '×')),
     h('div', { class: 'modal__body' }, body),
   );
-  dlg.addEventListener('close', () => { dlg.remove(); onClose?.(); if (!hadOpener) focusHeadingIfFree(); ignoreRepeatPress(lastPress); });
+  dlg.addEventListener('close', () => { dlg.remove(); onClose?.(); if (!hadOpener) focusHeadingIfFree(); guardRepeat(); });
   dlg.addEventListener('click', (e) => {
     if (e.detail > 0) lastPress = { x: e.clientX, y: e.clientY, t: Date.now() }; // a real press (mouse, pen or touch); a keyboard click has detail 0
     if (e.target === dlg) close();
+    // This press closed the dialog: start the guard now. The browser runs the close event later, as its own task, and a second press sent
+    // right after the first (a script's back-to-back click, a busy phone) arrived before it (D-125).
+    if (!dlg.open) guardRepeat();
   });
   document.body.append(dlg);
   dlg.showModal();

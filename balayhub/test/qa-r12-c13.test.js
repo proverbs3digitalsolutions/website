@@ -132,8 +132,8 @@ test('#30 Basics: listing name, type, base rate and cleaning fee come first, the
   assert.match(add, /Guests see the city and province on your booking page\. The street address stays private\./);
 });
 
-test('#30 the Launchpad step names the listing name, the rate, the cleaning fee and the building', () => {
-  assert.ok(onboarding.includes("'Enter the listing name (for example Tower 1 - 1201), the nightly rate, the cleaning fee and the building.'"));
+test('the Launchpad step names the listing name, the rate and the building with its street address, city and province', () => {
+  assert.ok(onboarding.includes("'Enter the listing name (for example Tower 1 - 1201) and the nightly rate, then choose the building, or add it with its street address, city and province (guests see only the city and province).'"));
   assert.ok(!onboarding.includes('the unit name'), 'the old wording is gone');
 });
 

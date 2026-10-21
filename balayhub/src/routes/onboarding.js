@@ -28,7 +28,7 @@ const PHASES = [
 const STEPS = [
   { key: 'listings', phase: 'listings', title: 'Add your first listing', minutes: 3, href: '#/listings?new=1', action: 'Add listing',
     why: 'A listing is one unit you rent out per night, like a condo unit in a tower.',
-    how: ['Go to Listings and click Add listing.', 'Enter the listing name (for example Tower 1 - 1201), the nightly rate, the cleaning fee and the building.', 'Repeat for each unit.'] },
+    how: ['Go to Listings and click Add listing.', 'Enter the listing name (for example Tower 1 - 1201) and the nightly rate, then choose the building, or add it with its street address, city and province (guests see only the city and province).', 'Repeat for each unit.'] },
   { key: 'guest_info', phase: 'listings', title: 'Add Wi-Fi, check-in instructions and house rules', minutes: 3, href: '#/listings', action: 'Edit a listing',
     why: 'These are filled in automatically in the messages your guests receive.',
     how: ['Go to Listings and click Edit on a listing.', 'Under "Guest info", add the Wi-Fi name and password, how to get the key, and your house rules.', 'Save, then do the same for your other listings.'] },
