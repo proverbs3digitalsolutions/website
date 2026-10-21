@@ -194,7 +194,7 @@ export async function ownersView(el, { rerender, query = {} }) {
     },
   });
   const archive = async (o) => {
-    if (!await confirmDialog({ title: `Remove ${o.full_name}?`, text: 'Their units will no longer have an owner. Past reservations and expenses are not changed.', confirmText: 'Remove owner' })) return;
+    if (!await confirmDialog({ title: `Remove ${o.full_name}?`, text: 'Their units will no longer have an owner. Record any payout you still owe them first. Past reservations and expenses are not changed.', confirmText: 'Remove owner' })) return;
     try { await post(`/unit-owners/${o.owner_id}/archive`); toast('Owner removed.'); rerender(); } catch (err) { toast(err.message, 'error'); }
   };
 
@@ -418,7 +418,10 @@ export async function ownerStatementView(el, { params, query = {}, rerender }) {
   };
   const payoutsCard = h('section', { class: 'card no-print' },
     h('div', { class: 'card__head' }, h('h2', null, 'Payouts'),
-      h('button', { class: 'btn btn--primary btn--sm', type: 'button', disabled: !payouts, onclick: recordPayout }, 'Record payout')),
+      // A removed owner has no units to check a payout against, so no new payout is taken (D-122); the list and Void stay below.
+      detail.archived
+        ? h('p', { class: 'muted small' }, 'This owner was removed, so new payouts can\'t be recorded here.')
+        : h('button', { class: 'btn btn--primary btn--sm', type: 'button', disabled: !payouts, onclick: recordPayout }, 'Record payout')),
     payouts
       ? [h('p', { class: 'own-paid' }, h('strong', null, owes ? `Paid ${peso(paid)}. The owner owes you ${peso(-payoutDue)} this month.` : `Paid ${peso(paid)} of ${peso(payoutDue)}`), remaining > 0 ? ` · ${peso(remaining)} left to pay` : ''),
         overpaid > 0 && h('p', { class: 'own-paid amount--neg' }, `Overpaid by ${peso(overpaid)}`),

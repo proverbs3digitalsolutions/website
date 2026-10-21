@@ -802,7 +802,7 @@ section[aria-labelledby="delete-ws-title"] { margin-top: 24px; padding-top: 24px
 .inbox__head h2 { font-size: 1.1rem; }
 .inbox__head-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .inbox__head-actions select.input { width: auto; max-width: 200px; }
-.inbox__messages { display: flex; flex-direction: column; gap: 12px; padding: 16px; max-height: max(260px, calc(100vh - 500px)); min-height: 160px; overflow: auto; background: var(--surface-2); }
+.inbox__messages { display: flex; flex-direction: column; gap: 12px; padding: 16px; min-height: 160px; overflow: auto; background: var(--surface-2); }
 @media (max-width: 959px) { .inbox__messages { max-height: none; } }
 .msg { max-width: min(560px, 88%); padding: 10px 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); }
 .msg--in { align-self: flex-start; border-bottom-left-radius: 4px; }
@@ -822,6 +822,14 @@ section[aria-labelledby="delete-ws-title"] { margin-top: 24px; padding-top: 24px
 .composer__subject .input--sm { width: 100%; }
 .composer__actions { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
 .composer__later { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+/* The thread gives up height so the reply box and Send fit under it on a laptop screen (D-122); it keeps 160px and opens at its newest message (D-119). */
+@media (min-width: 960px) {
+  .inbox__messages { max-height: max(160px, calc(100vh - 740px)); }
+  .composer__actions { flex-wrap: nowrap; align-items: flex-start; }
+  .composer__later { flex: 1 1 auto; min-width: 0; }
+  /* The date field starts at 180px and takes the rest of the label, so the row never widens the thread column (D-122). */
+  .composer__later .input--sm { width: 0; min-width: 0; flex: 1 1 180px; }
+}
 .inbox__summary .dl { grid-template-columns: 90px 1fr; font-size: .88rem; }
 code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; border-radius: 6px; background: var(--gray-soft); font-size: .78rem; }
 .center { text-align: center; }

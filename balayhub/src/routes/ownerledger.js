@@ -20,6 +20,7 @@ const PAYOUT_METHODS = ['gcash', 'maya', 'bank_transfer', 'cash', 'other'];
 const MONTH_RE = /^(20\d{2}|2100)-(0[1-9]|1[0-2])$/;
 const manilaToday = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
 const validationError = (fields) => new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields });
+const removedError = (o) => new HttpError(409, `${o.full_name} was removed, so a payout can't be recorded. Payouts already recorded stay on their statements.`, { code: 'OWNER_REMOVED' });
 const centavos = (s) => Math.round(Number(s) * 100);
 const money = (c) => (c / 100).toFixed(2);
 // ₱1,234.00 for messages (centavos in).
@@ -71,6 +72,8 @@ const PAYOUT_SPEC = {
 
 router.post('/unit-owners/:id/payouts', ownersOnly, ah(async (req, res) => {
   const o = await loadOwner(req.user, uuidParam(req.params.id));
+  // A removed owner has no units, so nothing can be checked as due: no new payout (D-122). Past payouts stay and can be voided.
+  if (o.archived_at) throw removedError(o);
   const body = validate(req.body, PAYOUT_SPEC);
   if (!body.month) throw validationError({ month: 'Choose the statement month this payout is for.' });
   monthParam(body.month);
@@ -91,8 +94,9 @@ router.post('/unit-owners/:id/payouts', ownersOnly, ah(async (req, res) => {
   let result;
   try {
     result = await tx(async (db) => {
-      // Lock the owner so a retried save waits here, then finds the first save's row.
-      await db.query('SELECT owner_id FROM unit_owners WHERE owner_id = $1 FOR UPDATE', [o.owner_id]);
+      // Lock the owner so a retried save waits here, then finds the first save's row. A removal that committed while we waited refuses it.
+      const { rows: [locked] } = await db.query('SELECT owner_id, archived_at FROM unit_owners WHERE owner_id = $1 FOR UPDATE', [o.owner_id]);
+      if (locked.archived_at) throw removedError(o);
       if (key) {
         const again = await replay(db);
         if (again) return again;

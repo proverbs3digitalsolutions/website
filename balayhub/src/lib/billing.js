@@ -20,6 +20,9 @@ const MONTH_OPTIONS = { 1: 1, 3: 3, 12: 10 }; // months → months charged (12 m
 // How long a one-tap charge may wait for the bank before a new one is allowed.
 const PENDING_MINUTES = 15;
 
+// A one-tap charge waits this long after any paid plan payment: a second press on the redrawn page is not a second month (D-122).
+const JUST_PAID_SECONDS = 60;
+
 const enabled = () => Boolean(config.paymongoSecretKey);
 
 function price(plan, months) {
@@ -136,6 +139,14 @@ async function prepareCharge(user, plan, months, { couponCode, provider, seenPai
       }
     }
     if (stale(org)) throw paymentReceived();
+    // A one-tap charge right after a paid plan payment is the same press again (a double click or Enter on the redrawn
+    // page), not a new month: refused under the lock for a minute. Paying ahead from a fresh page works after that (D-122).
+    if (provider === 'paymongo_intent') {
+      const { rows: [recent] } = await db.query(
+        `SELECT 1 FROM billing_payments WHERE organization_id = $1 AND kind = 'plan' AND status = 'paid'
+            AND paid_at > now() - make_interval(secs => $2)`, [user.organization_id, JUST_PAID_SECONDS]);
+      if (recent) throw paymentReceived();
+    }
     // A plan payment that landed after this request started (a webhook or another tab) also stops it.
     const { rows: [landed] } = await db.query(
       `SELECT 1 FROM billing_payments WHERE organization_id = $1 AND kind = 'plan' AND status = 'paid' AND paid_at > $2`, [user.organization_id, startedAt]);
@@ -449,4 +460,4 @@ function nextChargeOn(org) {
   return last ? dayAfter(last) : null;
 }
 
-module.exports = { convertDays, SAVED_CARD_PAY, PENDING_MINUTES, paySaved, settlePending, nextChargeOn, periodEnd, enabled, price, MONTH_OPTIONS, createCheckout, refresh, markPaid, verifySignature, reconcile, addMonths, couponAheadError, DELETING_PAY };
+module.exports = { convertDays, SAVED_CARD_PAY, PENDING_MINUTES, JUST_PAID_SECONDS, paySaved, settlePending, nextChargeOn, periodEnd, enabled, price, MONTH_OPTIONS, createCheckout, refresh, markPaid, verifySignature, reconcile, addMonths, couponAheadError, DELETING_PAY };

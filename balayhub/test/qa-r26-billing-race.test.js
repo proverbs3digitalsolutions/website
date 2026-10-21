@@ -90,6 +90,8 @@ test('CARD-1 timeline: coupon pay, stale pay refused, fresh early renewal adds a
   assert.equal(await paidUntil(), until1);
   const bill = await c.get('/api/billing');
   assert.equal(day(bill.data.paid_until), until1);
+  // The one-tap gate refuses a charge for 60 s after a paid plan payment (D-122). This is a later, separate renewal, so age that payment.
+  await sql(`UPDATE billing_payments SET paid_at = paid_at - interval '61 seconds' WHERE billing_id = (SELECT billing_id FROM billing_payments WHERE organization_id = $1 AND kind = 'plan' AND status = 'paid' ORDER BY paid_at DESC LIMIT 1)`, [orgId]);
   const third = await pay({ seen_paid_until: day(bill.data.paid_until) });
   assert.equal(third.status, 200, JSON.stringify(third.data));
   const until2 = await paidUntil();

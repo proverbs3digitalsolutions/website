@@ -84,6 +84,9 @@ let billPaidUntil = null; // set by planCard: the loaded billing's paid_until
 let carriedSentPaidUntil = null; // the paid_until the page had when the PAYMENT_IN_PROGRESS answer came back
 // The coupon code typed in the pay box when a card row was saved: the redrawn box starts with it (D-106).
 let keptCoupon = null;
+// Set by a paid one-tap charge or a free activation: the redrawn page puts focus on the Plan & billing heading, never on the new Pay button (D-122).
+let focusPlanAfterPay = false;
+let planHead = null; // set by planCard: the Plan & billing heading of the page being drawn
 
 // What the plan card shows depends on these; if another tab changes them, this tab is stale.
 const billSigOf = (bill) => JSON.stringify([bill.pending_payment, bill.paid_until, bill.renewal_plan, bill.plan]);
@@ -128,6 +131,7 @@ export async function settingsView(el, { rerender, query = {} }) {
   let carriedEl = null;
   const unlessWaiting = carriedUnlessWaiting; carriedUnlessWaiting = false;
   const sentPaidUntil = carriedSentPaidUntil; carriedSentPaidUntil = null;
+  const paidFocus = focusPlanAfterPay; focusPlanAfterPay = false;
   if (carriedNotice) { billingNotice = h('div', { class: 'alert alert--error', role: 'alert', tabindex: '-1' }, carriedNotice); carriedEl = billingNotice; carriedNotice = null; }
   // Back from PayMongo checkout: confirm the payment with the server.
   if (query.billing) {
@@ -279,6 +283,7 @@ export async function settingsView(el, { rerender, query = {} }) {
   }
   el.replaceChildren(pageHead({ title: 'Settings', sub: u.organization_name }), h('div', { class: 'stack' }, billingNotice, sections));
   if (billingNotice) focusWhenAttached(el, billingNotice);
+  else if (paidFocus && planHead) focusWhenAttached(el, planHead);
   if (u.role === 'owner' && u.plan && !u.plan.is_demo) startBillWatch(rerender);
   // The top bar's "Invite a teammate" link (#/settings?invite=1) opens the dialog once the page is drawn.
   query.invite && invite && (delete query.invite, history.replaceState(null, '', '#/settings'), invite());
@@ -490,8 +495,9 @@ export async function planCard(u, rerender) {
     : p.read_only ? h('div', { class: 'alert alert--error' }, p.reason === 'trial_ended' ? 'Your free trial has ended. Your workspace is view-only until you choose a plan.' : 'Your payment is overdue. Your workspace is view-only until you renew.')
     : p.plan === 'trial' ? h('div', { class: 'alert alert--info' }, `Free trial: ${p.trial_days_left} day${p.trial_days_left === 1 ? '' : 's'} left. All features are included.`)
       : p.reason === 'grace' ? h('div', { class: 'alert alert--warn' }, `Your plan was paid until ${fmtDate(p.paid_until)}. Please renew within 7 days to avoid interruption.`) : null;
+  planHead = h('h2', { tabindex: '-1' }, 'Plan & billing');
   return h('div', { class: 'card' },
-    h('div', { class: 'card__head' }, h('h2', null, 'Plan & billing'), h('span', { class: 'badge badge--paid' }, p.name)),
+    h('div', { class: 'card__head' }, planHead, h('span', { class: 'badge badge--paid' }, p.name)),
     status,
     h('dl', { class: 'dl', style: { marginTop: '12px' } },
       h('dt', null, 'Current plan'), h('dd', null, p.price ? `${p.name} — ₱${p.price.toLocaleString('en-PH')} / month` : p.name),
@@ -635,6 +641,7 @@ export function payOnline(p, bill, rerender, bc) {
       if (r.activated) {
         await refreshUser();
         toast(`Your ${bill.options.find((x) => x.key === plan).name} plan is active until ${fmtDate(r.paid_until)}.`);
+        focusPlanAfterPay = true;
         rerender();
         return;
       }
@@ -659,6 +666,7 @@ export function payOnline(p, bill, rerender, bc) {
       if (r.activated || r.status === 'paid') {
         await refreshUser();
         toast(`Your ${bill.options.find((x) => x.key === plan).name} plan is active until ${fmtDate(r.paid_until)}.`);
+        focusPlanAfterPay = true;
         rerender();
         return;
       }

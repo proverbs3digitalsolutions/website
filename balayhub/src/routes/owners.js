@@ -252,7 +252,7 @@ router.get('/unit-owners/:id/statement', ownersOnly, ah(async (req, res) => {
   const month = monthParam(req.query.month);
   const s = await ownerStatement(req.user.organization_id, o.owner_id, month);
   const saved = await loadRecord(o.owner_id, month);
-  res.json({ statement: { ...s, month_label: monthLabel(month) }, record: recordOf(saved), published: publishedOf(saved, month), portal_enabled: Boolean(o.portal_enabled) });
+  res.json({ statement: { ...s, month_label: monthLabel(month) }, record: recordOf(saved), published: publishedOf(saved, month), portal_enabled: Boolean(o.portal_enabled), archived: Boolean(o.archived_at) });
 }));
 
 router.post('/unit-owners/:id/statement/publish', ownersOnly, ah(async (req, res) => {

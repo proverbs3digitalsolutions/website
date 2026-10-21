@@ -188,6 +188,8 @@ test('a stale row whose intent is still processing is not expired or released; a
   assert.equal(r.data.status, 'paid');
   assert.deepEqual((await redemptions()).map((x) => [x.status, x.months_used]), [['used_up', 1]]);
   await sql(`UPDATE organizations SET paid_until = NULL, plan = 'trial' WHERE organization_id = $1`, [orgId]);
+  // The one-tap gate refuses a charge for 60 s after a paid plan payment (D-122). This is a later attempt, so age that payment.
+  await sql(`UPDATE billing_payments SET paid_at = paid_at - interval '61 seconds' WHERE billing_id = (SELECT billing_id FROM billing_payments WHERE organization_id = $1 AND kind = 'plan' AND status = 'paid' ORDER BY paid_at DESC LIMIT 1)`, [orgId]);
   const again = await pay();
   assert.equal(again.status, 409, 'the once-only coupon is not given a second time');
   assert.equal(again.data.code, 'COUPON_USED');

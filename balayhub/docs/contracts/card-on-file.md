@@ -147,6 +147,8 @@ Errors: everything `/billing/checkout` can answer (`COMPED`, `BILLING_OFF`, `COU
 
 409 `DELETION_SCHEDULED` (D-116) while the workspace is scheduled for deletion: "This workspace is scheduled for deletion, so plan payments are turned off. Cancel the deletion first, then pay." Nothing is recorded, no coupon is redeemed and nothing is charged.
 
+409 `PAYMENT_RECEIVED` ("That payment was just received. Check your plan before paying again.") for 60 seconds after any paid plan payment of the workspace, whatever `seen_paid_until` says (D-122). Nothing is charged, written or held.
+
 ### 3.9 `PATCH /api/billing/renewal` (new, owner)
 
 Request (partial): `{ "renewal_plan": "pro", "auto_renew": false, "consent": true }`.
