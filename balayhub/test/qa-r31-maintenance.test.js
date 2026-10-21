@@ -31,7 +31,7 @@ test('onchange clears the line first', () => {
 
 test('catch enables the input before up.show, and fileRefused chooses line or toast', () => {
   const c = onchange.slice(onchange.indexOf('catch'));
-  assert.ok(c.indexOf('upload.disabled = false') > -1 && c.indexOf('upload.disabled = false') < c.indexOf('up.show('));
+  assert.ok(c.indexOf("upload.removeAttribute('aria-disabled')") > -1 && c.indexOf("upload.removeAttribute('aria-disabled')") < c.indexOf('up.show('));
   assert.match(c, /if \(fileRefused\(err\)\) up\.show\(err\.message\); else toast\(err\.message, 'error'\);/);
 });
 

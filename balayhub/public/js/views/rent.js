@@ -544,11 +544,14 @@ export async function paymentDetailView(el, { params, rerender }) {
         !p.voided_at && h('div', { class: 'form', style: { marginTop: '12px' } }, h('div', { class: 'field' }, h('label', { for: 'payment-file' }, 'Choose a receipt or proof file'), up.wrap),
           h('button', {
             class: 'btn btn--secondary', onclick: async (e) => {
+              const btn = e.currentTarget;
+              if (btn.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
               up.clear();
               if (!upload.files[0]) { up.show('Choose a file first.'); return; }
               const bad = fileProblem(upload.files[0]); if (bad) { up.show(bad); return; }
-              e.target.disabled = true;
-              try { await uploadFile('payment', p.payment_id, upload.files[0]); toast('Uploaded.'); rerender(); } catch (err) { e.target.disabled = false; if (fileRefused(err)) up.show(err.message); else toast(err.message, 'error'); }
+              // aria-disabled, not disabled: a disabled control drops focus to the page while it waits (D-97, D-105, D-120).
+              btn.setAttribute('aria-disabled', 'true');
+              try { await uploadFile('payment', p.payment_id, upload.files[0]); toast('Uploaded.'); rerender(); } catch (err) { btn.removeAttribute('aria-disabled'); if (fileRefused(err)) up.show(err.message); else toast(err.message, 'error'); }
             },
           }, 'Upload attachment')))),
     h('div', { class: 'card print-only' },
@@ -605,11 +608,13 @@ export async function expenseDetailView(el, { params, rerender }) {
         !x.voided_at && h('div', { class: 'form', style: { marginTop: '12px' } }, h('div', { class: 'field' }, h('label', { for: 'expense-file' }, 'Choose a receipt or proof file'), up.wrap),
           h('button', {
             class: 'btn btn--secondary', onclick: async (e) => {
+              const btn = e.currentTarget;
+              if (btn.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
               up.clear();
               if (!upload.files[0]) { up.show('Choose a file first.'); return; }
               const bad = fileProblem(upload.files[0]); if (bad) { up.show(bad); return; }
-              e.target.disabled = true;
-              try { await uploadFile('expense', x.expense_id, upload.files[0]); toast('Uploaded.'); rerender(); } catch (err) { e.target.disabled = false; if (fileRefused(err)) up.show(err.message); else toast(err.message, 'error'); }
+              btn.setAttribute('aria-disabled', 'true');
+              try { await uploadFile('expense', x.expense_id, upload.files[0]); toast('Uploaded.'); rerender(); } catch (err) { btn.removeAttribute('aria-disabled'); if (fileRefused(err)) up.show(err.message); else toast(err.message, 'error'); }
             },
           }, 'Upload receipt')))));
 }

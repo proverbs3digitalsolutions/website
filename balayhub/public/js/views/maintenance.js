@@ -273,14 +273,17 @@ export async function maintenanceDetailView(el, { params, rerender }) {
 
   // Named by its visible label, never an aria-label (D-116).
   const upload = h('input', { type: 'file', id: 'maint-upload-file', class: 'input', accept: 'image/jpeg,image/png,image/webp,application/pdf',
-    // Picking a file uploads it at once (no second step); the input is off while the upload runs.
+    // Picking a file uploads it at once (no second step); the input is busy while the upload runs.
+    onclick: (e) => { if (upload.getAttribute('aria-disabled') === 'true') e.preventDefault(); },
     onchange: async () => {
+      if (upload.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
       if (!upload.files[0]) return;
       up.clear();
-      upload.disabled = true;
+      // aria-disabled, not disabled: a disabled control drops focus to the page while it waits (D-97, D-105, D-120).
+      upload.setAttribute('aria-disabled', 'true');
       try { await uploadFile('maintenance', m.request_id, upload.files[0]); upload.value = ''; toast('Uploaded.'); rerender(); } catch (err) {
         // Enabled before the line is shown, so focus can land on the box (D-113).
-        upload.disabled = false; upload.value = '';
+        upload.removeAttribute('aria-disabled'); upload.value = '';
         if (fileRefused(err)) up.show(err.message); else toast(err.message, 'error');
       }
     },

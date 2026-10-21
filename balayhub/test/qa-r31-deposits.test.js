@@ -21,12 +21,12 @@ test('the photo input is wrapped by uploadField and the wrapper is rendered', ()
 });
 
 test('onchange clears the line first', () => {
-  assert.match(block, /onchange: async \(\) => \{\s*up\.clear\(\);\s*if \(!upload\.files\[0\]\) return;/);
+  assert.match(block, /onchange: async \(\) => \{\s*if \(upload\.getAttribute\('aria-disabled'\) === 'true'\) return;[^\n]*\s*up\.clear\(\);\s*if \(!upload\.files\[0\]\) return;/);
 });
 
 test('the catch enables the input before up.show, and fileRefused picks line or toast', () => {
   const c = block.slice(block.indexOf('catch (err)'));
-  assert.ok(c.indexOf('upload.disabled = false') > -1 && c.indexOf('upload.disabled = false') < c.indexOf('up.show('));
+  assert.ok(c.indexOf("upload.removeAttribute('aria-disabled')") > -1 && c.indexOf("upload.removeAttribute('aria-disabled')") < c.indexOf('up.show('));
   assert.match(c, /if \(fileRefused\(err\)\) up\.show\(err\.message\); else toast\(err\.message, 'error'\)/);
   assert.match(block, /toast\('Photo added\.'\)/);
 });

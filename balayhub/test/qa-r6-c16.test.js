@@ -23,7 +23,7 @@ const step3Start = landing.indexOf('} else {\n      const submit = h(');
 const step3 = landing.slice(step3Start, landing.indexOf('box.querySelector(\'input:not([type=checkbox]), .gs-card\')', step3Start));
 // The sign-up error handler inside step 3: from its catch to the end of the submit handler.
 const catchStart = step3.indexOf('} catch (err) {');
-const signupCatch = step3.slice(catchStart, step3.indexOf('submit.disabled = false;', catchStart));
+const signupCatch = step3.slice(catchStart, step3.indexOf("submit.removeAttribute('aria-disabled')", catchStart));
 
 test('#31 language switch: its accessible name is "Language: EN" or "Wika: TL", built from the visible label', () => {
   assert.match(langMenu, /'aria-label': `\$\{t\('Language'\)\}: \$\{label\}`/, 'the name is the translated word plus the same label the summary shows');

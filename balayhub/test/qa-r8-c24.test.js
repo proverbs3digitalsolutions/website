@@ -110,7 +110,7 @@ test('the photos dialog puts focus back inside the dialog after Make cover, Dele
     'Make cover focuses the new cover');
   assert.match(text, /await post\(`\/listing-photos\/\$\{p\.file_id\}\/remove`\); draw\(\(root\) => \(root\.querySelectorAll\('\.ph-item'\)\[i\]\?\.querySelector\('button\[aria-label\^="Delete,"\]'\) \?\? root\.querySelector\('input\[type="file"\]'\)\)\.focus\(\)\);/,
     'Delete focuses the Delete of the photo now in that place, else the file input');
-  assert.match(text, /\} catch \(err\) \{ if \(fileRefused\(err\)\) refusal = err\.message; else toast\(err\.message, 'error'\); \}\s*input\.value = '';\s*draw\(\(root\) => root\.querySelector\('input\[type="file"\]'\)\?\.focus\(\)\);/, 'an upload keeps focus on the file input');
+  assert.match(text, /\} catch \(err\) \{ if \(fileRefused\(err\)\) refusal = err\.message; else toast\(err\.message, 'error'\); \}\s*input\.value = '';\s*input\.removeAttribute\('aria-disabled'\);[^\n]*\s*draw\(\(root\) => root\.querySelector\('input\[type="file"\]'\)\?\.focus\(\)\);/, 'an upload keeps focus on the file input');
 });
 
 test('every per-row button on the page names its row (D-81 sweep)', () => {

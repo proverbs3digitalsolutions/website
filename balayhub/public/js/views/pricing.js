@@ -441,7 +441,8 @@ async function bulkModal({ listings, rerender }) {
     if (Object.keys(problems).length) { banner('Please check the highlighted fields.'); showErrors(form, problems); return null; }
     try { return await post(isBlocks() ? '/bulk/blocks' : '/bulk/prices', body(dry)); }
     catch (e) {
-      const rest = e.fields ? showErrors(form, e.fields) : [e.message];
+      // ApiError always carries a fields object, so test for an entry; a refusal with none says the server's own words.
+      const rest = e.fields && Object.keys(e.fields).length ? showErrors(form, e.fields) : [e.message];
       if (rest.length) banner(rest.join(' '));
       else banner('Please check the highlighted fields.');
       return null;
@@ -449,9 +450,11 @@ async function bulkModal({ listings, rerender }) {
   };
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    previewBtn.disabled = true; previewBtn.textContent = 'Checking…';
+    if (previewBtn.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
+    // aria-disabled, not disabled: a disabled control drops focus to the page while it waits (D-97, D-105, D-120).
+    previewBtn.setAttribute('aria-disabled', 'true'); previewBtn.textContent = 'Checking…';
     const r = await run(true);
-    previewBtn.disabled = false; previewBtn.textContent = 'Preview';
+    previewBtn.removeAttribute('aria-disabled'); previewBtn.textContent = 'Preview';
     if (!r) return;
     let total;
     if (isBlocks()) {
@@ -476,12 +479,14 @@ async function bulkModal({ listings, rerender }) {
     if (total === 0 && isBlocks()) resultLine.append(h('p', { class: 'muted small' }, 'Nothing to change for these choices.'));
   });
   applyBtn.addEventListener('click', async () => {
+    if (applyBtn.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
     // A typed price above the ceiling is asked about before it is applied; "Change it" puts focus back in the price box.
     if (actSel.value === 'set' && !await highRateOk(parseAmount(price.value))) { price.focus(); return; }
-    applyBtn.disabled = true; applyBtn.textContent = 'Applying…';
+    applyBtn.setAttribute('aria-disabled', 'true'); applyBtn.textContent = 'Applying…';
     const r = await run(false);
     applyBtn.textContent = 'Apply';
-    if (!r) { applyBtn.disabled = false; return; }
+    // Only the busy mark goes: an Apply that an edit switched off (no fresh preview, stale()) stays off after a refusal.
+    if (!r) { applyBtn.removeAttribute('aria-disabled'); return; }
     const n = r.count;
     const sk = (r.skipped || []).length;
     const said = actSel.value === 'clear'

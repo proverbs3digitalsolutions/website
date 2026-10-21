@@ -115,15 +115,17 @@ export async function payBalanceView(el, { params, query }, snap) {
   const payError = h('div');
   const btn = h('button', { class: 'btn btn--primary btn--block', type: 'button' }, t('Pay {amount} now', { amount: peso(d.balance) }));
   btn.addEventListener('click', async () => {
+    if (btn.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
     payError.replaceChildren();
-    btn.disabled = true;
+    // aria-disabled, not disabled: a disabled control drops focus to the page while it waits (D-97, D-105, D-120).
+    btn.setAttribute('aria-disabled', 'true');
     btn.textContent = t('Opening secure payment…');
     try {
       const r = await post(`/public/pay/${encodeURIComponent(token)}/checkout`);
       location.href = r.checkout_url;
     } catch (err) {
       payError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, tServer(err.message)));
-      btn.disabled = false;
+      btn.removeAttribute('aria-disabled');
       btn.textContent = t('Pay {amount} now', { amount: peso(d.balance) });
     }
   });
@@ -179,10 +181,11 @@ function addonsCard(token, reload, snap) {
     });
     const btn = h('button', { class: 'btn btn--primary btn--block', type: 'button' }, t('Add selected to my bill'));
     btn.addEventListener('click', async () => {
+      if (btn.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
       err.replaceChildren();
       const selections = Object.entries(qty).filter(([, q]) => q > 0).map(([addon_id, quantity]) => ({ addon_id, quantity }));
       if (!selections.length) { err.replaceChildren(h('div', { class: 'alert alert--error' }, t('Choose at least one extra.'))); card.querySelector('.gp-addons input')?.focus(); return; }
-      btn.disabled = true;
+      btn.setAttribute('aria-disabled', 'true');
       btn.textContent = t('Adding…');
       try {
         await post(`/public/pay/${encodeURIComponent(token)}/addons`, { selections }, { idempotencyKey: newIdempotencyKey() });
@@ -190,7 +193,7 @@ function addonsCard(token, reload, snap) {
         reload();
       } catch (e) {
         err.replaceChildren(h('div', { class: 'alert alert--error' }, e.offline ? t("You're offline. Please try again when you're connected.") : tServer(e.message)));
-        btn.disabled = false;
+        btn.removeAttribute('aria-disabled');
         btn.textContent = t('Add selected to my bill');
       }
     });
@@ -260,32 +263,42 @@ function pendingList(list, token, reload) {
         const add = h('button', { class: 'btn btn--primary', type: 'button' }, t('Add the screenshot'));
         const back = h('button', { class: 'btn', type: 'button' }, t('Take it back'));
         add.addEventListener('click', async () => {
+          if (add.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
           const f = file.files[0];
           msg.replaceChildren();
           if (!f) { msg.replaceChildren(h('div', { class: 'alert alert--error' }, t('Choose a screenshot or receipt.'))); file.focus(); return; }
           if (!f.size) { msg.replaceChildren(h('div', { class: 'alert alert--error' }, t('This file is empty. Choose the file again.'))); file.focus(); return; } // D-111
           if (f.size > MAX_PROOF_BYTES || !PROOF_TYPES.includes(f.type)) { msg.replaceChildren(h('div', { class: 'alert alert--error' }, t('Upload a JPG, PNG, WEBP or PDF file up to 10 MB.'))); file.focus(); return; }
-          const bad = await fileContentError(f); if (bad) { msg.replaceChildren(h('div', { class: 'alert alert--error' }, t(bad))); file.focus(); return; } // D-113
-          add.disabled = true; back.disabled = true;
+          // Busy from here, so a second press while the file is read does nothing (D-120).
+          add.setAttribute('aria-disabled', 'true'); back.setAttribute('aria-disabled', 'true');
+          let checkPassed = false;
+          try {
+            const bad = await fileContentError(f); if (bad) { msg.replaceChildren(h('div', { class: 'alert alert--error' }, t(bad))); file.focus(); return; } // D-113
+            checkPassed = true;
+          } finally {
+            // A refused file, or one that cannot be read, gives the buttons back here; a file that passes keeps them busy for the upload.
+            if (!checkPassed) { add.removeAttribute('aria-disabled'); back.removeAttribute('aria-disabled'); }
+          }
           add.textContent = t('Uploading the screenshot…');
           try {
             await api('POST', `${base(p.proof_id)}/image`, undefined, { rawBody: f, headers: { 'Content-Type': f.type } });
             reload();
           } catch (err) {
             msg.replaceChildren(h('div', { class: 'alert alert--error' }, err.offline ? t("You're offline. Please try again when you're connected.") : tServer(err.message)));
-            add.disabled = false; back.disabled = false;
+            add.removeAttribute('aria-disabled'); back.removeAttribute('aria-disabled');
             add.textContent = t('Add the screenshot');
           }
         });
         back.addEventListener('click', async () => {
-          add.disabled = true; back.disabled = true;
+          if (back.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
+          add.setAttribute('aria-disabled', 'true'); back.setAttribute('aria-disabled', 'true');
           back.textContent = t('Taking back…');
           try {
             await api('DELETE', base(p.proof_id));
             reload();
           } catch (err) {
             msg.replaceChildren(h('div', { class: 'alert alert--error' }, err.offline ? t("You're offline. Please try again when you're connected.") : tServer(err.message) || t('Could not take it back. Please try again.')));
-            add.disabled = false; back.disabled = false;
+            add.removeAttribute('aria-disabled'); back.removeAttribute('aria-disabled');
             back.textContent = t('Take it back');
           }
         });
@@ -364,7 +377,7 @@ function proofForm(d, token, onSent, left, pendingTotal) {
     else if (file.size > MAX_PROOF_BYTES || !PROOF_TYPES.includes(file.type)) problems.proof_file = t('Upload a JPG, PNG, WEBP or PDF file up to 10 MB.');
     else { const bad = await fileContentError(file); if (bad) problems.proof_file = t(bad); }
     if (Object.keys(problems).length) { showErrors(form, problems); return; }
-    submit.disabled = true;
+    submit.setAttribute('aria-disabled', 'true');
     submit.textContent = t('Sending…');
     try {
       if (!proofId) {
@@ -388,7 +401,7 @@ function proofForm(d, token, onSent, left, pendingTotal) {
         : taken ? `${msg} ${t('Choose a different file and send again.')}` : msg));
       if (err.fields) showErrors(form, tFields(err.fields));
       progress.textContent = '';
-      submit.disabled = false;
+      submit.removeAttribute('aria-disabled');
       submit.textContent = t('Send proof');
       if (atFile && !err.offline) photo.focus();
     }

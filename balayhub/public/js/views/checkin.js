@@ -230,7 +230,8 @@ export async function guestCheckinView(el, { params }, kept) {
       busy = false;
       return;
     }
-    submit.disabled = true;
+    // aria-disabled, not disabled: a disabled control drops focus to the page while it waits (D-97, D-105, D-120).
+    submit.setAttribute('aria-disabled', 'true');
     const payload = {
       lead_name: d.lead_name, phone: d.phone, email: d.email, arrival_time: d.arrival_time, vehicle_plate: d.vehicle_plate,
       notes: d.notes, consent: Boolean(form.elements.consent.checked), id_photos: picked.length,
@@ -278,7 +279,7 @@ export async function guestCheckinView(el, { params }, kept) {
       formError.scrollIntoView?.({ block: 'nearest' });
     } finally {
       busy = false;
-      submit.disabled = false;
+      submit.removeAttribute('aria-disabled');
       submit.textContent = r?.submitted_at ? t('Save changes') : t('Submit registration');
     }
   });

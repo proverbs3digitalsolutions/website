@@ -284,7 +284,9 @@ export async function verifyPendingView(el) {
   const resend = h('button', {
     class: 'btn btn--secondary btn--block',
     onclick: async () => {
-      resend.disabled = true;
+      if (resend.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
+      // aria-disabled, not disabled: a disabled control drops focus to the page while it waits (D-97, D-105, D-120).
+      resend.setAttribute('aria-disabled', 'true');
       try {
         const r = await post('/auth/resend-verification');
         if (r.alreadyVerified) { await refreshUser(); afterLogin(); return; }
@@ -292,7 +294,7 @@ export async function verifyPendingView(el) {
         status.replaceChildren();
         msg.replaceChildren(h('div', { class: 'alert alert--ok' }, t('A new verification email is on its way.')), devLink(r.devVerificationLink, t('Verify my email')));
       } catch (err) { msg.replaceChildren(h('div', { class: 'alert alert--error' }, tServer(err.message))); }
-      resend.disabled = false;
+      resend.removeAttribute('aria-disabled');
     },
   }, t('Resend verification email'));
   // Stays in the page (role="status", so a screen reader hears it) while the email is not verified yet.

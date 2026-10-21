@@ -373,7 +373,7 @@ export async function bookListingView(el, { params, query }) {
         summary.replaceChildren(); return;
       }
       // Show the actual reason (e.g. minimum stay), not just "check the highlighted fields".
-      const reason = err.fields ? Object.values(err.fields)[0] : err.message;
+      const reason = err.fields && Object.keys(err.fields).length ? Object.values(err.fields)[0] : err.message;
       summary.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, tServer(reason)));
     }
   }
@@ -475,7 +475,8 @@ export async function bookListingView(el, { params, query }) {
       return;
     }
     busy = true;
-    submit.disabled = true;
+    // aria-disabled, not disabled: a disabled control drops focus to the page while it waits (D-97, D-105, D-120).
+    submit.setAttribute('aria-disabled', 'true');
     submit.textContent = t('Opening secure payment…');
     try {
       const r = await post(`/public/book/${encodeURIComponent(slug)}/units/${l.unit_id}/checkout`, {
@@ -499,7 +500,7 @@ export async function bookListingView(el, { params, query }) {
         : tServer(err.message);
       payError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, banner));
       if (err.code === 'DATES_TAKEN') { days = new Map(); await loadDays(monthStart); drawCal(); }
-      submit.disabled = false;
+      submit.removeAttribute('aria-disabled');
       submit.textContent = t('Continue to payment');
       busy = false;
     }

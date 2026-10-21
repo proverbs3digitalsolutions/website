@@ -266,15 +266,17 @@ export async function helpTicketView(el, { params, rerender }) {
   attach.addEventListener('change', clearReplyError);
   const send = async (e) => {
     const btn = e.currentTarget;
+    if (btn.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
     if (!reply.value.trim() && !attach.files[0]) { replyError.textContent = 'Write a reply first.'; replyField.classList.add('field--invalid'); reply.setAttribute('aria-invalid', 'true'); reply.focus(); return; }
-    btn.disabled = true;
+    // aria-disabled, not disabled: a disabled control drops focus to the page while it waits (D-97, D-105, D-120).
+    btn.setAttribute('aria-disabled', 'true');
     try {
       if (attach.files[0]) {
         try { await uploadFile('support', t.ticket_id, attach.files[0]); } catch (err) {
           // A file refused before sending (empty, too big, not really its type) or by the server is said on the attach box; the reply text stays (D-112).
           if (['EMPTY_FILE', 'BAD_FILE_CONTENT', 'UNSUPPORTED_FILE'].includes(err.code) || err.status === 413) {
             attachError.textContent = err.message; attachField.classList.add('field--invalid'); attach.setAttribute('aria-invalid', 'true');
-            btn.disabled = false; attach.focus(); return;
+            btn.removeAttribute('aria-disabled'); attach.focus(); return;
           }
           throw err;
         }
@@ -282,7 +284,7 @@ export async function helpTicketView(el, { params, rerender }) {
       if (reply.value.trim()) await post(`/support/tickets/${t.ticket_id}/reply`, { body: reply.value.trim() });
       toast(t.status === 'resolved' ? 'Ticket reopened. We’ll take another look.' : 'Sent to support.');
       rerender();
-    } catch (err) { toast(err.message, 'error'); btn.disabled = false; }
+    } catch (err) { toast(err.message, 'error'); btn.removeAttribute('aria-disabled'); }
   };
 
   let rating = 0;
@@ -295,9 +297,10 @@ export async function helpTicketView(el, { params, rerender }) {
       : h('div', { class: 'form' }, h('div', { class: 'field' }, stars((n) => { rating = n; ratingError.textContent = ''; }), ratingError), ratingComment,
         h('div', null, h('button', { class: 'btn btn--secondary btn--sm', onclick: async (e) => {
           const btn = e.currentTarget;
+          if (btn.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
           if (!rating) { ratingError.textContent = 'Pick a star rating first.'; return; }
-          btn.disabled = true;
-          try { await post(`/support/tickets/${t.ticket_id}/rate`, { rating, comment: ratingComment.value.trim() || null }); toast('Thanks for the feedback!'); rerender(); } catch (err) { toast(err.message, 'error'); btn.disabled = false; }
+          btn.setAttribute('aria-disabled', 'true');
+          try { await post(`/support/tickets/${t.ticket_id}/rate`, { rating, comment: ratingComment.value.trim() || null }); toast('Thanks for the feedback!'); rerender(); } catch (err) { toast(err.message, 'error'); btn.removeAttribute('aria-disabled'); }
         } }, 'Send rating'))));
 
   let solving = false;
@@ -393,8 +396,10 @@ export async function adminSupportTicketView(el, { params, rerender }) {
     h('option', { value: '' }, 'Status: automatic (waiting on customer)'),
     STEPS.concat([['closed', 'Closed']]).map(([k, v]) => h('option', { value: k }, `Set to: ${v}`)));
   const act = async (e, fn, msg) => {
-    const btn = e.currentTarget; btn.disabled = true;
-    try { await fn(); toast(msg); rerender(); } catch (err) { toast(err.message, 'error'); btn.disabled = false; }
+    const btn = e.currentTarget;
+    if (btn.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
+    btn.setAttribute('aria-disabled', 'true');
+    try { await fn(); toast(msg); rerender(); } catch (err) { toast(err.message, 'error'); btn.removeAttribute('aria-disabled'); }
   };
   const ctx = t.context || {};
   el.replaceChildren(

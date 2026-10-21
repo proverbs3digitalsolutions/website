@@ -14,7 +14,10 @@ const start = src.indexOf('async function photosModal');
 const fn = src.slice(start, src.indexOf('\n}\n', start) + 3).replace(/\/\/.*$/gm, '');
 
 test('the file box has an id and no aria-label', () => {
-  const input = fn.match(/const input = h\('input'[^\n]*/)[0];
+  // The input's props run over several lines (click guard, busy guard), so read its whole block to the closing "} });".
+  const at = fn.indexOf("const input = h('input'");
+  assert.ok(at > 0, 'the file input is found');
+  const input = fn.slice(at, fn.indexOf('} });', at));
   assert.match(input, /id: 'listing-photos-file'/);
   assert.doesNotMatch(input, /aria-label/);
 });

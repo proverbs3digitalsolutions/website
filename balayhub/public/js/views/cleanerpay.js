@@ -369,10 +369,16 @@ export async function myPayView(el, { query = {} } = {}) {
   }
 
   const label1 = h('span', { class: 'mypay__month', 'aria-live': 'polite' }); // the month name says which month now shows (D-114)
-  const go = (d) => () => { month = shift(month, d); sync(); load(); };
+  // A dimmed Next does nothing (D-117).
+  const go = (d) => () => { if (d > 0 && month >= thisMonth) return; month = shift(month, d); sync(); load(); };
   const prev = h('button', { class: 'btn btn--secondary mypay__nav', type: 'button', 'aria-label': t('Previous month'), onclick: go(-1) }, '‹');
   const next = h('button', { class: 'btn btn--secondary mypay__nav', type: 'button', 'aria-label': t('Next month'), onclick: go(1) }, '›');
-  function sync() { label1.textContent = monthName(month); next.disabled = month >= thisMonth; }
+  // Dimmed, not disabled: the press that reaches this month keeps focus on Next (D-117, D-120).
+  function sync() {
+    label1.textContent = monthName(month);
+    if (month >= thisMonth) next.setAttribute('aria-disabled', 'true');
+    else next.removeAttribute('aria-disabled');
+  }
   sync();
   el.replaceChildren(pageHead({ title: t('My pay'), sub: t('Your pay for the cleans you finished.') }), h('div', { class: 'mypay__bar' }, prev, label1, next), box);
   await load();

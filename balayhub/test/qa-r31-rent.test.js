@@ -29,7 +29,7 @@ for (const [kind, v] of views) {
     assert.match(v, /const bad = fileProblem\(upload\.files\[0\]\); if \(bad\) \{ up\.show\(bad\); return; \}/);
     assert.doesNotMatch(v, /toast\(bad/);
     assert.doesNotMatch(v, /toast\('Choose a file first/);
-    assert.match(v, /catch \(err\) \{ e\.target\.disabled = false; if \(fileRefused\(err\)\) up\.show\(err\.message\); else toast\(err\.message, 'error'\); \}/);
+    assert.match(v, /catch \(err\) \{ btn\.removeAttribute\('aria-disabled'\); if \(fileRefused\(err\)\) up\.show\(err\.message\); else toast\(err\.message, 'error'\); \}/);
     assert.match(v, /toast\('Uploaded\.'\)/);
   });
 }

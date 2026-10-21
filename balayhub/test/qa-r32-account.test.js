@@ -11,7 +11,7 @@ const path = require('node:path');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'public/js/views/account.js'), 'utf8');
 const SENTENCE = 'Pick at least one property, or choose all properties.';
-const submit = src.slice(src.indexOf('onsubmit: async (e) => {', src.indexOf("'Notifications'")), src.indexOf('save.disabled = true;'));
+const submit = src.slice(src.indexOf('onsubmit: async (e) => {', src.indexOf("'Notifications'")), src.indexOf("save.setAttribute('aria-disabled', 'true');"));
 
 test('the no-property branch focuses the first property box before it returns', () => {
   const at = submit.indexOf(SENTENCE);

@@ -320,10 +320,15 @@ async function photosModal(listing) {
     const { photos } = await get(`/units/${listing.unit_id}/photos`);
     const status = h('span', { class: 'muted small', 'aria-live': 'polite' });
     // Picking photos uploads them: no second "Upload" step.
-    const input = h('input', { type: 'file', accept: 'image/*', multiple: true, class: 'input', id: 'listing-photos-file', onchange: async () => {
+    const input = h('input', { type: 'file', accept: 'image/*', multiple: true, class: 'input',
+      // The picker does not open while photos upload.
+      onclick: (e) => { if (input.getAttribute('aria-disabled') === 'true') e.preventDefault(); },
+      id: 'listing-photos-file', onchange: async () => {
+      if (input.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
       const files = [...input.files];
       if (!files.length) return;
-      input.disabled = true;
+      // aria-disabled, not disabled: a disabled control drops focus to the page while it waits (D-97, D-105, D-120).
+      input.setAttribute('aria-disabled', 'true');
       try {
         for (const [i, f] of files.entries()) {
           if (!f.size) throw new ApiError('This file is empty. Choose the file again.', { status: 400, code: 'EMPTY_FILE' }); // D-111 (round 29): a 0-byte file is refused before sending
@@ -336,6 +341,7 @@ async function photosModal(listing) {
         toast('Photos uploaded.');
       } catch (err) { if (fileRefused(err)) refusal = err.message; else toast(err.message, 'error'); }
       input.value = '';
+      input.removeAttribute('aria-disabled'); // a redraw that fails must not leave the box busy
       draw((root) => root.querySelector('input[type="file"]')?.focus());
     } });
     const up = uploadField(input);
@@ -401,8 +407,10 @@ async function channelsModal(listing, onChange, { focusFeedId } = {}) {
       f.problem_message && f.last_message && h('details', { class: 'row__sub muted small' }, h('summary', null, 'Technical details'), f.last_message)),
     h('div', { class: 'row__end' }, h('div', { class: 'chips' },
       h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `Sync now, ${channelName(f)}`, onclick: async (e) => {
-        e.target.disabled = true;
-        try { const r = await post(`/ical-feeds/${f.feed_id}/sync`); toast(await syncToastText(listing.unit_id, f.feed_id, r.sync), r.sync.ok ? 'info' : 'error'); m.close(); channelsModal(listing, onChange, { focusFeedId: f.feed_id }); onChange(); } catch (err) { toast(err.message, 'error'); e.target.disabled = false; }
+        const btn = e.currentTarget;
+        if (btn.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
+        btn.setAttribute('aria-disabled', 'true');
+        try { const r = await post(`/ical-feeds/${f.feed_id}/sync`); toast(await syncToastText(listing.unit_id, f.feed_id, r.sync), r.sync.ok ? 'info' : 'error'); m.close(); channelsModal(listing, onChange, { focusFeedId: f.feed_id }); onChange(); } catch (err) { toast(err.message, 'error'); btn.removeAttribute('aria-disabled'); }
       } }, 'Sync now'),
       h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Disconnect ${channelName(f)}`, onclick: async () => {
         if (!await confirmDialog({ title: `Disconnect ${CHANNEL_LABEL[f.channel]}?`, text: 'Future stays from this channel are cancelled, and its calendar blocks are removed. Past stays and any stays with payments are kept.', confirmText: 'Disconnect', danger: true })) return;
@@ -418,10 +426,11 @@ async function channelsModal(listing, onChange, { focusFeedId } = {}) {
     h('div', { class: 'form-actions' }, h('button', { class: 'btn btn--primary', type: 'submit' }, 'Connect calendar')));
   addForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    clearErrors(addForm); status.replaceChildren();
     const btn = addForm.querySelector('button[type=submit]');
+    if (btn.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
+    clearErrors(addForm); status.replaceChildren();
     // 'Connecting…' shows only while a request is really running, never while the 'Save it anyway?' question is open.
-    const busy = () => { btn.disabled = true; btn.textContent = 'Connecting…'; };
+    const busy = () => { btn.setAttribute('aria-disabled', 'true'); btn.textContent = 'Connecting…'; };
     try {
       // Everything the device can know is checked in one pass, before any request.
       const problems = {};
@@ -436,7 +445,7 @@ async function channelsModal(listing, onChange, { focusFeedId } = {}) {
       try { r = await post('/ical-feeds', body); } catch (err) {
         // A link that does not look like a calendar: ask, rather than refuse (Booking.com's ends in ical.html).
         if (err.code !== 'ICAL_NOT_CALENDAR') throw err;
-        btn.disabled = false; btn.textContent = 'Connect calendar';
+        btn.removeAttribute('aria-disabled'); btn.textContent = 'Connect calendar';
         if (!await confirmDialog({ title: 'Check the calendar link', text: err.message, confirmText: 'Save anyway', cancelText: 'Change it' })) {
           addForm.elements.url.focus(); return;
         }
@@ -451,7 +460,7 @@ async function channelsModal(listing, onChange, { focusFeedId } = {}) {
       // A link problem is written under the link field, which is marked and takes focus; any other problem goes in the alert above.
       if (err.fields?.url) showErrors(addForm, { url: err.fields.url });
       else status.replaceChildren(h('div', { class: 'alert alert--error' }, err.message));
-      btn.disabled = false; btn.textContent = 'Connect calendar';
+      btn.removeAttribute('aria-disabled'); btn.textContent = 'Connect calendar';
     }
   });
   // The link names the site unless the host chose one by hand.

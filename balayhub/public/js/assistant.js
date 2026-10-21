@@ -121,7 +121,8 @@ function buildPanel() {
     const asked = { role: 'user', content: q };
     msgs.push(asked);
     input.value = '';
-    busy = true; sendBtn.disabled = true; draw();
+    // aria-disabled, not disabled: a disabled control drops focus to the page while it waits (D-97, D-105, D-120).
+    busy = true; sendBtn.setAttribute('aria-disabled', 'true'); draw();
     try {
       // Failed questions stay on screen but are not sent back as history.
       const res = await post('/assistant/chat', { messages: msgs.filter((m) => !m.failed).map(({ role, content }) => ({ role, content })), page: location.hash.split('?')[0] });
@@ -132,7 +133,7 @@ function buildPanel() {
       asked.failed = true;
       said.textContent = "Couldn't answer. Try again or contact support.";
     } finally {
-      busy = false; sendBtn.disabled = false; save(msgs); draw(); input.focus();
+      busy = false; sendBtn.removeAttribute('aria-disabled'); save(msgs); draw(); input.focus();
     }
   } }, input, sendBtn);
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); } });

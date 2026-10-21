@@ -80,14 +80,16 @@ export async function guestReviewView(el, { params }, snap) {
   const btn = h('button', { class: 'btn btn--primary btn--block', type: 'submit' }, t('Send feedback'));
   const form = h('form', { class: 'form card', novalidate: true, onsubmit: async (e) => {
     e.preventDefault();
+    if (btn.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
     clearErrors(form);
     if (!overall.get()) { showErrors(form, { rating: t('Please choose a star rating first.') }); return; }
-    btn.disabled = true;
+    // aria-disabled, not disabled: a disabled control drops focus to the page while it waits (D-97, D-105, D-120).
+    btn.setAttribute('aria-disabled', 'true');
     try {
       const res = await post(`/public/review/${encodeURIComponent(token)}`, { rating: overall.get(), cleanliness: clean.get(), comment: comment.value.trim() || undefined });
       d.reviewed = true;
       thanks(overall.get() >= 4 ? httpsOnly(res?.share_links) : []);
-    } catch (err) { toast(tServer(err.message), 'error'); btn.disabled = false; }
+    } catch (err) { toast(tServer(err.message), 'error'); btn.removeAttribute('aria-disabled'); }
   } },
   overall.el, clean.el,
   h('div', { class: 'field' }, h('label', { for: 'review-comment' }, t("Anything you'd like to tell your host? (optional)")), Object.assign(comment, { id: 'review-comment' })),

@@ -25,7 +25,9 @@ test('the content refusal is said on the row through t(), in Taglish too', () =>
 });
 
 test('every device refusal on the row puts focus on the file box before it returns', () => {
-  assert.equal(add.split('return;').length - 1, 4, 'four refusals: no file, empty, type and size, not really its type');
+  // The busy guard at the top of the handler also returns; it is not a refusal, so it is not counted.
+  const busyGuard = add.split("getAttribute('aria-disabled') === 'true') return;").length - 1;
+  assert.equal(add.split('return;').length - 1 - busyGuard, 4, 'four refusals: no file, empty, type and size, not really its type');
   assert.equal(add.split('file.focus(); return;').length - 1, 4, 'each refusal focuses the file box first');
 });
 

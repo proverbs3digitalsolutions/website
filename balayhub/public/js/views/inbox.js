@@ -515,15 +515,17 @@ function composer(c, templates, status, rerender, assignees = []) {
     class: 'btn btn--secondary btn--sm', type: 'button',
     onclick: async (e) => {
       const btn = e.currentTarget;
+      if (btn.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
       err.textContent = '';
-      btn.disabled = true;
+      // aria-disabled, not disabled: a disabled control drops focus to the page while it waits (D-97, D-105, D-120).
+      btn.setAttribute('aria-disabled', 'true');
       btn.textContent = 'Drafting…';
       try {
         const r = await post(`/inbox/${c.conversation_id}/ai-draft`, { instructions: body.value.trim().slice(0, 500) });
         body.value = r.draft;
         body.dispatchEvent(new Event('input'));
         toast('Draft ready. Read it and edit before sending.');
-      } catch (ex) { toast(ex.message, 'error'); } finally { btn.disabled = false; btn.textContent = '✨ Draft reply with AI'; }
+      } catch (ex) { toast(ex.message, 'error'); } finally { btn.removeAttribute('aria-disabled'); btn.textContent = '✨ Draft reply with AI'; }
     },
   }, '✨ Draft reply with AI');
 
@@ -583,7 +585,7 @@ function composer(c, templates, status, rerender, assignees = []) {
         scheduleFor = null;
       }
       busy = true;
-      sendBtn.disabled = true;
+      sendBtn.setAttribute('aria-disabled', 'true');
       try {
         const payload = { body: mode === 'note' ? encodeMentions(body.value, picked) : body.value, note: mode === 'note' };
         if (mode === 'message') {
@@ -600,7 +602,7 @@ function composer(c, templates, status, rerender, assignees = []) {
       } catch (ex) {
         err.textContent = ex.offline ? "You're offline. Your message is kept; try again when you're back online." : (ex.fields.body || ex.fields.send_at || ex.message);
         if (ex.fields?.send_at) { sendAt.setAttribute('aria-invalid', 'true'); sendAt.focus(); }
-      } finally { busy = false; sendBtn.disabled = false; }
+      } finally { busy = false; sendBtn.removeAttribute('aria-disabled'); }
     },
   },
   h('div', { class: 'composer__top' }, modeTabs, h('div', { class: 'composer__tools' }, tplSelect, aiBtn)),

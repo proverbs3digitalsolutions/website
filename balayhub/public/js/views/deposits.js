@@ -105,12 +105,17 @@ export async function depositCard(r, rerender) {
     if (!await confirmDialog({ title: 'Undo the return?', text: 'The deposit goes back to "Held" so you can record the return again. Emails already sent are not recalled.', confirmText: 'Undo' })) return;
     try { await post(`/reservations/${r.booking_id}/deposit/reopen`); toast('Back to held.'); rerender(); } catch (err) { toast(err.message, 'error'); }
   };
-  const upload = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', class: 'input', id: 'deposit-photo-file', onchange: async () => {
-    up.clear();
-    if (!upload.files[0]) return;
-    upload.disabled = true;
-    try { await uploadFile('deposit', dep.deposit_id, upload.files[0]); upload.value = ''; toast('Photo added.'); rerender(); } catch (err) { upload.disabled = false; upload.value = ''; if (fileRefused(err)) up.show(err.message); else toast(err.message, 'error'); }
-  } });
+  // Picking a photo uploads it at once. The box is busy while it waits: a click opens no chooser and a second pick sends nothing.
+  const upload = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', class: 'input', id: 'deposit-photo-file',
+    onclick: (e) => { if (upload.getAttribute('aria-disabled') === 'true') e.preventDefault(); },
+    onchange: async () => {
+      if (upload.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
+      up.clear();
+      if (!upload.files[0]) return;
+      // aria-disabled, not disabled: a disabled control drops focus to the page while it waits (D-97, D-105, D-120).
+      upload.setAttribute('aria-disabled', 'true');
+      try { await uploadFile('deposit', dep.deposit_id, upload.files[0]); upload.value = ''; toast('Photo added.'); rerender(); } catch (err) { upload.removeAttribute('aria-disabled'); upload.value = ''; if (fileRefused(err)) up.show(err.message); else toast(err.message, 'error'); }
+    } });
   const up = uploadField(upload);
 
   if (!dep) {

@@ -31,7 +31,7 @@ test('LT-1: a refused file goes on the upload line', () => {
   assert.doesNotMatch(docs, /status\.replaceChildren\(h\('div', \{ class: 'alert alert--error' \}, 'Choose a file first\.'\)\)/);
   assert.match(docs, /const status = h\('div', \{ role: 'alert' \}\)/);
   const c = docs.slice(docs.indexOf('catch (err)'));
-  assert.ok(c.indexOf('e.target.disabled = false') < c.indexOf('up.show(err.message)'));
+  assert.ok(c.indexOf("btn.removeAttribute('aria-disabled')") < c.indexOf('up.show(err.message)'));
   assert.match(c, /if \(fileRefused\(err\)\) up\.show\(err\.message\); else status\.replaceChildren/);
 });
 

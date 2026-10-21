@@ -144,7 +144,8 @@ export async function quoteView(el, { params, kept = {} }) {
     if (!form.elements.consent.checked) problems.consent = tServer('Please agree to continue.');
     if (Object.keys(problems).length) { formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, t('Please check the highlighted fields.'))); showErrors(form, problems); return; }
     busy = true;
-    submit.disabled = true;
+    // aria-disabled, not disabled: a disabled control drops focus to the page while it waits (D-97, D-105, D-120).
+    submit.setAttribute('aria-disabled', 'true');
     submit.textContent = t('Opening secure payment…');
     try {
       const r = await post(`/public/quote/${token}/checkout`, { name: v.name, email: v.email, phone: v.phone, accept_rules: rules ? true : undefined, consent: true });
@@ -158,7 +159,7 @@ export async function quoteView(el, { params, kept = {} }) {
         : Object.keys(err.fields || {}).length ? t('Please check the highlighted fields.')
         : tServer(err.message);
       formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, banner));
-      submit.disabled = false;
+      submit.removeAttribute('aria-disabled');
       submit.textContent = t('Pay {amount}', { amount: peso(due) });
       busy = false;
     }

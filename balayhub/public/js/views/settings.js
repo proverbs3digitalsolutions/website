@@ -530,9 +530,11 @@ export function cardBlock(p, bill, rerender) {
   const ar = bill.auto_renew || {};
   const stage2 = !!bill.subscriptions;
   const saveBtn = (text, onclick, key) => h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'data-focus-key': key, onclick }, text);
+  // aria-disabled, not disabled: a disabled control drops focus to the page while it waits (D-97, D-105, D-120).
   const change = async (body, doneText, btn) => {
-    btn.disabled = true;
-    try { await patch('/billing/renewal', body); toast(doneText); rerender(); } catch (err) { toast(err.message, 'error'); btn.disabled = false; }
+    if (btn.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
+    btn.setAttribute('aria-disabled', 'true');
+    try { await patch('/billing/renewal', body); toast(doneText); rerender(); } catch (err) { toast(err.message, 'error'); } finally { btn.removeAttribute('aria-disabled'); }
   };
   const rows = [];
   if (bill.card) {
@@ -614,17 +616,18 @@ export function payOnline(p, bill, rerender, bc) {
     strikeEl.textContent = discounted ? bc.money(quote.list_amount) : '';
     msgEl.textContent = quote?.message || '';
     couponNote.hidden = !(quote?.coupon || bill.coupon?.status === 'active' || bill.coupon?.status === 'pending');
-    if (!btn.disabled) btn.textContent = label();
+    if (btn.getAttribute('aria-disabled') !== 'true') btn.textContent = label();
     // A saved card makes one tap the main way to pay; a free coupon needs no card, so the plain Activate button stays.
     const showSaved = saved && !pending && !quote?.free;
     if (savedBtn) savedBtn.hidden = !showSaved;
     btn.className = showSaved ? 'btn btn--secondary' : 'btn btn--primary';
-    if (savedBtn && !savedBtn.disabled) savedBtn.textContent = `Pay ${bc.money(quote ? quote.amount : bill.options.find((x) => x.key === plan).prices.find((x) => x.months === months).amount)} with ${cardText(bill.card || {})}`;
+    if (savedBtn && savedBtn.getAttribute('aria-disabled') !== 'true') savedBtn.textContent = `Pay ${bc.money(quote ? quote.amount : bill.options.find((x) => x.key === plan).prices.find((x) => x.months === months).amount)} with ${cardText(bill.card || {})}`;
   };
   // A new plan or length makes the old preview wrong at once; ask the server again.
   const selectionChanged = () => { quote = null; update(); if (!pending) box.refresh(); };
   btn.addEventListener('click', async () => {
-    btn.disabled = true;
+    if (btn.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
+    btn.setAttribute('aria-disabled', 'true');
     btn.textContent = quote?.free ? 'Activating…' : 'Opening secure checkout…';
     try {
       const code = box.getCode();
@@ -641,12 +644,13 @@ export function payOnline(p, bill, rerender, bc) {
       if (err.code === 'DELETION_SCHEDULED') { await refreshUser(); rerender(); return; } // a deletion was scheduled after this page was drawn: redraw shows why (D-116)
       if (err.code === 'PAYMENT_IN_PROGRESS') { carriedNotice = err.message; carriedUnlessWaiting = true; carriedSentPaidUntil = bill.paid_until ?? null; await refreshUser(); rerender(); return; }
       if (/^(COUPON|COMPED|CARD_OFF)/.test(err.code || '')) box.showError(err.message); else toast(err.message, 'error');
-      btn.disabled = false;
+      btn.removeAttribute('aria-disabled');
       update();
     }
   });
   savedBtn?.addEventListener('click', async () => {
-    savedBtn.disabled = true; btn.disabled = true;
+    if (savedBtn.getAttribute('aria-disabled') === 'true' || btn.getAttribute('aria-disabled') === 'true') return; // a charge or a checkout is waiting: a second press does nothing
+    savedBtn.setAttribute('aria-disabled', 'true'); btn.setAttribute('aria-disabled', 'true');
     savedBtn.textContent = 'Charging your card…';
     try {
       const code = box.getCode();
@@ -658,13 +662,13 @@ export function payOnline(p, bill, rerender, bc) {
         rerender();
         return;
       }
-      savedBtn.disabled = false; btn.disabled = false; update();
+      savedBtn.removeAttribute('aria-disabled'); btn.removeAttribute('aria-disabled'); update();
       msgEl.textContent = 'Your payment is being confirmed. Check back in a moment.';
     } catch (err) {
       if (err.code === 'PAYMENT_RECEIVED') { carriedNotice = err.message; await refreshUser(); rerender(); return; }
       if (err.code === 'DELETION_SCHEDULED') { await refreshUser(); rerender(); return; } // a deletion was scheduled after this page was drawn: redraw shows why (D-116)
       if (err.code === 'PAYMENT_IN_PROGRESS') { carriedNotice = err.message; carriedUnlessWaiting = true; carriedSentPaidUntil = bill.paid_until ?? null; await refreshUser(); rerender(); return; }
-      savedBtn.disabled = false; btn.disabled = false; update();
+      savedBtn.removeAttribute('aria-disabled'); btn.removeAttribute('aria-disabled'); update();
       if (err.code === 'SAVED_CARD_FAILED' || err.code === 'SAVED_CARD_NONE') {
         msgEl.textContent = "Your saved card couldn't be charged. Pay another way, or use a different card.";
         btn.focus();
@@ -900,15 +904,17 @@ async function guestExperienceCard() {
   const followup = h('input', { type: 'checkbox', checked: Boolean(g.abandoned_followup) });
   const err = h('div', { class: 'error', role: 'alert' });
   const save = async (e) => {
+    const btn = e.currentTarget;
+    if (btn.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
     err.textContent = '';
     const review_links = rows.map((r) => ({ label: r.label.value.trim(), url: r.url.value.trim() })).filter((r) => r.label || r.url);
     if (review_links.some((r) => !r.label || !/^https:\/\//i.test(r.url))) { err.textContent = 'Each review link needs a name and an address starting with https://'; return; }
-    e.target.disabled = true;
+    btn.setAttribute('aria-disabled', 'true');
     try {
       await patch('/workspace/guest-settings', { review_links, returning_guest_pct: pct.value.trim() === '' ? null : Number(pct.value), abandoned_followup: followup.checked });
       toast('Guest experience saved.');
-    } catch (ex) { err.textContent = ex.fields ? Object.values(ex.fields).join(' ') : ex.message; }
-    e.target.disabled = false;
+    } catch (ex) { err.textContent = ex.fields && Object.keys(ex.fields).length ? Object.values(ex.fields).join(' ') : ex.message; }
+    btn.removeAttribute('aria-disabled');
   };
   return h('div', { class: 'card' },
     h('div', { class: 'card__head' }, h('h2', null, 'Guest experience')),

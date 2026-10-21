@@ -284,16 +284,19 @@ export async function tenantDetailView(el, { params, query, rerender }) {
         h('div', { class: 'form-actions' }, h('button', {
           class: 'btn btn--primary', type: 'button',
           onclick: async (e) => {
+            const btn = e.currentTarget;
+            if (btn.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
             up.clear(); status.replaceChildren();
             const file = input.files[0];
             if (!file) { up.show('Choose a file first.'); return; }
-            e.target.disabled = true;
+            // aria-disabled, not disabled: a disabled control drops focus to the page while it waits (D-97, D-105, D-120).
+            btn.setAttribute('aria-disabled', 'true');
             try { await uploadFile('lease', lease.lease_id, file); toast('Document uploaded.'); document.querySelector('dialog.modal')?.close(); } catch (err) {
-              e.target.disabled = false;
+              btn.removeAttribute('aria-disabled');
               if (fileRefused(err)) up.show(err.message); else status.replaceChildren(h('div', { class: 'alert alert--error' }, err.message));
               return;
             }
-            e.target.disabled = false;
+            btn.removeAttribute('aria-disabled');
           },
         }, 'Upload'))),
     });

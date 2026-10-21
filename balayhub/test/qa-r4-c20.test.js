@@ -36,7 +36,7 @@ test('book: a refused quote shows its message in the summary and clears the Tota
   const quote = book.slice(book.indexOf('async function updateQuote()'), book.indexOf('// The cancellation policy'));
   assert.ok(quote.length > 0, 'updateQuote is found');
   assert.match(quote, /current = null;\s*submit\.disabled = true;/, 'Continue is off until a quote succeeds');
-  assert.match(quote, /const reason = err\.fields \? Object\.values\(err\.fields\)\[0\] : err\.message;/);
+  assert.match(quote, /const reason = err\.fields && Object\.keys\(err\.fields\)\.length \? Object\.values\(err\.fields\)\[0\] : err\.message;/);
   assert.match(quote, /summary\.replaceChildren\(h\('div', \{ class: 'alert alert--error', role: 'alert' \}, tServer\(reason\)\)\);/);
 });
 

@@ -12,7 +12,7 @@ const path = require('path');
 const pay = fs.readFileSync(path.join(__dirname, '../public/js/views/pay.js'), 'utf8');
 const form = pay.slice(pay.indexOf('function proofForm('));
 const submit = form.slice(form.indexOf("addEventListener('submit'"));
-const pass = submit.slice(submit.indexOf('const problems'), submit.indexOf('submit.disabled = true'));
+const pass = submit.slice(submit.indexOf('const problems'), submit.indexOf("submit.setAttribute('aria-disabled', 'true')"));
 
 test('the file box is a field with its own message line', () => {
   assert.match(form, /dataset: \{ field: 'proof_file' \}/);

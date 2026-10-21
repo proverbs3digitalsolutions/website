@@ -64,15 +64,18 @@ function notifyCard(role) {
       h('form', {
         class: 'stack',
         onsubmit: async (e) => {
-          e.preventDefault(); err.textContent = '';
+          e.preventDefault();
+          if (save.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
+          err.textContent = '';
           const types = Object.fromEntries(boxes.map((b) => [b.querySelector('input').name, b.querySelector('input').checked]));
           const body = { types };
           if (showProps) {
             body.property_ids = all ? null : propBoxes.filter((b) => b.querySelector('input').checked).map((b) => b.querySelector('input').value);
             if (!all && !body.property_ids.length) { err.textContent = 'Pick at least one property, or choose all properties.'; propBoxes[0]?.querySelector('input').focus(); return; } // D-103: the first wrong field gets focus
           }
-          save.disabled = true;
-          try { await patch('/account/notify-prefs', body); toast('Notification settings saved.'); } catch (ex) { err.textContent = ex.fields.property_ids || ex.fields.types || ex.message; } finally { save.disabled = false; }
+          // aria-disabled, not disabled: a disabled control drops focus to the page while it waits (D-97, D-105, D-120).
+          save.setAttribute('aria-disabled', 'true');
+          try { await patch('/account/notify-prefs', body); toast('Notification settings saved.'); } catch (ex) { err.textContent = ex.fields.property_ids || ex.fields.types || ex.message; } finally { save.removeAttribute('aria-disabled'); }
         },
       },
       h('p', { class: 'muted small' }, 'Choose which alerts reach you by push or email.'),
@@ -112,13 +115,17 @@ export async function accountView(el, { rerender }) {
   });
 
   const signOutDevice = (s) => async (e) => {
-    const btn = e.currentTarget; btn.disabled = true;
-    try { await post(`/account/sessions/${s.id}/logout`); toast(`Signed out ${s.device}.`); rerender(); } catch (err) { toast(err.message, 'error'); btn.disabled = false; }
+    const btn = e.currentTarget;
+    if (btn.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
+    btn.setAttribute('aria-disabled', 'true');
+    try { await post(`/account/sessions/${s.id}/logout`); toast(`Signed out ${s.device}.`); rerender(); } catch (err) { toast(err.message, 'error'); btn.removeAttribute('aria-disabled'); }
   };
   const signOutOthers = async (e) => {
+    const btn = e.currentTarget; // read before the question: the browser clears currentTarget once the press is handled
+    if (btn.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
     if (!await confirmDialog({ title: 'Sign out other devices?', text: 'Every other phone or computer signed in to your account will need to log in again. This one stays signed in.', confirmText: 'Sign out others' })) return;
-    const btn = e.target; btn.disabled = true;
-    try { const r = await post('/account/sessions/logout-others'); toast(`Signed out ${r.signed_out} other device${r.signed_out === 1 ? '' : 's'}.`); rerender(); } catch (err) { toast(err.message, 'error'); btn.disabled = false; }
+    btn.setAttribute('aria-disabled', 'true');
+    try { const r = await post('/account/sessions/logout-others'); toast(`Signed out ${r.signed_out} other device${r.signed_out === 1 ? '' : 's'}.`); rerender(); } catch (err) { toast(err.message, 'error'); btn.removeAttribute('aria-disabled'); }
   };
 
   el.replaceChildren(

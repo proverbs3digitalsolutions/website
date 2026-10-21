@@ -99,8 +99,10 @@ export async function adminView(el, { rerender, query = {} }) {
     const sync = () => { for (const b of delBtns) b.disabled = !nameMatches(nameBox.value, w.name); };
     nameBox.addEventListener('input', () => { nameErr.textContent = ''; nameBox.removeAttribute('aria-invalid'); sync(); });
     const runDelete = async (mode) => {
+      if (delBtns.some((b) => b.getAttribute('aria-disabled') === 'true')) return; // busy with its own request: a second press does nothing
       delErr.hidden = true; nameErr.textContent = '';
-      for (const b of delBtns) b.disabled = true;
+      // aria-disabled, not disabled: a disabled control drops focus to the page while it waits (D-97, D-105, D-120).
+      for (const b of delBtns) b.setAttribute('aria-disabled', 'true');
       try {
         const r = await post(`/admin/workspaces/${w.organization_id}/delete`, { mode, confirm_name: nameBox.value });
         if (mode === 'now') {
@@ -113,6 +115,7 @@ export async function adminView(el, { rerender, query = {} }) {
           await reopen();
         }
       } catch (err) {
+        for (const b of delBtns) b.removeAttribute('aria-disabled');
         sync();
         if (err.fields?.confirm_name) { nameErr.textContent = err.fields.confirm_name; nameBox.setAttribute('aria-invalid', 'true'); }
         delErr.textContent = err.message; delErr.hidden = false; delErr.focus();

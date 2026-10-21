@@ -12,7 +12,8 @@ const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'views', 
 test('the listing photo file input has an accessible name', () => {
   const inputs = src.split('\n').filter((line) => /type: 'file'/.test(line));
   assert.equal(inputs.length, 1, 'one file input on this page');
-  assert.match(inputs[0], /id: 'listing-photos-file'/);
+  // The input's props run over several lines (click guard, busy guard), so read its whole block to the closing "} });".
+  assert.match(src.slice(src.indexOf(inputs[0]), src.indexOf('} });', src.indexOf(inputs[0]))), /id: 'listing-photos-file'/);
   assert.match(src, /h\('label', \{ for: 'listing-photos-file' \}, 'Listing photos'\)/);
 });
 

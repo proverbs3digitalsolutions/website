@@ -182,14 +182,16 @@ extendTranslations({
 
 export async function tryDemo(e) {
   const btn = e?.currentTarget;
-  if (btn) { btn.disabled = true; btn.textContent = t('Opening demo…'); }
+  if (btn?.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
+  // aria-disabled, not disabled: a disabled control drops focus to the page while it waits (D-97, D-105, D-120).
+  if (btn) { btn.setAttribute('aria-disabled', 'true'); btn.textContent = t('Opening demo…'); }
   try {
     await post('/auth/demo');
     await refreshUser();
     navigate(homeRoute(), { replace: true });
   } catch (err) {
     toast(err.message, 'error');
-    if (btn) { btn.disabled = false; btn.textContent = t('Try the live demo'); }
+    if (btn) { btn.removeAttribute('aria-disabled'); btn.textContent = t('Try the live demo'); }
   }
 }
 
@@ -383,7 +385,9 @@ export function openGetStarted(preset = {}) {
       const submit = h('button', { class: 'btn btn--primary btn--block', type: 'submit' }, t('Start my free trial'));
       const formError = h('div', { class: 'gs-form-error' });
       const form = h('form', { class: 'form', novalidate: true, onsubmit: async (e) => {
-        e.preventDefault(); read();
+        e.preventDefault();
+        if (submit.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
+        read();
         showErrors({}); formError.replaceChildren();
         // Email, password and the consent box are checked here, so an unticked box never uses up the sign-up limit.
         // Each message sits at its own field; the banner only points at them, so no problem is named twice.
@@ -398,7 +402,7 @@ export function openGetStarted(preset = {}) {
           formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, t('Please check the highlighted fields.')));
           return;
         }
-        submit.disabled = true; submit.textContent = t('Creating your account…');
+        submit.setAttribute('aria-disabled', 'true'); submit.textContent = t('Creating your account…');
         try {
           const res = await post('/auth/signup', {
             full_name: `${data.first_name} ${data.last_name}`.trim(), email: data.email, password: data.password, confirm_password: data.password,
@@ -426,7 +430,7 @@ export function openGetStarted(preset = {}) {
           else if (err instanceof ApiError && err.code !== 'VALIDATION') message = err.message;
           formError.replaceChildren(h('div', { class: 'alert alert--error', role: 'alert' }, message));
           showErrors(fields);
-          submit.disabled = false; submit.textContent = t('Start my free trial');
+          submit.removeAttribute('aria-disabled'); submit.textContent = t('Start my free trial');
         }
       } },
       formError,

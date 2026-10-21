@@ -23,8 +23,8 @@ for (const [name, src, kind] of [['housekeeping', hk, 'cleaning'], ['maintenance
       assert.match(block, /'data-focus-key': 'hk-photo'/);
       assert.doesNotMatch(block, /upload\.disabled/);
     } else {
-      assert.match(block, /upload\.disabled = true/);
-      assert.match(block, /upload\.disabled = false/);
+      assert.match(block, /upload\.setAttribute\('aria-disabled', 'true'\)/);
+      assert.match(block, /upload\.removeAttribute\('aria-disabled'\)/);
     }
     assert.match(block, /upload\.value = ''/);
     assert.doesNotMatch(src, /'Upload photo'\)?\)/);

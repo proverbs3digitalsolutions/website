@@ -469,11 +469,16 @@ async function calendarTab(box) {
   function reassignSelect(x, date) {
     const eligible = x.property_id ? eligibleFor(people, x.property_id) : people;
     const outside = !x.assigned_to && x.assignee_name;
+    let saving = null;
     const sel = h('select', {
       class: 'input hk-reassign', 'aria-label': `Assign ${x.unit_name}, ${fmtDate(date)}`,
       onchange: async (e) => {
-        sel.disabled = true;
-        try { await patch(`/cleaning-tasks/${x.task_id}`, { assigned_to: e.target.value || null, assignee_name: null }); toast('Assignment saved.'); await load(); } catch (err) { toast(err.message, 'error'); sel.disabled = false; sel.value = x.assigned_to || ''; }
+        // A second pick while the save runs puts back the value being saved, so it sends nothing.
+        if (saving !== null) { sel.value = saving; return; }
+        saving = sel.value;
+        // aria-disabled, not disabled: a disabled control drops focus to the page while it waits (D-97, D-105, D-120).
+        sel.setAttribute('aria-disabled', 'true');
+        try { await patch(`/cleaning-tasks/${x.task_id}`, { assigned_to: e.target.value || null, assignee_name: null }); toast('Assignment saved.'); await load(); } catch (err) { toast(err.message, 'error'); sel.value = x.assigned_to || ''; } finally { saving = null; sel.removeAttribute('aria-disabled'); }
       },
     },
     h('option', { value: '' }, outside ? `${x.assignee_name} (no login)` : 'Unassigned'),
@@ -715,14 +720,17 @@ export async function housekeepingDetailView(el, { params, rerender }) {
     h('label', { class: 'check' },
       h('input', {
         type: 'checkbox', checked: c.done, disabled: !open,
+        // A tick that is still saving is refused at the click, so it is not sent twice.
+        onclick: (e) => { if (e.target.getAttribute('aria-disabled') === 'true') e.preventDefault(); },
         onchange: async (e) => {
           const box = e.target;
-          box.disabled = true;
+          if (box.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
+          box.setAttribute('aria-disabled', 'true');
           try {
             const res = await post(`/cleaning-tasks/${t.task_id}/checklist`, { index: i, done: box.checked });
             progress.textContent = T('{n} of {total} done', { n: res.task.done_count, total: res.task.item_count });
             if (t.status === 'todo') { t.status = 'in_progress'; statusSlot.replaceChildren(statusBadge('in_progress')); startBtn?.remove(); }
-          } catch (err) { box.checked = !box.checked; toast(err.message, 'error'); } finally { box.disabled = false; }
+          } catch (err) { box.checked = !box.checked; toast(err.message, 'error'); } finally { box.removeAttribute('aria-disabled'); }
         },
       }),
       h('span', null, c.text)))));
