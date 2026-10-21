@@ -413,7 +413,17 @@ export async function bookListingView(el, { params, query }) {
   // Typing a valid count clears the message at once and quotes again 500 ms after the last keystroke (D-103). An invalid count is said on change, not while typing. Focus never moves.
   let guestTyping;
   form.elements.num_guests?.addEventListener('input', () => {
-    if (!guestCountInRange()) return;
+    if (!guestCountInRange()) {
+      // A count this place can't take is never priced: the old total goes and Continue waits at once. The box's own message still
+      // comes on change, not while typing (D-103, D-118).
+      clearTimeout(guestTyping);
+      current = null;
+      submit.disabled = true;
+      summary.replaceChildren(h('p', { class: 'muted' }, guestCountOk()
+        ? t('This place allows up to {n} guests.', { n: l.max_guests || 50 })
+        : t('Enter the number of guests to see the total.')));
+      return;
+    }
     guestsFromServer = false;
     setGuestsError('');
     clearTimeout(guestTyping);

@@ -750,7 +750,8 @@ export async function inboxSettingsView(el, { rerender }) {
           a.template_archived ? badge('archived', 'Template deleted, choose another') : a.enabled ? badge('active', 'On') : badge('archived', 'Off'),
           canEdit && h('div', { class: 'chips' },
             h('button', { class: 'btn btn--secondary btn--sm', 'data-focus-key': `auto-toggle-${a.automation_id}`, 'aria-label': `${a.enabled ? 'Turn off' : 'Turn on'} automatic message: ${a.name}, ${describeAutomation(a)}`, 'aria-disabled': a.template_archived && !a.enabled ? 'true' : undefined, title: a.template_archived && !a.enabled ? 'Choose a template first.' : undefined, onclick: () => (a.template_archived && !a.enabled ? toast("This automatic message's template was deleted. Choose a template first.", 'error') : toggle(a, !a.enabled)) }, a.enabled ? 'Turn off' : 'Turn on'),
-            h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Edit automatic message: ${a.name}, ${describeAutomation(a)}`, onclick: () => editAutomation(a) }, 'Edit'),
+            // Fixed keys: a rename or a new send time changes these buttons' names, and focus must still come back to them (D-118).
+            h('button', { class: 'btn btn--ghost btn--sm', 'data-focus-key': `auto-edit-${a.automation_id}`, 'aria-label': `Edit automatic message: ${a.name}, ${describeAutomation(a)}`, onclick: () => editAutomation(a) }, 'Edit'),
             h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Delete automatic message: ${a.name}, ${describeAutomation(a)}`, onclick: () => removeAutomation(a) }, 'Delete')))))))
         : h('p', { class: 'muted small' }, 'No automatic messages yet.')),
     h('div', { class: 'card' },
@@ -763,6 +764,6 @@ export async function inboxSettingsView(el, { rerender }) {
           h('span', { class: 'row__title' }, t.name),
           h('span', { class: 'row__sub' }, t.subject)),
         canEditTemplates && h('div', { class: 'row__end chips' },
-          h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Edit template: ${t.name}`, onclick: () => editTemplate(t) }, 'Edit'),
+          h('button', { class: 'btn btn--ghost btn--sm', 'data-focus-key': `tpl-edit-${t.template_id}`, 'aria-label': `Edit template: ${t.name}`, onclick: () => editTemplate(t) }, 'Edit'),
           !t.system_key && h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Delete template: ${t.name}`, onclick: () => archiveTemplate(t) }, 'Delete'))))))));
 }

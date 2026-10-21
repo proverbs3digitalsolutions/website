@@ -29,6 +29,6 @@ test('the page limit is the server limit', () => {
 });
 
 test('exportOk includes !tooLong and the hint sentence is exact', () => {
-  assert.match(src, /const exportOk = filters\.period !== 'range' \|\| Boolean\(filters\.from && filters\.to && !backwards && !tooLong\);/);
+  assert.match(src, /const exportOk = !refused && \(filters\.period !== 'range' \|\| Boolean\(filters\.from && filters\.to && !backwards && !tooLong\)\);/);
   assert.ok(src.includes("tooLong ? 'Choose up to two years to export.' : exportHint("));
 });

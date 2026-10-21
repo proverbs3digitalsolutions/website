@@ -17,9 +17,12 @@ test('ONB-4: Channels submit checks channel and link before any request', () => 
   const i = src.indexOf("addForm.addEventListener('submit'");
   const body = src.slice(i, src.indexOf("post('/ical-feeds', body)", i));
   assert.match(body, /Calendar link is required\./);
-  assert.match(body, /Paste the full https:\/\/ calendar \(iCal\) link from the channel\./);
-  assert.match(body, /new URL\(/);
-  assert.match(body, /protocol === 'https:'/);
+  // The link check moved to feedLinkProblem(link) (exported, checks on the device) so the submit runs it in the same pass.
+  assert.match(body, /feedLinkProblem\(link\)/);
+  const fn = src.slice(src.indexOf('export function feedLinkProblem(link)'), src.indexOf('async function channelsModal('));
+  assert.match(fn, /Paste the full https:\/\/ calendar \(iCal\) link from the channel\./);
+  assert.match(fn, /new URL\(/);
+  assert.match(fn, /u\.protocol !== 'https:'/);
   assert.match(body, /Choose which site this calendar link is from\./);
   assert.match(body, /showErrors\(addForm, problems\)/);
 });

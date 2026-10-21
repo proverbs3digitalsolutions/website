@@ -374,6 +374,18 @@ export function channelFromLink(url) {
   return (sites.find(([, re]) => re.test(host)) || [''])[0];
 }
 
+// The server's own link refusals (src/routes/stays.js feedLinkRefusal after ical.validateFeedUrl), said in the same press as the
+// channel (D-105, D-118). The server still checks every link. Pure.
+export function feedLinkProblem(link) {
+  let u;
+  try { u = new URL(String(link).trim()); } catch { u = null; }
+  if (!u || u.protocol !== 'https:') return 'Paste the full https:// calendar (iCal) link from the channel.';
+  const host = u.hostname.replace(/^\[|\]$/g, '');
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(':')) return "This link is an IP address, not a channel's website, so BalayHub can't read it. Copy the calendar (iCal) link from the channel.";
+  if (u.username || u.password || (u.port && u.port !== '443')) return "BalayHub can't read links with a port number or a password in them. Copy the calendar (iCal) link exactly as the channel shows it.";
+  return null;
+}
+
 async function channelsModal(listing, onChange, { focusFeedId } = {}) {
   let data;
   try { data = await get(`/units/${listing.unit_id}/channels`); } catch (err) { toast(err.message, 'error'); return; }
@@ -416,11 +428,7 @@ async function channelsModal(listing, onChange, { focusFeedId } = {}) {
       if (!addForm.elements.channel.value) problems.channel = 'Choose which site this calendar link is from.';
       const link = addForm.elements.url.value.trim();
       if (!link) problems.url = 'Calendar link is required.';
-      else {
-        let https = false;
-        try { https = new URL(link).protocol === 'https:'; } catch { /* not a link */ }
-        if (!https) problems.url = 'Paste the full https:// calendar (iCal) link from the channel.';
-      }
+      else { const bad = feedLinkProblem(link); if (bad) problems.url = bad; }
       if (Object.keys(problems).length) { showErrors(addForm, problems); return; }
       const body = { unit_id: listing.unit_id, channel: addForm.elements.channel.value, url: addForm.elements.url.value };
       let r;
@@ -710,14 +718,15 @@ export async function listingsView(el, { query }) {
         h('dt', null, 'Next arrival'), h('dd', null, l.next_check_in ? `${fmtDate(l.next_check_in)} · ${l.next_guest}` : '—'),
         h('dt', null, 'Channels'), h('dd', null, Number(l.channel_count) ? `${l.channel_count} connected` : 'None')),
       h('div', { class: 'chips listing__actions', style: { marginTop: '12px' } },
-        h('button', { class: `btn btn--sm ${l.cleaning_status === 'dirty' ? 'btn--primary' : 'btn--secondary'}`, 'aria-label': `${l.cleaning_status === 'dirty' ? 'Mark clean' : 'Mark dirty'}, ${l.unit_name}`, onclick: async () => {
+        // Fixed keys: these buttons' words change with the listing (D-118).
+        h('button', { class: `btn btn--sm ${l.cleaning_status === 'dirty' ? 'btn--primary' : 'btn--secondary'}`, 'data-focus-key': `clean-${l.unit_id}`, 'aria-label': `${l.cleaning_status === 'dirty' ? 'Mark clean' : 'Mark dirty'}, ${l.unit_name}`, onclick: async () => {
           await post(`/units/${l.unit_id}/cleaning`, { status: l.cleaning_status === 'dirty' ? 'clean' : 'dirty' });
           toast(l.cleaning_status === 'dirty' ? 'Marked clean.' : 'Marked as needing cleaning.'); load();
         } }, l.cleaning_status === 'dirty' ? 'Mark clean' : 'Mark dirty'),
         canManage && h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `Channels, ${l.unit_name}`, onclick: () => channelsModal(l, load) }, 'Channels'),
         canManage && h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `Photos, ${l.unit_name}`, onclick: () => photosModal(l) }, 'Photos'),
         canManage && h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `Guest pages, ${l.unit_name}`, onclick: () => guestPagesModal(l) }, 'Guest pages'),
-        canManage && h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': `Edit, ${l.unit_name}`, onclick: async () => {
+        canManage && h('button', { class: 'btn btn--secondary btn--sm', 'data-focus-key': `listing-edit-${l.unit_id}`, 'aria-label': `Edit, ${l.unit_name}`, onclick: async () => {
           const { units } = await get(`/properties/${l.property_id}`).then((r) => ({ units: r.units }));
           const unit = units.find((u) => u.unit_id === l.unit_id);
           const roomTypes = await roomTypeNames();

@@ -232,7 +232,8 @@ export async function pricingView(el, { rerender }) {
           h('span', { class: 'row__title' }, ruleSummary(r)),
           h('span', { class: 'row__sub' }, `${RULE_KINDS[r.kind]?.label || r.kind} · ${r.unit_name || 'All listings'}${!r.active ? ' · off' : ''}`)),
         canEditRule(r) && h('div', { class: 'row__end' }, h('div', { class: 'chips' },
-          h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Edit rule: ${ruleSummary(r)}, ${r.unit_name || 'All listings'}`, onclick: () => editRule(r) }, 'Edit'),
+          // A save changes the rule summary in this button's name: a fixed key (D-118).
+          h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'data-focus-key': `rule-edit-${r.rule_id}`, 'aria-label': `Edit rule: ${ruleSummary(r)}, ${r.unit_name || 'All listings'}`, onclick: () => editRule(r) }, 'Edit'),
           h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Remove rule: ${ruleSummary(r)}, ${r.unit_name || 'All listings'}`, onclick: () => removeRule(r) }, 'Remove')))))))
         : h('p', { class: 'muted' }, 'No rules yet. For example: 15% off stays starting within 3 days, or 10% off bookings more than 200 days away.')),
     h('div', { class: 'card card--flush' },

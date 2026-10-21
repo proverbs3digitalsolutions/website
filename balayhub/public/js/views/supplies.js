@@ -30,6 +30,11 @@ export async function suppliesView(el, { query = {} } = {}) {
   let properties = [];
   try { ({ properties } = await get('/properties')); } catch { /* filter stays hidden */ }
 
+  // D-118: Edit, Count and History sit inside a row's More disclosure. The redraw after their dialog draws
+  // that one row's disclosure open again, so the focus guard can find the keyed button (then it is cleared).
+  let reopen = null;
+  const fromMore = (s, fn) => () => { reopen = s.supply_id; fn(); };
+
   const addOrEdit = (s) => formModal({
     title: s ? `Edit ${s.name}` : 'Add a supply', submitText: s ? 'Save changes' : 'Add supply',
     fields: [
@@ -106,6 +111,7 @@ export async function suppliesView(el, { query = {} } = {}) {
     try { ({ supplies } = await get(`/supplies${qs({ property_id: filters.property_id, low: filters.low })}`)); } catch (err) {
       box.replaceChildren(errorState(err, load)); return;
     }
+    const reopenId = reopen; reopen = null;
     const q = filters.q.toLowerCase();
     if (q) supplies = supplies.filter((s) => s.name.toLowerCase().includes(q));
     if (!supplies.length) {
@@ -132,12 +138,13 @@ export async function suppliesView(el, { query = {} } = {}) {
             h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => move(s, 'restocked'), 'aria-label': `Add stock to ${s.name}` }, 'Add stock'),
             h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => move(s, 'used'), 'aria-label': `Record use of ${s.name}` }, 'Record use'),
             // The rest sit under one disclosure per row, named for its supply (#36, D-81).
-            h('details', { class: 'ops-more' },
+            h('details', { class: 'ops-more', open: s.supply_id === reopenId },
               h('summary', { class: 'btn btn--secondary btn--sm', 'aria-label': `More for ${s.name}` }, 'More'),
               h('div', { class: 'ops-supply__actions' },
-                h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => move(s, 'count'), 'aria-label': `Count ${s.name}` }, 'Count'),
-                h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => showHistory(s), 'aria-label': `History of ${s.name}` }, 'History'),
-                h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => addOrEdit(s), 'aria-label': `Edit ${s.name}` }, 'Edit'),
+                h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: fromMore(s, () => move(s, 'count')), 'aria-label': `Count ${s.name}` }, 'Count'),
+                h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: fromMore(s, () => showHistory(s)), 'aria-label': `History of ${s.name}` }, 'History'),
+                // Fixed key: a rename changes this button's name, and focus must still come back to it (D-118).
+                h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: fromMore(s, () => addOrEdit(s)), 'aria-label': `Edit ${s.name}`, 'data-focus-key': `supply-edit-${s.supply_id}` }, 'Edit'),
                 h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => archive(s), 'aria-label': `Archive ${s.name}` }, 'Archive'))))))))));
   }
 

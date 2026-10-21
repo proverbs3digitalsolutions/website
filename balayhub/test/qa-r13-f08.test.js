@@ -66,7 +66,7 @@ test('#22 the tenant Archive and Restore buttons carry the tenant-archive focus 
 test('#23 every maintenance status button carries the mt-status focus key', () => {
   const block = maintSrc.slice(maintSrc.indexOf('const statusButtons'), maintSrc.indexOf('const edit = '));
   assert.ok(block.length > 0, 'statusButtons block found');
-  assert.ok(block.includes("'data-focus-key': `mt-status-${s}`"));
+  assert.ok(block.includes("'data-focus-key': 'mt-status'"));
 });
 
 test('none of the four views moves focus after its own redraw, or imports a removed focus helper', () => {

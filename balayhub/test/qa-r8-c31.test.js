@@ -51,12 +51,12 @@ test('the other singulars and the plain-count cases are unchanged', () => {
 // ---------------------------------------------------------------- supply row controls (N1, D-81)
 
 test('the supply Edit button names its row', () => {
-  assert.match(supplies, /onclick: \(\) => addOrEdit\(s\), 'aria-label': `Edit \$\{s\.name\}` \}, 'Edit'\)/);
+  assert.match(supplies, /onclick: fromMore\(s, \(\) => addOrEdit\(s\)\), 'aria-label': `Edit \$\{s\.name\}`, 'data-focus-key': `supply-edit-\$\{s\.supply_id\}` \}, 'Edit'\)/);
 });
 
 test('the supply Add stock and Count buttons name their row', () => {
   assert.match(supplies, /onclick: \(\) => move\(s, 'restocked'\), 'aria-label': `Add stock to \$\{s\.name\}` \}, 'Add stock'\)/);
-  assert.match(supplies, /onclick: \(\) => move\(s, 'count'\), 'aria-label': `Count \$\{s\.name\}` \}, 'Count'\)/);
+  assert.match(supplies, /onclick: fromMore\(s, \(\) => move\(s, 'count'\)\), 'aria-label': `Count \$\{s\.name\}` \}, 'Count'\)/);
 });
 
 // ---------------------------------------------------------------- launchpad row controls (N1, D-81)

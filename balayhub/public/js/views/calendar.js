@@ -271,6 +271,7 @@ export async function calendarView(el, { query }) {
     const now = !price ? 'No price is set for this night yet. Type a price to set it for these nights.'
       : overridden ? `Now ${pesoShort(price)}, set on the calendar. Leave empty to go back to your usual rates.`
         : `Now ${pesoShort(price)} from your usual rates. Type a price to set it for these nights; leave empty to use your usual rates.`;
+    const nightsSpan = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000); // as src/routes/stays.js nightsBetween
     formModal({
       title: `Nightly price · ${listing.unit_name}`, submitText: 'Save price',
       fields: [
@@ -279,12 +280,16 @@ export async function calendarView(el, { query }) {
           field({ name: 'end_date', label: 'To night', type: 'date', required: true, value: date })),
         field({ name: 'price', label: 'Price per night', type: 'money', hint: now }),
       ],
+      // Every rule the server applies to these boxes, in the same press as the required ones (D-105, D-118): the order of the
+      // nights, one year at most, and a price of 0 (a blank still clears the price back to the usual rates). The server keeps the same checks.
+      check: (d) => {
+        const p = {};
+        if (d.start_date && d.end_date && d.end_date < d.start_date) p.end_date = 'Must be on or after the start date.';
+        else if (d.start_date && d.end_date && nightsSpan(d.start_date, d.end_date) > 366) p.end_date = 'Up to one year at a time.';
+        if (String(d.price ?? '').trim() !== '' && Number(d.price) === 0) p.price = 'Price must be greater than zero. Leave it blank to use your usual price.';
+        return Object.keys(p).length ? p : null;
+      },
       onSubmit: async (d, { form }) => {
-        // 0 would make the night free; a blank still clears the price back to the usual rates.
-        if (d.price.trim() !== '' && Number(d.price) === 0) {
-          const m = 'Price must be greater than zero. Leave it blank to use your usual price.';
-          throw new ApiError('Please check the highlighted fields.', { status: 400, code: 'VALIDATION', fields: { price: m } });
-        }
         // A price above the ceiling is asked about first; "Change it" keeps this dialog open with the price box focused.
         if (!await highRateOk(parseAmount(d.price))) { form.elements.price.focus(); return false; }
         const res = await api('PUT', '/rates', { ...d, unit_id: listing.unit_id });

@@ -294,19 +294,24 @@ export async function helpTicketView(el, { params, rerender }) {
       ? h('p', null, `${'★'.repeat(t.rating)}${'☆'.repeat(5 - t.rating)}`, t.rating_comment && h('span', { class: 'muted' }, ` · ${t.rating_comment}`))
       : h('div', { class: 'form' }, h('div', { class: 'field' }, stars((n) => { rating = n; ratingError.textContent = ''; }), ratingError), ratingComment,
         h('div', null, h('button', { class: 'btn btn--secondary btn--sm', onclick: async (e) => {
+          const btn = e.currentTarget;
           if (!rating) { ratingError.textContent = 'Pick a star rating first.'; return; }
-          e.currentTarget.disabled = true;
-          try { await post(`/support/tickets/${t.ticket_id}/rate`, { rating, comment: ratingComment.value.trim() || null }); toast('Thanks for the feedback!'); rerender(); } catch (err) { toast(err.message, 'error'); e.currentTarget.disabled = false; }
+          btn.disabled = true;
+          try { await post(`/support/tickets/${t.ticket_id}/rate`, { rating, comment: ratingComment.value.trim() || null }); toast('Thanks for the feedback!'); rerender(); } catch (err) { toast(err.message, 'error'); btn.disabled = false; }
         } }, 'Send rating'))));
 
+  let solving = false;
   el.replaceChildren(
     pageHead({
       title: t.subject, sub: `${t.number} · ${t.category_label} · opened ${fmtDateTime(t.created_at)}${t.created_by_name && state.user.role === 'owner' ? ` by ${t.created_by_name}` : ''}`,
       back: { href: '#/help', label: 'Help & support' },
       actions: open && h('button', { class: 'btn btn--secondary', onclick: async (e) => {
+        const btn = e.currentTarget; // read before any await: currentTarget is null afterwards
+        if (solving) return;
         if (!await confirmDialog({ title: 'Mark as solved?', text: 'Close this ticket because the problem is fixed? You can still reply within 14 days to reopen it.', confirmText: 'Yes, it’s solved', cancelText: 'Keep it open' })) return;
-        e.target.disabled = true;
-        try { await post(`/support/tickets/${t.ticket_id}/resolve`); toast('Marked as solved. Thank you!'); rerender(); } catch (err) { toast(err.message, 'error'); e.target.disabled = false; }
+        // aria-busy + flag, not disabled (D-116/D-117): a disabled focused button drops focus to BODY; the guard then moves it to the heading once the button is gone.
+        solving = true; btn.setAttribute('aria-busy', 'true');
+        try { await post(`/support/tickets/${t.ticket_id}/resolve`); toast('Marked as solved. Thank you!'); rerender(); } catch (err) { toast(err.message, 'error'); solving = false; btn.removeAttribute('aria-busy'); }
       } }, 'Mark as solved'),
     }),
     h('div', { class: 'card' },
@@ -324,7 +329,8 @@ export async function helpTicketView(el, { params, rerender }) {
           h('div', { class: 'card__head' }, h('h2', null, 'Conversation')),
           timeline(messages, events),
           canReply ? h('div', { class: 'form', style: { marginTop: '14px' } }, replyField, attachField,
-            h('div', null, h('button', { class: 'btn btn--primary', onclick: send }, t.status === 'resolved' ? 'Reply and reopen' : 'Send reply')))
+            // "Reply and reopen" becomes "Send reply" once the ticket reopens: one key (D-118).
+            h('div', null, h('button', { class: 'btn btn--primary', 'data-focus-key': 'ticket-reply', onclick: send }, t.status === 'resolved' ? 'Reply and reopen' : 'Send reply')))
             : h('div', { style: { marginTop: '14px' } }, h('a', { class: 'btn btn--secondary', href: `#/help/new${qs({ subject: `Follow-up on ${t.number}: ${t.subject}`.slice(0, 150) })}` }, 'Open a follow-up ticket')))),
       h('div', { class: 'stack' },
         h('div', { class: 'card' }, h('div', { class: 'card__head' }, h('h2', null, 'Attachments')), filesList(files)),

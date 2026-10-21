@@ -65,7 +65,8 @@ export async function gatepassCard(bookingId, rerender) {
         p?.last_error && h('p', { class: 'small amount--neg' }, p.last_error),
         !p && h('p', { class: 'muted small' }, d.auto ? `Sends automatically on ${fmtDate(d.send_on)} to ${d.admin_email}.` : `Admin: ${d.admin_email}. Automatic sending is off.`),
         h('div', { class: 'chips' },
-          h('button', { class: `btn ${p ? 'btn--secondary' : 'btn--primary'} btn--sm`, type: 'button', onclick: send }, p?.sent_at ? 'Send again' : 'Send now'),
+          // Send now becomes Send again after a send: one key (D-118).
+          h('button', { class: `btn ${p ? 'btn--secondary' : 'btn--primary'} btn--sm`, type: 'button', 'data-focus-key': 'gp-send', onclick: send }, p?.sent_at ? 'Send again' : 'Send now'),
           p && h('a', { class: 'btn btn--ghost btn--sm', href: p.link, target: '_blank', rel: 'noopener' }, 'Preview'))));
 }
 

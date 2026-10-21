@@ -845,7 +845,8 @@ export async function reservationDetailView(el, { params, rerender }) {
               p.voided_at && h('span', { class: 'row__sub' }, `Voided: ${p.void_reason}`)),
             h('div', { class: 'row__end' }, p.voided_at ? badge('voided', 'Voided') : h('div', { class: 'chips' },
               h('a', { class: 'btn btn--ghost btn--sm', href: `#/receipts/${p.payment_id}`, 'aria-label': `Receipt for ${paymentName(payments, p)}` }, 'Receipt'),
-              canManage && r.guest_email && h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `${p.receipt_sent_at ? 'Email again' : 'Email'} for ${paymentName(payments, p)}`, onclick: () => emailReceipt(p) }, p.receipt_sent_at ? 'Email again' : 'Email'),
+              // Email becomes Email again after the receipt is sent: a fixed key (D-118).
+              canManage && r.guest_email && h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `${p.receipt_sent_at ? 'Email again' : 'Email'} for ${paymentName(payments, p)}`, 'data-focus-key': `pay-email-${p.payment_id}`, onclick: () => emailReceipt(p) }, p.receipt_sent_at ? 'Email again' : 'Email'),
               canManage && h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Void ${paymentName(payments, p)}`, onclick: () => voidPayment(p) }, 'Void')))))))
             : h('p', { class: 'muted small' }, 'No payments recorded yet.')),
         charges, proofs, refunds && h('div', { id: 'refunds-card' }, refunds))));

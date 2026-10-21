@@ -92,7 +92,7 @@ test('the sync warning lists each problem once, naming the channel and host, in 
 test('the nightly price form refuses 0 with a plain message, and a blank still clears the price', () => {
   const body = functionBody('function priceModal(', 'async function blockMenu(');
   assert.match(body, /Price must be greater than zero\. Leave it blank to use your usual price\./);
-  assert.match(body, /throw new ApiError\(/, 'the refusal stops the save before PUT /rates');
-  assert.match(body, /d\.price\.trim\(\) !== ''/, 'a blank price is not refused');
+  assert.match(body, /p\.price = 'Price must be greater than zero\./, 'the refusal is a field check, so the save never starts');
+  assert.match(body, /String\(d\.price \?\? ''\)\.trim\(\) !== ''/, 'a blank price is not refused');
   assert.match(body, /Number\(d\.price\) === 0/);
 });

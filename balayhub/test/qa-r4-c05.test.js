@@ -53,7 +53,7 @@ test('a blank Save reads the server\'s cleared count; a typed price keeps "Price
 test('the price form lets server errors reach the field: the save is not caught here', () => {
   const body = priceModal();
   assert.match(body, /Price must be greater than zero\./, 'the zero refusal stays');
-  assert.match(body, /throw new ApiError\(/);
+  assert.match(body, /check: \(d\) => \{/, 'the zero refusal is a field check, so the save never starts');
   assert.doesNotMatch(body, /catch/, 'the server message is thrown on, so the form shows it on the price field');
 });
 

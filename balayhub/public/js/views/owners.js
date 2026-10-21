@@ -209,9 +209,14 @@ export async function ownersView(el, { rerender, query = {} }) {
       rerender();
     } catch (err) { toast(err.code === 'NO_EMAIL' ? 'Add an email for this owner first.' : err.message, 'error'); }
   };
-  const disablePortal = async (o) => {
+  const disablePortal = async (o, btn) => {
     if (!await confirmDialog({ title: 'Turn off portal access?', text: `${o.full_name} will be signed out and can't sign in again until you invite them.`, confirmText: 'Turn off access', danger: true })) return;
-    try { await post(`/unit-owners/${o.owner_id}/portal-disable`); toast('Portal access turned off.'); rerender(); } catch (err) { toast(err.message, 'error'); }
+    try {
+      await post(`/unit-owners/${o.owner_id}/portal-disable`); toast('Portal access turned off.');
+      // "Invite again" takes this button's place: hand it the key before the redraw, so focus lands there, not on the heading (D-117, D-118).
+      btn?.setAttribute('data-focus-key', `owner-invite-${o.owner_id}`); btn?.blur(); btn?.focus({ preventScroll: true });
+      rerender();
+    } catch (err) { toast(err.message, 'error'); }
   };
 
   const listBox = h('div');
@@ -232,7 +237,7 @@ export async function ownersView(el, { rerender, query = {} }) {
       h('div', { class: 'grid grid--2' }, owners.map((o) => h('div', { class: 'card' },
         h('div', { class: 'card__head' }, h('h2', null, o.full_name),
           h('div', { class: 'chips' },
-            h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Edit ${o.full_name}`, onclick: () => edit(o) }, 'Edit'),
+            h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Edit ${o.full_name}`, onclick: () => edit(o), 'data-focus-key': `owner-edit-${o.owner_id}` }, 'Edit'),
             h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Remove ${o.full_name}`, onclick: () => archive(o) }, 'Remove'))),
         h('dl', { class: 'dl' },
           h('dt', null, 'Units'), h('dd', null, o.unit_ids.map(unitName).filter(Boolean).join(', ') || 'None yet'),
@@ -245,7 +250,7 @@ export async function ownersView(el, { rerender, query = {} }) {
           h('a', { class: 'btn btn--primary btn--sm', href: `#/owners/${o.owner_id}/statement?month=${lastMonth()}`, 'aria-label': `Statement for last month, ${o.full_name}` }, 'Statement for last month'),
           h('a', { class: 'btn btn--secondary btn--sm', href: `#/owners/${o.owner_id}/statement?month=${todayManila().slice(0, 7)}`, 'aria-label': `This month so far, ${o.full_name}` }, 'This month so far'),
           o.portal_enabled
-            ? [h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Turn off portal access, ${o.full_name}`, onclick: () => disablePortal(o) }, 'Turn off portal access'),
+            ? [h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Turn off portal access, ${o.full_name}`, onclick: (e) => disablePortal(o, e.currentTarget) }, 'Turn off portal access'),
               h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'aria-label': `Send the invite again, ${o.full_name}`, onclick: () => invite(o), 'data-focus-key': `owner-invite-${o.owner_id}` }, 'Send the invite again')]
             : h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `${o.portal_invited_at ? 'Invite again' : 'Invite to owner portal'}, ${o.full_name}`, onclick: () => invite(o), 'data-focus-key': `owner-invite-${o.owner_id}` }, o.portal_invited_at ? 'Invite again' : 'Invite to owner portal'))))));
   }

@@ -188,10 +188,11 @@ export async function propertyDetailView(el, { params, query, rerender }) {
     const actions = [];
     if (canManage && u.status === 'active' && !archived) {
       if (!stayOnly && u.occupancy_status === 'vacant') actions.push(h('button', { class: 'btn btn--primary', 'aria-label': `Assign tenant to unit ${u.unit_name}`, onclick: () => assignTenantModal({ unit: { ...u, property_name: property.property_name }, onSaved: rerender }) }, 'Assign Tenant'));
-      actions.push(h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Edit unit ${u.unit_name}`, onclick: () => unitModal(property, u, rerender) }, 'Edit'));
+      actions.push(h('button', { class: 'btn btn--ghost btn--sm', 'data-focus-key': `unit-edit-${u.unit_id}`, 'aria-label': `Edit unit ${u.unit_name}`, onclick: () => unitModal(property, u, rerender) }, 'Edit'));
       if (u.occupancy_status !== 'occupied') {
         actions.push(h('button', {
           class: 'btn btn--ghost btn--sm',
+          'data-focus-key': `unit-archive-${u.unit_id}`,
           'aria-label': `Archive unit ${u.unit_name}`,
           onclick: async () => {
             if (!await confirmDialog({ title: `Archive unit ${u.unit_name}?`, text: 'Its history is kept. You can restore it later.', confirmText: 'Archive', danger: true })) return;
@@ -201,7 +202,7 @@ export async function propertyDetailView(el, { params, query, rerender }) {
       }
     }
     if (canManage && u.status === 'archived' && !archived) {
-      actions.push(h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Restore unit ${u.unit_name}`, onclick: async () => { try { await post(`/units/${u.unit_id}/restore`); toast('Unit restored.'); rerender(); } catch (err) { toast(err.message, 'error'); } } }, 'Restore'));
+      actions.push(h('button', { class: 'btn btn--ghost btn--sm', 'data-focus-key': `unit-archive-${u.unit_id}`, 'aria-label': `Restore unit ${u.unit_name}`, onclick: async () => { try { await post(`/units/${u.unit_id}/restore`); toast('Unit restored.'); rerender(); } catch (err) { toast(err.message, 'error'); } } }, 'Restore'));
     }
     return h('li', null, h('div', { class: 'row' },
       h('div', { class: 'row__main' },
@@ -259,8 +260,9 @@ export async function propertyDetailView(el, { params, query, rerender }) {
       actions: [
         canManage && !archived && h('button', { class: 'btn btn--primary', onclick: addUnit }, icon('plus'), 'Add unit'),
         canManage && !archived && h('button', { class: 'btn btn--secondary', onclick: editProperty }, 'Edit'),
-        isOwner && !archived && h('button', { class: 'btn btn--danger', onclick: archiveProperty }, 'Archive'),
-        isOwner && archived && h('button', { class: 'btn btn--secondary', onclick: restoreProperty }, 'Restore'),
+        // Archive and Restore take each other's place: one key (D-118).
+        isOwner && !archived && h('button', { class: 'btn btn--danger', 'data-focus-key': 'prop-archive', onclick: archiveProperty }, 'Archive'),
+        isOwner && archived && h('button', { class: 'btn btn--secondary', 'data-focus-key': 'prop-archive', onclick: restoreProperty }, 'Restore'),
       ],
     }),
     archived && h('div', { class: 'alert alert--warn', style: { marginBottom: '16px' } }, 'This property is archived. Restore it to add units or tenants.'),

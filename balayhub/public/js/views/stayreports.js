@@ -208,7 +208,7 @@ export async function stayReportsView(el, { query = {} }) {
       const shown = periodBoxes(typed, filters);
       const dateBox = (name, key) => h('input', { class: 'input', type: 'date', value: shown[key], 'aria-label': name, 'aria-describedby': 'stay-report-status', 'aria-invalid': typed[key] !== undefined ? 'true' : null,
         onchange: (e) => {
-          if (outOfWindow(e.target.value)) { typed[key] = e.target.value; e.target.setAttribute('aria-invalid', 'true'); status.textContent = OUT_OF_WINDOW + ' ' + refusedDatesText(typed); return; }
+          if (outOfWindow(e.target.value)) { typed[key] = e.target.value; e.target.setAttribute('aria-invalid', 'true'); status.textContent = OUT_OF_WINDOW + ' ' + refusedDatesText(typed); exportReady(false, 'Fix the dates to export.'); /* the page says this date isn't used, so the export can't use the old one either (D-118) */ return; }
           setPeriod({ [key]: e.target.value });
         } });
       inputs = h('div', { class: 'flt__range' }, dateBox('From', 'from'), h('span', { 'aria-hidden': 'true' }, '–'), dateBox('To', 'to'));
@@ -236,10 +236,11 @@ export async function stayReportsView(el, { query = {} }) {
     if (Object.keys(typed).length) status.textContent = `${OUT_OF_WINDOW} ` + refusedDatesText(typed); // refused typed dates win (#20)
     markBoxes();
     const apiQ = qs({ ...periodQ, ...scopeOf(filters) });
-    // A custom range is exported only once both dates are set, run forwards (#28) and span at most two years, the export's own limit (D-117).
+    // A custom range is exported only once both dates are set, run forwards (#28), span at most two years (D-117) and no typed date is refused (D-118).
+    const refused = Object.keys(typed).length > 0;
     const tooLong = filters.period === 'range' && Boolean(filters.from && filters.to) && !backwards && spanDays(filters.from, filters.to) > 731;
-    const exportOk = filters.period !== 'range' || Boolean(filters.from && filters.to && !backwards && !tooLong);
-    exportReady(exportOk, tooLong ? 'Choose up to two years to export.' : exportHint({ from: filters.from, to: filters.to }));
+    const exportOk = !refused && (filters.period !== 'range' || Boolean(filters.from && filters.to && !backwards && !tooLong));
+    exportReady(exportOk, refused ? 'Fix the dates to export.' : tooLong ? 'Choose up to two years to export.' : exportHint({ from: filters.from, to: filters.to }));
     if (exportOk) exportLink.href = `/api/stay-reports/export${apiQ}`;
     let r;
     try { r = await get(`/stay-reports${apiQ}`); } catch (err) {

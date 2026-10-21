@@ -210,7 +210,7 @@ export async function maintenanceView(el, { query }) {
           h('span', { class: 'row__sub' }, x.active ? `Next due ${fmtDate(String(x.next_due).slice(0, 10))}` : 'Not creating requests')),
         h('div', { class: 'ops-sched__actions' },
           badge(x.priority),
-          h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'aria-label': `Edit ${x.title}`, onclick: () => form(x) }, 'Edit'),
+          h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'data-focus-key': `mt-sched-edit-${x.schedule_id}`, 'aria-label': `Edit ${x.title}`, onclick: () => form(x) }, 'Edit'),
           h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'data-focus-key': `mt-pause-${x.schedule_id}`, 'aria-label': `${x.active ? 'Pause' : 'Resume'} ${x.title}`, onclick: () => pause(x) }, x.active ? 'Pause' : 'Resume')))))
         : h('p', { class: 'muted' }, 'No recurring jobs yet.')));
   }
@@ -230,7 +230,8 @@ export async function maintenanceDetailView(el, { params, rerender }) {
   let busy = false; // aria-busy + this flag, not disabled: a disabled focused button drops focus to BODY
   const statusButtons = canManage && nextStatuses(m.status).map((s) => h('button', {
     class: `btn btn--sm ${s === 'resolved' ? 'btn--primary' : 'btn--secondary'}`,
-    'data-focus-key': `mt-status-${s}`,
+    // One key for every status button: the guard takes the first, which is the button that took the pressed one's place (Back to open, Start work or Reopen) (D-118).
+    'data-focus-key': 'mt-status',
     onclick: async (e) => {
       const btn = e.currentTarget; // currentTarget is null after the first await
       if (s === 'cancelled' && !await confirmDialog({ title: 'Cancel this request?', text: 'Recorded costs stay on the books.', confirmText: 'Cancel request', cancelText: 'Keep request' })) return;

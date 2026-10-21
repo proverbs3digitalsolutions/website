@@ -67,7 +67,8 @@ export async function addonsView(el, { query = {}, rerender }) {
       h('span', { class: 'row__sub' }, `${peso(a.price)} ${PRICING[a.pricing] || ''} · up to ${a.max_quantity} · ${a.unit_ids?.length ? a.unit_ids.map(name).join(', ') : 'all listings'}`),
       h('span', { class: 'row__sub' }, [a.on_booking_page && 'On booking page', a.before_arrival && 'Before arrival'].filter(Boolean).join(' · ') || 'Hidden from guests')),
     isOwner && h('div', { class: 'row__end' }, h('div', { class: 'chips' },
-      h('button', { class: 'btn btn--secondary btn--sm', onclick: () => addonModal(a, listings, rerender), 'aria-label': `Edit ${a.name}` }, 'Edit'),
+      // A rename changes this button's name: a fixed key (D-118).
+      h('button', { class: 'btn btn--secondary btn--sm', onclick: () => addonModal(a, listings, rerender), 'aria-label': `Edit ${a.name}`, 'data-focus-key': `addon-edit-${a.addon_id}` }, 'Edit'),
       a.active && h('button', { class: 'btn btn--ghost btn--sm', 'aria-label': `Archive ${a.name}`, onclick: async () => {
         if (!await confirmDialog({ title: `Archive ${a.name}?`, text: 'Guests will no longer see it. Past bookings keep their charges.', confirmText: 'Archive' })) return;
         try { await post(`/addons/${a.addon_id}/archive`); toast('Add-on archived.'); rerender(); } catch (err) { toast(err.message, 'error'); }
