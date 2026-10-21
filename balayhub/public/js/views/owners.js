@@ -358,16 +358,17 @@ export async function ownerStatementView(el, { params, query = {}, rerender }) {
   };
   const publish = async () => {
     if (!await confirmDialog({ title: 'Publish this statement?', text: publishText(s.month_label, portalOn), confirmText: 'Publish' })) return;
-    act('publish', { month }, 'Statement published.');
+    // awaited: the button stays busy until the request ends (D-121).
+    await act('publish', { month }, 'Statement published.');
   };
   const unpublish = async () => {
     if (!await confirmDialog({ title: 'Unpublish to correct?', text: unpublishText(record.sent_at ? fmtDate(manilaDay(record.sent_at)) : null), confirmText: 'Unpublish', danger: true })) return;
-    act('unpublish', { month }, 'Statement is a draft again.');
+    await act('unpublish', { month }, 'Statement is a draft again.');
   };
   // The server emails the owner's current address (live), so the button and the message use that, not the frozen copy.
   const send = async () => {
     if (!await confirmDialog({ title: 'Email this statement?', text: `Send the ${s.month_label} statement to ${live.owner.email}?`, confirmText: 'Send' })) return;
-    act('send', { month }, `Statement sent to ${live.owner.email}.`);
+    await act('send', { month }, `Statement sent to ${live.owner.email}.`);
   };
   const monthInput = h('input', { class: 'input input--sm', type: 'month', value: month, 'aria-label': 'Month',
     onchange: (e) => { if (e.target.value) navigate(`#/owners/${id}/statement?month=${e.target.value}`); } });

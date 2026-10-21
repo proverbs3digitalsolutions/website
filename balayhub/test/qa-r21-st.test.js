@@ -11,6 +11,7 @@ class El {
   constructor(tag) { this.tag = tag; this.attrs = {}; this.children = []; this.l = {}; this.hidden = false; this.value = ''; this._t = ''; }
   setAttribute(k, v) { this.attrs[k] = String(v); }
   removeAttribute(k) { delete this.attrs[k]; }
+  getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }
   addEventListener(t, f) { this.l[t] = f; }
   append(...c) { this.children.push(...c); }
   focus() { global.document.activeElement = this; }

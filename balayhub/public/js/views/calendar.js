@@ -196,7 +196,8 @@ export async function calendarView(el, { query }) {
           class: `cal-bar cal-bar--${isBlock ? 'block' : b.channel}${startIdx + 0.5 < 0 ? ' cut-left' : ''}${endIdx + 0.5 > data.days ? ' cut-right' : ''}`,
           style: { left: `calc(${from} * var(--cal-col))`, width: `calc(${to - from} * var(--cal-col) - 3px)` },
           title: isBlock ? `Blocked: ${b.block_reason || ''}` : `${b.guest_name} · ${b.check_in} → ${b.check_out}${locked ? ` · From ${CHANNEL_LABEL[b.channel] || 'a channel'}: change it there` : canManage ? ' · Drag to another listing to move it' : ''}`,
-          onclick: (e) => { e.stopPropagation(); openBar(b); },
+          // awaited: the button stays busy until the request ends (D-121).
+          onclick: (e) => { e.stopPropagation(); return openBar(b); },
         }, isBlock ? `🔒 ${b.block_reason || 'Blocked'}` : `${b.guest_name || 'Guest'}${b.num_guests ? ` · ${b.num_guests}` : ''}`);
       });
       const warn = problems.get(l.unit_id) || [];
@@ -234,7 +235,7 @@ export async function calendarView(el, { query }) {
     if (!canManage) { toast('Only owners and managers can change the calendar.'); return; }
     // A night under a booking or block opens that booking or block, never the new-booking sheet.
     const taken = nightTaken(lastData.bookings, listing.unit_id, date);
-    if (taken) { openBar(taken); return; }
+    if (taken) return openBar(taken);
     const m = openModal({
       title: `${listing.unit_name} · ${fmtDate(date)}`,
       body: h('div', { class: 'form' },
@@ -309,8 +310,9 @@ export async function calendarView(el, { query }) {
   }
 
   // A bar, or a price cell under one, opens the same action: the block menu, or the reservation.
-  function openBar(b) {
-    if (b.kind === 'block') blockMenu(b); else navigate(`#/reservations/${b.booking_id}`);
+  async function openBar(b) {
+    if (b.kind === 'block') return blockMenu(b);
+    navigate(`#/reservations/${b.booking_id}`);
   }
 
   // An emptied box shows the date the grid is on again, so the box and the grid never disagree. A year still being typed

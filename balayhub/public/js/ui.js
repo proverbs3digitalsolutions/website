@@ -12,6 +12,28 @@ for (const name of ['replaceChildren', 'append']) {
   };
 }
 
+// A button whose click handler returns a promise waits for it (D-121): it is marked aria-disabled (dimmed, still focused) until
+// the promise settles, and a press while it waits does nothing. Not .disabled: a disabled button drops focus to the page
+// (D-97, D-105, D-120). A button dimmed before the press (D-117), or one its own handler marks (D-120), keeps its own mark.
+const pressing = new WeakSet();
+function busyWhile(el, promise) {
+  if (!promise || typeof promise.then !== 'function' || pressing.has(el)) return promise;
+  pressing.add(el);
+  el.setAttribute('aria-disabled', 'true');
+  const done = () => { if (pressing.delete(el)) el.removeAttribute('aria-disabled'); };
+  promise.then(done, done);
+  return promise;
+}
+function pressGuard(el, fn) {
+  return function onPress(e) {
+    if (pressing.has(el)) { e?.preventDefault?.(); return undefined; }
+    const before = el.getAttribute('aria-disabled');
+    const r = fn.call(this, e);
+    if (before === 'true' || el.getAttribute('aria-disabled') !== before) return r;
+    return busyWhile(el, r);
+  };
+}
+
 export function h(tag, props, ...children) {
   const el = document.createElement(tag);
   if (props) {
@@ -24,6 +46,7 @@ export function h(tag, props, ...children) {
         }
       }
       else if (k === 'dataset') Object.assign(el.dataset, v);
+      else if (k === 'onclick' && tag === 'button' && typeof v === 'function') el.addEventListener('click', pressGuard(el, v));
       else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2).toLowerCase(), v);
       else if (k === 'value' && (tag === 'input' || tag === 'textarea' || tag === 'select')) el.value = v;
       else if (k === 'checked' || k === 'disabled' || k === 'selected') el[k] = Boolean(v);
@@ -555,9 +578,9 @@ export function confirmDialog({ title, text, confirmText = 'Confirm', cancelText
         if (reasonInput && reasonInput.value.trim().length > REASON_MAX) { err.textContent = `Reason must be at most ${REASON_MAX} characters.`; reasonInput.setAttribute('aria-invalid', 'true'); reasonInput.focus(); return; }
         const value = reasonInput ? reasonInput.value.trim() : true;
         if (onConfirm) {
-          busy = true; confirmBtn.setAttribute('aria-busy', 'true'); refusal.replaceChildren();
+          busy = true; confirmBtn.setAttribute('aria-disabled', 'true'); refusal.replaceChildren();
           try { await onConfirm(value); } catch (e) {
-            busy = false; confirmBtn.removeAttribute('aria-busy');
+            busy = false; confirmBtn.removeAttribute('aria-disabled');
             if (m.el.open) { refusal.replaceChildren(h('div', { class: 'alert alert--error' }, e.message)); confirmBtn.focus(); } else { done = true; toast(e.message, 'error'); resolve(null); }
             return;
           }

@@ -154,6 +154,7 @@ async function loadHelp() {
   fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}');
   for (const [name, code] of Object.entries(STUBS)) fs.writeFileSync(path.join(dir, name), code);
   fs.writeFileSync(path.join(dir, 'views', 'help.js'), SRC);
+  fs.writeFileSync(path.join(dir, 'views', 'inbox.js'), 'export const scrollToNewest = () => {};');
   help = await import(pathToFileURL(path.join(dir, 'views', 'help.js')).href);
   return help;
 }

@@ -75,16 +75,20 @@ export function couponBox({ current, getSelection, onQuote, initialCode }) {
     }
     onQuote(q);
   };
-  const apply = () => {
+  const apply = async () => {
+    if (applyBtn.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
     code = input.value.trim();
     if (!code) { setMsg('Enter your coupon code.'); input.focus(); return; } // the message is about the box, so focus goes there
-    refresh(true);
+    // aria-disabled, not disabled: a disabled control drops focus to the page while it waits (D-97, D-105, D-120).
+    applyBtn.setAttribute('aria-disabled', 'true');
+    try { await refresh(true); } finally { applyBtn.removeAttribute('aria-disabled'); }
   };
 
   const input = h('input', { class: 'input', type: 'text', name: 'coupon_code', autocomplete: 'off', autocapitalize: 'characters', maxlength: 32, 'aria-label': 'Coupon code',
     onkeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); apply(); } } });
+  const applyBtn = h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: () => apply() }, 'Apply');
   const form = h('div', null,
-    h('div', { class: 'coupon-row' }, input, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: apply }, 'Apply')),
+    h('div', { class: 'coupon-row' }, input, applyBtn),
     h('div', { class: 'field' }, msg), ok);
 
   let box;

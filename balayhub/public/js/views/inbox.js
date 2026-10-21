@@ -223,11 +223,20 @@ async function renderThread(pane, id, { status, back, rerender }) {
 
   // The server refuses an assignee who can't see this reservation; show why and put the dropdown back.
   const assign = async (e) => {
-    try { await patch(`/inbox/${id}`, { assigned_to: e.target.value || null }); toast('Assignment updated.'); } catch (err) { toast(err.fields.assigned_to || err.message, 'error'); }
+    const sel = e.target;
+    if (sel.getAttribute('aria-disabled') === 'true') { sel.value = sel.dataset.saving; return; } // busy with its own request: a second change is put back
+    const value = sel.value;
+    sel.dataset.saving = value;
+    // aria-disabled, not disabled: a disabled control drops focus to the page while it waits (D-97, D-105, D-120).
+    sel.setAttribute('aria-disabled', 'true');
+    try { await patch(`/inbox/${id}`, { assigned_to: value || null }); toast('Assignment updated.'); } catch (err) { toast(err.fields.assigned_to || err.message, 'error'); } finally { sel.removeAttribute('aria-disabled'); delete sel.dataset.saving; }
     rerender();
   };
 
-  const snooze = () => {
+  // Snooze opens the list; the chosen time marks the Snooze button it came from while it saves (D-121).
+  const snooze = (e) => {
+    const opener = e.currentTarget;
+    if (opener.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
     const tomorrow = new Date(Date.now() + 86400000);
     const opts = [
       ['3 hours', new Date(Date.now() + 3 * 3600000)],
@@ -239,7 +248,12 @@ async function renderThread(pane, id, { status, back, rerender }) {
       title: 'Snooze until…',
       body: h('div', { class: 'stack' }, opts.map(([t, d]) => h('button', {
         class: 'btn btn--secondary btn--block',
-        onclick: () => { m.close(); act(() => patch(`/inbox/${id}`, { snoozed_until: d.toISOString() }), `Snoozed until ${fmtDateTime(d)}.`); },
+        onclick: async () => {
+          m.close();
+          // aria-disabled, not disabled: a disabled control drops focus to the page while it waits (D-97, D-105, D-120).
+          opener.setAttribute('aria-disabled', 'true');
+          try { await act(() => patch(`/inbox/${id}`, { snoozed_until: d.toISOString() }), `Snoozed until ${fmtDateTime(d)}.`); } finally { opener.removeAttribute('aria-disabled'); }
+        },
       }, `${t} · ${fmtDateTime(d)}`))),
     });
   };
@@ -278,7 +292,8 @@ async function renderThread(pane, id, { status, back, rerender }) {
       meta = h('div', { class: 'msg__meta' }, `Scheduled for ${fmtDateTime(m.scheduled_at)} · `,
         h('button', { class: 'linkbtn', 'aria-label': `Cancel the message scheduled for ${fmtDateTime(m.scheduled_at)}`, onclick: async () => {
           if (!await confirmDialog({ title: 'Cancel this scheduled message?', text: 'It will not be sent.', confirmText: 'Cancel message', danger: true })) return;
-          act(() => post(`/inbox/messages/${m.message_id}/cancel`), 'Scheduled message cancelled.');
+          // awaited: the button stays busy until the request ends (D-121).
+          await act(() => post(`/inbox/messages/${m.message_id}/cancel`), 'Scheduled message cancelled.');
         } }, 'Cancel'));
     } else if (m.status === 'failed') {
       meta = h('div', { class: 'msg__meta msg__meta--err' }, `Not sent: ${m.error || 'unknown error'} · `,

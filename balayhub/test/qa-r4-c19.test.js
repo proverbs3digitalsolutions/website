@@ -105,6 +105,6 @@ test('workspace with alert types keeps the list, the stay-only sentence and no m
 test('toggling an alert type on a workspace with types still saves it', async () => {
   const root = await render(STAY_TYPES, { on: true });
   const input = elements(root, 'input')[0];
-  await input.props.onchange({ target: { checked: false } });
+  await input.props.onchange({ target: { checked: false, attrs: {}, getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }, setAttribute(k, v) { this.attrs[k] = String(v); }, removeAttribute(k) { delete this.attrs[k]; } } });
   assert.deepEqual(api.state.calls[0], ['patch', '/push/settings', { new_booking: false }]);
 });

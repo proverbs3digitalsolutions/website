@@ -79,7 +79,7 @@ test('(b) onConfirm resolving: called once with the trimmed reason, then closes 
   w.box.value = ' wrong guest ';
   w.press();
   assert.equal(w.dlg.open, true, 'still open while it runs');
-  assert.equal(w.confirm.getAttribute('aria-busy'), 'true');
+  assert.equal(w.confirm.getAttribute('aria-disabled'), 'true');
   await tick();
   assert.deepEqual(calls, ['wrong guest']);
   assert.equal(w.dlg.open, false);

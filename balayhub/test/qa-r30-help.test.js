@@ -37,6 +37,7 @@ test('the check puts the content sentence on the screenshot field (temp copy, st
   w('assistant.js', 'export const assistantEnabled = () => false, openAssistant = () => {};');
   w('filters.js', 'export const initFilters = () => {}, filterBar = () => null, rememberFilters = () => {}, changed = () => false;');
   w('views/help.js', SRC);
+  w('views/inbox.js', 'export const scrollToNewest = () => {};');
   const help = await import(pathToFileURL(path.join(dir, 'views/help.js')));
   assert.equal(typeof help.screenshotError, 'function');
   assert.equal(help.screenshotContentError, undefined);

@@ -170,7 +170,7 @@ test('workspace with alert types keeps the list, the stay-only sentence and no m
 test('a switch whose save fails goes back to its old position and says why', async () => {
   const root = await render(STAY_TYPES, { on: true });
   api.state.failPatch = true;
-  const target = { checked: false };
+  const target = { checked: false, attrs: {}, getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }, setAttribute(k, v) { this.attrs[k] = String(v); }, removeAttribute(k) { delete this.attrs[k]; } };
   await elements(root, 'input')[0].props.onchange({ target });
   assert.equal(target.checked, true, 'the box is put back');
   assert.deepEqual(ui.toasts.at(-1), ['Could not save that. Try again.', 'error']);
@@ -178,7 +178,7 @@ test('a switch whose save fails goes back to its old position and says why', asy
 
 test('a switch that saves keeps its new position and says Saved', async () => {
   const root = await render(STAY_TYPES, { on: true });
-  const target = { checked: false };
+  const target = { checked: false, attrs: {}, getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }, setAttribute(k, v) { this.attrs[k] = String(v); }, removeAttribute(k) { delete this.attrs[k]; } };
   await elements(root, 'input')[0].props.onchange({ target });
   assert.equal(target.checked, false);
   assert.deepEqual(api.state.calls[0], ['patch', '/push/settings', { new_booking: false }]);

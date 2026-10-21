@@ -23,7 +23,7 @@ test('Turn on is aria-disabled, never disabled, and does nothing while no listin
   const on = btn('Turn on');
   assert.doesNotMatch(on, /\bdisabled:/);
   assert.match(on, /'aria-disabled': noListing \? 'true' : null/);
-  assert.match(on, /onclick: \(\) => \{ if \(!noListing\) turnOn\(false\); \}/);
+  assert.match(on, /onclick: \(\) => \(noListing \? undefined : turnOn\(false\)\)/);
   assert.match(on, /'aria-describedby': noListing \? 'bp-on-hint' : undefined/);
 });
 

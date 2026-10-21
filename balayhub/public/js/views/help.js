@@ -9,6 +9,7 @@ import { state, navigate } from '../app.js';
 import { currentTheme } from '../themeswitch.js';
 import { assistantEnabled, openAssistant } from '../assistant.js';
 import { initFilters, filterBar, rememberFilters, changed } from '../filters.js';
+import { scrollToNewest } from './inbox.js';
 
 // A screenshot is checked (type, size, content) before the ticket is created, so a refused file never leaves the ticket without it.
 export function screenshotError(file) {
@@ -304,6 +305,7 @@ export async function helpTicketView(el, { params, rerender }) {
         } }, 'Send rating'))));
 
   let solving = false;
+  const thread = timeline(messages, events);
   el.replaceChildren(
     pageHead({
       title: t.subject, sub: `${t.number} · ${t.category_label} · opened ${fmtDateTime(t.created_at)}${t.created_by_name && state.user.role === 'owner' ? ` by ${t.created_by_name}` : ''}`,
@@ -330,7 +332,7 @@ export async function helpTicketView(el, { params, rerender }) {
       h('div', { class: 'stack' },
         h('div', { class: 'card' },
           h('div', { class: 'card__head' }, h('h2', null, 'Conversation')),
-          timeline(messages, events),
+          thread,
           canReply ? h('div', { class: 'form', style: { marginTop: '14px' } }, replyField, attachField,
             // "Reply and reopen" becomes "Send reply" once the ticket reopens: one key (D-118).
             h('div', null, h('button', { class: 'btn btn--primary', 'data-focus-key': 'ticket-reply', onclick: send }, t.status === 'resolved' ? 'Reply and reopen' : 'Send reply')))
@@ -338,6 +340,8 @@ export async function helpTicketView(el, { params, rerender }) {
       h('div', { class: 'stack' },
         h('div', { class: 'card' }, h('div', { class: 'card__head' }, h('h2', null, 'Attachments')), filesList(files)),
         rateCard)));
+  // Opens at the newest entry, as a conversation does (D-119, D-121); not awaited: the page is attached after this view returns.
+  scrollToNewest(thread);
 }
 
 // ---------------------------------------------------------------- BalayHub support queue
@@ -402,6 +406,7 @@ export async function adminSupportTicketView(el, { params, rerender }) {
     try { await fn(); toast(msg); rerender(); } catch (err) { toast(err.message, 'error'); btn.removeAttribute('aria-disabled'); }
   };
   const ctx = t.context || {};
+  const thread = timeline(messages, events);
   el.replaceChildren(
     pageHead({ title: t.subject, sub: `${t.number} · ${t.category_label} · ${workspace?.name || ''}`, back: { href: '#/admin/support', label: 'Support queue' },
       actions: [
@@ -412,7 +417,7 @@ export async function adminSupportTicketView(el, { params, rerender }) {
     h('div', { class: 'grid grid--help' },
       h('div', { class: 'card' },
         h('div', { class: 'card__head' }, h('h2', null, 'Conversation')),
-        timeline(messages, events),
+        thread,
         h('div', { class: 'form', style: { marginTop: '14px' } }, body,
           h('div', { class: 'toolbar' }, h('label', { class: 'check' }, internal, h('span', null, 'Internal note (customer won’t see it)')), nextStatus),
           h('div', null, h('button', { class: 'btn btn--primary', onclick: (e) => {
@@ -441,4 +446,6 @@ export async function adminSupportTicketView(el, { params, rerender }) {
           h('div', { class: 'card__head' }, h('h2', null, 'Change status')),
           h('div', { class: 'chips' }, STEPS.concat([['closed', 'Closed']]).filter(([k]) => k !== t.status).map(([k, v]) =>
             h('button', { class: 'btn btn--secondary btn--sm', onclick: (e) => act(e, () => post(`/admin/support/tickets/${t.ticket_id}/status`, { status: k }), `Moved to ${v}.`) }, v)))))));
+  // Opens at the newest entry, as a conversation does (D-119, D-121); not awaited: the page is attached after this view returns.
+  scrollToNewest(thread);
 }

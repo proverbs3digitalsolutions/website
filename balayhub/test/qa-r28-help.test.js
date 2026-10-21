@@ -25,6 +25,7 @@ test.before(async () => {
   w('assistant.js', 'export const assistantEnabled = () => false, openAssistant = () => {};');
   w('filters.js', 'export const initFilters = () => {}, filterBar = () => null, rememberFilters = () => {}, changed = () => false;');
   w('views/help.js', SRC.replace(/from '\.\.\/(?=[a-z]+\.js')/g, "from '../"));
+  w('views/inbox.js', 'export const scrollToNewest = () => {};');
   help = await import(pathToFileURL(path.join(dir, 'views/help.js')));
 });
 

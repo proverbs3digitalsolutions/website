@@ -71,8 +71,11 @@ export async function notificationsCard(rerender) {
   };
   // A switch whose save fails goes back to where it was.
   const toggle = async (input, key) => {
+    if (input.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
     const value = input.checked;
-    try { await patch('/push/settings', { [key]: value }); toast('Saved.'); } catch (err) { input.checked = !value; toast(err.message, 'error'); }
+    // aria-disabled, not disabled: a disabled control drops focus to the page while it waits (D-97, D-105, D-120).
+    input.setAttribute('aria-disabled', 'true');
+    try { await patch('/push/settings', { [key]: value }); toast('Saved.'); } catch (err) { input.checked = !value; toast(err.message, 'error'); } finally { input.removeAttribute('aria-disabled'); }
   };
 
   // A long-term workspace has no alert types. Its card says so, and it gets no stay-only sentence.
@@ -114,6 +117,11 @@ export async function notificationsCard(rerender) {
       : h('fieldset', { class: 'checks notify-list', style: { border: 0, padding: 0, margin: '12px 0 0' } },
         h('legend', { class: 'small' }, 'Notify me about'),
         s.types.map((t) => h('label', { class: 'check' },
-          h('input', { type: 'checkbox', checked: t.on, onchange: (e) => toggle(e.target, t.key) }),
+          h('input', {
+            type: 'checkbox', checked: t.on,
+            // A click on a switch that is still saving is refused, so the tick stays where the save puts it (D-121).
+            onclick: (e) => { if (e.target.getAttribute('aria-disabled') === 'true') e.preventDefault(); },
+            onchange: (e) => toggle(e.target, t.key),
+          }),
           h('span', null, t.label)))));
 }

@@ -204,7 +204,7 @@ export async function settingsView(el, { rerender, query = {} }) {
     });
 
     const showInviteLink = (res) => {
-      const input = h('input', { class: 'input', readonly: true, value: res.inviteLink });
+      const input = h('input', { class: 'input', readonly: true, value: res.inviteLink, 'aria-label': 'Invitation link' });
       openModal({
         title: 'Invitation created',
         body: h('div', { class: 'form' },
@@ -883,7 +883,8 @@ async function bookingCard(rerender) {
       b.paymongo_connected
         ? (b.enabled
           ? h('button', { class: 'btn btn--secondary btn--sm', 'data-focus-key': 'bp-main', onclick: () => save({ enabled: false }, 'Booking page turned off.') }, 'Turn off')
-          : h('button', { class: 'btn btn--primary btn--sm', 'data-focus-key': 'bp-main', 'aria-disabled': noListing ? 'true' : null, 'aria-describedby': noListing ? 'bp-on-hint' : undefined, onclick: () => { if (!noListing) turnOn(false); } }, 'Turn on'))
+          // returns the request so the button waits for it (D-121); with no listing it is dimmed and does nothing (D-117).
+          : h('button', { class: 'btn btn--primary btn--sm', 'data-focus-key': 'bp-main', 'aria-disabled': noListing ? 'true' : null, 'aria-describedby': noListing ? 'bp-on-hint' : undefined, onclick: () => (noListing ? undefined : turnOn(false)) }, 'Turn on'))
         : h('button', { class: 'btn btn--primary btn--sm', 'data-focus-key': 'bp-main', onclick: connect }, 'Connect PayMongo'),
       b.enabled && b.url && h('button', { class: 'btn btn--secondary btn--sm', onclick: copy }, 'Copy link'),
       h('button', { class: 'btn btn--ghost btn--sm', onclick: edit }, 'Page settings'),

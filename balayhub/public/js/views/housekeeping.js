@@ -708,12 +708,13 @@ export async function housekeepingDetailView(el, { params, rerender }) {
   const finish = async () => {
     const left = uncheckedCount([...items.querySelectorAll('input[type="checkbox"]')].map((b) => b.checked));
     if (left > 0 && !await confirmDialog({ title: T('Mark as done?'), text: T('{n} checklist item(s) not ticked yet.', { n: left }), confirmText: T('Mark done anyway'), cancelText: T('Cancel') })) return;
-    setStatus('done', T('Cleaning done. Listing marked clean.'));
+    // awaited: the button stays busy until the request ends (D-121).
+    await setStatus('done', T('Cleaning done. Listing marked clean.'));
   };
   // Reopening clears a pay that was typed or worked out, so it asks first when there is one.
   const reopen = async () => {
     if (t.pay_amount != null && !await confirmDialog({ title: 'Reopen this clean?', text: `Its pay of ${peso(t.pay_amount)} is cleared. It's worked out again from the rate when the clean is finished, so check the amount then.`, confirmText: 'Reopen' })) return;
-    setStatus('in_progress', T('Reopened.'));
+    await setStatus('in_progress', T('Reopened.'));
   };
 
   const items = h('ul', { class: 'hk-checklist' }, t.checklist.map((c, i) => h('li', null,
@@ -782,7 +783,7 @@ export async function housekeepingDetailView(el, { params, rerender }) {
         isManager && t.status === 'done' && t.checklist.length > 0 && !isPaidClean(t) && h('button', { class: 'btn btn--primary', onclick: () => inspectModal(t, rerender) }, 'Inspect'),
         isManager && open && h('button', { class: 'btn btn--secondary', onclick: () => copyText(taskText(t)) }, 'Copy for cleaner'),
         isManager && open && h('button', { class: 'btn btn--ghost', onclick: async () => {
-          if (await confirmDialog({ title: 'Cancel this cleaning task?', text: 'Use this if the cleaning is no longer needed.', confirmText: 'Cancel task', danger: true })) setStatus('cancelled', 'Task cancelled.');
+          if (await confirmDialog({ title: 'Cancel this cleaning task?', text: 'Use this if the cleaning is no longer needed.', confirmText: 'Cancel task', danger: true })) await setStatus('cancelled', 'Task cancelled.');
         } }, 'Cancel task'))),
     h('div', { class: 'grid grid--2' },
       h('div', { class: 'stack' },

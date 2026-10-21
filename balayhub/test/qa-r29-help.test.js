@@ -26,6 +26,7 @@ test.before(async () => {
   w('assistant.js', 'export const assistantEnabled = () => false, openAssistant = () => {};');
   w('filters.js', 'export const initFilters = () => {}, filterBar = () => null, rememberFilters = () => {}, changed = () => false;');
   w('views/help.js', SRC);
+  w('views/inbox.js', 'export const scrollToNewest = () => {};');
   api = await import(pathToFileURL(path.join(dir, 'api.js')));
   help = await import(pathToFileURL(path.join(dir, 'views/help.js')));
 });

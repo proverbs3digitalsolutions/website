@@ -179,12 +179,12 @@ test('a price cell under a booking or block opens that booking or block, never t
   const check = menu.indexOf('nightTaken(lastData.bookings, listing.unit_id, date)');
   assert.ok(check > -1, 'cellMenu looks up the booking or block under the night');
   assert.ok(check < menu.indexOf('newReservationModal('), 'the lookup comes before the new-booking sheet can open');
-  assert.match(menu, /if \(taken\) \{?\s*openBar\(taken\)/);
+  assert.match(menu, /if \(taken\) return openBar\(taken\)/);
 });
 
 test('a bar and the price cell under it share one action: the block menu, or the reservation', () => {
   const open = between(calendarSrc, 'function openBar(', '// An emptied box shows the date');
-  assert.match(open, /if \(b\.kind === 'block'\) blockMenu\(b\);/);
-  assert.match(open, /else navigate\(`#\/reservations\/\$\{b\.booking_id\}`\);/);
-  assert.match(calendarSrc, /onclick: \(e\) => \{ e\.stopPropagation\(\); openBar\(b\); \},/);
+  assert.match(open, /if \(b\.kind === 'block'\) return blockMenu\(b\);/);
+  assert.match(open, /return blockMenu\(b\);\s*navigate\(`#\/reservations\/\$\{b\.booking_id\}`\);/);
+  assert.match(calendarSrc, /onclick: \(e\) => \{ e\.stopPropagation\(\); return openBar\(b\); \},/);
 });

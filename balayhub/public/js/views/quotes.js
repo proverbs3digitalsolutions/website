@@ -302,7 +302,8 @@ export async function quoteDetailView(el, { params, rerender }) {
                 q.guest_email && h('button', { class: 'btn btn--secondary btn--sm', onclick: () => act(() => post(`/quotes/${q.quote_id}/send`), `Quote emailed to ${q.guest_email}.`) }, 'Send by email'),
                 h('button', { class: 'btn btn--danger btn--sm', onclick: async () => {
                   if (!await confirmDialog({ title: 'Cancel this quote?', text: 'The link stops working. This can\'t be undone.', confirmText: 'Cancel quote', cancelText: 'Keep it', danger: true })) return;
-                  act(() => post(`/quotes/${q.quote_id}/cancel`), 'Quote cancelled.', true);
+                  // awaited: the button stays busy until the request ends (D-121).
+                  await act(() => post(`/quotes/${q.quote_id}/cancel`), 'Quote cancelled.', true);
                 } }, 'Cancel quote')),
               !q.guest_email && h('p', { class: 'muted small' }, 'No email on this quote, so copy the link and send it on Messenger or Viber.')]
               : h('p', { class: 'muted' }, q.status === 'expired' ? 'This quote expired. Create a new one if the guest is still interested.' : 'This quote was cancelled.')))));

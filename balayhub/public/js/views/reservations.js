@@ -485,7 +485,8 @@ async function damageCard(r, rerender) {
   });
   const deduct = async (x) => {
     if (!await confirmDialog({ title: 'Deduct from the deposit?', text: 'The amount is pre-filled when you return the deposit. Nothing is taken until you do.', confirmText: 'Deduct from deposit' })) return;
-    run(`/damage-reports/${x.report_id}/deduct`, {}, 'Marked to deduct from the deposit.');
+    // awaited: the button stays busy until the request ends (D-121).
+    await run(`/damage-reports/${x.report_id}/deduct`, {}, 'Marked to deduct from the deposit.');
   };
   return h('div', { class: 'card' },
     h('div', { class: 'card__head' }, h('h2', null, 'Damage reports'), h('span', { class: 'muted small' }, `${reports.length} report${reports.length === 1 ? '' : 's'}`)),
@@ -507,9 +508,15 @@ async function lostFoundCard(r, rerender) {
   const d = await get(`/reservations/${r.booking_id}/lost-found`);
   const items = d.items || [];
   if (!items.length) return null;
-  const setStatus = async (x, status) => {
+  const setStatus = async (x, sel) => {
+    if (sel.getAttribute('aria-disabled') === 'true') { sel.value = sel.dataset.saving; return; } // busy with its own request: a second change is put back
+    const status = sel.value;
     if (status === x.status) return;
+    sel.dataset.saving = status;
+    // aria-disabled, not disabled: a disabled control drops focus to the page while it waits (D-97, D-105, D-120).
+    sel.setAttribute('aria-disabled', 'true');
     try { await patch(`/lost-found/${x.item_id}`, { status }); toast('Updated.'); rerender(); } catch (err) { toast(err.message, 'error'); rerender(); }
+    finally { sel.removeAttribute('aria-disabled'); delete sel.dataset.saving; }
   };
   return h('div', { class: 'card' },
     h('div', { class: 'card__head' }, h('h2', null, 'Lost and found')),
@@ -520,7 +527,7 @@ async function lostFoundCard(r, rerender) {
           h('span', { class: 'row__title' }, x.description),
           h('span', { class: 'row__sub' }, `${x.found_where ? `${x.found_where} · ` : ''}Found ${fmtDate(x.found_on)}${x.status_note ? ` · ${x.status_note}` : ''}`)),
         h('div', { class: 'row__end' }, badge(cls, text),
-          h('select', { class: 'select', 'aria-label': `Status of ${x.description}`, onchange: (e) => setStatus(x, e.target.value) },
+          h('select', { class: 'select', 'aria-label': `Status of ${x.description}`, onchange: (e) => setStatus(x, e.target) },
             FOUND_NEXT.map(([v, t]) => h('option', { value: v, selected: v === x.status }, t))))));
     })));
 }
