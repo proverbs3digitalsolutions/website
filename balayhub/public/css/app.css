@@ -1291,7 +1291,7 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 /* On phones the sheet starts where the top bar's panels start (topbar.css .tb-pop) and ends just above the bottom bar, so both stay in reach. */
 @media (max-width: 559px) { .assist { right: 0; left: 0; bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom)); top: calc(max(12px, env(safe-area-inset-top)) + 56px); width: 100%; height: calc(100dvh - (max(12px, env(safe-area-inset-top)) + 56px) - var(--bottomnav-h) - env(safe-area-inset-bottom)); border-radius: 18px 18px 0 0; /* sits flush on the bottom bar (D-116) */ } }
 .assist__head { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 14px; background: var(--forest); color: #fff; }
-.assist__head .small { opacity: .85; }
+/* The header's small line is full white: opacity on the dark-mode green fell under 4.5:1 (D-114, D-117). */
 .assist__actions { display: flex; gap: 4px; }
 .assist__icon { background: transparent; border: 0; color: #fff; width: 34px; height: 34px; border-radius: 8px; cursor: pointer; font-size: 1.4rem; line-height: 1; display: grid; place-items: center; }
 .assist__icon svg { width: 18px; height: 18px; }
@@ -1800,6 +1800,9 @@ a.op__row:hover { background: var(--surface-2); }
   .check { align-items: center; }
   .gc__foot a { display: inline-flex; align-items: center; }
   .lpad-guide summary { padding: 10px 0; }
+  /* Round 35 (D-117): every tappable summary is 44px on a phone: the landing FAQ, Help articles (also in the assistant),
+     "Show the accepted text" and Guest care's welcome codes. The marker stays (display is unchanged). */
+  .lp-faq summary, .help-article summary, .assist__articles .help-article summary, .hp-rules summary, details.card > summary { min-height: 44px; padding-top: 10px; padding-bottom: 10px; }
   /* Round 19: landing top-nav 'Log in' and the language summary reach 44px; tabs never narrower than 44px. */
   .lp-top__nav a:not(.btn):not(.lp-hide-sm), .lp-lang summary { display: inline-flex; align-items: center; min-height: 44px; }
   .lp-lang summary { min-width: 44px; justify-content: center; }

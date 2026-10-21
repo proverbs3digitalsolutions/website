@@ -137,7 +137,7 @@ test('#22: Turn on is disabled, with a line under it, while no listing is ticked
   assert.match(card, /const noListing = !listed\.length;/);
   const on = card.split('\n').find((line) => line.includes("'Turn on'"));
   assert.ok(on, 'the Turn on button is in the card');
-  assert.match(on, /disabled: noListing/, 'Turn on is disabled while no listing is ticked');
+  assert.match(on, /'aria-disabled': noListing \? 'true' : null/, 'Turn on is disabled while no listing is ticked');
   const off = card.split('\n').find((line) => line.includes("'Turn off'"));
   assert.ok(off, 'the Turn off button is in the card');
   assert.doesNotMatch(off, /disabled/, 'Turn off is never gated');

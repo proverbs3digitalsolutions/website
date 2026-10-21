@@ -165,11 +165,12 @@ export async function cleanerPayView(el, { query = {} } = {}) {
     const missing = data.tasks.filter((x) => x.pay_amount == null && x.pay_status !== 'self').length;
     const payable = rows.filter((x) => x.pay_status === 'unpaid' && x.pay_amount != null);
     const selTotal = ticked().reduce((s, x) => s + cents(x.pay_amount), 0);
-    const markBtn = h('button', { class: 'btn btn--primary', type: 'button', disabled: !selected.size, onclick: markPaid }, selected.size ? `Mark ${selected.size} paid · ${peso(fromCents(selTotal))}` : 'Mark paid');
+    // One key whatever its count, and aria-disabled, not disabled, so focus can come back here after Mark paid (D-117).
+    const markBtn = h('button', { class: 'btn btn--primary', type: 'button', 'data-focus-key': 'cp-mark', 'aria-disabled': selected.size ? null : 'true', onclick: markPaid }, selected.size ? `Mark ${selected.size} paid · ${peso(fromCents(selTotal))}` : 'Mark paid');
     const refresh = () => {
       const n = ticked().length;
       const c = ticked().reduce((s, x) => s + cents(x.pay_amount), 0);
-      markBtn.disabled = !n;
+      if (n) markBtn.removeAttribute('aria-disabled'); else markBtn.setAttribute('aria-disabled', 'true');
       markBtn.textContent = n ? `Mark ${n} paid · ${peso(fromCents(c))}` : 'Mark paid';
     };
     const all = h('input', { type: 'checkbox', disabled: !payable.length,

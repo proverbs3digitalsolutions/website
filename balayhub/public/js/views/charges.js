@@ -74,8 +74,9 @@ function addCharge(reservationId, rerender) {
       });
       added = true;
       toast('Charge added.');
-      rerender();
+      // Close first, then redraw: the pay-link question then opens from Add charge, so its answer returns focus there (D-117).
       modal.close();
+      rerender();
     },
   });
   // Offer the pay link only after the dialog has closed, so two dialogs never stack.

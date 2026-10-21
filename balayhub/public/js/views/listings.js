@@ -360,7 +360,8 @@ async function photosModal(listing) {
 async function syncToastText(unitId, feedId, sync) {
   if (sync.ok || String(sync.message).startsWith('Synced:')) return sync.message; // "Synced:" = synced, some overlaps skipped
   const feed = await get(`/units/${unitId}/channels`).then((r) => r.feeds.find((f) => f.feed_id === feedId)).catch(() => null);
-  return feed?.problem_message || "Couldn't reach the calendar link. Check the link on the listing's Channels page.";
+  // Same sentence as the channels route (D-117).
+  return feed?.problem_message || "Couldn't reach the calendar link. Check the link above, then press Sync now.";
 }
 
 // The site a calendar link comes from, by its host ('' when it is none of the six BalayHub knows: the host chooses).

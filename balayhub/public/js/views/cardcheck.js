@@ -180,6 +180,8 @@ export async function cardCheckView(el, { query = {} } = {}) {
   fields.consent = { input: consentBox, err: consentErr };
 
   const summary = h('div', { class: 'alert alert--error', role: 'alert', tabindex: '-1', hidden: true });
+  // The day's or the hour's tries are used up: say the wait on load, in the sentence a press would give (D-117). Pay stays usable.
+  const waitNote = info.retry_after > 0 ? h('div', { class: 'alert alert--warn', id: 'cc-wait' }, rateText(info.retry_after)) : null;
   const btn = h('button', { type: 'button', class: 'btn btn--primary btn--block', onclick: () => submit() }, 'Pay ₱20 and start my trial');
   let busy = false;
   const setBusy = (on) => {
@@ -312,6 +314,7 @@ export async function cardCheckView(el, { query = {} } = {}) {
   }
 
   const formEl = h('div', { class: 'cc-form' },
+    waitNote,
     summary,
     h('section', { 'aria-labelledby': 'cc-plan-h' },
       h('h2', { id: 'cc-plan-h' }, 'Plan after your trial'),

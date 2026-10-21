@@ -174,12 +174,6 @@ async function cancelSubscription(user, reason) {
 }
 const validationError = (fields) => new HttpError(400, 'Please check the highlighted fields.', { code: 'VALIDATION', fields });
 
-router.get('/billing/card-check', owners, ah(async (req, res) => {
-  const v = await cardcheck.view(req.user);
-  // cardcheck.view is not this lane's file, so the listing limit (for "Up to 2 listings") is added here.
-  res.json({ ...v, plans: v.plans.map((p) => ({ ...p, listings: PLANS[p.key].listings })) });
-}));
-
 // CARD-1 (the longest wait first, D-112): a start the day's attach limits would refuse is answered first, with the longer of
 // their waits. It counts nothing and starts nothing. An hourly start block that lasts longer is left to cardStartLimiter.
 const attachDayGate = (req, res, next) => {
@@ -187,6 +181,15 @@ const attachDayGate = (req, res, next) => {
   if (day && day >= cardStartLimiter.blockedFor(req)) return next(rateLimitRefusal(res, day));
   next();
 };
+
+// The wait the next start would get, read without counting (D-117): the page says it on load, not only after a press.
+const startWait = (req) => Math.max(attachLimiter.blockedFor(req), attachAllLimiter.blockedFor(req),
+  cardStartLimiter.blockedFor(req), cardStartAllLimiter.blockedFor(req));
+router.get('/billing/card-check', owners, ah(async (req, res) => {
+  const v = await cardcheck.view(req.user);
+  // cardcheck.view is not this lane's file, so the listing limit (for "Up to 2 listings") is added here.
+  res.json({ ...v, plans: v.plans.map((p) => ({ ...p, listings: PLANS[p.key].listings })), retry_after: v.required ? startWait(req) : 0 });
+}));
 
 router.post('/billing/card-check/start', owners, notDeleting(DELETING_CARD), attachDayGate, cardStartAllLimiter, cardStartLimiter, ah(async (req, res) => {
   const body = validate(req.body, {

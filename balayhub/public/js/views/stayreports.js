@@ -18,6 +18,8 @@ function isDay(v) {
   const d = new Date(`${v}T00:00:00Z`);
   return /^\d{4}-\d{2}-\d{2}$/.test(v || '') && !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
 }
+// Days from one YYYY-MM-DD to another, counted the way the export route does (src/routes/stayreports.js daysBetween).
+const spanDays = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000);
 
 // The period a link means. A link with a from or to date and no period is a custom range (links from before the period was in the address).
 export function periodFromLink(query) {
@@ -234,9 +236,10 @@ export async function stayReportsView(el, { query = {} }) {
     if (Object.keys(typed).length) status.textContent = `${OUT_OF_WINDOW} ` + refusedDatesText(typed); // refused typed dates win (#20)
     markBoxes();
     const apiQ = qs({ ...periodQ, ...scopeOf(filters) });
-    // A custom range is exported only once both dates are set and run forwards (#28).
-    const exportOk = filters.period !== 'range' || Boolean(filters.from && filters.to && !backwards);
-    exportReady(exportOk, exportHint({ from: filters.from, to: filters.to }));
+    // A custom range is exported only once both dates are set, run forwards (#28) and span at most two years, the export's own limit (D-117).
+    const tooLong = filters.period === 'range' && Boolean(filters.from && filters.to) && !backwards && spanDays(filters.from, filters.to) > 731;
+    const exportOk = filters.period !== 'range' || Boolean(filters.from && filters.to && !backwards && !tooLong);
+    exportReady(exportOk, tooLong ? 'Choose up to two years to export.' : exportHint({ from: filters.from, to: filters.to }));
     if (exportOk) exportLink.href = `/api/stay-reports/export${apiQ}`;
     let r;
     try { r = await get(`/stay-reports${apiQ}`); } catch (err) {

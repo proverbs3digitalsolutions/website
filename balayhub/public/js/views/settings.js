@@ -875,11 +875,12 @@ async function bookingCard(rerender) {
     b.test_mode && h('div', { class: 'alert alert--warn', style: { marginTop: '10px' } }, 'TEST MODE: you connected a PayMongo test key, so payments on your page are not real and guests see a test-mode notice. Switch to your live key (Change key) before sharing the link.'),
     listed.some((l) => !l.photo_count) && h('p', { class: 'muted small' }, 'Tip: add photos to every listing (Listings → Photos). Pages with photos get far more bookings.'),
     h('div', { class: 'chips', style: { marginTop: '12px' } },
+      // Connect PayMongo, Turn on and Turn off take each other's place: one key, so focus follows the save (D-117).
       b.paymongo_connected
         ? (b.enabled
-          ? h('button', { class: 'btn btn--secondary btn--sm', onclick: () => save({ enabled: false }, 'Booking page turned off.') }, 'Turn off')
-          : h('button', { class: 'btn btn--primary btn--sm', disabled: noListing, 'aria-describedby': noListing ? 'bp-on-hint' : undefined, onclick: () => turnOn(false) }, 'Turn on'))
-        : h('button', { class: 'btn btn--primary btn--sm', onclick: connect }, 'Connect PayMongo'),
+          ? h('button', { class: 'btn btn--secondary btn--sm', 'data-focus-key': 'bp-main', onclick: () => save({ enabled: false }, 'Booking page turned off.') }, 'Turn off')
+          : h('button', { class: 'btn btn--primary btn--sm', 'data-focus-key': 'bp-main', 'aria-disabled': noListing ? 'true' : null, 'aria-describedby': noListing ? 'bp-on-hint' : undefined, onclick: () => { if (!noListing) turnOn(false); } }, 'Turn on'))
+        : h('button', { class: 'btn btn--primary btn--sm', 'data-focus-key': 'bp-main', onclick: connect }, 'Connect PayMongo'),
       b.enabled && b.url && h('button', { class: 'btn btn--secondary btn--sm', onclick: copy }, 'Copy link'),
       h('button', { class: 'btn btn--ghost btn--sm', onclick: edit }, 'Page settings'),
       b.paymongo_connected && h('button', { class: 'btn btn--ghost btn--sm', onclick: connect }, 'Change key')),

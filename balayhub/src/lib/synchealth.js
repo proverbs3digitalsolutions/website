@@ -27,6 +27,7 @@ function feedProblem(f, cutoff) {
 // `detail` is the raw error text from ical.js, or null. The patterns match the strings ical.js writes,
 // so a new error text there needs a line here. Anything unmatched is a link that could not be reached.
 const CHECK_LINK = "Check the link on the listing's Channels page.";
+const CHECK_HERE = 'Check the link above, then press Sync now.'; // inside the Channels dialog (D-117)
 const FAILURE_WORDS = [
   [/^Sync failed:/, "BalayHub couldn't save the bookings from this calendar. Try again later, or contact support if it keeps happening."],
   [/HTTP \d{3}/, `The channel's calendar link returned an error. ${CHECK_LINK}`],
@@ -34,11 +35,12 @@ const FAILURE_WORDS = [
   [/too large/, `The calendar file is too big for BalayHub to read. ${CHECK_LINK}`],
   [/too long/, `The channel took too long to answer. ${CHECK_LINK}`],
 ];
-function problemText(f, kind) {
+function problemText(f, kind, { inChannels = false } = {}) {
   if (kind === 'stale') return { message: STALE_MESSAGE, detail: null };
   const text = String(f.last_message || '');
   const hit = FAILURE_WORDS.find(([pattern]) => pattern.test(text));
-  return { message: hit ? hit[1] : `Couldn't reach the calendar link. ${CHECK_LINK}`, detail: f.last_message || null };
+  const message = hit ? hit[1] : `Couldn't reach the calendar link. ${CHECK_LINK}`;
+  return { message: inChannels ? message.replace(CHECK_LINK, CHECK_HERE) : message, detail: f.last_message || null };
 }
 
 // One message to each owner, and each manager assigned to the property. notify.js picks
@@ -89,4 +91,4 @@ async function checkFeeds(now = new Date()) {
   }
 }
 
-module.exports = { checkFeeds, alertPeople, feedProblem, problemText, STALE_MS };
+module.exports = { checkFeeds, alertPeople, feedProblem, problemText, STALE_MS, CHECK_HERE };

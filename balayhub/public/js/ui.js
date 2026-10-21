@@ -476,7 +476,7 @@ export function installFocusGuard(doc = document, { observe = true } = {}) {
       setTimeout(() => { if (lossAt === mine) check(mine + FOCUS_WATCH_MS + 1); }, FOCUS_WATCH_MS);
     }
     if (now - lossAt > FOCUS_WATCH_MS) { if (top) dlgRec = null; else pageRec = null; lossAt = null; return; }
-    const h = root.querySelector(top ? 'h2' : 'h1');
+    const h = top ? root.querySelector('h2') : (root.querySelector('[data-page-heading]') || root.querySelector('h1')); // the page's own focus heading first, as the router does (D-116 C1, D-117)
     if (h && a !== h) { h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true }); fallback = h; }
   }
 
@@ -506,7 +506,7 @@ export function installFocusGuard(doc = document, { observe = true } = {}) {
 function focusHeadingIfFree() {
   const a = document.activeElement;
   if (a && a !== document.body && a.isConnected) return;
-  const h1 = document.querySelector('#main h1') || document.querySelector('#app h1');
+  const h1 = document.querySelector('#main [data-page-heading]') || document.querySelector('#main h1') || document.querySelector('#app h1'); // the page's own focus heading first (D-117)
   if (h1) { h1.setAttribute('tabindex', '-1'); h1.focus({ preventScroll: true }); }
 }
 

@@ -59,7 +59,7 @@ test('the channel list gives each feed a plain problem message and keeps the raw
   const byId = new Map(res.data.feeds.map((f) => [f.feed_id, f]));
 
   const bad = byId.get(failing);
-  assert.equal(bad.problem_message, `Couldn't reach the calendar link. ${CHECK_LINK}`);
+  assert.equal(bad.problem_message, "Couldn't reach the calendar link. Check the link above, then press Sync now.");
   assert.ok(!bad.problem_message.includes('ENOTFOUND'));
   assert.equal(bad.last_message, 'getaddrinfo ENOTFOUND qa-unreachable.invalid');
   assert.equal(byId.get(healthy).problem_message, null);

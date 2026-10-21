@@ -40,7 +40,8 @@ Response 200:
   "subscriptions": false,
   "plans": [{ "key": "starter", "name": "Starter", "price": 499 }, { "key": "growth", "name": "Growth", "price": 999 }, { "key": "pro", "name": "Pro", "price": 1799 }],
   "renewal_plan": "growth",
-  "pending": { "billing_id": "uuid", "status": "pending" }
+  "pending": { "billing_id": "uuid", "status": "pending" },
+  "retry_after": 0
 }
 ```
 
@@ -48,6 +49,7 @@ Response 200:
 - `trial_would_end`: Manila date of today plus `TRIAL_DAYS`.
 - `paymongo_api`: `https://api.paymongo.com/v1` always in production; `PAYMONGO_BROWSER_API` only when `NODE_ENV !== 'production'` (local fake).
 - `pending`: the live pending card check, or `null`.
+- `retry_after`: integer seconds, 0 when the next start (3.3) would not be refused by a limit. It is the longest wait among the limits that refuse a start: the day's attach limits (`attachLimiter` and `attachAllLimiter`, as `attachDayGate` reads them) and the hourly start limits (`cardStartLimiter` and `cardStartAllLimiter`). Read only: it counts nothing. Always present (0 when `status` is not `"required"`). The page shows the same wait on load (D-117).
 
 ### 3.3 `POST /api/billing/card-check/start` (new, owner)
 
@@ -71,6 +73,8 @@ Server: creates (or reuses) the PayMongo Customer and the pending card check row
 Errors: 403 `FORBIDDEN` (not owner); 409 `CARD_CHECK_NOT_REQUIRED` ("Your card is already confirmed." / or "Your workspace doesn't need a card check."); 409 `CARD_CHECK_OFF` ("Card checks are off right now. Please try again later."); 400 `VALIDATION` (field `consent`: "Tick the box to agree to automatic payment."); 429 `RATE_LIMITED`; 502 `BILLING_FAILED` ("We couldn't reach the payment service. Nothing was charged. Please try again in a moment."). *The body carries `retry_after` (seconds left in the window; D-111). The start limit does not count a press that ended 502 or 503.* *The message names the wait: "Too many tries. Please try again in N minutes." (or "about an hour", "about N hours"; D-112).* *Also answered, before anything is started, while the day's attach limits are used up; `retry_after` is that longer wait (D-113).*
 
 409 `DELETION_SCHEDULED` (D-116) while the workspace is scheduled for deletion: "This workspace is scheduled for deletion, so the card check is turned off. Cancel the deletion first." Checked before the limiter counts, so a refused press counts nothing. No pending card-check row is made and no PayMongo call is sent.
+
+The page shows the same wait on load from 3.2's `retry_after` (D-117).
 
 ### 3.4 Browser to PayMongo (not BalayHub)
 

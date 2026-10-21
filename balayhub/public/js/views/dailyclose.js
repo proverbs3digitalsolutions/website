@@ -96,14 +96,20 @@ export async function dailyCloseView(el, { query, rerender }) {
     const btn = e.currentTarget; // currentTarget is null after the first await
     if (!await confirmDialog({ title: `Reopen ${fmtDate(date)}?`, text: `The saved close (by ${closed.closed_by_name || 'a team member'}, ${fmtDateTime(closed.closed_at)}) is removed. You can close the day again.`, confirmText: 'Reopen day' })) return;
     reopening = true; btn.setAttribute('aria-busy', 'true');
-    try { await post('/daily-close/reopen', { date }); toast('Day reopened.'); rerender(); } catch (err) { toast(err.message, 'error'); reopening = false; btn.removeAttribute('aria-busy'); }
+    try {
+      await post('/daily-close/reopen', { date });
+      toast('Day reopened.');
+      // Close the day takes Reopen day's place: hand the guard its key, so after the redraw focus lands there, not on the heading (D-117).
+      btn.setAttribute('data-focus-key', 'dc-close'); btn.blur(); btn.focus({ preventScroll: true });
+      rerender();
+    } catch (err) { toast(err.message, 'error'); reopening = false; btn.removeAttribute('aria-busy'); }
   };
 
   const closes = hist.closes;
   el.replaceChildren(
     h('div', { class: 'page-head' },
       h('div', { class: 'page-head__title' }, h('h1', null, 'Daily close'), h('p', null, 'Check the day is wrapped up, then close it')),
-      // The group names the header's buttons, so after Reopen day the focus guard lands on Close the day (its shared fallback).
+      // The group names the header's buttons for screen readers. After Reopen day, Close the day gets focus by its key (see reopen).
       h('div', { class: 'page-head__actions', role: 'group', 'aria-label': 'Daily close actions' }, picker, closed?.can_change && h('button', { class: 'btn btn--secondary', 'data-focus-key': 'dc-reopen', onclick: reopen }, 'Reopen day'), (!closed || closed.can_change) && h('button', { class: 'btn btn--primary', 'data-focus-key': 'dc-close', onclick: closeDay }, closed ? 'Update close' : 'Close the day'))),
     msgBox,
     closed

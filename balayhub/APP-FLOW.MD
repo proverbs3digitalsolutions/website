@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-21 (QA round 34: section 47 and the notes in 2, 7.8, 22, 35.4 and 46; D-116). Before that: 2026-10-21 (QA round 33: section 46 and the notes in 26 and 44; D-115). Before that: 2026-10-21 (QA round 32: section 45 and the notes in 14 and 28.7; D-114). Before that: 2026-10-21 (QA round 31: section 44, the notes in 5.10 and 43.2; D-113). Before that: 2026-10-21 (QA round 30: section 43, the notes in 5, 41.2 and 42.2; D-112). Before that: 2026-10-21 (QA round 29: section 42, a line in 39.3 and the notes in 5.10, 14.9 and 25; D-111). Before that: 2026-10-21 (QA round 28: section 41 and the notes in 29.1, 39.2 and 40.2; D-110). Before that: 2026-10-21 (QA round 27: section 40 and the notes in 29.1 and 30.6; D-109). Before that: 2026-10-21 (QA round 26: section 39 and 33.1; D-108). Before that: 2026-10-21 (QA round 25: section 38, 5.10 and 30 corrected; D-107). Before that: 2026-10-21 (QA round 24: section 37; D-106). Before that: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
+Last updated: 2026-10-21 (QA round 35: section 48 and the notes in 5.10, 29.11, 35.3, 44.3, 47.1 and 47.2; D-117). Before that: 2026-10-21 (QA round 34: section 47 and the notes in 2, 7.8, 22, 35.4 and 46; D-116). Before that: 2026-10-21 (QA round 33: section 46 and the notes in 26 and 44; D-115). Before that: 2026-10-21 (QA round 32: section 45 and the notes in 14 and 28.7; D-114). Before that: 2026-10-21 (QA round 31: section 44, the notes in 5.10 and 43.2; D-113). Before that: 2026-10-21 (QA round 30: section 43, the notes in 5, 41.2 and 42.2; D-112). Before that: 2026-10-21 (QA round 29: section 42, a line in 39.3 and the notes in 5.10, 14.9 and 25; D-111). Before that: 2026-10-21 (QA round 28: section 41 and the notes in 29.1, 39.2 and 40.2; D-110). Before that: 2026-10-21 (QA round 27: section 40 and the notes in 29.1 and 30.6; D-109). Before that: 2026-10-21 (QA round 26: section 39 and 33.1; D-108). Before that: 2026-10-21 (QA round 25: section 38, 5.10 and 30 corrected; D-107). Before that: 2026-10-21 (QA round 24: section 37; D-106). Before that: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
 
 ---
 
@@ -223,6 +223,8 @@ Open to everyone. Linked from sign-up, guest pages and footers.
 *2026-10-21 (D-107): while the card check is due, My account says "Waiting for your card check" with one Confirm your card button, and the Ask assistant button is hidden. See 38.3.*
 
 *2026-10-21 (D-113): While the day's card tries are used up, Pay says that wait and starts nothing.*
+
+*2026-10-21 (D-117): The wait shows when the page opens. While the day's or the hour's card tries are used up, the page shows the wait above the form on load, in the sentence a press gives; Pay still starts nothing. A gated owner whose workspace is scheduled for deletion lands on Home in the deletion state (with **Cancel deletion**), not on this page; the page comes back once the deletion is cancelled.*
 
 *Numbered 5.10 because 5.9 was already Privacy and Terms.* The page appears right after workspace setup (and whenever a gated owner signs in or opens any other page). It is the only app page a gated owner can use besides Help (`#/help`) and Account (`#/account`).
 
@@ -1267,7 +1269,7 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 - A percentage fee over 50% asks "Check the management fee" (Save anyway / Change it); 0% saves without a question. An exact duplicate name asks "Name already used" (Save anyway / Change it). On Edit, the fee question is asked only when the fee model or the value changed.
 
 ### 29.11 Reports
-- Stay reports: a custom range longer than two years keeps the last report and marks the To box "Choose up to two years." Long-term Reports has no range limit (D-99).
+- Stay reports: a custom range longer than two years keeps the last report and marks the To box "Choose up to two years." Long-term Reports has no range limit (D-99). *Round 35 (D-117): Download CSV is also off for a custom range over two years, with "Choose up to two years to export." under it, so a click never leads to an empty download.*
 
 ### 29.12 Rent & Expenses
 - The Vendor list hides vendors seen only on voided expenses unless voided expenses are shown.
@@ -1523,7 +1525,7 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 - **Help, new ticket:** the file in "Screenshot or file" is checked before sending. A file that is not a PDF, JPG, PNG or WEBP, or is over 10 MB, shows "Upload a PDF, JPG, PNG or WEBP file up to 10 MB." on the field; no ticket is created and the text stays.
 
 ### 35.3 Listings and Settings
-- **Listings, Channels, Connect calendar:** the Channel box starts on **Choose the channel**. A link from a known site (Airbnb, Booking.com, Agoda, Vrbo, Expedia, Trip.com) picks that site; any other link needs the host to choose, otherwise "Choose which site this calendar link is from." shows on Channel. A channel the host picked by hand is not changed by the link. After **Save anyway** on an odd link, focus lands on the new row's **Sync now**.
+- **Listings, Channels, Connect calendar:** the Channel box starts on **Choose the channel**. A link from a known site (Airbnb, Booking.com, Agoda, Vrbo, Expedia, Trip.com) picks that site; any other link needs the host to choose, otherwise "Choose which site this calendar link is from." shows on Channel. A channel the host picked by hand is not changed by the link. After **Save anyway** on an odd link, focus lands on the new row's **Sync now**. *Round 35 (D-117): a refused calendar link says why. A link to an IP address gets "This link is an IP address, not a channel's website, so BalayHub can't read it. Copy the calendar (iCal) link from the channel." A link with a port number or a password gets "BalayHub can't read links with a port number or a password in them. Copy the calendar (iCal) link exactly as the channel shows it." A link that is not https keeps "Paste the full https:// calendar (iCal) link from the channel." Inside the Channels dialog a failed sync ends "Check the link above, then press Sync now."; alerts and Daily close keep "Check the link on the listing's Channels page."*
 - **Edit listing:** the "Booking page and payments" section is open by itself while no listing in the workspace is on the booking page.
 - **Settings, Direct booking:** with no listing on the page it reads "None yet: on Listings, press Edit and tick "Show this listing on my booking page"." with a **Go to Listings** link.
 
@@ -1734,7 +1736,7 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 - **A note with a typed @name that nobody picked says so.** The toast reads "Note saved. Nobody was notified: pick a name from the @ list to mention someone." An email address such as ana@x.com does not count.
 - **Dialog actions stay in view.** In every dialog, Save and Cancel stick to the bottom of the scrolling part, and a focused field scrolls clear of them.
 - **The page is not one live region.** Only the toasts and the small status areas (filter chips, search status, the assistant list, help suggestions) are read out as they change. A page change is said by focus on its heading, including the "Can't reach BalayHub." page when the app cannot start. *Corrected 2026-10-21 (D-115): the chat is not live; only its newest answer is read out.*
-- **The card check gives the longer wait first.** While the day's card tries are used up, Pay gives that wait and starts nothing (5.10).
+- **The card check gives the longer wait first.** While the day's card tries are used up, Pay gives that wait and starts nothing (5.10). *It is also shown when the page opens (D-117).*
 
 ## 45. QA round 32 changes (D-114; 2026-10-21)
 
@@ -1777,11 +1779,11 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 - **A workspace scheduled for deletion takes no plan payment and no card check.** One-tap pay, checkout, a free coupon activation and the card check are refused with 409 `DELETION_SCHEDULED`. Plan & billing shows "This workspace is scheduled for deletion, so plan payments are turned off. Cancel the deletion first, then pay." in place of the plan picker, the Pay buttons and the coupon box. The card check refuses with "This workspace is scheduled for deletion, so the card check is turned off. Cancel the deletion first." The owner cancels the deletion from the banner at the top of every page.
 - **Plan & billing names a scheduled deletion,** not "Your payment is overdue."
 - **A refused coupon leaves no discount behind.** When the server refuses a coupon at pay time, the "applied" line goes, the total returns to the list price, and the next press pays without the code. The typed code stays in the box, marked invalid, with the message. A refused code is never sent with a payment; Apply still asks again.
-- **A menu shows only places the person can open.** While the card check is due, the account menu has no Settings, because it only led back to Confirm your card. My account, Help & support and Log out stay.
+- **A menu shows only places the person can open.** While the card check is due, the account menu has no Settings, because it only led back to Confirm your card. My account, Help & support and Log out stay. *Desktop: Help & support is the top bar's help button, not a menu item (D-117).*
 
 ### 47.2 Focus
 - **Opening a conversation puts focus on its heading** (the guest's name), at every width. A page may mark the heading of what it just opened, and the router uses that heading in place of the page's `h1`.
-- **A dialog save closes onto the button that opened it,** or its replacement. The page heading takes focus only when that control is gone (after Void or Delete), when the dialog opened with no button (`?new=1`), or when the save opens another page. Sheets (More, the top bar's panels) still hand focus to the heading.
+- **A dialog save closes onto the button that opened it,** or its replacement. The page heading takes focus only when that control is gone (after Void or Delete), when the dialog opened with no button (`?new=1`), or when the save opens another page. Sheets (More, the top bar's panels) still hand focus to the heading. *Round 35 (D-117): a replacement that cannot be used stays focusable and takes focus.*
 - **A dialog drawn after it opens puts focus on its first field** once it is drawn.
 - **The Listing photos dialog opens on its file box,** not on ×.
 
@@ -1790,3 +1792,22 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 - **Two controls on one screen never share a name.** The conversation's select is "Conversation assigned to"; the list filter stays "Assigned to".
 - **The bottom bar and the assistant panel on a phone sit flush.** The bar is 64 px tall, and the open panel ends on it with square bottom corners, so no page text shows between them.
 - **A stand-alone disclosure on a phone is 44 px tall.** The booking page's "Have a discount code?" is 44 px and still opens and closes with its arrow.
+
+## 48. QA round 35 changes (D-117; 2026-10-21)
+
+### 48.1 Focus
+- **A control that takes another's place takes focus after a save, even when it cannot be used yet.** Cleaner pay's Mark paid (dimmed with `aria-disabled="true"`; a press does nothing), Daily close's Close the day after Reopen day, and the booking page's Connect PayMongo, Turn on and Turn off, which share one place. The focus guard finds the replacement by its focus key, even when its name changes. The page heading takes focus only when no control takes the place.
+- **The last-resort heading is the page's own.** After a scheduled message is cancelled from an open conversation, focus goes to the conversation's heading (the guest's name), not "Inbox". The router, the focus guard and a dialog with no opener all use it.
+- **Add charge closes first.** The dialog closes before the page redraws, so "Send the guest a pay link?" opens from Add charge, and its answer ("Not now" or Escape) returns focus there.
+- **A question about what is being saved stays over its form** (Refund leaves money owed?, Pay more than the statement?). Cancel goes back to the form with everything typed. This is as built.
+
+### 48.2 Card, deletion and reports
+- **Confirm your card shows the wait when it opens.** While the day's or the hour's card tries are used up, the page shows the server's wait sentence above the form on load, the same sentence a press gives. Pay stays usable: a press still gets the same answer and starts nothing. The page reads the wait from `retry_after` on `GET /api/billing/card-check` (contract 3.2).
+- **A gated owner whose workspace is scheduled for deletion lands on Home** in the deletion state, with **Cancel deletion**, not on Confirm your card. After the deletion is cancelled, the owner goes to Confirm your card.
+- **Stay reports: Download CSV is off for a custom range over two years.** The note under it reads "Choose up to two years to export.", the same limit the export enforces, and a click sends no request. The report itself is unchanged: the server's refusal still shows "Choose up to two years." on the status line and marks the To box.
+
+### 48.3 Channels and phone
+- **A refused calendar link says why.** A link to an IP address and a link with a port number or a password each get their own sentence (the wording is in section 35.3 and D-117). A link that is not https keeps "Paste the full https:// calendar (iCal) link from the channel." The link is still refused; nothing about the check changed.
+- **A failed sync inside the Channels dialog** ends "Check the link above, then press Sync now." Alerts and Daily close keep "Check the link on the listing's Channels page."
+- **Phone toggles are 44 px tall.** On a phone the landing FAQ questions, the Help centre articles (also in the assistant's articles), "Show the accepted text" on a reservation, and "Automatic welcome codes" on Guest care are each at least 44 px, and each still opens with Enter.
+- **The assistant's header line is full white in dark mode.** It is no longer faded, so it meets 4.5:1 on the dark green.

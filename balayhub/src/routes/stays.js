@@ -4,6 +4,7 @@
 // blocks, cleaning status, homepage stats and channel (iCal) sync.
 
 const express = require('express');
+const net = require('net');
 const { query, one, tx } = require('../db');
 const { HttpError, ah, notFound } = require('../lib/http');
 const { own } = require('../lib/pick');
@@ -1403,7 +1404,7 @@ router.get('/units/:id/channels', managers, ah(async (req, res) => {
   const cutoff = new Date(Date.now() - STALE_MS);
   const withProblems = feeds.map((f) => {
     const problem = feedProblem(f, cutoff);
-    return { ...f, host: hostOf(f.url), problem_message: problem ? problemText(f, problem).message : null };
+    return { ...f, host: hostOf(f.url), problem_message: problem ? problemText(f, problem, { inChannels: true }).message : null }; // Read only by the Channels dialog, so the sentence points at the link above (D-117).
   });
   res.json({ export_url: `${require('../config').appUrl}/ical/${token}.ics`, feeds: withProblems });
 }));
@@ -1418,6 +1419,15 @@ router.post('/units/:id/channels/rotate', managers, ah(async (req, res) => {
 // Calendar links end in .ics; Booking.com's export is ical.html?t=..., so "ical" in the path or query counts too.
 const looksLikeCalendar = (url) => /\.ics$/i.test(url.pathname) || /ical/i.test(url.pathname + url.search);
 
+// Why ical.validateFeedUrl refused a link, in the owner's words. The check stays there; this only picks the sentence (D-117).
+function feedLinkRefusal(raw) {
+  let u;
+  try { u = new URL(String(raw).trim()); } catch { u = null; }
+  if (!u || u.protocol !== 'https:') return 'Paste the full https:// calendar (iCal) link from the channel.';
+  if (net.isIP(u.hostname.replace(/^\[|\]$/g, ''))) return "This link is an IP address, not a channel's website, so BalayHub can't read it. Copy the calendar (iCal) link from the channel.";
+  return "BalayHub can't read links with a port number or a password in them. Copy the calendar (iCal) link exactly as the channel shows it.";
+}
+
 router.post('/ical-feeds', managers, ah(async (req, res) => {
   const body = validate(req.body, {
     unit_id: { type: 'uuid', required: true, label: 'Listing' },
@@ -1427,7 +1437,7 @@ router.post('/ical-feeds', managers, ah(async (req, res) => {
   });
   const unit = await loadUnit(req.user, body.unit_id);
   const url = ical.validateFeedUrl(body.url);
-  if (!url) throw validationError({ url: 'Paste the full https:// calendar (iCal) link from the channel.' });
+  if (!url) throw validationError({ url: feedLinkRefusal(body.url) });
   // Asks once: the person resends with confirm_unusual_link when the link is what they meant.
   if (!looksLikeCalendar(url) && !body.confirm_unusual_link) {
     throw new HttpError(409, "This doesn't look like a calendar link (they usually end in .ics). Save it anyway?", { code: 'ICAL_NOT_CALENDAR' });
