@@ -471,6 +471,8 @@ export const shortTermCount = (listings) => listings.filter((l) => l.nightly_rat
 // A listing with no nightly rate is a monthly unit, which plans do not count. The plan card says so only then.
 export const monthlyNote = (listings) => listings.some((l) => l.nightly_rate == null);
 
+const DELETING_PAY = 'This workspace is scheduled for deletion, so plan payments are turned off. Cancel the deletion first, then pay.'; // the server's sentence (D-116)
+
 export async function planCard(u, rerender) {
   const p = u.plan;
   // Loaded here, not at the top, so the rest of this file still loads without it.
@@ -484,8 +486,8 @@ export async function planCard(u, rerender) {
   billWaiting = !!bill.pending_payment;
   billPaidUntil = bill.paid_until ?? null;
   billSig = billSigOf(bill);
-  const status = p.read_only
-    ? h('div', { class: 'alert alert--error' }, p.reason === 'trial_ended' ? 'Your free trial has ended. Your workspace is view-only until you choose a plan.' : 'Your payment is overdue. Your workspace is view-only until you renew.')
+  const status = p.reason === 'deleting' ? h('div', { class: 'alert alert--error' }, DELETING_PAY)
+    : p.read_only ? h('div', { class: 'alert alert--error' }, p.reason === 'trial_ended' ? 'Your free trial has ended. Your workspace is view-only until you choose a plan.' : 'Your payment is overdue. Your workspace is view-only until you renew.')
     : p.plan === 'trial' ? h('div', { class: 'alert alert--info' }, `Free trial: ${p.trial_days_left} day${p.trial_days_left === 1 ? '' : 's'} left. All features are included.`)
       : p.reason === 'grace' ? h('div', { class: 'alert alert--warn' }, `Your plan was paid until ${fmtDate(p.paid_until)}. Please renew within 7 days to avoid interruption.`) : null;
   return h('div', { class: 'card' },
@@ -497,6 +499,7 @@ export async function planCard(u, rerender) {
         monthlyNote(listings) && h('div', { class: 'muted small' }, 'Monthly units are not counted.')),
       p.paid_until && [h('dt', null, 'Paid until'), h('dd', null, fmtDate(p.paid_until))]),
     p.plan === 'comped' ? h('p', { class: 'muted' }, 'Your workspace is on a complimentary plan, so there is nothing to pay.')
+      : p.reason === 'deleting' ? null
       : bill.online ? payOnline(p, bill, rerender, bc) : [
       pub.plans.length > 0 && h('div', { class: 'plan-mini' }, pub.plans.map((x) => h('div', { class: `plan-mini__item${x.key === p.plan ? ' is-current' : ''}` },
         h('strong', null, x.name), h('span', null, `₱${x.price.toLocaleString('en-PH')}/mo`), h('span', { class: 'muted small' }, `Up to ${x.listings} listings${x.ai ? ' · AI drafts' : ''}`)))),
@@ -635,6 +638,7 @@ export function payOnline(p, bill, rerender, bc) {
       location.href = r.checkout_url;
     } catch (err) {
       if (err.code === 'PAYMENT_RECEIVED') { carriedNotice = err.message; await refreshUser(); rerender(); return; }
+      if (err.code === 'DELETION_SCHEDULED') { await refreshUser(); rerender(); return; } // a deletion was scheduled after this page was drawn: redraw shows why (D-116)
       if (err.code === 'PAYMENT_IN_PROGRESS') { carriedNotice = err.message; carriedUnlessWaiting = true; carriedSentPaidUntil = bill.paid_until ?? null; await refreshUser(); rerender(); return; }
       if (/^(COUPON|COMPED|CARD_OFF)/.test(err.code || '')) box.showError(err.message); else toast(err.message, 'error');
       btn.disabled = false;
@@ -658,6 +662,7 @@ export function payOnline(p, bill, rerender, bc) {
       msgEl.textContent = 'Your payment is being confirmed. Check back in a moment.';
     } catch (err) {
       if (err.code === 'PAYMENT_RECEIVED') { carriedNotice = err.message; await refreshUser(); rerender(); return; }
+      if (err.code === 'DELETION_SCHEDULED') { await refreshUser(); rerender(); return; } // a deletion was scheduled after this page was drawn: redraw shows why (D-116)
       if (err.code === 'PAYMENT_IN_PROGRESS') { carriedNotice = err.message; carriedUnlessWaiting = true; carriedSentPaidUntil = bill.paid_until ?? null; await refreshUser(); rerender(); return; }
       savedBtn.disabled = false; btn.disabled = false; update();
       if (err.code === 'SAVED_CARD_FAILED' || err.code === 'SAVED_CARD_NONE') {

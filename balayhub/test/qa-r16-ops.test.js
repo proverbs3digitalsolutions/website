@@ -33,7 +33,9 @@ for (const [name, src, kind] of [['housekeeping', hk, 'cleaning'], ['maintenance
 }
 
 test('housekeeping input is named Add photo with Taglish; maintenance keeps its name', () => {
-  assert.match(hk, /'aria-label': T\('Add photo'\)/);
+  assert.match(hk, /id: 'hk-photo-file'/);
+  assert.match(hk, /h\('label', \{ for: 'hk-photo-file' \}, T\('Add photo'\)\)/);
   assert.match(hk, /'Add photo': 'Magdagdag ng litrato'/);
-  assert.match(mt, /'aria-label': 'Upload photo or document'/);
+  assert.match(mt, /id: 'maint-upload-file'/);
+  assert.match(mt, /h\('label', \{ for: 'maint-upload-file' \}, 'Upload photo or document'\)/);
 });

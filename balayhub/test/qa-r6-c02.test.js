@@ -69,7 +69,7 @@ test('Inspect is not offered on a paid clean, the same rule as Reopen', () => {
 
 // N2 (R16 #36): picking a photo uploads it at once, so the input is named "Add photo" and there is no Upload photo button.
 test('the photo file input is named Add photo and uploads on change; no Upload photo button', () => {
-  assert.match(src, /const upload = h\('input', \{\s*type: 'file'[^\n]*'aria-label': T\('Add photo'\)/);
+  assert.match(src, /const upload = h\('input', \{\s*type: 'file'[^\n]*id: 'hk-photo-file'/);
   assert.doesNotMatch(src, /T\('Upload photo'\)/);
 });
 

@@ -23,7 +23,7 @@ test('billing.js: the every-press backstop is 30 an hour with no give-back, ahea
   const line = src.split('\n').find((l) => l.startsWith('const cardStartAllLimiter ='));
   assert.match(line, /windowMs: 60 \* 60 \* 1000, max: 30, key:/);
   assert.doesNotMatch(line, /giveBack|failedOnly/);
-  assert.match(src, /router\.post\('\/billing\/card-check\/start', owners, attachDayGate, cardStartAllLimiter, cardStartLimiter, /);
+  assert.match(src, /router\.post\('\/billing\/card-check\/start', owners, notDeleting\(DELETING_CARD\), attachDayGate, cardStartAllLimiter, cardStartLimiter, /);
 });
 
 test('route: 30 starts that fail at PayMongo are each 502 or 503, the 31st is a 429 from the backstop and never reaches PayMongo', async () => {

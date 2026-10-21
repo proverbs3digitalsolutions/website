@@ -19,6 +19,10 @@ const { audit } = require('../lib/audit');
 const router = express.Router();
 const owners = requireRole('owner');
 
+// While a deletion is scheduled no plan payment and no card check starts (D-116). Checked before the limiters, so a refused press counts nothing.
+const DELETING_CARD = 'This workspace is scheduled for deletion, so the card check is turned off. Cancel the deletion first.';
+const notDeleting = (message) => (req, res, next) => next(req.user?.deletion_scheduled_at ? new HttpError(409, message, { code: 'DELETION_SCHEDULED' }) : undefined);
+
 // The same message checkout has always given when online payment is off.
 const billingOff = () => new HttpError(409, 'Online payment is not set up yet. Please pay by GCash or bank transfer and contact us.', { code: 'BILLING_OFF' });
 
@@ -131,7 +135,7 @@ router.post('/billing/coupon/preview', owners, codeIpLimiter, codeLimiter, ah(as
 }));
 
 const withBillingFailed = (err) => (err.status === 502 ? new HttpError(502, 'We couldn\'t reach the payment service. Nothing was charged. Please try again in a moment.', { code: 'BILLING_FAILED' }) : err);
-router.post('/billing/checkout', owners, checkoutLimiter, onlyWithCode(codeIpLimiter), onlyWithCode(codeLimiter), ah(async (req, res) => {
+router.post('/billing/checkout', owners, notDeleting(billing.DELETING_PAY), checkoutLimiter, onlyWithCode(codeIpLimiter), onlyWithCode(codeLimiter), ah(async (req, res) => {
   // With a code, a comped workspace hears the coupon reason from coupons.resolve instead.
   if (req.user.plan === 'comped' && !req.body?.coupon_code) throw new HttpError(409, 'Your workspace is on a complimentary plan, so there is nothing to pay.', { code: 'COMPED' });
   if (!billing.enabled()) throw billingOff();
@@ -184,7 +188,7 @@ const attachDayGate = (req, res, next) => {
   next();
 };
 
-router.post('/billing/card-check/start', owners, attachDayGate, cardStartAllLimiter, cardStartLimiter, ah(async (req, res) => {
+router.post('/billing/card-check/start', owners, notDeleting(DELETING_CARD), attachDayGate, cardStartAllLimiter, cardStartLimiter, ah(async (req, res) => {
   const body = validate(req.body, {
     renewal_plan: { type: 'enum', values: PUBLIC_PLANS, required: true, label: 'Plan' },
     consent: { type: 'bool' },
@@ -219,7 +223,7 @@ router.post('/billing/card-check/:id/refresh', owners, cardRefreshLimiter, ah(as
 }));
 
 // One tap: charge the saved card for a plan (the same checks and limiters as /billing/checkout).
-router.post('/billing/pay-saved', owners, checkoutLimiter, onlyWithCode(codeIpLimiter), onlyWithCode(codeLimiter), ah(async (req, res) => {
+router.post('/billing/pay-saved', owners, notDeleting(billing.DELETING_PAY), checkoutLimiter, onlyWithCode(codeIpLimiter), onlyWithCode(codeLimiter), ah(async (req, res) => {
   if (req.user.plan === 'comped' && !req.body?.coupon_code) throw new HttpError(409, 'Your workspace is on a complimentary plan, so there is nothing to pay.', { code: 'COMPED' });
   if (!billing.enabled()) throw billingOff();
   const body = validate(req.body, {

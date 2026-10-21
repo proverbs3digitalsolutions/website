@@ -87,6 +87,11 @@ async function settleHosted(orgId) {
 
 const paymentReceived = () => new HttpError(409, 'That payment was just received. Check your plan before paying again.', { code: 'PAYMENT_RECEIVED' });
 
+// A workspace scheduled for deletion takes no plan payment: the money would be taken for a workspace the deletion job
+// removes. The owner cancels the deletion first (D-116). The routes refuse earlier; this is the check under the lock.
+const DELETING_PAY = 'This workspace is scheduled for deletion, so plan payments are turned off. Cancel the deletion first, then pay.';
+const deletingRefusal = () => new HttpError(409, DELETING_PAY, { code: 'DELETION_SCHEDULED' });
+
 // The first half of every charge: resolve the coupon, hold its slot and write the pending billing row. The workspace row
 // is locked so two charges can't both take the last slot of a coupon. A free quote is recorded as provider 'coupon'.
 async function prepareCharge(user, plan, months, { couponCode, provider, seenPaidUntil }) {
@@ -103,8 +108,9 @@ async function prepareCharge(user, plan, months, { couponCode, provider, seenPai
   if (paidIntent || paidHosted) throw paymentReceived();
   return tx(async (db) => {
     const { rows: [org] } = await db.query(
-      'SELECT organization_id, plan, is_demo, trial_ends_at, paid_until FROM organizations WHERE organization_id = $1 FOR UPDATE',
+      'SELECT organization_id, plan, is_demo, trial_ends_at, paid_until, deletion_scheduled_at FROM organizations WHERE organization_id = $1 FOR UPDATE',
       [user.organization_id]);
+    if (org.deletion_scheduled_at) throw deletingRefusal();
     // A refusal because another payment is open reads as "received" when a plan payment was marked paid a moment ago:
     // the other tab's payment just finished, so "try again" would mislead. Which requests are refused does not change.
     // A free activation (a ₱0 coupon row) is not a payment received: another tab's activation is caught by the stale check (D-115).
@@ -443,4 +449,4 @@ function nextChargeOn(org) {
   return last ? dayAfter(last) : null;
 }
 
-module.exports = { convertDays, SAVED_CARD_PAY, PENDING_MINUTES, paySaved, settlePending, nextChargeOn, periodEnd, enabled, price, MONTH_OPTIONS, createCheckout, refresh, markPaid, verifySignature, reconcile, addMonths, couponAheadError };
+module.exports = { convertDays, SAVED_CARD_PAY, PENDING_MINUTES, paySaved, settlePending, nextChargeOn, periodEnd, enabled, price, MONTH_OPTIONS, createCheckout, refresh, markPaid, verifySignature, reconcile, addMonths, couponAheadError, DELETING_PAY };

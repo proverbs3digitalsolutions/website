@@ -31,6 +31,7 @@ In plain words: BalayHub charges one prepaid period at a time. It never keeps a 
 - **Remaining months survive the coupon's end date and switching it off:** end date and off stop *new* redemptions only (Founder question 6). Switching off with "Also stop it for workspaces already using it" is not built (YAGNI).
 - **When months run out:** the next checkout is full price and the box says "Your coupon's 3 months are used. This payment is the full price." A free period that ends follows the normal grace (7 days) then read-only rule.
 - **Trial:** a coupon does not lengthen the trial. Using one during the trial keeps the remaining trial days (existing rule); the covered months start when the trial ends. To lengthen a trial the founder keeps using the admin trial date.
+- **A refusal at pay time (owner box).** After a refusal at pay time the box drops the applied line and the discounted total; the refused code is not sent with the next payment (D-116).
 
 ## 2. API contract
 
@@ -57,6 +58,8 @@ Errors: 400 `VALIDATION` (plan, months, code format "Enter the code using letter
 - paid checkout: 200 `{ "billing_id", "checkout_url" }` (unchanged shape);
 - free activation: 200 `{ "billing_id", "activated": true, "plan": "growth", "paid_until": "2026-11-28" }`.
 Same coupon errors as preview.
+
+409 `DELETION_SCHEDULED` (D-116) while the workspace is scheduled for deletion: no redemption row, no charge and no PayMongo call. A free activation gets the same refusal.
 
 **`GET /api/billing`** (changed): adds `"coupon": null | { code, name, kind, percent_off, amount_off, duration, duration_months, months_left, plans, require_card, status: "pending"|"active"|"used_up" }` (the workspace's latest non-released redemption) and each `history` row adds `list_amount`, `discount_amount`, `coupon_code`, `provider`. History also lists `provider='coupon'` rows (they are `paid`).
 

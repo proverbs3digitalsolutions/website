@@ -12,7 +12,8 @@ const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'views', 
 test('the listing photo file input has an accessible name', () => {
   const inputs = src.split('\n').filter((line) => /type: 'file'/.test(line));
   assert.equal(inputs.length, 1, 'one file input on this page');
-  assert.match(inputs[0], /'aria-label': 'Listing photos'/);
+  assert.match(inputs[0], /id: 'listing-photos-file'/);
+  assert.match(src, /h\('label', \{ for: 'listing-photos-file' \}, 'Listing photos'\)/);
 });
 
 test('Connect calendar and Sync now toasts use the plain problem message, not the raw sync text', () => {

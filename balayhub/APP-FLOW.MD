@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-21 (QA round 33: section 46 and the notes in 26 and 44; D-115). Before that: 2026-10-21 (QA round 32: section 45 and the notes in 14 and 28.7; D-114). Before that: 2026-10-21 (QA round 31: section 44, the notes in 5.10 and 43.2; D-113). Before that: 2026-10-21 (QA round 30: section 43, the notes in 5, 41.2 and 42.2; D-112). Before that: 2026-10-21 (QA round 29: section 42, a line in 39.3 and the notes in 5.10, 14.9 and 25; D-111). Before that: 2026-10-21 (QA round 28: section 41 and the notes in 29.1, 39.2 and 40.2; D-110). Before that: 2026-10-21 (QA round 27: section 40 and the notes in 29.1 and 30.6; D-109). Before that: 2026-10-21 (QA round 26: section 39 and 33.1; D-108). Before that: 2026-10-21 (QA round 25: section 38, 5.10 and 30 corrected; D-107). Before that: 2026-10-21 (QA round 24: section 37; D-106). Before that: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
+Last updated: 2026-10-21 (QA round 34: section 47 and the notes in 2, 7.8, 22, 35.4 and 46; D-116). Before that: 2026-10-21 (QA round 33: section 46 and the notes in 26 and 44; D-115). Before that: 2026-10-21 (QA round 32: section 45 and the notes in 14 and 28.7; D-114). Before that: 2026-10-21 (QA round 31: section 44, the notes in 5.10 and 43.2; D-113). Before that: 2026-10-21 (QA round 30: section 43, the notes in 5, 41.2 and 42.2; D-112). Before that: 2026-10-21 (QA round 29: section 42, a line in 39.3 and the notes in 5.10, 14.9 and 25; D-111). Before that: 2026-10-21 (QA round 28: section 41 and the notes in 29.1, 39.2 and 40.2; D-110). Before that: 2026-10-21 (QA round 27: section 40 and the notes in 29.1 and 30.6; D-109). Before that: 2026-10-21 (QA round 26: section 39 and 33.1; D-108). Before that: 2026-10-21 (QA round 25: section 38, 5.10 and 30 corrected; D-107). Before that: 2026-10-21 (QA round 24: section 37; D-106). Before that: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
 
 ---
 
@@ -54,7 +54,7 @@ The app is a single page with hash routes (`#/…`). Each route has an access le
 ### Read-only, demo and plan-limit behaviour
 
 - **Read-only (trial ended, payment due, deleting):** every page still opens and exports still work. Any save is refused with HTTP 402 and a message such as "Your free trial has ended. Your data is safe and you can still view and export it. Choose a plan in Settings to keep making changes." It shows as a form error or a red toast. These keep working: billing, support tickets (and screenshots), account, push settings, the assistant, and **Cancel deletion**. The direct booking page shows "Online booking is paused". Gate passes are not sent.
-- **Card check pending (D-98):** a new workspace is gated until the owner confirms a card. The menu shows only **Confirm your card** and **Help & support**; Account and Log out stay reachable; any other page sends the person back to `#/confirm-card`, and any save the server refuses with 402 "Confirm your payment card to start your free trial." Support tickets (with a screenshot) still work. See 5.10.
+- **Card check pending (D-98):** a new workspace is gated until the owner confirms a card. The menu shows only **Confirm your card** and **Help & support**; Account and Log out stay reachable; any other page sends the person back to `#/confirm-card`, and any save the server refuses with 402 "Confirm your payment card to start your free trial." Support tickets (with a screenshot) still work. See 5.10. *Settings is not in the account menu while the card is due (D-116).*
 - **Demo:** same as read-only, with the message "This is the demo workspace, so changes are turned off. Start a free trial…". Settings hides Notifications, Plan & billing, Direct booking page and Your data. The Launchpad reminder is hidden. The assistant button is hidden. The demo booking page says "This is a demo, so booking is turned off."
 - **Listing limit:** adding a listing, giving a long-term unit a nightly rate, or restoring a listing beyond the plan's limit fails with "Your Starter plan includes up to 2 listings. Upgrade your plan in Settings to add more." (402). Long-term units without a nightly rate do not count.
 - **AI drafts limit:** on Starter, the **✨ Draft reply with AI** button is not shown. A direct API call returns "AI reply drafts are included in the Growth and Pro plans." (402).
@@ -375,7 +375,7 @@ Printable acknowledgement receipt. **Print / save as PDF**. Voided receipts show
 
 ### 7.8 Inbox `#/inbox`, `#/inbox/<id>`
 - Setup alerts: email sending not set up; guest replies arrive in email only; reply check failed.
-- Left list with view dropdown (with counts) and filter bar. **Click a conversation** → thread on the right.
+- Left list with view dropdown (with counts) and filter bar. **Click a conversation** → thread on the right. *Focus goes to the conversation's heading (D-116).*
 - Thread header: **Snooze** (pick a time) / **Unsnooze**, **Mark unread**, **Archive** / **Unarchive**.
 - Composer: **Message guest** or **Internal note** tabs, **Insert template…**, **✨ Draft reply with AI** ("Drafting…" → "Draft ready. Read it and edit before sending."), subject, **Send later** time, **Send**.
 - The chosen tab (**Message guest** or **Internal note**) stays after a note is saved, so the next note doesn't go to the guest. A hint line says "Internal note: only your team sees this" or "This will be emailed to <guest>". Sending a message that still has `@[Name](id)` mention text or an unfilled `{{variable}}` asks "Send this to the guest?" first. Mentioning staff or a cleaner shows "Only owners and managers can be mentioned." A counter appears in the last 1,000 characters (limit 10,000). Very long messages show a **Show more** button.
@@ -952,7 +952,7 @@ Decision D-85. The alpha is for owners of 1 to 3 properties, so these changes ma
 - **Groups:** renaming a booking group writes one activity row, shown on each room's timeline.
 - **Reports and profit and loss:** category labels match the rest of the app; profit and loss reads "October 2026" and says it counts finished stays by check-out date; Reports counts by check-in and shows a "Direct bookings by source" card. The Period box keeps focus after a change; the tab row has the label "Report type".
 - **Calendar:** go-to-date waits 400 ms after typing, so a half-typed date loads once.
-- **Focus and forms everywhere:** after a save or redraw, focus returns to the control the person used (or its replacement); a tab row drawn again keeps focus on the same tab *(rule replaced in round 13: see section 26)*. A date outside 2000 to 2100 is refused at the field before any question. While a question is open the form's button shows its own label, not "Saving…". Errors inside a closed section open it. One toast per save.
+- **Focus and forms everywhere:** after a save or redraw, focus returns to the control the person used (or its replacement); a tab row drawn again keeps focus on the same tab *(rule replaced in round 13: see section 26)*. A date outside 2000 to 2100 is refused at the field before any question. While a question is open the form's button shows its own label, not "Saving…". Errors inside a closed section open it. One toast per save. *Decided 2026-10-21 (D-116): a dialog save closes onto the button that opened it, or its replacement.*
 - **Filter links:** a bad value in a link is also removed from the address; a half-typed year is ignored; date filters use 2000 to 2100.
 
 ## 23. QA round 10 flow changes (2026-10-15)
@@ -1530,6 +1530,7 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 ### 35.4 Plan & billing
 - **Two tabs, Pay in both at once:** one charge. The refused tab redraws to the waiting view ("A payment of ... is waiting for your bank..."); it keeps no Pay button and no "Try again in 15 minutes" alert. When no payment is waiting (the hosted "already open in another window" case), the message shows as before.
 - **Changing plan after a free coupon or trial days:** paid days convert at the price ratio as before; free days move day for day to a cheaper plan and never grow.
+- **A workspace scheduled for deletion takes no plan payment or card check (D-116).** The refusal sentence shows in place of the plan picker, the Pay buttons and the coupon box (section 47.1).
 
 ### 35.5 Phones and Inbox
 - **Assistant panel (under 560px):** the open panel ends just above the bottom bar, so the bar's tabs can be tapped. Tapping a tab changes the page and closes the panel.
@@ -1757,7 +1758,7 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 
 ### 46.1 Dialogs and focus
 - **A reason dialog keeps the typed reason when the server refuses.** Cancel reservation; Void payment on a stay and on long-term rent; Void expense; Void payout; Void withdrawal; Remove room; Cancel group; Void refund; Void charge. The request is sent from inside the dialog. A refusal is said on a line above the buttons, and the reason stays in its box with focus on the confirm button. Only success closes the dialog. Closing the dialog while the request is still running is allowed: a success still redraws the page, and a refusal is said in a toast.
-- **Close the day / Update close and Set pay / Edit pay keep focus on their button after the dialog saves** (the lines at 26, "Cleaner pay and housekeeping" and "Daily close", are annotated). Other dialog saves still close onto the page heading; round 34 checks them.
+- **Close the day / Update close and Set pay / Edit pay keep focus on their button after the dialog saves** (the lines at 26, "Cleaner pay and housekeeping" and "Daily close", are annotated). Other dialog saves still close onto the page heading; round 34 checks them. *Decided 2026-10-21 (D-116): a dialog save closes onto the button that opened it, or its replacement.*
 
 ### 46.2 Names and live areas
 - **The deposit damage photo box is named "Damage / condition photos",** and the inbox's Send later box is named "Send later (Philippine time, optional)" (extends 45.1).
@@ -1769,3 +1770,23 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 - **The booking page's discount code box is marked when a code is refused.** It is marked invalid and points at its message. Typing in the box clears the message and the mark.
 - **"Just received" is said only when a real payment finished.** A free coupon activation no longer counts, so a refused one-tap payment on another tab shows the normal in-progress or waiting line.
 - **Home's daily tiles show a plain count when nothing is due.** The first tile reads "0" labelled Arrivals, the second "0" labelled Departures, instead of "0/0". With anything due, the fraction and "Checked in" or "Checked out" stay as before.
+
+## 47. QA round 34 changes (D-116; 2026-10-21)
+
+### 47.1 Plan & billing and deletion
+- **A workspace scheduled for deletion takes no plan payment and no card check.** One-tap pay, checkout, a free coupon activation and the card check are refused with 409 `DELETION_SCHEDULED`. Plan & billing shows "This workspace is scheduled for deletion, so plan payments are turned off. Cancel the deletion first, then pay." in place of the plan picker, the Pay buttons and the coupon box. The card check refuses with "This workspace is scheduled for deletion, so the card check is turned off. Cancel the deletion first." The owner cancels the deletion from the banner at the top of every page.
+- **Plan & billing names a scheduled deletion,** not "Your payment is overdue."
+- **A refused coupon leaves no discount behind.** When the server refuses a coupon at pay time, the "applied" line goes, the total returns to the list price, and the next press pays without the code. The typed code stays in the box, marked invalid, with the message. A refused code is never sent with a payment; Apply still asks again.
+- **A menu shows only places the person can open.** While the card check is due, the account menu has no Settings, because it only led back to Confirm your card. My account, Help & support and Log out stay.
+
+### 47.2 Focus
+- **Opening a conversation puts focus on its heading** (the guest's name), at every width. A page may mark the heading of what it just opened, and the router uses that heading in place of the page's `h1`.
+- **A dialog save closes onto the button that opened it,** or its replacement. The page heading takes focus only when that control is gone (after Void or Delete), when the dialog opened with no button (`?new=1`), or when the save opens another page. Sheets (More, the top bar's panels) still hand focus to the heading.
+- **A dialog drawn after it opens puts focus on its first field** once it is drawn.
+- **The Listing photos dialog opens on its file box,** not on ×.
+
+### 47.3 Names and phones
+- **Every file box has its own visible label,** and no file box is named only by a hidden label. The names are the words already on screen: check-in "ID photos" (Taglish "Litrato ng ID"), "Listing photos", the help reply's "Attach a file", housekeeping's "Add photo" and "Photo (optional)", maintenance's "Upload photo or document", the guest's "Screenshot or receipt", and "Choose a receipt or proof file" on the payment and expense pages.
+- **Two controls on one screen never share a name.** The conversation's select is "Conversation assigned to"; the list filter stays "Assigned to".
+- **The bottom bar and the assistant panel on a phone sit flush.** The bar is 64 px tall, and the open panel ends on it with square bottom corners, so no page text shows between them.
+- **A stand-alone disclosure on a phone is 44 px tall.** The booking page's "Have a discount code?" is 44 px and still opens and closes with its arrow.

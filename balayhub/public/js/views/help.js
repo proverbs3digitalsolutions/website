@@ -253,9 +253,10 @@ export async function helpTicketView(el, { params, rerender }) {
     placeholder: t.status === 'waiting_on_customer' ? 'Answer the question from support…' : t.status === 'resolved' ? 'Still not fixed? Reply here and we’ll reopen it.' : 'Add more details…' });
   const replyError = h('div', { class: 'error', role: 'alert' });
   const replyField = h('div', { class: 'field' }, reply, replyError);
-  const attach = h('input', { type: 'file', class: 'input', accept: 'image/jpeg,image/png,image/webp,application/pdf', 'aria-label': 'Attach a file', 'aria-describedby': 'reply-attach-err' });
+  const attach = h('input', { type: 'file', class: 'input', accept: 'image/jpeg,image/png,image/webp,application/pdf', id: 'reply-attach', 'aria-describedby': 'reply-attach-err' });
   const attachError = h('div', { class: 'error', id: 'reply-attach-err', role: 'alert' });
-  const attachField = h('div', { class: 'field' }, attach, attachError);
+  // Named by its visible label (D-116).
+  const attachField = h('div', { class: 'field' }, h('label', { for: 'reply-attach' }, 'Attach a file'), attach, attachError);
   // Clears the messages once the person types or attaches a file.
   const clearReplyError = () => {
     replyError.textContent = ''; replyField.classList.remove('field--invalid'); reply.removeAttribute('aria-invalid');

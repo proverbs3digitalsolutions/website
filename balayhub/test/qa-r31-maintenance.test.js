@@ -21,7 +21,7 @@ test('maintenance.js imports the two upload helpers', () => {
 
 test('the input is wrapped by uploadField and up.wrap is rendered in its place', () => {
   assert.match(block, /const up = uploadField\(upload\);/);
-  assert.match(src, /h\('div', \{ class: 'form'[^)]*\}, up\.wrap\)/);
+  assert.match(src, /h\('div', \{ class: 'field' \}, h\('label', \{ for: 'maint-upload-file' \}, 'Upload photo or document'\), up\.wrap\)/);
   assert.doesNotMatch(src, /\}, upload\)/);
 });
 

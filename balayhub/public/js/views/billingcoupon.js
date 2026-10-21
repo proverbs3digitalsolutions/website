@@ -48,7 +48,7 @@ export function couponBox({ current, getSelection, onQuote, initialCode }) {
   const refresh = async (asked = false) => {
     const my = ++seq;
     if (!live && !asked) { code = input.value.trim(); if (!code) refused = null; } // the field is the truth: emptied means no code
-    if (!asked && code && refused && code.toUpperCase() === refused.code && (!refused.plan || refused.plan === getSelection().plan)) return; // each re-send would count as another failed try
+    if (!asked && code && refused && code.toUpperCase() === refused.code && (!refused.plan || refused.plan === getSelection().plan)) { code = ''; return; } // each re-send would count as another failed try; a refused code is never sent with a payment (D-116)
     if (!live && !code && !usedUp) { setMsg(''); ok.hidden = true; onQuote(null); return; }
     const sel = getSelection();
     let q;
@@ -104,6 +104,12 @@ export function couponBox({ current, getSelection, onQuote, initialCode }) {
   if (!live && typeof initialCode === 'string' && initialCode) { input.value = initialCode; code = initialCode; box.open = true; }
   box.refresh = refresh;
   box.getCode = () => code;
-  box.showError = (text) => { if (box.tagName === 'DETAILS') box.open = true; setMsg(text); };
+  // A refusal at pay time (the code was switched off, used up, or is not for this plan) drops the discount on screen too:
+  // no "applied" line, the list price, and the next press pays without the code. Apply still asks again on purpose (D-116).
+  box.showError = (text) => {
+    if (box.tagName === 'DETAILS') box.open = true;
+    if (!live) { if (code) refused = { code: code.toUpperCase(), plan: null }; code = ''; seq += 1; ok.hidden = true; onQuote(null); }
+    setMsg(text);
+  };
   return box;
 }

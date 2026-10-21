@@ -132,7 +132,8 @@ export async function guestCheckinView(el, { params }, kept) {
   for (let n = kept?.snap?.guest?.length || 0; others.children.length < n && others.children.length + 1 < s.guests_allowed;) addGuest();
 
   // No `capture`: guests must be able to pick existing photos from their gallery.
-  const photos = h('input', { type: 'file', accept: 'image/*', multiple: true, class: 'input', 'aria-label': t('ID photos') });
+  // Named by its visible label "ID photos" (Taglish "Litrato ng ID"), never an aria-label (D-116).
+  const photos = h('input', { type: 'file', id: 'ci-id-photos', accept: 'image/*', multiple: true, class: 'input' });
   const uploaded = new Set(); // files already sent, so a retry doesn't upload them twice
   const progress = h('div', { class: 'muted small', 'aria-live': 'polite' });
   const formError = h('div');
@@ -163,6 +164,7 @@ export async function guestCheckinView(el, { params }, kept) {
     field({ name: 'notes', label: t('Anything we should know?'), type: 'textarea', value: r?.notes || '', maxlength: 1000, placeholder: t('Special requests, late arrival, celebrating something…') }),
     h('h2', null, t('Valid ID')),
     h('div', { class: 'field', dataset: { field: 'id_photos' } },
+      h('label', { for: 'ci-id-photos' }, t('ID photos')),
       h('p', { class: 'hint' }, h('span', { class: 'req', 'aria-hidden': 'true' }, '* '), `${t("A photo of a valid government ID for each adult (driver's license, passport, UMID, PhilID…). ")}${r?.id_count ? t('Photos you already sent are kept; add more only if needed.') : ''}${kept?.photosChosen ? ` ${t('Choose the photos again after changing the language.')}` : ''}`),
       photos, progress, h('div', { class: 'error', role: 'alert' })),
     rules && h('h2', null, t('House rules')),

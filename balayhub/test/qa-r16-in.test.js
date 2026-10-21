@@ -32,7 +32,7 @@ test.before(async () => {
 test.after(() => { if (dir) fs.rmSync(dir, { recursive: true, force: true }); });
 
 test('the Assigned to select carries the conv-assign focus key', () => {
-  assert.match(src, /'aria-label': 'Assigned to', 'data-focus-key': 'conv-assign'/);
+  assert.match(src, /'aria-label': 'Conversation assigned to', 'data-focus-key': 'conv-assign'/);
 });
 
 test('swapMode keeps a separate text per mode', () => {

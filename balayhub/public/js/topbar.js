@@ -172,7 +172,8 @@ function buildProfile(panel, pop, ctx, me, bookmarksPop, helpPop) {
       h('div', { class: 'tb-profile__who' }, h('strong', null, u.full_name), h('span', { class: 'muted small' }, `${u.organization_name} · ${ROLES[u.role] || ''}`))),
     h('ul', { class: 'tb-list tb-menu', role: 'menu', 'aria-label': 'Account' },
       item(row('users', 'My account'), { href: '#/account', onclick: done }),
-      u.role !== 'cleaner' && item(row('settings', 'Settings'), { href: '#/settings', onclick: done })),
+      // While the card check is due Settings would only send the owner back to Confirm your card (APP-FLOW 57, D-116).
+      u.role !== 'cleaner' && !u.plan?.card_check_due && item(row('settings', 'Settings'), { href: '#/settings', onclick: done })),
     // Between two menu lists, not inside one: a menu may own only menu items, and the theme buttons are radios (axe aria-required-children).
     // The switch updates its buttons in place, so choosing a theme keeps the menu open and focus on the chosen radio.
     h('div', { class: 'tb-theme' }, themeSwitch({ compact: true })),

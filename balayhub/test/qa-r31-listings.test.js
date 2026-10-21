@@ -32,7 +32,7 @@ test('a file refusal is said on the box line, never toasted', () => {
   assert.match(modal, /let refusal = ''/);
   assert.match(modal, /catch \(err\) \{ if \(fileRefused\(err\)\) refusal = err\.message; else toast\(err\.message, 'error'\); \}/);
   assert.match(modal, /const up = uploadField\(input\)/);
-  assert.match(modal, /h\('div', \{ class: 'form' \}, up\.wrap,/);
+  assert.match(modal, /h\('div', \{ class: 'field' \}, h\('label', \{ for: 'listing-photos-file' \}, 'Listing photos'\), up\.wrap\), h\('div', \{ class: 'chips' \}/);
   const redraw = modal.indexOf('box.replaceChildren(');
   assert.ok(modal.indexOf('up.show(refusal)') > modal.indexOf('focus?.(box)') && modal.indexOf('focus?.(box)') > redraw, 'shown after the redraw');
   assert.match(modal, /toast\('Photos uploaded\.'\)/);

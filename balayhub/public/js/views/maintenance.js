@@ -270,7 +270,8 @@ export async function maintenanceDetailView(el, { params, rerender }) {
     },
   });
 
-  const upload = h('input', { type: 'file', class: 'input', accept: 'image/jpeg,image/png,image/webp,application/pdf', 'aria-label': 'Upload photo or document',
+  // Named by its visible label, never an aria-label (D-116).
+  const upload = h('input', { type: 'file', id: 'maint-upload-file', class: 'input', accept: 'image/jpeg,image/png,image/webp,application/pdf',
     // Picking a file uploads it at once (no second step); the input is off while the upload runs.
     onchange: async () => {
       if (!upload.files[0]) return;
@@ -315,6 +316,6 @@ export async function maintenanceDetailView(el, { params, rerender }) {
         h('div', { class: 'card' },
           h('div', { class: 'card__head' }, h('h2', null, 'Photos & documents')),
           filesList(files),
-          h('div', { class: 'form', style: { marginTop: '12px' } }, up.wrap)))),
+          h('div', { class: 'form', style: { marginTop: '12px' } }, h('div', { class: 'field' }, h('label', { for: 'maint-upload-file' }, 'Upload photo or document'), up.wrap))))),
   );
 }

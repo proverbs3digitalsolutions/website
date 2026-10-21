@@ -262,6 +262,8 @@ h1[tabindex="-1"]:focus-visible, h2[tabindex="-1"]:focus-visible { outline: none
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 40; background: var(--surface);
   border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(5, 1fr);
   padding-bottom: env(safe-area-inset-bottom);
+  /* Exactly the height the page and the assistant panel leave for it, so nothing shows between them (D-116). */
+  min-height: calc(var(--bottomnav-h) + env(safe-area-inset-bottom));
 }
 .bottomnav a, .bottomnav button {
   display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 2px 9px;
@@ -1095,6 +1097,7 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .bk-code summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 .bk-code .chips { margin-top: 8px; flex-wrap: nowrap; }
 .bk-code .input { max-width: 220px; text-transform: uppercase; }
+@media (max-width: 559px) { .bk-code summary { min-height: 44px; padding: 10px 0; } } /* a stand-alone toggle on a phone is 44px (DESIGN-BRIEF 22, D-116) */
 .stars { display: flex; gap: 6px; }
 .stars button { font-size: 2rem; line-height: 1; background: none; border: 0; cursor: pointer; color: var(--star-off); padding: 4px; border-radius: 8px; }
 .stars button.is-on { color: var(--star-on); }
@@ -1286,7 +1289,7 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .assist { position: fixed; right: 20px; bottom: 20px; z-index: 60; width: min(400px, calc(100vw - 24px)); height: min(620px, calc(100vh - 40px));
   display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 18px 48px rgba(0, 0, 0, .28); overflow: hidden; }
 /* On phones the sheet starts where the top bar's panels start (topbar.css .tb-pop) and ends just above the bottom bar, so both stay in reach. */
-@media (max-width: 559px) { .assist { right: 0; left: 0; bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom)); top: calc(max(12px, env(safe-area-inset-top)) + 56px); width: 100%; height: calc(100dvh - (max(12px, env(safe-area-inset-top)) + 56px) - var(--bottomnav-h) - env(safe-area-inset-bottom)); border-radius: 18px; } }
+@media (max-width: 559px) { .assist { right: 0; left: 0; bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom)); top: calc(max(12px, env(safe-area-inset-top)) + 56px); width: 100%; height: calc(100dvh - (max(12px, env(safe-area-inset-top)) + 56px) - var(--bottomnav-h) - env(safe-area-inset-bottom)); border-radius: 18px 18px 0 0; /* sits flush on the bottom bar (D-116) */ } }
 .assist__head { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 14px; background: var(--forest); color: #fff; }
 .assist__head .small { opacity: .85; }
 .assist__actions { display: flex; gap: 4px; }

@@ -320,7 +320,7 @@ async function photosModal(listing) {
     const { photos } = await get(`/units/${listing.unit_id}/photos`);
     const status = h('span', { class: 'muted small', 'aria-live': 'polite' });
     // Picking photos uploads them: no second "Upload" step.
-    const input = h('input', { type: 'file', accept: 'image/*', multiple: true, class: 'input', 'aria-label': 'Listing photos', onchange: async () => {
+    const input = h('input', { type: 'file', accept: 'image/*', multiple: true, class: 'input', id: 'listing-photos-file', onchange: async () => {
       const files = [...input.files];
       if (!files.length) return;
       input.disabled = true;
@@ -347,11 +347,12 @@ async function photosModal(listing) {
           i === 0 ? h('span', { class: 'badge badge--paid' }, 'Cover') : h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Make cover, photo ${i + 1}`, onclick: async () => { await post(`/listing-photos/${p.file_id}/cover`); draw((root) => root.querySelector('.ph-item')?.focus()); } }, 'Make cover'),
           h('button', { class: 'btn btn--ghost btn--sm', type: 'button', 'aria-label': `Delete, photo ${i + 1}`, onclick: async () => { if (!await confirmDialog({ title: 'Delete this photo?', text: 'It is removed from your booking page.', confirmText: 'Delete photo', danger: true })) return; await post(`/listing-photos/${p.file_id}/remove`); draw((root) => (root.querySelectorAll('.ph-item')[i]?.querySelector('button[aria-label^="Delete,"]') ?? root.querySelector('input[type="file"]')).focus()); } }, 'Delete')))))
         : h('p', { class: 'muted' }, 'No photos yet.'),
-      h('div', { class: 'form' }, up.wrap, h('div', { class: 'chips' }, status)));
+      h('div', { class: 'form' }, h('div', { class: 'field' }, h('label', { for: 'listing-photos-file' }, 'Listing photos'), up.wrap), h('div', { class: 'chips' }, status)));
     focus?.(box);
     if (refusal) { up.show(refusal); refusal = ''; }
   }
-  try { await draw(); } catch (err) { m.close(); toast(err.message, 'error'); }
+  // The box is drawn after the dialog opens, so the first draw puts focus on it, not on × (D-105, D-116).
+  try { await draw((root) => root.querySelector('input[type="file"]')?.focus()); } catch (err) { m.close(); toast(err.message, 'error'); }
 }
 
 // A failed sync's own text is raw (DNS, HTTP or file errors), so the toast uses the plain sentence the

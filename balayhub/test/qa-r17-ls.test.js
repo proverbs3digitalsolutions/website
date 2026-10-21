@@ -19,7 +19,7 @@ test('compactSplit puts every filter in the panel (R20)', () => {
 
 test('the photo input uploads on pick; no Upload button or Choose photos toast', () => {
   assert.doesNotMatch(src, /Choose photos first\./);
-  assert.match(src, /'aria-label': 'Listing photos', onchange: async/);
+  assert.match(src, /id: 'listing-photos-file', onchange: async/);
   assert.doesNotMatch(src, /\}, 'Upload'\)/);
 });
 

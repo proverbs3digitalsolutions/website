@@ -11,10 +11,10 @@ const app = fs.readFileSync(process.env.APP_SRC || path.join(__dirname, '../publ
 const grab = (from, to) => app.slice(app.indexOf(from), app.indexOf(to, app.indexOf(from)));
 
 test('d2: render notes a layer holding focus before the sweep and refocuses the heading after both draws', () => {
-  const i = app.indexOf("const layerHadFocus = Boolean(document.activeElement?.closest?.('dialog.modal, .morenav, .tb-sheet'));");
+  const i = app.indexOf("const layerHadFocus = layerFocus(document.activeElement, path === drawnPath);");
   assert.ok(i > 0, 'layerHadFocus is computed');
   assert.ok(i < app.indexOf("document.querySelectorAll('dialog.modal, .morenav, .tb-sheet').forEach((d) => d.remove());"), 'before the sweep');
-  assert.equal((app.match(/if \(layerHadFocus\) focusPageHeading\(mount\);/g) || []).length, 2);
+  assert.equal((app.match(/if \(layerHadFocus === 'heading'\) focusPageHeading\(mount\);/g) || []).length, 2);
   assert.match(app, /export const headingFocusDue = \(\{ drawnPath, path, prevKept, redirected, addressChange \}\)/, 'signature unchanged');
 });
 

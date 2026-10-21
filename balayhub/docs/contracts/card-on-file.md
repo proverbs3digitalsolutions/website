@@ -70,6 +70,8 @@ Server: creates (or reuses) the PayMongo Customer and the pending card check row
 
 Errors: 403 `FORBIDDEN` (not owner); 409 `CARD_CHECK_NOT_REQUIRED` ("Your card is already confirmed." / or "Your workspace doesn't need a card check."); 409 `CARD_CHECK_OFF` ("Card checks are off right now. Please try again later."); 400 `VALIDATION` (field `consent`: "Tick the box to agree to automatic payment."); 429 `RATE_LIMITED`; 502 `BILLING_FAILED` ("We couldn't reach the payment service. Nothing was charged. Please try again in a moment."). *The body carries `retry_after` (seconds left in the window; D-111). The start limit does not count a press that ended 502 or 503.* *The message names the wait: "Too many tries. Please try again in N minutes." (or "about an hour", "about N hours"; D-112).* *Also answered, before anything is started, while the day's attach limits are used up; `retry_after` is that longer wait (D-113).*
 
+409 `DELETION_SCHEDULED` (D-116) while the workspace is scheduled for deletion: "This workspace is scheduled for deletion, so the card check is turned off. Cancel the deletion first." Checked before the limiter counts, so a refused press counts nothing. No pending card-check row is made and no PayMongo call is sent.
+
 ### 3.4 Browser to PayMongo (not BalayHub)
 
 The page calls `POST {paymongo_api}/payment_methods` with `Authorization: Basic base64(public_key + ':')`:
@@ -138,6 +140,8 @@ Responses:
 ```
 
 Errors: everything `/billing/checkout` can answer (`COMPED`, `BILLING_OFF`, `COUPON_*`, `RATE_LIMITED`, `BILLING_FAILED`), plus 409 `SAVED_CARD_NONE` ("There is no saved card. Pay another way.") and 402 `SAVED_CARD_FAILED` ("Your saved card couldn't be charged. Pay another way, or use a different card."). On `SAVED_CARD_FAILED` the row is failed and its coupon slot released (existing `failCheckout`). 3-D Secure return URL: `{APP_URL}/#/settings?billing={billing_id}` (the existing return handler, which calls `/billing/:id/refresh`).
+
+409 `DELETION_SCHEDULED` (D-116) while the workspace is scheduled for deletion: "This workspace is scheduled for deletion, so plan payments are turned off. Cancel the deletion first, then pay." Nothing is recorded, no coupon is redeemed and nothing is charged.
 
 ### 3.9 `PATCH /api/billing/renewal` (new, owner)
 

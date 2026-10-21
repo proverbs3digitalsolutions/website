@@ -501,7 +501,7 @@ export async function rentView(el, { query }) {
 export async function paymentDetailView(el, { params, rerender }) {
   const { payment: p, files } = await get(`/payments/${params.id}`);
   const canVoid = state.user.role !== 'staff' && !p.voided_at;
-  const upload = h('input', { type: 'file', class: 'input', 'aria-label': 'Choose a receipt or proof file', accept: 'application/pdf,image/jpeg,image/png,image/webp' });
+  const upload = h('input', { id: 'payment-file', type: 'file', class: 'input', accept: 'application/pdf,image/jpeg,image/png,image/webp' });
   const up = uploadField(upload);
   upload.addEventListener('change', up.clear);
   // The header (back link, title) is screen-only; the print-only block below is the receipt.
@@ -541,7 +541,7 @@ export async function paymentDetailView(el, { params, rerender }) {
       h('div', { class: 'card no-print' },
         h('h2', { style: { marginBottom: '12px' } }, 'Receipt / proof'),
         filesList(files),
-        !p.voided_at && h('div', { class: 'form', style: { marginTop: '12px' } }, up.wrap,
+        !p.voided_at && h('div', { class: 'form', style: { marginTop: '12px' } }, h('div', { class: 'field' }, h('label', { for: 'payment-file' }, 'Choose a receipt or proof file'), up.wrap),
           h('button', {
             class: 'btn btn--secondary', onclick: async (e) => {
               up.clear();
@@ -569,7 +569,7 @@ export async function paymentDetailView(el, { params, rerender }) {
 export async function expenseDetailView(el, { params, rerender }) {
   const { expense: x, files } = await get(`/expenses/${params.id}`);
   const canEdit = state.user.role !== 'staff' && !x.voided_at;
-  const upload = h('input', { type: 'file', class: 'input', 'aria-label': 'Choose a receipt or proof file', accept: 'application/pdf,image/jpeg,image/png,image/webp' });
+  const upload = h('input', { id: 'expense-file', type: 'file', class: 'input', accept: 'application/pdf,image/jpeg,image/png,image/webp' });
   const up = uploadField(upload);
   upload.addEventListener('change', up.clear);
   el.replaceChildren(
@@ -602,7 +602,7 @@ export async function expenseDetailView(el, { params, rerender }) {
       h('div', { class: 'card' },
         h('h2', { style: { marginBottom: '12px' } }, 'Receipts'),
         filesList(files),
-        !x.voided_at && h('div', { class: 'form', style: { marginTop: '12px' } }, up.wrap,
+        !x.voided_at && h('div', { class: 'form', style: { marginTop: '12px' } }, h('div', { class: 'field' }, h('label', { for: 'expense-file' }, 'Choose a receipt or proof file'), up.wrap),
           h('button', {
             class: 'btn btn--secondary', onclick: async (e) => {
               up.clear();

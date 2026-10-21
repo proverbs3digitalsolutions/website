@@ -43,7 +43,8 @@ test('GET /api/maintenance search still matches ordinary words', async () => {
 test('the photo/document upload input has an accessible name', () => {
   const fileInputs = VIEW.split('\n').filter((l) => l.includes("type: 'file'"));
   assert.ok(fileInputs.length > 0, 'upload input found');
-  for (const line of fileInputs) assert.match(line, /'aria-label': 'Upload photo or document'/);
+  for (const line of fileInputs) assert.match(line, /id: 'maint-upload-file'/);
+  assert.match(VIEW, /h\('label', \{ for: 'maint-upload-file' \}, 'Upload photo or document'\)/);
 });
 
 test('Cancel request asks first in the app dialog, says recorded costs stay, and only then changes the status', () => {

@@ -625,7 +625,8 @@ let drawnPath = null; // the path last drawn to the end: a different path next m
 const focusFree = (a = document.activeElement) => !a || a === document.body || !a.isConnected || a.matches('h1') || Boolean(a.closest('.sidebar, .topbar, .bottomnav, .skip-link, .assist-fab'));
 function focusPageHeading(root) {
   if (!focusFree()) return;
-  const h1 = root.querySelector('h1');
+  // A page may mark the heading of what was just opened (the open conversation); else the page's h1 (D-116).
+  const h1 = root.querySelector('[data-page-heading]') || root.querySelector('h1');
   if (h1) { h1.setAttribute('tabindex', '-1'); h1.focus({ preventScroll: true }); }
 }
 let viaAddress = false; // the person changed the address (typed it, Back, Forward, a # link) while focus was free
@@ -633,6 +634,14 @@ let viaRedirect = false; // set just before a redirect so the draw it triggers k
 // Whether the router should move focus to the page heading after a draw: a new page, the first page drawn, a page drawn
 // under a skeleton, or a redirect (even onto the page already open). Same-page redraws stay with the focus guard in ui.js.
 export const headingFocusDue = ({ drawnPath, path, prevKept, redirected, addressChange }) => drawnPath === null || drawnPath !== path || !prevKept || redirected || Boolean(addressChange);
+// Which focus the router owns after it removed an open layer: a sheet always hands focus to the heading; a dialog does when the page
+// changed; on the same page the focus guard returns focus to the control that opened the dialog, and the heading takes it only if
+// nothing did (D-89, D-108, D-116). Returns 'heading', 'guard' or null.
+export const layerFocus = (active, samePage) => {
+  const layer = active?.closest?.('dialog.modal, .morenav, .tb-sheet');
+  if (!layer) return null;
+  return layer.matches('dialog.modal') && samePage ? 'guard' : 'heading';
+};
 export async function render() {
   const seq = ++renderSeq;
   stopRestore();
@@ -659,8 +668,8 @@ export async function render() {
   // Pages this role or workspace module can't use go home instead of opening by URL.
   if (route.access === APP && !routeAllowed(path, state.user)) { if (!otherHome(path, state.user)) toast("That page isn't available for your role or workspace.", 'error'); viaRedirect = true; navigate(homeRoute(), { replace: true }); return; }
 
-  // The sweep below removes any open layer; if one held focus, the new page's heading takes it (D-89, D-108).
-  const layerHadFocus = Boolean(document.activeElement?.closest?.('dialog.modal, .morenav, .tb-sheet'));
+  // The sweep below removes any open layer; if one held focus, the heading or the focus guard takes it (see layerFocus).
+  const layerHadFocus = layerFocus(document.activeElement, path === drawnPath);
   document.querySelectorAll('dialog.modal, .morenav, .tb-sheet').forEach((d) => d.remove());
   delete document.documentElement.dataset.h1title; // set below when a guest page's tab title is taken from its heading
   const ctx = { params: route.params, query, state, navigate, rerender: render };
@@ -713,7 +722,8 @@ export async function render() {
     document.title = title ? `${title} — BalayHub` : 'BalayHub';
     // A page drawn under a skeleton (no old page kept) lost the old heading's focus, even when a redirect landed on the page it left (Reports to Stay reports).
     if (headingFocusDue({ drawnPath, path, prevKept: Boolean(prev), redirected, addressChange })) focusPageHeading(mount);
-    if (layerHadFocus) focusPageHeading(mount);
+    if (layerHadFocus === 'heading') focusPageHeading(mount);
+    else if (layerHadFocus === 'guard') setTimeout(() => { if (seq === renderSeq) focusPageHeading(mount); }); // only if the guard found nothing
     rovingTabs(mount);
     drawnPath = path;
   } else {
@@ -744,7 +754,8 @@ export async function render() {
       if (!mount.isConnected) app.replaceChildren(mount);
       if (restoreTo !== null) restoreScroll(restoreTo); else rememberPlace(entry);
       if (headingFocusDue({ drawnPath, path, prevKept: true, redirected, addressChange })) focusPageHeading(mount);
-      if (layerHadFocus) focusPageHeading(mount);
+      if (layerHadFocus === 'heading') focusPageHeading(mount);
+      else if (layerHadFocus === 'guard') setTimeout(() => { if (seq === renderSeq) focusPageHeading(mount); }); // only if the guard found nothing
       rovingTabs(mount);
       drawnPath = path;
     }

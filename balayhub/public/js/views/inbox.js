@@ -238,12 +238,14 @@ async function renderThread(pane, id, { status, back, rerender }) {
     h('a', { class: 'back inbox__back', href: back }, '‹ Inbox'),
     h('div', { class: 'inbox__head-main' },
       h('div', null,
-        h('h2', null, c.guest_name),
+        // Opening a conversation puts focus here, not on the page's h1 (D-116, C1).
+        h('h2', { 'data-page-heading': '' }, c.guest_name),
         h('div', { class: 'small muted' }, `${c.unit_name} · ${fmtDate(c.check_in)} – ${fmtDate(c.check_out)}`)),
       h('div', { class: 'inbox__head-actions' },
         // A host who works alone has no one to assign to, so the select only shows with a second person or an existing assignment.
         (assignees.length > 1 || c.assigned_to) && h('select', {
-          class: 'input input--sm', 'aria-label': 'Assigned to', 'data-focus-key': 'conv-assign',
+          // The list filter is "Assigned to"; two controls never share a name (D-116).
+          class: 'input input--sm', 'aria-label': 'Conversation assigned to', 'data-focus-key': 'conv-assign',
           onchange: assign,
         }, h('option', { value: '' }, 'Unassigned'), c.assigned_to && !assignees.some((a) => a.user_id === c.assigned_to) && h('option', { value: c.assigned_to, selected: true }, c.assigned_name), assignees.map((a) => h('option', { value: a.user_id, selected: a.user_id === c.assigned_to }, a.full_name))),
         c.snoozed_until && new Date(c.snoozed_until) > new Date()

@@ -228,8 +228,10 @@ const UNIT_STATUS = { dirty: ['overdue', 'Dirty'], clean: ['open', 'Clean'], ins
 const unitChip = (st) => badge(...(UNIT_STATUS[st] ? [UNIT_STATUS[st][0], T(UNIT_STATUS[st][1])] : ['unpaid', st || '']));
 const PRIORITIES = [['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['urgent', 'Urgent']];
 
-const photoInput = () => h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', class: 'input', capture: 'environment', 'aria-label': T('Photo (optional)') });
-const photoField = (input) => h('div', { class: 'field', 'data-field': 'photo' }, h('label', null, T('Photo (optional)')), input, h('div', { class: 'error', role: 'alert' }));
+// Named by its visible label "Photo (optional)", never an aria-label; ids count up because three dialogs use it (D-116).
+let photoSeq = 0;
+const photoInput = () => h('input', { type: 'file', id: `hk-photo-opt-${++photoSeq}`, accept: 'image/jpeg,image/png,image/webp', class: 'input', capture: 'environment' });
+const photoField = (input) => h('div', { class: 'field', 'data-field': 'photo' }, h('label', { for: input.id }, T('Photo (optional)')), input, h('div', { class: 'error', role: 'alert' }));
 // A photo that is empty, the wrong type or over 10 MB is refused before a record is saved or a request sent.
 export function photoProblem(file) {
   if (!file) return null;
@@ -730,7 +732,7 @@ export async function housekeepingDetailView(el, { params, rerender }) {
   // Picking a photo uploads it at once (no second step). A busy flag, not `disabled`, blocks a second pick: a disabled control drops focus to the body.
   let uploading = false;
   const upload = h('input', {
-    type: 'file', accept: 'image/jpeg,image/png,image/webp', class: 'input', capture: 'environment', 'aria-label': T('Add photo'), 'data-focus-key': 'hk-photo',
+    type: 'file', accept: 'image/jpeg,image/png,image/webp', class: 'input', capture: 'environment', id: 'hk-photo-file', 'data-focus-key': 'hk-photo',
     onclick: (e) => { if (uploading) e.preventDefault(); },
     onchange: async () => {
       if (uploading || !upload.files[0]) return;
@@ -826,5 +828,5 @@ export async function housekeepingDetailView(el, { params, rerender }) {
           h('div', { class: 'card__head' }, h('h2', null, T('Photos'))),
           h('p', { class: 'muted small' }, T('Add photos of the finished unit or any damage found.')),
           files?.length ? filesList(files) : h('p', { class: 'muted small' }, T('No photos yet.')),
-          h('div', { class: 'form', style: { marginTop: '12px' } }, up.wrap)))));
+          h('div', { class: 'form', style: { marginTop: '12px' } }, h('div', { class: 'field' }, h('label', { for: 'hk-photo-file' }, T('Add photo')), up.wrap))))));
 }

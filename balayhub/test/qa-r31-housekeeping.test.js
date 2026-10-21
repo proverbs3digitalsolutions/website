@@ -21,7 +21,7 @@ test('imports uploadField and fileRefused from ui.js', () => {
 
 test('uploadField wraps the input and up.wrap is rendered in its place', () => {
   assert.match(slice, /const up = uploadField\(upload\)/);
-  assert.match(src, /h\('div', \{ class: 'form'[^\n]*\}, up\.wrap\)/);
+  assert.match(src, /h\('div', \{ class: 'field' \}, h\('label', \{ for: 'hk-photo-file' \}, T\('Add photo'\)\), up\.wrap\)/);
   assert.doesNotMatch(src.slice(src.indexOf('const actionBtn')), /\}, upload\)/, 'bare input no longer rendered');
 });
 

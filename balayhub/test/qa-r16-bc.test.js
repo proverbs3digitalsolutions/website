@@ -19,5 +19,5 @@ test('banner names the card charge of a free coupon', () => {
 });
 test('live box no longer repeats "Applies every month."', () => assert.doesNotMatch(bc, /Applies every month/));
 test('comped workspaces see the sentence, not Pay now', () => {
-  assert.match(st, /p\.plan === 'comped' \? h\('p', \{ class: 'muted' \}, 'Your workspace is on a complimentary plan, so there is nothing to pay\.'\)\s*: bill\.online \? payOnline/);
+  assert.match(st, /p\.plan === 'comped' \? h\('p', \{ class: 'muted' \}, 'Your workspace is on a complimentary plan, so there is nothing to pay\.'\)\s*: p\.reason === 'deleting' \? null\s*: bill\.online \? payOnline/);
 });

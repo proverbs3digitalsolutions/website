@@ -29,6 +29,9 @@ function initialState(user) {
 
 const status = (org) => (['required', 'passed', 'waived'].includes(org?.card_check) ? org.card_check : 'not_required');
 
+// Same sentence as routes/billing.js DELETING_CARD: a check started before the deletion was scheduled must not go on.
+const DELETING_CARD = 'This workspace is scheduled for deletion, so the card check is turned off. Cancel the deletion first.';
+
 const notRequired = (org) => new HttpError(409,
   org.card_check === 'passed' ? 'Your card is already confirmed.' : "Your workspace doesn't need a card check.",
   { code: 'CARD_CHECK_NOT_REQUIRED' });
@@ -140,6 +143,7 @@ async function start(user, { renewalPlan, consent } = {}) {
   // two intents, and a PayMongo error rolls the new row back.
   return tx(async (db) => {
     const { rows: [org] } = await db.query('SELECT * FROM organizations WHERE organization_id = $1 FOR UPDATE', [user.organization_id]);
+    if (org.deletion_scheduled_at) throw new HttpError(409, DELETING_CARD, { code: 'DELETION_SCHEDULED' });
     if (org.card_check !== 'required') throw notRequired(org);
     const auto = Boolean(config.paymongoSubscriptions && consent);
     await db.query(

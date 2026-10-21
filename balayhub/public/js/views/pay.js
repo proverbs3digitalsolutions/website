@@ -255,7 +255,8 @@ function pendingList(list, token, reload) {
         h('p', null, t('Sent {amount} by {method} on {date}.', { amount: peso(p.amount), method: METHOD_TEXT[p.method] || p.method, date: fmtDate(p.sent_at) }), ' ',
           p.has_file ? t('Waiting for the host to check it.') : t('Sent, but there is no screenshot yet.')), msg);
       if (!p.has_file) {
-        const file = h('input', { type: 'file', accept: PROOF_TYPES.join(','), class: 'input', 'aria-label': t('Screenshot or receipt') });
+        // Named by its visible label (D-116); one per waiting proof, so the id carries the proof.
+        const file = h('input', { type: 'file', id: `proof-add-${p.proof_id}`, accept: PROOF_TYPES.join(','), class: 'input' });
         const add = h('button', { class: 'btn btn--primary', type: 'button' }, t('Add the screenshot'));
         const back = h('button', { class: 'btn', type: 'button' }, t('Take it back'));
         add.addEventListener('click', async () => {
@@ -288,7 +289,7 @@ function pendingList(list, token, reload) {
             back.textContent = t('Take it back');
           }
         });
-        row.append(h('div', { class: 'field' }, file), h('div', { class: 'btn-row' }, add, back));
+        row.append(h('div', { class: 'field' }, h('label', { for: `proof-add-${p.proof_id}` }, t('Screenshot or receipt')), file), h('div', { class: 'btn-row' }, add, back));
       }
       return row;
     }));
