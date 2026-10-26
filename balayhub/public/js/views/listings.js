@@ -76,6 +76,13 @@ export function baseRateError(text) {
   if (!Number.isFinite(n)) return 'Nightly rate must be a valid amount (e.g. 8500 or 8500.50).';
   return n > 0 ? null : 'Nightly rate must be greater than zero.';
 }
+// The rate and the discount order are reported with the required boxes, in one pass (D-105, D-126): { field: message } or null.
+function listingCheck(d) {
+  const out = {};
+  if (String(d.nightly_rate ?? '').trim() && baseRateError(d.nightly_rate)) out.nightly_rate = baseRateError(d.nightly_rate);
+  try { checkDiscountOrder(d); } catch (err) { Object.assign(out, err.fields); }
+  return Object.keys(out).length ? out : null;
+}
 function checkBaseRate(d) {
   const error = baseRateError(d.nightly_rate);
   if (error) throw new ApiError('Please check the highlighted fields.', { status: 400, fields: { nightly_rate: error } });
@@ -254,7 +261,7 @@ async function addListingModal(onSaved) {
   // Not formModal: a cancelled question must leave the form open with what was typed.
   const modal = openModal({ title: 'Add listing', body: makeForm({
     submitText: 'Save listing', draftKey: 'listing-new', cancel: () => modal.close(),
-    check: (d) => (String(d.nightly_rate ?? '').trim() && baseRateError(d.nightly_rate) ? { nightly_rate: baseRateError(d.nightly_rate) } : null), // with the required-field messages, in one pass
+    check: listingCheck, // with the required-field messages, in one pass
     fields: [savedLine, ...listingFields({}, roomTypes, newPropMore, [h('hr', { class: 'divider' }), propSelect, newProp])],
     onSubmit: async (raw, { form }) => {
       const d = prepUnit(raw);
@@ -741,7 +748,7 @@ export async function listingsView(el, { query }) {
           const roomTypes = await roomTypeNames();
           // Not formModal: a cancelled question must leave the form open with what was typed.
           const modal = openModal({ title: `Edit ${l.unit_name}`, body: makeForm({ submitText: 'Save changes', fields: listingFields({ ...unit, tags: unit.tags }, roomTypes, null, [], !bookable.size),
-            check: (d) => (String(d.nightly_rate ?? '').trim() && baseRateError(d.nightly_rate) ? { nightly_rate: baseRateError(d.nightly_rate) } : null), // with the required-field messages, in one pass
+            check: listingCheck, // with the required-field messages, in one pass
             cancel: () => modal.close(),
             onSubmit: async (d, { form }) => {
               checkBaseRate(d);

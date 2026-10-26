@@ -1,7 +1,7 @@
 // Guest's quote page (#/quote/:token): the host's offer, house rules, details and the pay button.
 
 import { get, post, ApiError } from '../api.js';
-import { h, brand, field, readForm, clearErrors, showErrors, EMAIL_RE } from '../ui.js';
+import { h, brand, field, readForm, clearErrors, showErrors, EMAIL_RE, guardPress } from '../ui.js';
 import { t, tServer, tFields, guestLang, initGuestLang, langToggle, extendTranslations, fmtDateL as fmtDate, fmtDateTimeL } from '../i18n.js';
 
 // The same mobile rule as book.js (and the server), kept local so this page loads on its own.
@@ -98,6 +98,7 @@ export async function quoteView(el, { params, kept = {} }) {
   const addons = q.addons;
   const formError = h('div');
   const submit = h('button', { class: 'btn btn--primary btn--block', type: 'submit' }, t('Pay {amount}', { amount: peso(due) }));
+  submit.addEventListener('click', (e) => guardPress(e)); // a refusal moves the button: a second press does nothing for 600 ms, so it cannot untick the consent box (D-126)
   const form = h('form', { class: 'form', novalidate: true }, formError,
     h('h2', null, t('Your details')),
     field({ name: 'name', label: t('Full name'), required: true, maxlength: 120, autocomplete: 'name', value: kept.name ?? (q.guest_name || '') }),

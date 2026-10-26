@@ -29,9 +29,23 @@ function pressGuard(el, fn) {
     if (pressing.has(el)) { e?.preventDefault?.(); return undefined; }
     const before = el.getAttribute('aria-disabled');
     const r = fn.call(this, e);
+    if (before !== 'true' && typeof r?.then === 'function') guardPress(e, el);
     if (before === 'true' || el.getAttribute('aria-disabled') !== before) return r;
     return busyWhile(el, r);
   };
+}
+
+// A press that waits for the server swallows its own second press (D-126). The answer often comes back in 10 to 20 ms, before a
+// double click's or a double tap's second press, and the page draws the button that takes the pressed one's place at the same spot
+// (Start work becomes Back to open, Check in becomes Check out, D-117), so the second press undid the first. A mouse, pen or touch press
+// (detail > 0, it has a position) on a button whose press waits for the server: any press within REPEAT_PRESS_MS and REPEAT_PRESS_PX of
+// it does nothing, whatever is drawn there by then. Keyboard presses are untouched (detail 0). A press that closed its dialog is left to
+// the dialog's own guard (openModal, D-124, D-125), so one press installs one guard. Guest pages call it from their own Pay and
+// Continue presses (book.js, pay.js, quote.js), whose refusal message moves the button.
+export function guardPress(e, el = null) {
+  if (!(e?.detail > 0) || !Number.isFinite(e.clientX) || !Number.isFinite(e.clientY)) return;
+  for (let p = el; p; p = p.parentElement) if (p.tagName === 'DIALOG') { if (!p.open) return; break; }
+  ignoreRepeatPress({ x: e.clientX, y: e.clientY, t: Date.now() });
 }
 
 export function h(tag, props, ...children) {

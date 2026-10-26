@@ -750,7 +750,14 @@ export async function render() {
     lastKey = entry;
     lastHash = location.hash;
     const mount = h('div');
-    if (restoreTo === null) app.replaceChildren(mount);
+    if (restoreTo === null) {
+      // A press inside the page (a listing card, a link back to the host page) leaves with the old page: while the next page loads, focus
+      // waits on a placeholder that the drawn page replaces, never on the page body (D-125, D-126). Otherwise the page is drawn in place.
+      const pressedInPage = app.contains(document.activeElement); // read before the swap removes it
+      const hold = pressedInPage ? h('div', { class: 'page-hold' }) : null;
+      app.replaceChildren(hold || mount);
+      holdFocusWhileLoading(hold, pressedInPage);
+    }
     document.title = RESET_TITLE;
     try { await route.view(mount, ctx); } catch (err) { mount.replaceChildren(pageError(err, render)); }
     // Landing keeps the site title; sign-in pages have friendly h1s, so name them; others use their h1 (minus a leading brand name).

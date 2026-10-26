@@ -87,7 +87,7 @@ async function newQuoteModal(listings, onSaved) {
   const picks = new Map(); // addon_id -> qty input
 
   const fields = [
-    field({ name: 'unit_id', label: 'Listing', type: 'select', required: true, options: listings.map((l) => [l.unit_id, l.unit_name]), value: listings.length === 1 ? listings[0].unit_id : '' }),
+    field({ name: 'unit_id', label: 'Listing', type: 'select', required: true, options: listings.map((l) => [l.unit_id, `${l.unit_name} — ${l.property_name}`]), value: listings.length === 1 ? listings[0].unit_id : '' }),
     h('div', { class: 'form-row form-row--3' },
       field({ name: 'check_in', label: 'Check-in', type: 'date', required: true, min: todayManila() }),
       field({ name: 'check_out', label: 'Check-out', type: 'date', required: true, min: todayManila() }),

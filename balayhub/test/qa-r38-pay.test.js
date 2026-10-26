@@ -116,6 +116,7 @@ export const readForm = (form) => {
 export const clearErrors = () => {};
 export const showErrors = () => {};
 export const parseAmount = (text) => Number(String(text).replace(/[,\s]/g, ''));
+export const guardPress = () => {};
 `;
 
 const API_JS = String.raw`

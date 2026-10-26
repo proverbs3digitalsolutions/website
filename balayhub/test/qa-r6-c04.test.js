@@ -92,7 +92,7 @@ test('a PATCH that does not touch the discounts is not blocked by an order saved
 });
 
 test('the listing form checks the discount order before it saves, with the same sentence the server uses', () => {
-  assert.equal(LISTINGS.match(/checkDiscountOrder\(d\);/g)?.length, 2, 'the add and the edit form both check first');
+  assert.equal(LISTINGS.match(/checkDiscountOrder\(d\);/g)?.length, 3, 'the add and the edit form check first, and listingCheck runs it in the one pass');
   assert.match(LISTINGS, /can't be smaller than the/);
   assert.match(LISTINGS, /Longer stays get the same or a bigger discount\./);
 });

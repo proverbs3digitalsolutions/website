@@ -156,6 +156,8 @@ function roomRow({ listings, roomTypes, defaults, onRemove, number = 0 }) {
     setNumber(n) { num = n; removeBtn?.setAttribute('aria-label', `Remove this room, room ${n}`); },
     // Every problem this row can name, each keyed to its own box, in the order the boxes read; {} when the row is fine.
     problems() { return Object.fromEntries(found().map((x) => [x.key, x.msg])); },
+    // The listing and nights this row books, when it names a listing and both dates; else null (a room type is picked by the server).
+    stay() { return mode.value === 'unit' && unit.value && ci.value && co.value && co.value > ci.value ? { unit_id: unit.value, check_in: ci.value, check_out: co.value } : null; },
     // How many rooms this row books (a room type with a count books that many); a count that is not usable counts as one.
     roomCount() { const n = Number(count.value); return mode.value === 'type' && Number.isInteger(n) && n >= 1 && n <= 20 ? n : 1; },
     // Returns the rooms to send (a room type with a count becomes that many rows), or throws the first problem.
@@ -181,6 +183,13 @@ function roomRow({ listings, roomTypes, defaults, onRemove, number = 0 }) {
 export function groupProblems(guestProblems, rows) {
   const out = { ...guestProblems };
   for (const r of rows) Object.assign(out, r.problems());
+  // Two rows on the same listing with nights that overlap: the later row's listing box says so, in the same pass (the server refuses it too).
+  const stays = rows.map((r) => r.stay?.() || null);
+  stays.forEach((s, i) => {
+    const j = s ? stays.findIndex((o, k) => k < i && o && o.unit_id === s.unit_id && o.check_in < s.check_out && s.check_in < o.check_out) : -1;
+    const key = j >= 0 ? rows[i].fieldKey('unit_id') : null;
+    if (key && !out[key]) out[key] = `Room ${j + 1} already has this listing on nights that overlap. Choose another listing or change the dates.`;
+  });
   const total = rows.reduce((n, r) => n + r.roomCount(), 0);
   if (total < 2 || total > 20) out._rooms = 'A group needs between 2 and 20 rooms.';
   return out;

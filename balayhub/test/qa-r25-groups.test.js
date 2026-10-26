@@ -119,7 +119,7 @@ test('a missing lead guest name and two rows with no listing give three messages
 
 test('fewer than 2 rooms in total adds the count line to the same pass; a good group has none', () => {
   assert.equal(groups.groupProblems({}, [rowWith(1, {})])._rooms, 'A group needs between 2 and 20 rooms.');
-  assert.deepEqual(groups.groupProblems({}, [rowWith(1, {}), rowWith(2, {})]), {});
+  assert.deepEqual(groups.groupProblems({}, [rowWith(1, {}), rowWith(2, { ci: '2028-07-06', co: '2028-07-07' })]), {});
   assert.equal(groups.groupProblems({}, [rowWith(1, { mode: 'type', count: '3' })])._rooms, undefined);
 });
 

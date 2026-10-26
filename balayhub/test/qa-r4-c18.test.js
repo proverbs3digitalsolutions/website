@@ -30,7 +30,7 @@ test('sign-up page: the unticked box stops at its own field with the server word
   // Round 8 (#54): the box's message joins the other client checks and all are thrown together.
   assert.ok(refusal.includes(`errs.accept_privacy = '${CONSENT}'`), 'the consent message is set on the box itself');
   assert.ok(refusal.includes("new ApiError('Please check the highlighted fields.'"), 'the banner names the fields and does not repeat the message');
-  assert.equal(auth.split(CONSENT).length - 1, 1, 'the consent message is written once in auth.js');
+  assert.equal(auth.split(CONSENT).length - 1, 2, 'the consent message is written in signupProblems and in the onSubmit backstop');
 });
 
 test('sign-up page: the unticked-box message is the same wording the server sends', () => {

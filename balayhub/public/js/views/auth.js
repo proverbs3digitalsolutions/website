@@ -122,6 +122,17 @@ export async function loginView(el, { query }) {
       h('p', null, 'Just looking? ', h('button', { class: 'linkbtn', type: 'button', onclick: tryDemo }, 'Try the live demo'))))));
 }
 
+// The password length, the match and the Terms box are checked in the form's one pass, with the required boxes (D-105, D-126). A blank
+// box is the required check's, so a blank password gets no length message and the form's line stays "fill in" for missing boxes only.
+// Returns { field: message } or null. The onSubmit checks in signupView stay as backstops.
+export function signupProblems(data) {
+  const errs = {};
+  if (data.password && data.password.length < 8) errs.password = 'Password must be at least 8 characters.';
+  if (data.password !== data.confirm_password) errs.confirm_password = 'Passwords do not match.';
+  if (!data.accept_privacy) errs.accept_privacy = 'Please accept the Terms of Service and read the Privacy Notice to continue.';
+  return Object.keys(errs).length ? errs : null;
+}
+
 // ---------------------------------------------------------------- Screen 2: Sign up
 export async function signupView(el, { query }) {
   let invite = null;
@@ -140,6 +151,8 @@ export async function signupView(el, { query }) {
     h('div', { class: 'error', role: 'alert' }));
   const form = makeForm({
     submitText: 'Create account',
+    // The password, the match and the Terms box are reported with the required boxes and the email, in one pass (D-105, D-126).
+    check: signupProblems,
     fields: [
       field({ name: 'full_name', label: 'Full name', required: true, autocomplete: 'name', maxlength: 120 }),
       field({ name: 'email', label: 'Email', type: 'email', required: true, autocomplete: 'email', value: invite?.email }),
@@ -209,6 +222,8 @@ export async function resetView(el, { query }) {
   if (!query.token) { navigate('#/forgot', { replace: true }); return; }
   const form = makeForm({
     submitText: 'Save new password',
+    // A typed confirmation that does not match is reported with a blank password box, in one pass (D-105, D-126).
+    check: (d) => (d.confirm && d.password !== d.confirm ? { confirm: 'Passwords do not match.' } : null),
     fields: [
       field({ name: 'password', label: 'New password', type: 'password', required: true, autocomplete: 'new-password', hint: 'At least 8 characters.' }),
       field({ name: 'confirm', label: 'Confirm new password', type: 'password', required: true, autocomplete: 'new-password' }),

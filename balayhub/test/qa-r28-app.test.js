@@ -52,7 +52,7 @@ test('k1: the public branch stamps bhEntry, sets lastForward, arms and restores,
   assert.match(pub, /bhEntry: entry/);
   assert.match(pub, /lastForward = \{ fromHash: lastHash, toKey: entry \}/);
   assert.match(pub, /armRestore\(\)/);
-  assert.match(pub, /if \(restoreTo === null\) app\.replaceChildren\(mount\)/);
+  assert.match(pub, /if \(restoreTo === null\) \{[\s\S]{0,600}app\.replaceChildren\(hold \|\| mount\);/);
   assert.match(pub, /if \(!mount\.isConnected\) app\.replaceChildren\(mount\)/);
   assert.match(pub, /restoreScroll\(restoreTo\)/);
   assert.ok(pub.indexOf('document.title = RESET_TITLE') < pub.indexOf('await route.view'), 'title reset before the view, as before');

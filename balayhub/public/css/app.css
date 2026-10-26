@@ -176,6 +176,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 h1[tabindex="-1"]:focus-visible, h2[tabindex="-1"]:focus-visible { outline: none; }
 /* The page area that holds focus while the next page loads is not a control: no ring (D-125). */
 main[tabindex="-1"]:focus-visible { outline: none; }
+/* The placeholder that holds focus while a guest page loads is not a control either (D-126). */
+.page-hold[tabindex="-1"]:focus-visible { outline: none; }
 [hidden] { display: none !important; }
 .tb__search[hidden] { display: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

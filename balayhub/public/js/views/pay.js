@@ -3,7 +3,7 @@
 // the manual payment details with a form to send a proof of payment.
 
 import { get, post, api, ApiError, newIdempotencyKey, fileContentError } from '../api.js';
-import { h, brand, toast, field, readForm, showErrors, clearErrors, parseAmount } from '../ui.js';
+import { h, brand, toast, field, readForm, showErrors, clearErrors, parseAmount, guardPress } from '../ui.js';
 import { t, tServer, guestLang, tFields, initGuestLang, langToggle, keepFormValues, restoreFormValues, fmtDateL as fmtDate, extendTranslations } from '../i18n.js';
 
 // Money owed is always shown with centavos (₱600.00), like the emails and receipts.
@@ -114,6 +114,7 @@ export async function payBalanceView(el, { params, query }, snap) {
   const paidUp = Number(d.balance) <= 0 && !d.cancelled;
   const payError = h('div');
   const btn = h('button', { class: 'btn btn--primary btn--block', type: 'button' }, t('Pay {amount} now', { amount: peso(d.balance) }));
+  btn.addEventListener('click', (e) => guardPress(e)); // a refusal moves the button: a second press at its old spot does nothing for 600 ms (D-126)
   btn.addEventListener('click', async () => {
     if (btn.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
     payError.replaceChildren();
@@ -180,6 +181,7 @@ function addonsCard(token, reload, snap) {
           : h('label', { class: 'check gp-addon__qty' }, h('input', { type: 'checkbox', name: `addon-pick-${a.addon_id}`, 'aria-label': t('Select {name}', { name }), oninput: (e) => { qty[a.addon_id] = e.target.checked ? 1 : 0; } }), h('span', null, t('Select'))));
     });
     const btn = h('button', { class: 'btn btn--primary btn--block', type: 'button' }, t('Add selected to my bill'));
+    btn.addEventListener('click', (e) => guardPress(e));
     btn.addEventListener('click', async () => {
       if (btn.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
       err.replaceChildren();

@@ -320,7 +320,7 @@ export const ownerBookingsView = portalScreen('bookings', 'Bookings', async (bod
       title: 'Block dates',
       submitText: 'Block dates',
       fields: [
-        field({ name: 'unit_id', label: 'Unit', type: 'select', required: true, options: units.map((u) => [u.unit_id, u.unit_name]), placeholderOption: 'Choose a unit' }),
+        field({ name: 'unit_id', label: 'Unit', type: 'select', required: true, options: units.map((u) => [u.unit_id, `${u.unit_name} — ${u.property_name}`]), placeholderOption: 'Choose a unit' }),
         field({ name: 'check_in', label: 'From', type: 'date', required: true, min: today }),
         field({ name: 'check_out', label: 'Until (check-out day)', type: 'date', required: true, min: today, hint: 'The check-out day itself is not blocked. Up to 60 nights.' }),
         field({ name: 'reason', label: 'Reason', type: 'text', maxlength: 200, placeholder: 'Owner stay' }),

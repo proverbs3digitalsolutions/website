@@ -2,7 +2,7 @@
 // availability and checkout, and the guest's confirmation page.
 
 import { get, post, ApiError } from '../api.js';
-import { h, brand, field, toast, readForm, clearErrors, showErrors, todayManila } from '../ui.js';
+import { h, brand, field, toast, readForm, clearErrors, showErrors, todayManila, guardPress } from '../ui.js';
 import { t, tServer, tFields, locale, initGuestLang, langToggle, guestLang, extendTranslations, fmtDateL as fmtDate } from '../i18n.js';
 
 // Taglish for the wording this page adds (the policy text itself comes from the server).
@@ -256,6 +256,7 @@ export async function bookListingView(el, { params, query }) {
     h('div', { class: 'chips' }, codeInput, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: applyCode }, t('Apply'))),
     codeMsg, h('div', { class: 'error', role: 'alert', id: 'bk-code-err' }));
   const submit = h('button', { class: 'btn btn--primary btn--block', type: 'submit', disabled: true }, t('Continue to payment'));
+  submit.addEventListener('click', (e) => guardPress(e)); // a refusal moves the button: a second press at its old spot does nothing for 600 ms (D-126)
   let current = null;
   // Add-ons: addon_id -> quantity (only entries above 0).
   const addonList = l.addons || [];

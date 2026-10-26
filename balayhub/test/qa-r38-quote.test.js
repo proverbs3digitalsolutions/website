@@ -156,6 +156,7 @@ export function h(tag, props, ...kids) {
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const manilaDay = (d) => String(d).slice(0, 10);
 export function brand() { return h('span', { class: 'brand' }, 'BalayHub'); }
+export function guardPress() {}
 export function field(o) {
   const id = 'f-' + o.name;
   return h('div', { class: 'field', 'data-field': o.name },
