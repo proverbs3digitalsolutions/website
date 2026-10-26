@@ -134,7 +134,7 @@ test('(once) the guard is installed once per dialog, by the closing press, and t
   firstPress(w);
   await tick();
   assert.equal(w.result(), true);
-  assert.deepEqual(added, REPEAT_TYPES);
+  assert.deepEqual(added, [...REPEAT_TYPES, 'input']);
 });
 
 test('(window end) 650 ms after the first press the guard is gone', async () => {

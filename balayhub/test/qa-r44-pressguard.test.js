@@ -192,13 +192,13 @@ test('(dimmed before) a button dimmed before the press (aria-disabled "true") in
   assert.deepEqual(added, []);
 });
 
-test('(dialog) a dialog button whose press closes the dialog installs the five listeners exactly once', async () => {
+test('(dialog) a dialog button whose press closes the dialog installs the five press listeners and the change listener exactly once', async () => {
   const w = openConfirm();
   const added = recordWindowListeners(w.win);
   firstPress(w);
   await tick();
   assert.equal(w.result(), true);
-  assert.deepEqual(added, REPEAT_TYPES);
+  assert.deepEqual(added, [...REPEAT_TYPES, 'input']);
 });
 
 test('(export) guardPress installs the guard for a mouse, pen or touch press with a position, and nothing for a keyboard press', () => {
@@ -206,7 +206,7 @@ test('(export) guardPress installs the guard for a mouse, pen or touch press wit
   assert.equal(typeof ui.guardPress, 'function');
   const added = recordWindowListeners(p.win);
   ui.guardPress({ detail: 1, clientX: 811, clientY: 509 });
-  assert.deepEqual(added, REPEAT_TYPES);
+  assert.deepEqual(added, [...REPEAT_TYPES, 'input']);
   const keyboard = recordWindowListeners(p.win);
   ui.guardPress({ detail: 0, clientX: 1, clientY: 1 });
   assert.deepEqual(keyboard, []);

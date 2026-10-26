@@ -30,7 +30,7 @@ test('a percent and an amount together, with the end date before the start, repo
   const r = await owner.post('/api/discount-codes', { code: 'QA23BOTH', percent_off: 10, amount_off: '100', valid_from: '2030-06-10', valid_until: '2030-06-01' });
   assert.equal(r.status, 400, JSON.stringify(r.data));
   assert.equal(r.data.fields.percent_off, BOTH);
-  assert.equal(r.data.fields.valid_until, 'The end date must be after the start date.');
+  assert.equal(r.data.fields.valid_until, 'Valid until must be on or after Valid from.');
   assert.equal(r.data.fields.code, undefined);
 });
 

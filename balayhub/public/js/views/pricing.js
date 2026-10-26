@@ -7,9 +7,9 @@ import { state } from '../app.js';
 import { addDays } from './reservations.js';
 
 const RULE_KINDS = {
-  last_minute: { label: 'Last-minute', min: 0, max: 30, daysLabel: 'Stay starts within (days)', hint: 'From 0 to 30 days from today.' },
-  far_out: { label: 'Far-out', min: 31, max: 540, daysLabel: 'Stay starts more than (days) away', hint: 'From 31 to 540 days from today.' },
-  gap_night: { label: 'Gap night', min: 1, max: 7, daysLabel: 'Gap is up to (nights)', hint: 'A free gap of 1 to 7 nights between two bookings. The minimum stay is waived for it.' },
+  last_minute: { label: 'Last-minute', min: 0, max: 30, daysLabel: 'Stay starts within this many days', hint: 'From 0 to 30 days from today.' },
+  far_out: { label: 'Far-out', min: 31, max: 540, daysLabel: 'Stay starts more than this many days away', hint: 'From 31 to 540 days from today.' },
+  gap_night: { label: 'Gap night', min: 1, max: 7, daysLabel: 'Gap is up to this many nights', hint: 'A free gap of 1 to 7 nights between two bookings. The minimum stay is waived for it.' },
 };
 const pctWords = (p) => (Number(p) < 0 ? `${Math.abs(p)}% off` : `${p}% more`);
 export function ruleSummary(r) {
@@ -150,7 +150,7 @@ export async function pricingView(el, { rerender }) {
     const kindSel = field({ name: 'kind', label: 'Rule', type: 'select', required: true, value: r?.kind || 'last_minute', placeholderOption: false,
       options: Object.entries(RULE_KINDS).map(([k, v]) => [k, v.label]) });
     const daysHint = h('p', { class: 'muted small', 'aria-live': 'polite' });
-    const daysField = field({ name: 'days', label: 'Days', type: 'number', required: true, value: r?.days ?? 3, step: 1, inputmode: 'numeric' });
+    const daysField = field({ name: 'days', label: 'Days', msgLabel: 'Days', type: 'number', required: true, value: r?.days ?? 3, step: 1, inputmode: 'numeric' });
     const scopeField = field({ name: 'unit_id', label: 'Applies to', type: 'select', required: !isOwner, value: r?.unit_id || '', placeholderOption: isOwner ? false : undefined,
       options: [...(isOwner ? [['', 'All listings']] : []), ...listings.map((l) => [l.unit_id, `${l.unit_name} · ${l.property_name}`])] });
     if (r) { kindSel.querySelector('select').disabled = true; scopeField.querySelector('select').disabled = true; }

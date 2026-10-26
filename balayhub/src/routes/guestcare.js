@@ -187,7 +187,7 @@ function discountCodeProblems(out, fields) {
     else if (out.percent_off === null && !amountSet) problems.percent_off = 'Set either a percent off or an amount off.';
   }
   if (!fields.valid_from && !fields.valid_until && out.valid_from && out.valid_until && out.valid_until < out.valid_from) {
-    problems.valid_until = 'The end date must be after the start date.';
+    problems.valid_until = 'Valid until must be on or after Valid from.';
   }
   return problems;
 }

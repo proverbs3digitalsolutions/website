@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-21 (QA round 44: section 57; D-126). Before that: 2026-10-21 (QA round 43: section 56; D-125). Before that: 2026-10-21 (QA round 42: section 55; D-124). Before that: 2026-10-21 (QA round 41: section 54; D-123). Before that: 2026-10-21 (QA round 40: section 53; D-122). Before that: 2026-10-21 (QA round 39: section 52; D-121). Before that: 2026-10-21 (QA round 38: section 51 and a note in 1489; D-120). Before that: 2026-10-21 (QA round 37: section 50 and the notes in 1, 29.11 and 48.2; D-119). Before that: 2026-10-21 (QA round 36: section 49 and the notes in 7.10, 17, 24, 30.9, 48.1, 48.2 and 48.3; D-118). Before that: 2026-10-21 (QA round 35: section 48 and the notes in 5.10, 29.11, 35.3, 44.3, 47.1 and 47.2; D-117). Before that: 2026-10-21 (QA round 34: section 47 and the notes in 2, 7.8, 22, 35.4 and 46; D-116). Before that: 2026-10-21 (QA round 33: section 46 and the notes in 26 and 44; D-115). Before that: 2026-10-21 (QA round 32: section 45 and the notes in 14 and 28.7; D-114). Before that: 2026-10-21 (QA round 31: section 44, the notes in 5.10 and 43.2; D-113). Before that: 2026-10-21 (QA round 30: section 43, the notes in 5, 41.2 and 42.2; D-112). Before that: 2026-10-21 (QA round 29: section 42, a line in 39.3 and the notes in 5.10, 14.9 and 25; D-111). Before that: 2026-10-21 (QA round 28: section 41 and the notes in 29.1, 39.2 and 40.2; D-110). Before that: 2026-10-21 (QA round 27: section 40 and the notes in 29.1 and 30.6; D-109). Before that: 2026-10-21 (QA round 26: section 39 and 33.1; D-108). Before that: 2026-10-21 (QA round 25: section 38, 5.10 and 30 corrected; D-107). Before that: 2026-10-21 (QA round 24: section 37; D-106). Before that: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
+Last updated: 2026-10-21 (QA round 45: section 58 and the notes in 1489 and 1867; D-127). Before that: 2026-10-21 (QA round 44: section 57; D-126). Before that: 2026-10-21 (QA round 43: section 56; D-125). Before that: 2026-10-21 (QA round 42: section 55; D-124). Before that: 2026-10-21 (QA round 41: section 54; D-123). Before that: 2026-10-21 (QA round 40: section 53; D-122). Before that: 2026-10-21 (QA round 39: section 52; D-121). Before that: 2026-10-21 (QA round 38: section 51 and a note in 1489; D-120). Before that: 2026-10-21 (QA round 37: section 50 and the notes in 1, 29.11 and 48.2; D-119). Before that: 2026-10-21 (QA round 36: section 49 and the notes in 7.10, 17, 24, 30.9, 48.1, 48.2 and 48.3; D-118). Before that: 2026-10-21 (QA round 35: section 48 and the notes in 5.10, 29.11, 35.3, 44.3, 47.1 and 47.2; D-117). Before that: 2026-10-21 (QA round 34: section 47 and the notes in 2, 7.8, 22, 35.4 and 46; D-116). Before that: 2026-10-21 (QA round 33: section 46 and the notes in 26 and 44; D-115). Before that: 2026-10-21 (QA round 32: section 45 and the notes in 14 and 28.7; D-114). Before that: 2026-10-21 (QA round 31: section 44, the notes in 5.10 and 43.2; D-113). Before that: 2026-10-21 (QA round 30: section 43, the notes in 5, 41.2 and 42.2; D-112). Before that: 2026-10-21 (QA round 29: section 42, a line in 39.3 and the notes in 5.10, 14.9 and 25; D-111). Before that: 2026-10-21 (QA round 28: section 41 and the notes in 29.1, 39.2 and 40.2; D-110). Before that: 2026-10-21 (QA round 27: section 40 and the notes in 29.1 and 30.6; D-109). Before that: 2026-10-21 (QA round 26: section 39 and 33.1; D-108). Before that: 2026-10-21 (QA round 25: section 38, 5.10 and 30 corrected; D-107). Before that: 2026-10-21 (QA round 24: section 37; D-106). Before that: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
 
 ---
 
@@ -1486,7 +1486,7 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 ### 34.1 Keyboard focus
 - **Any form with several wrong fields** puts focus on the first wrong field in the order the form shows it (for example Add tenant with a bad phone and a bad email focuses Phone).
 - **Phones, More sheet:** choosing a page from the sheet puts focus on that page's heading, also when the new page has the same heading text as the old one. Closing the sheet without going anywhere returns focus to the More button.
-- **Calendar:** after Block dates, Set price, New reservation from a cell, Remove block or a drag-move, focus returns to the redrawn cell that opened the menu (else the page heading). *Round 38 (D-120): a drag-move lands on the moved booking's bar.*
+- **Calendar:** after Block dates, Set price, New reservation from a cell, Remove block or a drag-move, focus returns to the redrawn cell that opened the menu (else the page heading). *Round 38 (D-120): a drag-move lands on the moved booking's bar (round 45: on every browser, D-127).*
 - **Quotes:** after **Cancel quote** focus lands on the page heading. An unknown quote link shows a **Not found** heading with focus on it.
 - **Filters:** **Clear all** and the chip remove buttons work on the first click even when a number box (for example Nights at least) was typed and not yet applied.
 
@@ -1864,7 +1864,7 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 
 ### 51.3 As designed
 - **Calendar booking bars** stay at least 24 px tall on a phone (D-89, D-95).
-- **After a calendar drag,** focus is on the moved booking's bar (annotated at 1489).
+- **After a calendar drag,** focus is on the moved booking's bar (annotated at 1489; round 45: on every browser, D-127).
 - **Continue to payment** on the booking page is off while the guest count is over the maximum, and the price summary says why (D-118).
 - **Managers** see the workspace's pricing rules without Edit or Remove, because only the owner changes rules that apply to every listing (BACKEND-SCHEMA section 7). A manager changes rules for the listings assigned to them only.
 - **The booking-page section** of Edit listing stays closed once a listing is on the booking page (D-104, 1529 unchanged).
@@ -1970,3 +1970,20 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 
 ### 57.6 As designed
 - **On a phone the conversation's buttons scroll with the page under the bottom bar;** the card page's Pay button follows the card fields.
+
+## 58. QA round 45 changes (D-127; 2026-10-21)
+
+### 58.1 Waiting buttons
+- **Every button that waits for the server: a press, then a change (typing, a paste, a tick, a choice), then a press at the same spot, counts however quick.** A double click or double tap with nothing changed between still counts once.
+
+### 58.2 Calendar drag-move
+- **After Move reservation (or a refused move, or Cancel), focus is on the booking's bar, on every browser.** The bar takes focus as its drag starts.
+
+### 58.3 New discount code
+- **Valid until before Valid from** shows "Valid until must be on or after Valid from." under Valid until. The same day is accepted.
+
+### 58.4 Pricing rules
+- **The Days box's label names it:** "Stay starts within this many days", "Stay starts more than this many days away" or "Gap is up to this many nights". Its messages say "Days".
+
+### 58.5 As designed
+- **A refusal on the guest booking and balance pages shows right above the button and moves it;** a second press within 600 ms does nothing (D-126).

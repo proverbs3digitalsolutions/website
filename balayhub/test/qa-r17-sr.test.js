@@ -11,6 +11,8 @@ const { startServer, client, sql, ownerAccount, manilaToday } = require('./helpe
 const PASSWORD = 'longenough1';
 // Money, contact details and notes must never appear in a result.
 const LEAK = /@|\+63|secret|1234\.56|1,234|₱/i;
+// Random record ids (the add-on id) are UUIDs, and a random UUID can contain "500" by chance. Ids are blanked before the text checks.
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 
 let srv; let owner; let staffA; let staffB; let manager; let longTerm;
 
@@ -182,8 +184,10 @@ test('a discount code or add-on item never shows its percent or amount', async (
   const code = await search(owner, 'SRSUMMER');
   assert.equal(group(code, 'discount_codes').items[0].sub, 'Active');
   const addon = await search(owner, 'Airport');
-  assert.equal(LEAK.test(JSON.stringify(group(addon, 'addons'))), false, JSON.stringify(group(addon, 'addons')));
-  assert.equal(/500|10%/.test(JSON.stringify(group(addon, 'addons'))), false);
+  // Blank out the add-on id first, so a random id that contains "500" is not read as a leaked price.
+  const shown = JSON.stringify(group(addon, 'addons')).replace(UUID, ' ');
+  assert.equal(LEAK.test(shown), false, shown);
+  assert.equal(/500|10%/.test(shown), false, shown);
 });
 
 test('an archived add-on is not found; an active add-on has no status line', async () => {

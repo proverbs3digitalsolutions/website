@@ -80,7 +80,7 @@ export function discountCodeProblems(d) {
   const percentOk = /^\d+$/.test(percentText) && Number(percentText) >= 1 && Number(percentText) <= 90;
   if (percent && amount) out[percentOk ? 'percent_off' : 'amount_off'] = 'Choose one: a percent off or an amount off, not both.';
   else if (!percent && !amount) out.percent_off = 'Set either a percent off or an amount off.';
-  if (d.valid_from && d.valid_until && d.valid_until < d.valid_from) out.valid_until = 'The end date must be after the start date.';
+  if (d.valid_from && d.valid_until && d.valid_until < d.valid_from) out.valid_until = 'Valid until must be on or after Valid from.';
   return Object.keys(out).length ? out : null;
 }
 

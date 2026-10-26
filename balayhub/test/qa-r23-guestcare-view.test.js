@@ -26,7 +26,7 @@ test('shape, both-or-neither and date order use the server wording', () => {
   assert.equal(discountCodeProblems({ code: 'ab', percent_off: '10' }).code, 'Use 3–20 letters, numbers or dashes, e.g. BALIK10.');
   assert.equal(discountCodeProblems({ code: 'BALIK10', percent_off: '10', amount_off: '50' }).percent_off, 'Choose one: a percent off or an amount off, not both.');
   assert.equal(discountCodeProblems({ code: 'BALIK10', percent_off: '10', amount_off: '0' }), null);
-  assert.equal(discountCodeProblems({ code: 'BALIK10', amount_off: '50', valid_from: '2026-11-02', valid_until: '2026-11-01' }).valid_until, 'The end date must be after the start date.');
+  assert.equal(discountCodeProblems({ code: 'BALIK10', amount_off: '50', valid_from: '2026-11-02', valid_until: '2026-11-01' }).valid_until, 'Valid until must be on or after Valid from.');
 });
 
 test('an empty code is left to the required check; a good form has no problems', () => {

@@ -567,8 +567,15 @@ function ignoreRepeatPress(first) {
   if (left <= 0) return;
   // A keyboard activation, assistive tech or a script's el.click() is a click with detail 0 and no press position: it is never a second press.
   const stop = (e) => { if (e.type === 'click' && e.detail === 0) return; if (isRepeatPress(first, e, Date.now())) { e.preventDefault(); e.stopImmediatePropagation(); } };
+  // A change the person makes after the press (typing a reason, ticking a box, picking an option) ends the guard: the next press is a new
+  // one (D-127). The first press may have been refused on the device and sent nothing ("Please enter a reason."), and its answer can't move
+  // anything after the person has changed the form. Only the person's own input counts (isTrusted): a view that fills a box and sends an
+  // input event (an AI draft, a template) keeps the guard.
+  const end = () => { clearTimeout(timer); for (const t of REPEAT_EVENTS) win.removeEventListener(t, stop, true); win.removeEventListener('input', changed, true); };
+  const changed = (e) => { if (e.isTrusted) end(); };
   for (const t of REPEAT_EVENTS) win.addEventListener(t, stop, true);
-  setTimeout(() => { for (const t of REPEAT_EVENTS) win.removeEventListener(t, stop, true); }, left);
+  win.addEventListener('input', changed, true);
+  const timer = setTimeout(end, left);
 }
 
 export function openModal({ title, body, onClose, wide }) {

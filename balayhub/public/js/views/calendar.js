@@ -188,9 +188,10 @@ export async function calendarView(el, { query }) {
           'data-focus-key': `cal-booking-${b.booking_id}`,
           type: 'button',
           draggable: canManage && !isBlock ? 'true' : null,
+          // The bar is the control used: it takes focus as the drag starts (some browsers don't focus a button on a mouse press), so the move question closes back onto it and the reload keeps it (D-120, D-127).
           ondragstart: (e) => {
             if (locked) { e.preventDefault(); toast(`This stay comes from ${CHANNEL_LABEL[b.channel] || 'a channel'}, so it can't be moved here. Change it on the channel.`); return; }
-            dragging = b; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', b.booking_id);
+            dragging = b; e.currentTarget.focus({ preventScroll: true }); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', b.booking_id);
           },
           ondragend: () => { dragging = null; grid.querySelectorAll('.is-drop').forEach((x) => x.classList.remove('is-drop')); },
           class: `cal-bar cal-bar--${isBlock ? 'block' : b.channel}${startIdx + 0.5 < 0 ? ' cut-left' : ''}${endIdx + 0.5 > data.days ? ' cut-right' : ''}`,
@@ -228,7 +229,7 @@ export async function calendarView(el, { query }) {
     if (!await confirmDialog({ title: 'Move this reservation?', text: `Move ${b.guest_name || 'this guest'} from ${from?.unit_name || 'this listing'} to ${to.unit_name}? The price stays the same.`, confirmText: 'Move reservation' })) return;
     // err.message is the server's reason: the stay or block in the way, or the field messages (already de-duplicated by api.js).
     try { await patch(`/reservations/${b.booking_id}`, { unit_id: to.unit_id }); toast('Reservation moved.'); } catch (err) { toast(err.message, 'error'); }
-    reload();
+    reload(`cal-booking-${b.booking_id}`);
   }
 
   function cellMenu(listing, date, price, rule, overridden) {
