@@ -58,7 +58,7 @@ test.before(async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bh-shell-'));
   fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}');
   fs.writeFileSync(path.join(dir, 'api.js'), 'export async function get() { return { enabled: true }; }\nexport async function post() { return {}; }\n');
-  fs.writeFileSync(path.join(dir, 'ui.js'), 'export const h = () => null;\nexport const icon = () => null;\nexport const toast = () => null;\n');
+  fs.writeFileSync(path.join(dir, 'ui.js'), 'export const h = () => null;\nexport const icon = () => null;\nexport const toast = () => null;\nexport const guardPress = () => {};\n');
   fs.writeFileSync(path.join(dir, 'app.js'), 'export const state = { user: null };\nexport const navigate = () => {};\n');
   fs.writeFileSync(path.join(dir, 'assistant.js'), ASSISTANT_SRC);
   assistant = await import(pathToFileURL(path.join(dir, 'assistant.js')));

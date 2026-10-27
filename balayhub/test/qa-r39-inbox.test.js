@@ -136,6 +136,7 @@ const STUBS = {
     'export const h = (...a) => L.h(...a);',
     'export const icon = (...a) => L.icon(...a);',
     'export const toast = (...a) => L.toast(...a);',
+    'export const guardPress = () => {};',
     'export const fmtDateTime = (...a) => L.fmtDateTime(...a);',
     'export const fmtDate = (...a) => L.fmtDate(...a);',
     'export const peso = (...a) => L.peso(...a);',

@@ -18,7 +18,7 @@ test.before(async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bh-assist-gate-'));
   fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}');
   fs.writeFileSync(path.join(dir, 'api.js'), 'export async function get() { globalThis.__assistGets = (globalThis.__assistGets || 0) + 1; return { enabled: true }; }\nexport async function post() { return {}; }\n');
-  fs.writeFileSync(path.join(dir, 'ui.js'), 'export const h = () => null;\nexport const icon = () => null;\nexport const toast = () => null;\n');
+  fs.writeFileSync(path.join(dir, 'ui.js'), 'export const h = () => null;\nexport const icon = () => null;\nexport const toast = () => null;\nexport const guardPress = () => {};\n');
   fs.writeFileSync(path.join(dir, 'app.js'), 'export const state = { user: null };\nexport const navigate = () => {};\n');
   fs.writeFileSync(path.join(dir, 'assistant.js'), SRC);
   app = await import(pathToFileURL(path.join(dir, 'app.js')));

@@ -18,8 +18,8 @@ async function run(d, consentChecked) {
   const row = { classList: { add() {} } };
   const others = { querySelectorAll: () => [] };
   const form = { elements: { consent: { checked: consentChecked }, accept_rules: { checked: true } } };
-  return new AsyncFunction('d', 'others', 'form', 'picked', 'r', 'rules', 'rulesAt', 't', 'ID_PHOTO_TYPE', 'EMAIL_RE', 'PHONE_RE', 'fileContentError',
-    `${block}; return problems;`)(d, others, form, [{ type: 'image/png' }], { id_count: 0 }, null, null, (s) => s, /^image\/(jpeg|png|webp)$/, EMAIL_RE, PHONE_RE, async () => null);
+  return new AsyncFunction('d', 'others', 'form', 'picked', 'r', 'rules', 'rulesAt', 't', 'ID_PHOTO_TYPE', 'EMAIL_RE', 'PHONE_RE', 'fileContentError', 'PHOTO_KINDS',
+    `${block}; return problems;`)(d, others, form, [{ type: 'image/png' }], { id_count: 0 }, null, null, (s) => s, /^image\/(jpeg|png|webp)$/, EMAIL_RE, PHONE_RE, async () => null, 'JPG, PNG or WEBP');
 }
 
 test('x@y, abc and an empty consent box give all three messages in one submit', async () => {

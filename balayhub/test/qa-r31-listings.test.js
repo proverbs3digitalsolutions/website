@@ -21,7 +21,7 @@ test('imports the content check and the upload line helpers', () => {
 test('empty check keeps its sentence and is coded; content check runs before shrink and the POST', () => {
   assert.match(modal, /if \(!f\.size\) throw new ApiError\('This file is empty\. Choose the file again\.', \{ status: 400, code: 'EMPTY_FILE' \}\)/);
   const empty = modal.indexOf('!f.size');
-  const content = modal.indexOf('await fileContentError(f)');
+  const content = modal.indexOf('await fileContentError(f, PHOTO_KINDS)');
   assert.ok(content > empty, 'content check follows the empty check');
   assert.ok(content < modal.indexOf('shrink(f)'), 'content check before shrink');
   assert.ok(content < modal.indexOf("api('POST'"), 'content check before the POST');

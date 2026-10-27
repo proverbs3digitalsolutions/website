@@ -278,11 +278,11 @@ export async function stayReportsView(el, { query = {} }) {
     box.replaceChildren(
       h('div', { class: 'card' },
         h('div', { class: 'grid grid--4 stats stats--stack-phone' },
-          stat('Revenue', peso(t.revenue), [`${t.stays} check-in${t.stays === 1 ? '' : 's'} · ${t.nights} nights`, h('br'), `Rooms ${peso(t.accommodation)}`, h('br'), `Cleaning and extras ${peso(t.fees)}`]),
+          stat('Revenue', peso(t.revenue), [`${t.stays} check-in${t.stays === 1 ? '' : 's'} · ${t.nights} night${t.nights === 1 ? '' : 's'}`, h('br'), `Rooms ${peso(t.accommodation)}`, h('br'), `Cleaning and extras ${peso(t.fees)}`]),
           stat('Occupancy', pct(t.occupancy), 'booked nights ÷ open nights'),
           stat('Avg nightly rate', peso(t.adr), `RevPAR ${peso(t.revpar)}`),
           stat('Net (before refunds)', peso(t.net), r.expenses_excluded ? `${peso(t.channel_fees)} channel fees · expenses not split by channel` : `${peso(t.channel_fees)} channel fees · ${peso(t.expenses)} expenses`)),
-        h('p', { class: 'muted small' }, `Average stay ${t.avg_stay} nights (whole stays, check-ins in this period)${t.cancelled ? ` · ${t.cancelled} cancelled` : ''}.`),
+        h('p', { class: 'muted small' }, `Average stay ${t.avg_stay} night${Number(t.avg_stay) === 1 ? '' : 's'} (whole stays, check-ins in this period)${t.cancelled ? ` · ${t.cancelled} cancelled` : ''}.`),
         // Channel stays with no fee make the net look higher than it is (per channel, linked to those bookings).
         ...missingFeeNotes(r.missing_fees, (c) => `#/reservations${qs({ view: 'all', channel: c, from: r.from, to: lastDay(r.to_exclusive), property_id: filters.property_id, unit_id: filters.unit_id })}`),
         h('p', { class: 'muted small' }, 'Refunds aren\'t deducted here. Profit and loss shows the net after refunds.'),

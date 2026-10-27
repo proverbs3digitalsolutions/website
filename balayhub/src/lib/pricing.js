@@ -121,7 +121,7 @@ function windowRules(ctx, checkIn, checkOut) {
   const farOut = rules.far_out;
   const gap = rules.gap_night;
   if (lastMinute && lead >= 0 && lead <= lastMinute.days) {
-    out.push({ kind: 'last_minute', label: `Last minute: check-in within ${lastMinute.days} days`, adjust_pct: lastMinute.adjust_pct });
+    out.push({ kind: 'last_minute', label: `Last minute: check-in within ${lastMinute.days} day${Number(lastMinute.days) === 1 ? '' : 's'}`, adjust_pct: lastMinute.adjust_pct });
   } else if (farOut && lead > farOut.days) {
     out.push({ kind: 'far_out', label: `Booked early: check-in more than ${farOut.days} days away`, adjust_pct: farOut.adjust_pct });
   }

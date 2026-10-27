@@ -111,6 +111,7 @@ const STUBS = {
     'export const h = (...a) => L.h(...a);',
     'export const icon = (...a) => L.icon(...a);',
     'export const toast = (...a) => L.toast(...a);',
+    'export const guardPress = () => {};',
     'export const fmtDateTime = (...a) => L.fmtDateTime(...a);',
     'export const confirmDialog = (...a) => L.confirmDialog(...a);',
     "export const peso = () => ''; export const fmtDate = () => ''; export const badge = () => null; export const field = () => null;",

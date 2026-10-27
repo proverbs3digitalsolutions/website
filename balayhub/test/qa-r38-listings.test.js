@@ -226,6 +226,7 @@ function standIn() {
     api: (method, url, query, opts) => { const d = deferred(); log.apis.push({ method, url, opts, d }); return d.p; },
     ApiError,
     fileContentError: async () => null,
+    PHOTO_KINDS: 'JPG, PNG or WEBP',
     fileRefused: (err) => ['EMPTY_FILE', 'BAD_FILE_CONTENT', 'UNSUPPORTED_FILE'].includes(err?.code) || err?.status === 413 || err?.status === 415,
     // The real uploadField focuses the box when it shows a refusal (ui.js), so the stub does too.
     uploadField: (input) => ({ wrap: h('div', { class: 'field' }, input), show: (msg) => { log.shown.push(msg); input.focus(); }, clear() {} }),

@@ -57,12 +57,15 @@ async function checkMentions(user, conv, text) {
   for (const m of text.matchAll(MENTION_RE)) typed.set(m[2].toLowerCase(), m[1]);
   if (!typed.size) return [];
   const propertyId = await push.propertyOfBooking(conv.booking_id);
+  // in_scope: the caller may see this person's name (an owner sees everyone; a manager, owners and the people sharing a property, D-130).
   const { rows } = await query(
     `SELECT u.user_id, u.full_name, (u.role = 'owner' OR EXISTS (SELECT 1 FROM property_assignments pa
-              WHERE pa.user_id = u.user_id AND pa.property_id = $3)) AS can_see
+              WHERE pa.user_id = u.user_id AND pa.property_id = $3)) AS can_see,
+            (NOT $4::boolean OR u.role = 'owner' OR u.user_id = $5 OR EXISTS (SELECT 1 FROM property_assignments pa
+              JOIN property_assignments mine ON mine.property_id = pa.property_id AND mine.user_id = $5 WHERE pa.user_id = u.user_id)) AS in_scope
        FROM users u WHERE u.organization_id = $1 AND u.role IN ('owner', 'manager') AND u.account_status = 'active'
         AND u.user_id = ANY($2::uuid[])`,
-    [user.organization_id, [...typed.keys()], propertyId]);
+    [user.organization_id, [...typed.keys()], propertyId, user.role !== 'owner', user.user_id]);
   const people = new Map(rows.map((r) => [r.user_id, r]));
   // Staff (and cleaners) exist in the workspace but can't be mentioned: say so rather than the general refusal.
   const { rows: others } = await query(
@@ -74,7 +77,8 @@ async function checkMentions(user, conv, text) {
   for (const id of typed.keys()) {
     const p = people.get(id);
     if (!p) problems.add(known.has(id) ? 'Only owners and managers can be mentioned.' : "That person can't be mentioned. Pick a name from the @ list.");
-    else if (!p.can_see) problems.add(`${p.full_name} can't see this reservation`);
+    // A person outside the caller's properties is not named: the general refusal, as for an unknown id (D-131).
+    else if (!p.can_see) problems.add(p.in_scope ? `${p.full_name} can't see this reservation` : "That person can't be mentioned. Pick a name from the @ list.");
     else mentions.push({ user_id: p.user_id, full_name: p.full_name });
   }
   if (problems.size) throw validationError({ body: [...problems].join(' ') });
@@ -292,10 +296,13 @@ router.patch('/inbox/:id', ah(async (req, res) => {
     if (body.assigned_to) {
       const member = await one(
         `SELECT u.user_id, (u.role = 'owner' OR EXISTS (SELECT 1 FROM property_assignments pa
-              WHERE pa.user_id = u.user_id AND pa.property_id = $3)) AS can_see
+              WHERE pa.user_id = u.user_id AND pa.property_id = $3)) AS can_see,
+              (NOT $4::boolean OR u.role = 'owner' OR u.user_id = $5 OR EXISTS (SELECT 1 FROM property_assignments pa
+                JOIN property_assignments mine ON mine.property_id = pa.property_id AND mine.user_id = $5 WHERE pa.user_id = u.user_id)) AS in_scope
            FROM users u WHERE u.user_id = $1 AND u.organization_id = $2 AND u.role IN ('owner', 'manager') AND u.account_status = 'active'`,
-        [body.assigned_to, req.user.organization_id, await push.propertyOfBooking(conv.booking_id)]);
-      if (!member) throw validationError({ assigned_to: 'Choose an owner or manager in this workspace.' });
+        [body.assigned_to, req.user.organization_id, await push.propertyOfBooking(conv.booking_id), req.user.role !== 'owner', req.user.user_id]);
+      // A person outside the caller's properties gets the same answer as someone not in the workspace (D-131).
+      if (!member || !member.in_scope) throw validationError({ assigned_to: 'Choose an owner or manager in this workspace.' });
       if (!member.can_see) throw validationError({ assigned_to: "This person can't see this reservation's property." });
     }
     set('assigned_to', body.assigned_to);

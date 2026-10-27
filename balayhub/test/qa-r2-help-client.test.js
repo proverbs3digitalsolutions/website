@@ -22,7 +22,7 @@ test.before(async () => {
   fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}');
   fs.writeFileSync(path.join(dir, 'api.js'),
     'export const calls = [];\nexport async function get(p) { calls.push(["GET", p]); return { enabled: true }; }\nexport async function post(p) { calls.push(["POST", p]); return {}; }\n');
-  fs.writeFileSync(path.join(dir, 'ui.js'), 'export const h = () => null;\nexport const icon = () => null;\nexport const toast = () => null;\n');
+  fs.writeFileSync(path.join(dir, 'ui.js'), 'export const h = () => null;\nexport const icon = () => null;\nexport const toast = () => null;\nexport const guardPress = () => {};\n');
   fs.writeFileSync(path.join(dir, 'app.js'), 'export const state = { user: null };\nexport const navigate = () => {};\n');
   fs.writeFileSync(path.join(dir, 'assistant.js'), ASSISTANT_SRC);
   api = await import(pathToFileURL(path.join(dir, 'api.js')));

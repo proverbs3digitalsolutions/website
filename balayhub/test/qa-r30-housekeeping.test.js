@@ -12,13 +12,13 @@ const path = require('node:path');
 const src = fs.readFileSync(path.join(__dirname, '../public/js/views/housekeeping.js'), 'utf8');
 const EMPTY = 'This file is empty. Choose the file again.';
 const TYPE = 'Upload a JPG, PNG or WEBP photo up to 10 MB.';
-const CONTENT = "This file isn't a real PDF, JPG, PNG or WEBP. Choose the file again.";
+const CONTENT = "This file isn't a real JPG, PNG or WEBP. Choose the file again.";
 
 function load(contentStub) {
   const p = src.match(/export function photoProblem[\s\S]*?\n}\n/);
   const c = src.match(/export async function photoCheck[\s\S]*?\n}\n/);
   assert.ok(p && c, 'photoProblem and photoCheck are exported');
-  return new Function('T', 'fileContentError', `${p[0]}${c[0]}; return photoCheck;`.replaceAll('export ', ''))((s) => s, contentStub);
+  return new Function('T', 'fileContentError', 'PHOTO_KINDS', `${p[0]}${c[0]}; return photoCheck;`.replaceAll('export ', ''))((s) => s, contentStub, 'JPG, PNG or WEBP');
 }
 const fn = (name) => src.slice(src.indexOf(`function ${name}(`), src.indexOf('\nfunction ', src.indexOf(`function ${name}(`) + 1));
 
@@ -52,5 +52,5 @@ test('the Add photo catch maps the content refusal before the type and size', ()
 });
 
 test('the Taglish dictionary has the content sentence', () => {
-  assert.ok(src.includes(`"${CONTENT}": 'Hindi totoong PDF, JPG, PNG o WEBP ang file na ito. Piliin ulit ang file.'`));
+  assert.ok(src.includes(`"${CONTENT}": 'Hindi totoong JPG, PNG o WEBP ang file na ito. Piliin ulit ang file.'`));
 });

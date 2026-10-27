@@ -188,10 +188,11 @@ async function newQuoteModal(listings, onSaved) {
     if (!picks.size) addonBox.replaceChildren(h('p', { class: 'muted small' }, 'No add-ons for this listing.'));
   }
   // Once the host types a price, a date change keeps it; the rate-card price is offered as a button instead.
-  let edited = false; let rate = null;
+  // Each box keeps its own typed mark: a typed Accommodation does not keep an old Cleaning fee suggestion (D-131).
+  const typed = new Set(); let rate = null;
   const useRate = h('button', { class: 'btn btn--secondary btn--sm', type: 'button', hidden: true, onclick: () => {
     el('accommodation_total').value = rate.accommodation_total ?? ''; el('cleaning_fee').value = rate.cleaning_fee ?? '';
-    edited = false; useRate.hidden = true; drawTotal();
+    typed.clear(); useRate.hidden = true; drawTotal();
   } });
   preview.after(useRate);
   async function loadPreview() {
@@ -204,14 +205,14 @@ async function newQuoteModal(listings, onSaved) {
       const p = await get(`/units/${unit}/price-preview${qs({ check_in: el('check_in').value, check_out: el('check_out').value, guests: guests() })}`);
       rate = p;
       const stay = rateStay(p);
-      if (edited) {
+      if (typed.has('accommodation_total')) {
         useRate.hidden = !rateOffer(el('accommodation_total').value, stay);
         if (!useRate.hidden) useRate.textContent = `Use rate-card price ${peso(stay)}`;
       } else {
         // With no rate for some nights the box stays empty for the host to type an amount.
         el('accommodation_total').value = stay ?? '';
-        el('cleaning_fee').value = p.cleaning_fee ?? '';
       }
+      if (!typed.has('cleaning_fee')) el('cleaning_fee').value = p.cleaning_fee ?? '';
       const warn = p.available ? '' : ' Warning: these dates are already booked, so this quote cannot be created.';
       preview.textContent = p.missing_rates
         ? `This listing has no nightly rate for some nights. Enter the total yourself.${warn}`
@@ -220,13 +221,13 @@ async function newQuoteModal(listings, onSaved) {
     } catch (e) {
       // The price filled in for the old dates is not a price for these: empty the boxes the host has not typed in (D-130).
       rate = null;
-      if (!edited) { el('accommodation_total').value = ''; el('cleaning_fee').value = ''; }
+      for (const n of ['accommodation_total', 'cleaning_fee']) if (!typed.has(n)) el(n).value = '';
       preview.textContent = `Couldn't price these dates: ${e.message} Enter the amounts yourself.`;
     }
     drawTotal();
   }
   for (const n of ['unit_id', 'check_in', 'check_out', 'num_guests']) el(n).addEventListener('change', () => { if (n === 'unit_id') { drawAddons(); fitGuests(); } loadPreview(); });
-  for (const n of ['accommodation_total', 'cleaning_fee', 'discount_amount']) el(n).addEventListener('input', () => { if (n !== 'discount_amount') edited = true; drawTotal(); });
+  for (const n of ['accommodation_total', 'cleaning_fee', 'discount_amount']) el(n).addEventListener('input', () => { if (n !== 'discount_amount') typed.add(n); drawTotal(); });
   fitGuests(); drawAddons(); drawTotal();
 }
 

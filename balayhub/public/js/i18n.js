@@ -223,6 +223,7 @@ const SERVER_TL = [
   [/^Payment by transfer is not available for this booking\. Please contact your host\.$/, () => 'Hindi available ang bayad sa transfer para sa booking na ito. Kontakin ang iyong host.'],
   [/^This booking was cancelled, so no payment can be sent for it\.$/, () => 'Na-cancel ang booking na ito, kaya hindi na puwedeng magpadala ng bayad para dito.'],
   [/^This booking was cancelled, so add-ons cannot be booked on it\.$/, () => 'Na-cancel ang booking na ito, kaya hindi na puwedeng mag-book ng add-ons dito.'],
+  [/^Add-ons can't be booked for this stay right now\. Please contact your host\.$/, () => 'Hindi muna puwedeng mag-book ng add-ons para sa stay na ito. Kontakin ang iyong host.'], // round 49 (D-131)
   [/^Add-ons can only be booked up to check-in day\.$/, () => 'Puwede lang mag-book ng add-ons hanggang sa araw ng check-in.'],
   [/^Choose at least one add-on\.$/, () => 'Pumili ng kahit isang add-on.'],
   [/^The balance is too small to pay online\. Please pay your host directly\.$/, () => 'Masyadong maliit ang balanse para bayaran online. Direktang magbayad sa host mo.'],

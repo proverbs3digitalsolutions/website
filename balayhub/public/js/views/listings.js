@@ -1,8 +1,8 @@
 // Listings (units rented per night), cleaning status and channel connections.
 
-import { get, post, patch, qs, api, ApiError, fileContentError } from '../api.js';
+import { get, post, patch, qs, api, ApiError, fileContentError, PHOTO_KINDS } from '../api.js';
 import {
-  h, icon, peso, pesoShort, parseAmount, fmtDate, fmtDateTime, badge, field, formModal, makeForm, openModal, confirmDialog, emptyState, toast, options, todayManila, manilaDay, clearErrors, showErrors, uploadField, fileRefused,
+  guardPress, h, icon, peso, pesoShort, parseAmount, fmtDate, fmtDateTime, badge, field, formModal, makeForm, openModal, confirmDialog, emptyState, toast, options, todayManila, manilaDay, clearErrors, showErrors, uploadField, fileRefused,
 } from '../ui.js';
 import { state } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed, apiFilters } from '../filters.js';
@@ -339,7 +339,7 @@ async function photosModal(listing) {
       try {
         for (const [i, f] of files.entries()) {
           if (!f.size) throw new ApiError('This file is empty. Choose the file again.', { status: 400, code: 'EMPTY_FILE' }); // D-111 (round 29): a 0-byte file is refused before sending
-          const bad = await fileContentError(f); // D-112: a renamed file is refused before it is shrunk or sent
+          const bad = await fileContentError(f, PHOTO_KINDS); // D-112: a renamed file is refused before it is shrunk or sent
           if (bad) throw new ApiError(bad, { status: 415, code: 'BAD_FILE_CONTENT' });
           status.textContent = `Uploading ${i + 1} of ${files.length}…`;
           const blob = await shrink(f);
@@ -431,6 +431,8 @@ async function channelsModal(listing, onChange, { focusFeedId } = {}) {
       field({ name: 'channel', label: 'Channel', type: 'select', value: '', placeholderOption: 'Choose the channel', options: [['airbnb', 'Airbnb'], ['booking', 'Booking.com'], ['agoda', 'Agoda'], ['vrbo', 'Vrbo'], ['expedia', 'Expedia'], ['tripcom', 'Trip.com'], ['other', 'Other (any site with a calendar link)']] }),
       field({ name: 'url', label: 'Calendar link from Airbnb, Booking.com or Agoda (ends in .ics)', type: 'url', placeholder: 'https://www.airbnb.com/calendar/ical/…', hint: 'In Airbnb or Booking.com, look for Export calendar or Sync calendars and copy the link that ends in .ics.' })),
     h('div', { class: 'form-actions' }, h('button', { class: 'btn btn--primary', type: 'submit' }, 'Connect calendar')));
+  // Its own form, not makeForm: the press swallows its own second press, so it can't close the question the answer draws (D-129, D-131).
+  addForm.querySelector('button[type=submit]').addEventListener('click', (e) => guardPress(e, e.currentTarget));
   addForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = addForm.querySelector('button[type=submit]');

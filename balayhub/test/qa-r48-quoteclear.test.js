@@ -139,5 +139,5 @@ test('an amount the host typed stays when the price check is refused', async () 
 test('source: the catch block clears the rate and the untyped boxes', () => {
   const block = quotesSrc.slice(quotesSrc.indexOf('} catch (e) {', quotesSrc.indexOf('async function loadPreview')));
   assert.match(block.slice(0, 500), /rate = null;/);
-  assert.match(block.slice(0, 500), /if \(!edited\) \{ el\('accommodation_total'\)\.value = ''; el\('cleaning_fee'\)\.value = ''; \}/);
+  assert.match(block.slice(0, 500), /for \(const n of \['accommodation_total', 'cleaning_fee'\]\) if \(!typed\.has\(n\)\) el\(n\)\.value = '';/);
 });

@@ -806,6 +806,7 @@ section[aria-labelledby="delete-ws-title"] { margin-top: 24px; padding-top: 24px
 .inbox__head h2 { font-size: 1.1rem; }
 .inbox__head-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .inbox__head-actions select.input { width: auto; max-width: 200px; }
+@media (max-width: 559px) { .inbox__head-actions select.input { flex: 1 1 100%; max-width: none; } } /* a name fits on a phone (D-131) */
 .inbox__messages { display: flex; flex-direction: column; gap: 12px; padding: 16px; min-height: 160px; overflow: auto; background: var(--surface-2); }
 @media (max-width: 959px) { .inbox__messages { max-height: none; } }
 .msg { max-width: min(560px, 88%); padding: 10px 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); }
@@ -1212,7 +1213,6 @@ code.var { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; borde
 .themeswitch { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; border: 1px solid var(--line-2); border-radius: 99px; padding: 3px; gap: 2px; background: var(--surface); }
 .themeswitch button { white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; background: transparent; color: var(--muted); border-radius: 99px; padding: 6px 12px; font: inherit; font-size: .88rem; font-weight: 650; cursor: pointer; }
 .themeswitch button[aria-checked="true"] { background: var(--forest); color: #fff; }
-}
 .themeswitch button > [aria-hidden] { display: inline-flex; font-size: 1.1rem; line-height: 1; }
 .themeswitch button > [aria-hidden] svg { width: 18px; height: 18px; flex: none; }
 .themeswitch button[aria-checked="false"] > [aria-hidden] { color: var(--text); }

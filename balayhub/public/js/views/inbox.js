@@ -3,7 +3,7 @@
 
 import { get, post, patch, qs } from '../api.js';
 import {
-  h, icon, peso, fmtDate, fmtDateTime, badge, field, formModal, confirmDialog, emptyState, toast, openModal, todayManila,
+  h, icon, peso, fmtDate, fmtDateTime, badge, field, formModal, confirmDialog, emptyState, toast, openModal, todayManila, guardPress,
 } from '../ui.js';
 import { state, navigate } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed, apiFilters } from '../filters.js';
@@ -486,6 +486,9 @@ function composer(c, templates, status, rerender, assignees = []) {
   ['input', 'change'].forEach((ev) => sendAt.addEventListener(ev, () => { sendAt.removeAttribute('aria-invalid'); err.textContent = ''; }));
   const modeHint = h('div', { class: 'small muted', role: 'status' });
   const sendBtn = h('button', { class: 'btn btn--primary', type: 'submit' }, 'Send');
+  // The composer is its own form, not makeForm: its press swallows its own second press too, so a quick double press can't land on the
+  // redrawn, empty composer and say "Write a note first." after the note saved (D-126, D-131). Enter and a change after the press are untouched (D-127).
+  sendBtn.addEventListener('click', (e) => guardPress(e, sendBtn));
   const picked = new Map();
   if (mode === 'note') { const d = decodeMentions(savedDraft); savedDraft = d.text; d.picked.forEach((id, n) => picked.set(n, id)); }
   body.value = savedDraft;

@@ -80,7 +80,7 @@ test('the Photos card says No photos yet. itself when it is empty', () => {
 
 // #19: a photo refused for type (UNSUPPORTED_FILE) or size (413, the client's 10 MB check) says what to send.
 test('a photo refused for type or size says what to send, in the workspace language', () => {
-  assert.match(src, /const msg = err\.code === 'EMPTY_FILE' \? T\('This file is empty\. Choose the file again\.'\) : err\.code === 'BAD_FILE_CONTENT' \|\| err\.message === "The file content doesn't match its type\." \? T\("This file isn't a real PDF, JPG, PNG or WEBP\. Choose the file again\."\) : err\.code === 'UNSUPPORTED_FILE' \|\| err\.status === 413 \? T\('Upload a JPG, PNG or WEBP photo up to 10 MB\.'\) : err\.message; if \(fileRefused\(err\) \|\| err\.message === "The file content doesn't match its type\."\) up\.show\(msg\); else toast\(err\.message, 'error'\)/);
+  assert.match(src, /const msg = err\.code === 'EMPTY_FILE' \? T\('This file is empty\. Choose the file again\.'\) : err\.code === 'BAD_FILE_CONTENT' \|\| err\.message === "The file content doesn't match its type\." \? T\("This file isn't a real JPG, PNG or WEBP\. Choose the file again\."\) : err\.code === 'UNSUPPORTED_FILE' \|\| err\.status === 413 \? T\('Upload a JPG, PNG or WEBP photo up to 10 MB\.'\) : err\.message; if \(fileRefused\(err\) \|\| err\.message === "The file content doesn't match its type\."\) up\.show\(msg\); else toast\(err\.message, 'error'\)/);
 });
 
 // #37, #19 and N2: the new and reused strings are Taglish for cleaners, and t() returns that wording.

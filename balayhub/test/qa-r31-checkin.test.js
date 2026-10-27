@@ -20,10 +20,10 @@ test('imports fileContentError and fileRefused', () => {
 test('the content check runs after the type check, before anything is posted, into problems.id_photos', () => {
   const empty = submit.indexOf('f.size === 0');
   const type = submit.indexOf('ID_PHOTO_TYPE.test');
-  const content = submit.indexOf('await fileContentError(f)');
+  const content = submit.indexOf('await fileContentError(f, PHOTO_KINDS)');
   assert.ok(empty > -1 && type > empty && content > type, 'empty, then type, then content');
   assert.ok(content < submit.indexOf('await post('), 'content check precedes the save');
-  assert.match(submit, /const bad = await fileContentError\(f\); if \(bad\) \{ problems\.id_photos = t\(bad\); break; \}/);
+  assert.match(submit, /const bad = await fileContentError\(f, PHOTO_KINDS\); if \(bad\) \{ problems\.id_photos = t\(bad\); break; \}/);
   assert.ok(submit.indexOf('f.size === 0') < submit.indexOf('shrinkImage(f)'), 'empty check before shrinkImage');
 });
 
@@ -38,6 +38,6 @@ test('a refused photo after the draft was saved goes on the ID box with no error
 });
 
 test('the two Taglish lines exist', () => {
-  assert.ok(src.includes(`"This file isn't a real PDF, JPG, PNG or WEBP. Choose the file again.": 'Hindi totoong PDF, JPG, PNG o WEBP ang file na ito. Piliin ulit ang file.',`));
+  assert.ok(src.includes(`"This file isn't a real JPG, PNG or WEBP. Choose the file again.": 'Hindi totoong JPG, PNG o WEBP ang file na ito. Piliin ulit ang file.',`));
   assert.ok(src.includes(`'Upload a photo (JPG, PNG or WEBP) up to 10 MB.': 'Mag-upload ng litrato (JPG, PNG o WEBP) na hanggang 10 MB.',`));
 });

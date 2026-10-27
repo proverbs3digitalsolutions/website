@@ -1,6 +1,6 @@
 // Housekeeping: cleaning tasks for departing stays, checklist, photos, assignment.
 
-import { get, post, patch, api, uploadFile, fileContentError, qs, ApiError } from '../api.js';
+import { get, post, patch, api, uploadFile, fileContentError, PHOTO_KINDS, qs, ApiError } from '../api.js';
 import {
   h, icon, manilaDay, fmtDate, fmtDateTime, badge, field, formModal, confirmDialog, emptyState, errorState, toast, todayManila, filesList, openModal, peso, uploadField, fileRefused,
 } from '../ui.js';
@@ -35,7 +35,7 @@ extendTranslations({
   'Add photo': 'Magdagdag ng litrato', 'Photo uploaded.': 'Na-upload na ang litrato.',
   'Choose a photo': 'Pumili ng litrato', 'No photos yet.': 'Wala pang litrato.', 'Upload a JPG, PNG or WEBP photo up to 10 MB.': 'Mag-upload ng JPG, PNG o WEBP na litrato, hanggang 10 MB.',
   'This file is empty. Choose the file again.': 'Walang laman ang file. Piliin ulit ang file.',
-  "This file isn't a real PDF, JPG, PNG or WEBP. Choose the file again.": 'Hindi totoong PDF, JPG, PNG o WEBP ang file na ito. Piliin ulit ang file.',
+  "This file isn't a real JPG, PNG or WEBP. Choose the file again.": 'Hindi totoong JPG, PNG o WEBP ang file na ito. Piliin ulit ang file.',
   'Report damage': 'I-report ang sira', 'Found an item': 'May nakitang gamit', 'Supplies used': 'Mga gamit na nagamit', 'Something broken?': 'May sira ba?',
   'Description': 'Paglalarawan', 'What happened?': 'Ano ang nangyari?', 'Send report': 'Ipadala ang report',
   'Damage reported. Thank you.': 'Na-report na ang sira. Salamat.',
@@ -243,7 +243,7 @@ export function photoProblem(file) {
 export async function photoCheck(file) {
   const p = photoProblem(file);
   if (p) return p;
-  const c = await fileContentError(file);
+  const c = await fileContentError(file, PHOTO_KINDS);
   return c ? T(c) : null;
 }
 
@@ -753,7 +753,7 @@ export async function housekeepingDetailView(el, { params, rerender }) {
       if (bad) { upload.value = ''; up.show(bad); return; }
       uploading = true;
       upload.setAttribute('aria-disabled', 'true');
-      try { await uploadFile('cleaning', t.task_id, upload.files[0]); upload.value = ''; toast(T('Photo uploaded.')); rerender(); } catch (err) { const msg = err.code === 'EMPTY_FILE' ? T('This file is empty. Choose the file again.') : err.code === 'BAD_FILE_CONTENT' || err.message === "The file content doesn't match its type." ? T("This file isn't a real PDF, JPG, PNG or WEBP. Choose the file again.") : err.code === 'UNSUPPORTED_FILE' || err.status === 413 ? T('Upload a JPG, PNG or WEBP photo up to 10 MB.') : err.message; if (fileRefused(err) || err.message === "The file content doesn't match its type.") up.show(msg); else toast(err.message, 'error'); upload.value = ''; } finally { uploading = false; upload.removeAttribute('aria-disabled'); }
+      try { await uploadFile('cleaning', t.task_id, upload.files[0]); upload.value = ''; toast(T('Photo uploaded.')); rerender(); } catch (err) { const msg = err.code === 'EMPTY_FILE' ? T('This file is empty. Choose the file again.') : err.code === 'BAD_FILE_CONTENT' || err.message === "The file content doesn't match its type." ? T("This file isn't a real JPG, PNG or WEBP. Choose the file again.") : err.code === 'UNSUPPORTED_FILE' || err.status === 413 ? T('Upload a JPG, PNG or WEBP photo up to 10 MB.') : err.message; if (fileRefused(err) || err.message === "The file content doesn't match its type.") up.show(msg); else toast(err.message, 'error'); upload.value = ''; } finally { uploading = false; upload.removeAttribute('aria-disabled'); }
     },
   });
   const up = uploadField(upload);

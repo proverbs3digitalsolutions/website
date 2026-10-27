@@ -1,7 +1,7 @@
 // Guest check-in (registration) form, opened from the private link the host sends.
 // Also: the host's "Guest check-in form" card on the reservation page.
 
-import { get, post, api, ApiError, fileContentError } from '../api.js';
+import { get, post, api, ApiError, fileContentError, PHOTO_KINDS } from '../api.js';
 import { h, brand, field, fmtDateTime, toast, clearErrors, showErrors, readForm, confirmDialog, fileRefused, EMAIL_RE, PHONE_RE, guardPress } from '../ui.js';
 import { t, tServer, tFields, extendTranslations, initGuestLang, langToggle, keepFormValues, restoreFormValues, fmtDateL, fmtDateTimeL } from '../i18n.js';
 import { copyText } from './quotes.js';
@@ -35,7 +35,7 @@ extendTranslations({
   'Remove guest {n}': 'Alisin ang guest {n}',
   'Choose the photos again after changing the language.': 'Piliin ulit ang mga litrato pagkatapos magpalit ng wika.',
   'Add a photo of a valid ID for at least one guest.': 'Mag-upload ng litrato ng valid ID ng kahit isang guest.',
-  "This file isn't a real PDF, JPG, PNG or WEBP. Choose the file again.": 'Hindi totoong PDF, JPG, PNG o WEBP ang file na ito. Piliin ulit ang file.',
+  "This file isn't a real JPG, PNG or WEBP. Choose the file again.": 'Hindi totoong JPG, PNG o WEBP ang file na ito. Piliin ulit ang file.',
   'Upload a photo (JPG, PNG or WEBP) up to 10 MB.': 'Mag-upload ng litrato (JPG, PNG o WEBP) na hanggang 10 MB.',
   'Your answers are saved. Add a photo of your ID to finish registering.': 'Naka-save na ang mga sagot mo. Mag-upload ng litrato ng ID mo para matapos ang registration.',
 });
@@ -221,7 +221,7 @@ export async function guestCheckinView(el, { params }, kept) {
     if (blankGuests.length) problems.guests = t('Enter the name of each guest, or remove the empty row.');
     if (picked.some((f) => f.size === 0)) problems.id_photos = t('This file is empty. Choose the file again.'); // D-111: a 0-byte photo is refused here, before anything is sent
     else if (picked.some((f) => !ID_PHOTO_TYPE.test(f.type))) problems.id_photos = t('Your ID must be a JPG, PNG or WEBP photo.');
-    else for (const f of picked) { const bad = await fileContentError(f); if (bad) { problems.id_photos = t(bad); break; } } // D-113: a renamed file is refused before the answers are saved
+    else for (const f of picked) { const bad = await fileContentError(f, PHOTO_KINDS); if (bad) { problems.id_photos = t(bad); break; } } // D-113: a renamed file is refused before the answers are saved
     if (!picked.length && !(r?.id_count > 0)) problems.id_photos = t('Add a photo of a valid ID for at least one guest.');
     if (rules && !rulesAt && !form.elements.accept_rules.checked) problems.accept_rules = t('Please read and agree to the house rules.');
     if (!form.elements.consent.checked) problems.consent = t('Please agree so your host can register you with the building.');

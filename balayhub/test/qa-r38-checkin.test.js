@@ -74,6 +74,7 @@ function page() {
     EMAIL_RE: /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/,
     PHONE_RE: /^[+\d][\d\s()-]{6,19}$/,
     fileContentError: async () => null,
+    PHOTO_KINDS: 'JPG, PNG or WEBP',
     fileRefused: () => false,
     ApiError,
     submit,

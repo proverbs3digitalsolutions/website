@@ -13,7 +13,7 @@ const path = require('node:path');
 const src = fs.readFileSync(path.join(__dirname, '../public/js/views/stayreports.js'), 'utf8');
 
 test('#34: the average stay line says it counts whole stays, with check-ins in the period', () => {
-  assert.match(src, /Average stay \$\{t\.avg_stay\} nights \(whole stays, check-ins in this period\)/);
+  assert.match(src, /Average stay \$\{t\.avg_stay\} night\$\{Number\(t\.avg_stay\) === 1 \? '' : 's'\} \(whole stays, check-ins in this period\)/);
   assert.doesNotMatch(src, /Average stay \$\{t\.avg_stay\} nights\$\{/);
 });
 

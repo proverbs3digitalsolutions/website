@@ -99,10 +99,13 @@ const SIGNATURES = {
   'image/webp': (b) => String.fromCharCode(...b.slice(0, 4)) === 'RIFF' && String.fromCharCode(...b.slice(8, 12)) === 'WEBP',
   'application/pdf': (b) => String.fromCharCode(...b.slice(0, 4)) === '%PDF',
 };
+// The kinds a photo-only box takes (check-in ID, cleaning photos, listing photos): its refusal names only these (D-131).
+export const PHOTO_KINDS = 'JPG, PNG or WEBP';
 // null for no file, an empty file (the empty-file sentence says that) or another type (each control's type sentence says that).
-export async function fileContentError(file) {
+// `kinds` is what the box takes, as the refusal names it.
+export async function fileContentError(file, kinds = 'PDF, JPG, PNG or WEBP') {
   if (!file || !file.size || !SIGNATURES[file.type]) return null;
-  const bad = "This file isn't a real PDF, JPG, PNG or WEBP. Choose the file again.";
+  const bad = `This file isn't a real ${kinds}. Choose the file again.`;
   if (!SIGNATURES[file.type](new Uint8Array(await file.slice(0, 12).arrayBuffer()))) return bad;
   // An image up to 10 MB is read whole, as the server reads it; a bigger one gets its size sentence anyway, so it is not read (D-119).
   if (!file.type.startsWith('image/') || file.size > 10 * 1024 * 1024) return null;

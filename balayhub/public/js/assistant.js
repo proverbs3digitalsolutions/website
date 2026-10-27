@@ -2,7 +2,7 @@
 // questions from the help center, and hands off to a support ticket.
 
 import { get, post } from './api.js';
-import { h, icon } from './ui.js';
+import { h, icon, guardPress } from './ui.js';
 import { state, navigate } from './app.js';
 
 const KEY = 'bh-assistant';
@@ -81,6 +81,8 @@ function buildPanel() {
   const longTerm = state.user?.business_type === 'long_term';
   const input = h('textarea', { class: 'input', rows: 2, maxlength: 2000, placeholder: longTerm ? 'Ask anything, e.g. how do I record rent? (English or Tagalog)' : 'Ask anything about BalayHub… (English or Tagalog)', 'aria-label': 'Your question' });
   const sendBtn = h('button', { class: 'btn btn--primary', type: 'submit', 'aria-label': 'Send' }, 'Send');
+  // A quick second press must not land on the emptied box and say "Type a question first." (D-126, D-131).
+  sendBtn.addEventListener('click', (e) => guardPress(e, sendBtn));
   // Sits above the box, so an empty Send says what to do where the person is looking.
   const askError = h('div', { class: 'error', role: 'alert' });
   const askNote = h('div', { class: 'field', style: { padding: '0 12px' } }, askError);
