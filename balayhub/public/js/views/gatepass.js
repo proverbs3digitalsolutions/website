@@ -78,20 +78,21 @@ export function guestNamesBlock(names) {
 
 export async function gatepassPublicView(el, { params }) {
   const token = params.token;
-  const page = (...children) => h('div', { class: 'gc' },
+  // The footer speaks about a pass, so it is drawn only with one: a link that is not valid, has expired or was refused has none (D-128).
+  const page = (pass, ...children) => h('div', { class: 'gc' },
     h('header', { class: 'gc__top no-print' }, brand(null)),
     h('main', { class: 'gc__main gp', id: 'main' }, children),
-    h('p', { class: 'gc__foot muted small no-print' }, 'Private gate pass. Please don\'t forward. The link stops working after check-out.'));
+    pass && h('p', { class: 'gc__foot muted small no-print' }, 'Private gate pass. Please don\'t forward. The link stops working after check-out.'));
   let d;
   try { d = await get(`/public/gatepass/${encodeURIComponent(token)}`); } catch (err) {
-    el.replaceChildren(page(h('div', { class: 'card' }, h('h1', null, 'Gate pass not available'), h('p', { class: 'muted' }, err.message))));
+    el.replaceChildren(page(false, h('div', { class: 'card' }, h('h1', null, 'Gate pass not available'), h('p', { class: 'muted' }, err.message))));
     return;
   }
   const ack = async () => {
     try { await post(`/public/gatepass/${encodeURIComponent(token)}/ack`); d.acknowledged_at = new Date().toISOString(); toast('Thank you! The host has been told you received it.'); draw(); } catch (err) { toast(err.message, 'error'); }
   };
   function draw() {
-    el.replaceChildren(page(
+    el.replaceChildren(page(true,
       h('div', { class: 'card receipt' },
         h('div', { class: 'receipt__head' },
           h('div', null, h('h1', null, 'Guest gate pass'), h('div', { class: 'muted small' }, `${d.property}${d.address ? ` · ${d.address}` : ''}`))),

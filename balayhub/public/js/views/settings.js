@@ -49,7 +49,7 @@ export const inviteProblems = (data) => {
 // The pay picker starts on the plan chosen under "Plan after your trial", else the current paid plan, else Growth.
 // The sentence shown while a payment waits at the bank (GET /billing pending_payment); money is the file's peso formatter.
 export const pendingText = (pp, money) => (pp.minutes_left > 0
-  ? `A payment of ${money(pp.amount)} is waiting for your bank. Finish it in the bank window, or try again in ${pp.minutes_left} minutes.`
+  ? `A payment of ${money(pp.amount)} is waiting for your bank. Finish it in the bank window, or try again in ${pp.minutes_left} minute${pp.minutes_left === 1 ? '' : 's'}.`
   : `A payment of ${money(pp.amount)} is still waiting for your bank. Pay another way, or try again later.`);
 
 export const payDefaultPlan = (p, bill) => [bill.renewal_plan, p.plan, 'growth'].find((k) => k && bill.options.some((o) => o.key === k));
@@ -728,10 +728,20 @@ function guestLanguageCard(u, rerender) {
       h('div', null, h('button', { class: 'btn btn--secondary btn--sm', type: 'button', 'aria-label': 'Save default language', onclick: save }, 'Save'))));
 }
 
+// The new password's length and the match are checked in the form's one pass, with the required boxes, in the server's words
+// (POST /auth/change-password); a blank box is the required check's. Only the current password needs the server (D-105, D-128).
+export function passwordChangeProblems(d) {
+  const errs = {};
+  if (d.new_password && d.new_password.length < 8) errs.new_password = 'New password must be at least 8 characters.';
+  if (d.confirm_password && d.new_password !== d.confirm_password) errs.confirm_password = 'The passwords do not match.';
+  return Object.keys(errs).length ? errs : null;
+}
+
 export function changePassword() {
   formModal({
     title: 'Change password',
     submitText: 'Change password',
+    check: passwordChangeProblems,
     fields: [
       field({ name: 'current_password', label: 'Current password', type: 'password', required: true, autocomplete: 'current-password' }),
       field({ name: 'new_password', label: 'New password', type: 'password', required: true, autocomplete: 'new-password', hint: 'At least 8 characters.' }),
