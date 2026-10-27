@@ -237,12 +237,18 @@ router.get('/inbox/status', ah(async (req, res) => {
 router.get('/inbox/assignees', ah(async (req, res) => {
   const conv = req.query.conversation_id ? await loadConversation(req.user, uuidParam(String(req.query.conversation_id))) : null;
   const propertyId = conv ? await push.propertyOfBooking(conv.booking_id) : null;
+  // A manager is shown only owners and the people who share one of their properties, never the whole team (D-10; Team is owner-only, D-130).
+  const scoped = req.user.role !== 'owner';
   const { rows } = await query(
     `SELECT u.user_id, u.full_name FROM users u
       WHERE u.organization_id = $1 AND u.role IN ('owner', 'manager') AND u.account_status = 'active'
         AND ($2::uuid IS NULL OR u.role = 'owner'
              OR EXISTS (SELECT 1 FROM property_assignments pa WHERE pa.user_id = u.user_id AND pa.property_id = $2))
-      ORDER BY u.full_name`, [req.user.organization_id, propertyId]);
+        AND (NOT $3::boolean OR u.role = 'owner' OR u.user_id = $4
+             OR EXISTS (SELECT 1 FROM property_assignments pa
+                          JOIN property_assignments mine ON mine.property_id = pa.property_id AND mine.user_id = $4
+                         WHERE pa.user_id = u.user_id))
+      ORDER BY u.full_name`, [req.user.organization_id, propertyId, scoped, req.user.user_id]);
   res.json({ assignees: rows });
 }));
 

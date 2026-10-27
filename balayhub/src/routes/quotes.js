@@ -186,6 +186,8 @@ router.post('/quotes', managers, ah(async (req, res) => {
     note: { type: 'text', max: 1000, label: 'Note' },
   });
   if (body.check_out <= body.check_in) throw validationError({ check_out: 'Choose a check-out date after check-in.' });
+  // A typed price does not lift the one-year cap that New reservation and the price check keep (stays.js checkDates, D-130).
+  if (nightsBetween(body.check_in, body.check_out) > 366) throw validationError({ check_out: 'Stays are limited to one year.' });
   if (body.check_in < manilaToday()) throw validationError({ check_in: 'Choose a date from today onwards.' });
   if (cents(body.discount_amount) > cents(body.accommodation_total)) {
     throw validationError({ discount_amount: "The discount can't be more than the accommodation." });

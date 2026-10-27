@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-27 (QA round 47: section 60 and the notes in 210, 214 and 650; D-129). Before that: 2026-10-27 (QA round 46: section 59 and the notes in 304 and 1406; D-128). Before that: 2026-10-21 (QA round 45: section 58 and the notes in 1489 and 1867; D-127). Before that: 2026-10-21 (QA round 44: section 57; D-126). Before that: 2026-10-21 (QA round 43: section 56; D-125). Before that: 2026-10-21 (QA round 42: section 55; D-124). Before that: 2026-10-21 (QA round 41: section 54; D-123). Before that: 2026-10-21 (QA round 40: section 53; D-122). Before that: 2026-10-21 (QA round 39: section 52; D-121). Before that: 2026-10-21 (QA round 38: section 51 and a note in 1489; D-120). Before that: 2026-10-21 (QA round 37: section 50 and the notes in 1, 29.11 and 48.2; D-119). Before that: 2026-10-21 (QA round 36: section 49 and the notes in 7.10, 17, 24, 30.9, 48.1, 48.2 and 48.3; D-118). Before that: 2026-10-21 (QA round 35: section 48 and the notes in 5.10, 29.11, 35.3, 44.3, 47.1 and 47.2; D-117). Before that: 2026-10-21 (QA round 34: section 47 and the notes in 2, 7.8, 22, 35.4 and 46; D-116). Before that: 2026-10-21 (QA round 33: section 46 and the notes in 26 and 44; D-115). Before that: 2026-10-21 (QA round 32: section 45 and the notes in 14 and 28.7; D-114). Before that: 2026-10-21 (QA round 31: section 44, the notes in 5.10 and 43.2; D-113). Before that: 2026-10-21 (QA round 30: section 43, the notes in 5, 41.2 and 42.2; D-112). Before that: 2026-10-21 (QA round 29: section 42, a line in 39.3 and the notes in 5.10, 14.9 and 25; D-111). Before that: 2026-10-21 (QA round 28: section 41 and the notes in 29.1, 39.2 and 40.2; D-110). Before that: 2026-10-21 (QA round 27: section 40 and the notes in 29.1 and 30.6; D-109). Before that: 2026-10-21 (QA round 26: section 39 and 33.1; D-108). Before that: 2026-10-21 (QA round 25: section 38, 5.10 and 30 corrected; D-107). Before that: 2026-10-21 (QA round 24: section 37; D-106). Before that: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
+Last updated: 2026-10-27 (QA round 48: section 61 and the notes in 437 and 650; D-130). Before that: 2026-10-27 (QA round 47: section 60 and the notes in 210, 214 and 650; D-129). Before that: 2026-10-27 (QA round 46: section 59 and the notes in 304 and 1406; D-128). Before that: 2026-10-21 (QA round 45: section 58 and the notes in 1489 and 1867; D-127). Before that: 2026-10-21 (QA round 44: section 57; D-126). Before that: 2026-10-21 (QA round 43: section 56; D-125). Before that: 2026-10-21 (QA round 42: section 55; D-124). Before that: 2026-10-21 (QA round 41: section 54; D-123). Before that: 2026-10-21 (QA round 40: section 53; D-122). Before that: 2026-10-21 (QA round 39: section 52; D-121). Before that: 2026-10-21 (QA round 38: section 51 and a note in 1489; D-120). Before that: 2026-10-21 (QA round 37: section 50 and the notes in 1, 29.11 and 48.2; D-119). Before that: 2026-10-21 (QA round 36: section 49 and the notes in 7.10, 17, 24, 30.9, 48.1, 48.2 and 48.3; D-118). Before that: 2026-10-21 (QA round 35: section 48 and the notes in 5.10, 29.11, 35.3, 44.3, 47.1 and 47.2; D-117). Before that: 2026-10-21 (QA round 34: section 47 and the notes in 2, 7.8, 22, 35.4 and 46; D-116). Before that: 2026-10-21 (QA round 33: section 46 and the notes in 26 and 44; D-115). Before that: 2026-10-21 (QA round 32: section 45 and the notes in 14 and 28.7; D-114). Before that: 2026-10-21 (QA round 31: section 44, the notes in 5.10 and 43.2; D-113). Before that: 2026-10-21 (QA round 30: section 43, the notes in 5, 41.2 and 42.2; D-112). Before that: 2026-10-21 (QA round 29: section 42, a line in 39.3 and the notes in 5.10, 14.9 and 25; D-111). Before that: 2026-10-21 (QA round 28: section 41 and the notes in 29.1, 39.2 and 40.2; D-110). Before that: 2026-10-21 (QA round 27: section 40 and the notes in 29.1 and 30.6; D-109). Before that: 2026-10-21 (QA round 26: section 39 and 33.1; D-108). Before that: 2026-10-21 (QA round 25: section 38, 5.10 and 30 corrected; D-107). Before that: 2026-10-21 (QA round 24: section 37; D-106). Before that: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
 
 ---
 
@@ -434,7 +434,7 @@ Average and count, filter bar, list linking to reservations. Empty: "No reviews 
 - **Repairs reserve** card: balance, target, entries, **Record withdrawal** (amount, date, required note).
 - Empty: "No unit owners yet" + **Add owner**.
 
-### 7.17 Stay reports `#/stay-reports`
+### 7.17 Stay reports `#/stay-reports` (round 48: headed "Stay reports" in a workspace with both kinds of rental, D-130)
 - Tabs: **Performance**, **Income summary (for taxes)**, **Deposits**.
 - Period: month, year or range ("Choose both dates. Showing this month for now."). Filters: property, listing, channel. **Download CSV**.
 - Empty: "No stays in this period". Failure: "Couldn't load this report" + toast.
@@ -647,7 +647,7 @@ Spec: `docs/specs/PHASE-4-GUESTS.md`. Decisions D-57 to D-64. Both the English a
 ### 13.10 Host: quotes `#/quotes`, `#/quotes/<id>`
 
 - The list has a status filter (open, paid, expired, cancelled) and a **New quote** button.
-- **New quote** opens a form: listing, dates, guests, guest name, email or mobile, and the price. The price comes from the pricing engine (any future dates, round 47, D-129) and can be edited (accommodation, cleaning, add-ons, discount). It shows whether the dates are free. Pay type and expiry are set here, and a note can be added.
+- **New quote** opens a form: listing, dates, guests, guest name, email or mobile, and the price. The price comes from the pricing engine (any future dates, round 47, D-129; one year at most, round 48, D-130) and can be edited (accommodation, cleaning, add-ons, discount). It shows whether the dates are free. Pay type and expiry are set here, and a note can be added.
 - The quote detail page has: **Copy**, **Send by email** (only when the guest has an email), and **Cancel quote** (only while open). A paid quote links to its booking.
 
 ### 13.11 Host: stay reports (changes to 7.17)
@@ -2025,3 +2025,27 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 - **An unknown address** such as `#/expenses` goes to the home page.
 - **A failed check-in save** keeps focus on Submit registration, and the message shows in the alert at the top.
 - **A More sheet pick** leaves focus on More until the new page's heading is drawn (D-103).
+
+## 61. QA round 48 changes (D-130; 2026-10-27)
+
+### 61.1 Managers' people lists
+- **Inbox's "Assigned to" filter and @ list (with no conversation open), Housekeeping's "Assigned to" filter, the cleaning calendar, Assign cleaning and Add cleaning task** list only the owners and the people who share one of the manager's properties. Owners see everyone. Staff and cleaners get none of these lists, as before.
+
+### 61.2 New quote (owners and managers)
+- **A stay longer than 366 nights** is refused on Check-out with "Stays are limited to one year.", even when the amounts are typed by hand. No quote is saved.
+- **After "Couldn't price these dates: …"**, Accommodation and Cleaning fee are emptied unless the host typed them, and the total reads "Total for the guest: -". The sentence and the other lines are unchanged.
+
+### 61.3 Guest balance pay page in Taglish
+- **`#/pay/<token>` with Taglish chosen:** the page's own messages have a Taglish line. A bad link reads "Hindi valid ang payment link na ito. Humingi ng bagong link sa host mo."; an expired stay reads "Expired na ang payment link na ito dahil tapos na ang stay. Humingi ng bagong link sa host mo."; the heading stays "Hindi makita ang link". The other messages (transfer not available, a cancelled booking, add-ons, a balance too small, an amount that changed, a payment in progress) have their drafts in BLOCKERS round 48 (c).
+
+### 61.4 Headings
+- **`#/stay-reports` and `#/reports`** are headed by the menu's names: in a workspace with both short-term and long-term rentals, "Stay reports" and "Rental reports"; otherwise "Reports" on either page. The browser tab title follows the heading.
+
+### 61.5 Home and the owner portal
+- **Home's occupancy line** reads "1 night booked · 3% occupancy" for one night and "{n} nights booked · {p}% occupancy" otherwise.
+- **The owner portal strip's label** reads "{unit}: 1 night booked, {m} blocked in {month}" for one night.
+
+### 61.6 As designed
+- **Inspect** on a finished task's page appears for owners and managers when the task has checklist items and is not paid (a paid clean cannot be reopened by a failed inspection).
+- **A stay moves** by dragging it onto another listing's row, not sideways on its own row.
+- **Owner statements** show guests by first name only (DECISIONS 127).

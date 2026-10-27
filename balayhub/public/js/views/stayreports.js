@@ -4,11 +4,14 @@
 
 import { get, qs } from '../api.js';
 import { h, peso, pageHead, todayManila, emptyState, toast, label } from '../ui.js';
-import { navigate } from '../app.js';
+import { navigate, state } from '../app.js';
 import { initFilters, filterBar, rememberFilters, changed, outOfWindow, OUT_OF_WINDOW } from '../filters.js';
 import { depositsPanel } from './deposits.js';
 import { CHANNEL_LABEL, SOURCE_LABEL } from './reservations.js';
 import { exportHint, dateFieldError } from './reports.js';
+
+// The heading is the menu's name for this page: "Stay reports" where the menu also has Rental reports, else "Reports" (D-130).
+const pageTitle = () => (state.user?.business_type === 'both' ? 'Stay reports' : 'Reports');
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const pct = (n) => (n === null || n === undefined ? '—' : `${n}%`);
@@ -83,7 +86,7 @@ export async function stayReportsView(el, { query = {} }) {
 
   if (tab === 'deposits') {
     const panel = await depositsPanel({ query, onUrl: setUrl });
-    el.replaceChildren(pageHead({ title: 'Reports', sub: 'Short-term rentals' }), tabs, panel);
+    el.replaceChildren(pageHead({ title: pageTitle(), sub: 'Short-term rentals' }), tabs, panel);
     return;
   }
 
@@ -158,7 +161,7 @@ export async function stayReportsView(el, { query = {} }) {
     }
     drawBar({ key: 'stay-reports-tax', values: filters, defaults, load, before: [{ name: 'year', label: 'Year', all: String(thisYear), options: years }] });
     await load();
-    el.replaceChildren(pageHead({ title: 'Reports', sub: 'Short-term rentals', actions: exportLink }), tabs, barBox, box);
+    el.replaceChildren(pageHead({ title: pageTitle(), sub: 'Short-term rentals', actions: exportLink }), tabs, barBox, box);
     return;
   }
 
@@ -317,5 +320,5 @@ export async function stayReportsView(el, { query = {} }) {
   drawBar({ key: 'stay-reports', values: filters, defaults, load, extra: periodBox });
   await load();
   exportLink.setAttribute('aria-describedby', 'stay-report-export-note');
-  el.replaceChildren(pageHead({ title: 'Reports', sub: 'Short-term rentals', actions: h('div', { class: 'chips' }, exportLink, exportNote) }), tabs, barBox, status, notice, box);
+  el.replaceChildren(pageHead({ title: pageTitle(), sub: 'Short-term rentals', actions: h('div', { class: 'chips' }, exportLink, exportNote) }), tabs, barBox, status, notice, box);
 }

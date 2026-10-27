@@ -230,7 +230,7 @@ export async function reportsView(el, { query }) {
   renderBar();
   el.replaceChildren(
     pageHead({
-      title: 'Reports', sub: 'Income, expenses and unpaid rent for any period',
+      title: state.user?.business_type === 'both' ? 'Rental reports' : 'Reports', sub: 'Income, expenses and unpaid rent for any period', // the menu's name (D-130)
       actions: [exportLink, exportNote, h('button', { class: 'btn btn--secondary', onclick: () => window.print() }, 'Print / PDF'), h('a', { class: 'btn btn--ghost', href: '#/dashboard' }, icon('home'), 'Dashboard')],
     }),
     barBox,

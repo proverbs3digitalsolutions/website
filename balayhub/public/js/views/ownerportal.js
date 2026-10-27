@@ -296,7 +296,7 @@ export const ownerBookingsView = portalScreen('bookings', 'Bookings', async (bod
       });
       const booked = cells.filter((c) => c.classList.contains('op-day--res')).length;
       const blocked = cells.filter((c) => c.classList.contains('op-day--blk')).length;
-      return h('div', { class: 'op-strip', role: 'img', 'aria-label': `${u.unit_name}: ${booked} nights booked, ${blocked} blocked in ${fmtMonth(month)}` },
+      return h('div', { class: 'op-strip', role: 'img', 'aria-label': `${u.unit_name}: ${booked} night${booked === 1 ? '' : 's'} booked, ${blocked} blocked in ${fmtMonth(month)}` },
         h('div', { class: 'op-strip__name' }, u.unit_name),
         h('div', { class: 'op-strip__days', style: { '--days': days } }, cells));
     };

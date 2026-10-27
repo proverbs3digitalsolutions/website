@@ -217,7 +217,12 @@ async function newQuoteModal(listings, onSaved) {
         ? `This listing has no nightly rate for some nights. Enter the total yourself.${warn}`
         : `Price from your rates: ${nights()} night${nights() === 1 ? '' : 's'}, ${peso(p.accommodation_total)} plus ${peso(p.cleaning_fee)} cleaning. You can change the amounts.${warn}`;
       preview.setAttribute('role', 'status');
-    } catch (e) { preview.textContent = `Couldn't price these dates: ${e.message} Enter the amounts yourself.`; }
+    } catch (e) {
+      // The price filled in for the old dates is not a price for these: empty the boxes the host has not typed in (D-130).
+      rate = null;
+      if (!edited) { el('accommodation_total').value = ''; el('cleaning_fee').value = ''; }
+      preview.textContent = `Couldn't price these dates: ${e.message} Enter the amounts yourself.`;
+    }
     drawTotal();
   }
   for (const n of ['unit_id', 'check_in', 'check_out', 'num_guests']) el(n).addEventListener('change', () => { if (n === 'unit_id') { drawAddons(); fitGuests(); } loadPreview(); });

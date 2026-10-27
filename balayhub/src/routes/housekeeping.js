@@ -562,16 +562,24 @@ router.get('/cleaner-scores', managers, ah(async (req, res) => {
   res.json({ cleaners: [...people.values()].sort((a, b) => a.cleaner_name.localeCompare(b.cleaner_name)) });
 }));
 
-// People a task can be assigned to (any active team member). property_ids
-// lists the properties a manager or staff member is assigned to (null for
-// owners, who can take any task), so the picker can show only eligible people.
+// People a task can be assigned to. property_ids lists the properties each manager or staff member (or cleaner) is assigned to (null for
+// owners, who can take any task), so the picker shows only eligible people. A manager is shown only owners and the people who share one
+// of their properties, with only those shared properties listed (D-10, D-130).
 router.get('/cleaning-assignees', managers, ah(async (req, res) => {
+  const scoped = req.user.role !== 'owner';
   const { rows } = await query(
     `SELECT u.user_id, u.full_name, u.role,
             CASE WHEN u.role = 'owner' THEN NULL
-                 ELSE COALESCE((SELECT array_agg(pa.property_id) FROM property_assignments pa WHERE pa.user_id = u.user_id), '{}') END AS property_ids
-       FROM users u WHERE u.organization_id = $1 AND u.account_status = 'active' ORDER BY u.role = 'staff' DESC, u.full_name`,
-    [req.user.organization_id]);
+                 ELSE COALESCE((SELECT array_agg(pa.property_id) FROM property_assignments pa WHERE pa.user_id = u.user_id
+                                   AND (NOT $2::boolean OR EXISTS (SELECT 1 FROM property_assignments mine
+                                                                    WHERE mine.user_id = $3 AND mine.property_id = pa.property_id))), '{}') END AS property_ids
+       FROM users u WHERE u.organization_id = $1 AND u.account_status = 'active'
+        AND (NOT $2::boolean OR u.role = 'owner' OR u.user_id = $3
+             OR EXISTS (SELECT 1 FROM property_assignments pa
+                          JOIN property_assignments mine ON mine.property_id = pa.property_id AND mine.user_id = $3
+                         WHERE pa.user_id = u.user_id))
+      ORDER BY u.role = 'staff' DESC, u.full_name`,
+    [req.user.organization_id, scoped, req.user.user_id]);
   res.json({ assignees: rows });
 }));
 

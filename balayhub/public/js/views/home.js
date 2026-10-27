@@ -125,7 +125,7 @@ async function revenueSection() {
         h('div', { class: 'card' },
           h('div', { class: 'stat__label' }, 'Average daily rate'),
           h('div', { class: 'hero-num' }, pesoWhole(r.current.adr)), change(r.current.adr, r.previous.adr),
-          h('p', { class: 'muted small' }, `${r.current.booked_nights} nights booked · ${r.current.occupancy}% occupancy`),
+          h('p', { class: 'muted small' }, `${r.current.booked_nights} night${r.current.booked_nights === 1 ? '' : 's'} booked · ${r.current.occupancy}% occupancy`),
           lineChart({
             labels: Array.from({ length: days }, (_, i) => String(i + 1)), height: 180, ariaLabel: 'Average daily rate by day, this month vs previous month',
             series: [{ name: fmtMonth(`${month}-01`), values: byDay(r.current.daily_adr) }, { name: fmtMonth(`${r.previous.month}-01`), values: byDay(r.previous.daily_adr), color: SERIES[2], dashed: true }],
