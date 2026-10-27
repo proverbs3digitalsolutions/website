@@ -892,6 +892,10 @@ export function typeProblems(form, missing, labelOf) {
 
 export function makeForm({ fields, submitText = 'Save', onSubmit, cancel, draftKey, idempotent = false, extra, check }) {
   const submitBtn = h('button', { class: 'btn btn--primary', type: 'submit' }, submitText);
+  // A form's Save waits for the server too, so its press swallows its own second press (D-126): the answer may draw a question over the
+  // spot (Pay more than the statement?) or open another page (a sent ticket), and the second press must not answer the question or move
+  // focus off the new page's heading (D-129). Enter (a click with detail 0) is untouched; a change after the press ends the guard (D-127).
+  submitBtn.addEventListener('click', (e) => guardPress(e, submitBtn));
   const formError = h('div', { class: 'form-error' });
   const form = h('form', { class: 'form', novalidate: true },
     formError, fields, extra,

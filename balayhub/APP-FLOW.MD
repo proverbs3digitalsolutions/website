@@ -2,7 +2,7 @@
 
 This document walks through BalayHub page by page and role by role. For each page it says what the main clicks do, which page comes next, and what the user sees when data is loading, empty, failing, read-only, in the demo, or over a plan limit. It covers visitors, guests on private link pages, the three workspace roles (owner, property manager, staff) and the platform admin. Every statement was checked against `public/js/app.js`, the views in `public/js/views/`, the server routes in `src/routes/`, `src/lib/access.js` and every `requireRole(...)` call. Features themselves are described in `PRD.MD`.
 
-Last updated: 2026-10-27 (QA round 46: section 59 and the notes in 304 and 1406; D-128). Before that: 2026-10-21 (QA round 45: section 58 and the notes in 1489 and 1867; D-127). Before that: 2026-10-21 (QA round 44: section 57; D-126). Before that: 2026-10-21 (QA round 43: section 56; D-125). Before that: 2026-10-21 (QA round 42: section 55; D-124). Before that: 2026-10-21 (QA round 41: section 54; D-123). Before that: 2026-10-21 (QA round 40: section 53; D-122). Before that: 2026-10-21 (QA round 39: section 52; D-121). Before that: 2026-10-21 (QA round 38: section 51 and a note in 1489; D-120). Before that: 2026-10-21 (QA round 37: section 50 and the notes in 1, 29.11 and 48.2; D-119). Before that: 2026-10-21 (QA round 36: section 49 and the notes in 7.10, 17, 24, 30.9, 48.1, 48.2 and 48.3; D-118). Before that: 2026-10-21 (QA round 35: section 48 and the notes in 5.10, 29.11, 35.3, 44.3, 47.1 and 47.2; D-117). Before that: 2026-10-21 (QA round 34: section 47 and the notes in 2, 7.8, 22, 35.4 and 46; D-116). Before that: 2026-10-21 (QA round 33: section 46 and the notes in 26 and 44; D-115). Before that: 2026-10-21 (QA round 32: section 45 and the notes in 14 and 28.7; D-114). Before that: 2026-10-21 (QA round 31: section 44, the notes in 5.10 and 43.2; D-113). Before that: 2026-10-21 (QA round 30: section 43, the notes in 5, 41.2 and 42.2; D-112). Before that: 2026-10-21 (QA round 29: section 42, a line in 39.3 and the notes in 5.10, 14.9 and 25; D-111). Before that: 2026-10-21 (QA round 28: section 41 and the notes in 29.1, 39.2 and 40.2; D-110). Before that: 2026-10-21 (QA round 27: section 40 and the notes in 29.1 and 30.6; D-109). Before that: 2026-10-21 (QA round 26: section 39 and 33.1; D-108). Before that: 2026-10-21 (QA round 25: section 38, 5.10 and 30 corrected; D-107). Before that: 2026-10-21 (QA round 24: section 37; D-106). Before that: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
+Last updated: 2026-10-27 (QA round 47: section 60 and the notes in 210, 214 and 650; D-129). Before that: 2026-10-27 (QA round 46: section 59 and the notes in 304 and 1406; D-128). Before that: 2026-10-21 (QA round 45: section 58 and the notes in 1489 and 1867; D-127). Before that: 2026-10-21 (QA round 44: section 57; D-126). Before that: 2026-10-21 (QA round 43: section 56; D-125). Before that: 2026-10-21 (QA round 42: section 55; D-124). Before that: 2026-10-21 (QA round 41: section 54; D-123). Before that: 2026-10-21 (QA round 40: section 53; D-122). Before that: 2026-10-21 (QA round 39: section 52; D-121). Before that: 2026-10-21 (QA round 38: section 51 and a note in 1489; D-120). Before that: 2026-10-21 (QA round 37: section 50 and the notes in 1, 29.11 and 48.2; D-119). Before that: 2026-10-21 (QA round 36: section 49 and the notes in 7.10, 17, 24, 30.9, 48.1, 48.2 and 48.3; D-118). Before that: 2026-10-21 (QA round 35: section 48 and the notes in 5.10, 29.11, 35.3, 44.3, 47.1 and 47.2; D-117). Before that: 2026-10-21 (QA round 34: section 47 and the notes in 2, 7.8, 22, 35.4 and 46; D-116). Before that: 2026-10-21 (QA round 33: section 46 and the notes in 26 and 44; D-115). Before that: 2026-10-21 (QA round 32: section 45 and the notes in 14 and 28.7; D-114). Before that: 2026-10-21 (QA round 31: section 44, the notes in 5.10 and 43.2; D-113). Before that: 2026-10-21 (QA round 30: section 43, the notes in 5, 41.2 and 42.2; D-112). Before that: 2026-10-21 (QA round 29: section 42, a line in 39.3 and the notes in 5.10, 14.9 and 25; D-111). Before that: 2026-10-21 (QA round 28: section 41 and the notes in 29.1, 39.2 and 40.2; D-110). Before that: 2026-10-21 (QA round 27: section 40 and the notes in 29.1 and 30.6; D-109). Before that: 2026-10-21 (QA round 26: section 39 and 33.1; D-108). Before that: 2026-10-21 (QA round 25: section 38, 5.10 and 30 corrected; D-107). Before that: 2026-10-21 (QA round 24: section 37; D-106). Before that: 2026-10-21 (QA round 23: section 36; D-105). Before that: 2026-10-21 (QA round 22: section 35; D-104). Before that: 2026-10-21 (QA round 21: section 34; D-103). Before that: 2026-10-20 (QA round 20: section 33; D-102). Before that: 2026-10-20 (QA round 19: section 32, 5.10 second tab, 28.3 photo rule; D-101). Before that: 2026-10-19 (QA round 18: section 31, admin Delete workspace in section 10, 5.10 card page; D-100). Before that: 2026-10-15 (QA round 17: section 30 and the card step 5.10, D-98 and D-99; 29.11 corrected)
 
 ---
 
@@ -207,11 +207,11 @@ Cleaning push notifications do not go to cleaners yet.
 - `#/forgot` → **Send reset link** → "If an account exists for that email, we sent a reset link." (same text either way).
 - `#/reset-password?token=…` → new password + confirm → **Save new password** → `#/login?reset=1`. Bad link → error. No token → `#/forgot`.
 
-### 5.8 Workspace setup `#/setup`
+### 5.8 Workspace setup `#/setup` (round 47: the line names the card page, D-129)
 - If answers from the Get-started popup are saved, they fill the setup form; the workspace is created only when the person clicks **Create workspace** (D-84) → Launchpad or Properties.
 - Otherwise: business name and type → **Create workspace** → `#/launchpad` (short-term/Both) or `#/properties?new=1` (long-term).
 - Already in a workspace → `afterLogin`.
-- **D-98:** when the card check is on and the person is not a platform admin, the new workspace has no trial yet, so `afterLogin` sends the owner to **Confirm your payment card** (5.10) instead of the Launchpad or Properties. When the check is off, nothing changes (the trial starts at creation).
+- **D-98:** when the card check is on and the person is not a platform admin, the new workspace has no trial yet, so `afterLogin` sends the owner to **Confirm your payment card** (5.10) instead of the Launchpad or Properties. When the check is off, nothing changes (the trial starts at creation). (Round 47: the line names the card page, D-129.)
 
 ### 5.9 Privacy `#/privacy` and Terms `#/terms`
 Open to everyone. Linked from sign-up, guest pages and footers.
@@ -647,7 +647,7 @@ Spec: `docs/specs/PHASE-4-GUESTS.md`. Decisions D-57 to D-64. Both the English a
 ### 13.10 Host: quotes `#/quotes`, `#/quotes/<id>`
 
 - The list has a status filter (open, paid, expired, cancelled) and a **New quote** button.
-- **New quote** opens a form: listing, dates, guests, guest name, email or mobile, and the price. The price comes from the pricing engine and can be edited (accommodation, cleaning, add-ons, discount). It shows whether the dates are free. Pay type and expiry are set here, and a note can be added.
+- **New quote** opens a form: listing, dates, guests, guest name, email or mobile, and the price. The price comes from the pricing engine (any future dates, round 47, D-129) and can be edited (accommodation, cleaning, add-ons, discount). It shows whether the dates are free. Pay type and expiry are set here, and a note can be added.
 - The quote detail page has: **Copy**, **Send by email** (only when the guest has an email), and **Cancel quote** (only while open). A paid quote links to its booking.
 
 ### 13.11 Host: stay reports (changes to 7.17)
@@ -2001,3 +2001,27 @@ Adding a link that is not obviously a calendar shows "This doesn't look like a c
 
 ### 59.4 As designed
 - **Add listing saves a new listing off the booking page,** with "Booking page and payments" folded (Edit listing opens it while no listing is on the page, D-104); the admin's Delete now and Delete in 14 days need only the typed workspace name (D-100); a new owner's first screens are Setup, then Confirm your card (D-98).
+
+## 60. QA round 47 changes (D-129; 2026-10-27)
+
+### 60.1 Forms' Save and the guest check-in's Submit registration
+- **Every form's Save (on a page or in a dialog) and the guest check-in's Submit registration:** a second mouse, pen or touch press within 600 ms and 30 px of the first does nothing: no click, no question answered or closed, no box ticked or unticked, no focus change. A change the person makes in between starts a new press (D-127). Enter is unchanged.
+- **Record payout above the amount due:** "Pay more than the statement?" stays open after a double click on Save payout.
+- **Help > New ticket:** after a double click on Send to support, focus is on the new ticket's heading.
+
+### 60.2 New quote price check (owners and managers)
+- **The price check prices any future dates,** including more than 18 months ahead and stays longer than 60 nights. The guest booking page keeps "Bookings open up to 18 months ahead. Please contact the host for later dates." and "For stays longer than 60 nights, please contact the host."
+
+### 60.3 Setup (`#/setup`)
+- **The line under "Welcome, {first name}!"** is "Let's set up your rental business. Next, you'll confirm your payment card, then add your first listing or property." while the card check is on (D-98) and the person is not a platform admin. Otherwise it is "Let's set up your rental business. Next, you'll add your first listing or property." If the plan read fails, the old line stays.
+
+### 60.4 Singular night
+- **Profit and loss's Gross line** reads "1 stay · 1 night" (and "{n} nights" for any other count). **The emailed owner statement** reads "Stays checked out this month: 1 (1 night, …)" with the same rule.
+
+### 60.5 As designed
+- **Pricing and Discount codes** are not menu entries. Pricing opens from Calendar's **₱ Pricing rules** and Discount codes from Guests' **% Discount codes** (owners and managers).
+- **The More sheet's theme buttons** show the icon above a one-line label, the same height on each.
+- **Cancel task** asks "Cancel this cleaning task?" on the task's own page. **Remove block** is the button of the "Remove this block?" question.
+- **An unknown address** such as `#/expenses` goes to the home page.
+- **A failed check-in save** keeps focus on Submit registration, and the message shows in the alert at the top.
+- **A More sheet pick** leaves focus on More until the new page's heading is drawn (D-103).

@@ -333,14 +333,17 @@ function priceRules(nights) {
 }
 
 // `promo`: { orgId, code, email, strict } — strict (at checkout) rejects a bad code; otherwise it's reported.
-async function priceStay(u, checkIn, checkOut, promo = {}) {
+// `host`: the host's own quote preview. The booking page's 18-month window and 60-night limit are for guests ("please contact the host"),
+// and a host's quote and reservation skip them, but a stay is still capped at one year, as stays.js refuses (D-129).
+async function priceStay(u, checkIn, checkOut, promo = {}, { host = false } = {}) {
   if (!isValidDate(checkIn) || !isValidDate(checkOut) || checkOut <= checkIn) throw validationError({ check_out: 'Choose a check-out date after check-in.' });
   if (checkIn < manilaToday()) throw validationError({ check_in: 'Choose a date from today onwards.' });
-  if (checkIn > new Date(Date.now() + 8 * 3600e3 + MAX_DAYS_AHEAD * 86400000).toISOString().slice(0, 10)) {
+  if (!host && checkIn > new Date(Date.now() + 8 * 3600e3 + MAX_DAYS_AHEAD * 86400000).toISOString().slice(0, 10)) {
     throw validationError({ check_in: `Bookings open up to ${Math.round(MAX_DAYS_AHEAD / 30)} months ahead. Please contact the host for later dates.` });
   }
   const nights = nightsBetween(checkIn, checkOut);
-  if (nights > 60) throw validationError({ check_out: 'For stays longer than 60 nights, please contact the host.' });
+  if (!host && nights > 60) throw validationError({ check_out: 'For stays longer than 60 nights, please contact the host.' });
+  if (host && nights > 366) throw validationError({ check_out: 'Stays are limited to one year.' });
   const q = await quote(u.unit_id, checkIn, checkOut);
   if (nights < q.min_nights) {
     throw validationError({ check_out: `${q.min_nights_reason ? `During ${q.min_nights_reason}, this` : 'This'} place has a minimum stay of ${q.min_nights} nights.` });

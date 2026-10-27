@@ -2,7 +2,7 @@
 // Also: the host's "Guest check-in form" card on the reservation page.
 
 import { get, post, api, ApiError, fileContentError } from '../api.js';
-import { h, brand, field, fmtDateTime, toast, clearErrors, showErrors, readForm, confirmDialog, fileRefused, EMAIL_RE, PHONE_RE } from '../ui.js';
+import { h, brand, field, fmtDateTime, toast, clearErrors, showErrors, readForm, confirmDialog, fileRefused, EMAIL_RE, PHONE_RE, guardPress } from '../ui.js';
 import { t, tServer, tFields, extendTranslations, initGuestLang, langToggle, keepFormValues, restoreFormValues, fmtDateL, fmtDateTimeL } from '../i18n.js';
 import { copyText } from './quotes.js';
 
@@ -138,6 +138,7 @@ export async function guestCheckinView(el, { params }, kept) {
   const progress = h('div', { class: 'muted small', 'aria-live': 'polite' });
   const formError = h('div');
   const submit = h('button', { class: 'btn btn--primary btn--block', type: 'submit' }, r?.submitted_at ? t('Save changes') : t('Submit registration'));
+  submit.addEventListener('click', (e) => guardPress(e)); // a refusal moves the button: a second press at its old spot does nothing for 600 ms, so it cannot untick the consent box (D-126, D-129)
   // The answers are saved but no ID photo is stored yet: the registration is not finished.
   const draftNote = t('Your answers are saved. Add a photo of your ID to finish registering.');
 

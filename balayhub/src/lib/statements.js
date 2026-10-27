@@ -170,7 +170,7 @@ function statementText(s, monthLabel) {
     `${s.owner.full_name} · prepared by ${s.workspace}`,
     `Units: ${s.units.map((u) => u.unit_name).join(', ') || 'none'}`,
     '',
-    `Stays checked out this month: ${t.stays} (${t.nights} nights, ${t.occupancy_pct}% occupancy)`,
+    `Stays checked out this month: ${t.stays} (${t.nights} night${t.nights === 1 ? '' : 's'}, ${t.occupancy_pct}% occupancy)`,
     ...rows,
     '',
     `Gross bookings:        ${peso(t.gross)}`,

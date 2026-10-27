@@ -373,8 +373,11 @@ export async function setupView(el) {
       navigate(data.business_type === 'long_term' ? '#/properties?new=1' : '#/launchpad', { replace: true });
     },
   });
+  // The screen after this one: Confirm your payment card while the card check is on (D-98; not for a platform admin), else the first listing (D-129).
+  const cardNext = !state.user.is_platform_admin && await get('/public/plans').then((pl) => pl.card_check === true, () => false);
   el.append(publicPage(authCard(`Welcome, ${state.user.full_name.split(' ')[0]}!`,
-    "Let's set up your rental business. Next, you'll add your first listing or property.", form,
+    cardNext ? "Let's set up your rental business. Next, you'll confirm your payment card, then add your first listing or property."
+      : "Let's set up your rental business. Next, you'll add your first listing or property.", form,
     h('div', { class: 'auth-card__foot' },
       h('button', { class: 'link-btn', type: 'button', onclick: async () => {
         try { localStorage.removeItem('bh-setup'); } catch { /* ignore */ }

@@ -145,7 +145,7 @@ router.get('/units/:id/price-preview', managers, ah(async (req, res) => {
     check_in: { type: 'date', required: true, label: 'Check-in' },
     check_out: { type: 'date', required: true, label: 'Check-out' },
   });
-  const price = await priceStay(unit, check_in, check_out);
+  const price = await priceStay(unit, check_in, check_out, {}, { host: true }); // the guest page's date limits are not the host's (D-129)
   const { missing_rates } = await quote(unit.unit_id, check_in, check_out);
   res.json({ ...price, missing_rates, available: await isFree(unit.unit_id, check_in, check_out) });
 }));

@@ -68,7 +68,7 @@ export async function pnlView(el, { query = {} } = {}) {
       .concat([x.gross, x.channel_fees, x.refunds, x.expenses].map((n) => h('td', { class: 'num' }, peso(n))), h('td', { class: 'num' }, h('strong', null, money(x.net))));
     box.replaceChildren(
       h('div', { class: 'card' }, h('div', { class: 'grid grid--4 stats' },
-        stat('Gross', peso(t.gross), `${t.stays} stay${t.stays === 1 ? '' : 's'} · ${t.nights} nights`),
+        stat('Gross', peso(t.gross), `${t.stays} stay${t.stays === 1 ? '' : 's'} · ${t.nights} night${t.nights === 1 ? '' : 's'}`),
         stat('Channel fees and refunds', peso(Number(t.channel_fees) + Number(t.refunds)), `${peso(t.channel_fees)} channel fees · ${peso(t.refunds)} refunds`),
         stat('Expenses', peso(t.expenses)),
         h('div', { class: `stat stat--flat${neg(t.net) ? ' stat--alert' : ''}` }, h('div', { class: 'stat__value' }, peso(t.net)), h('div', { class: 'stat__label' }, 'Net'), h('div', { class: 'muted small' }, 'gross − channel fees − refunds − expenses')))),
