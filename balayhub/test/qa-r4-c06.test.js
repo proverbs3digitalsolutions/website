@@ -77,7 +77,8 @@ test('the subject draft is kept per conversation, restored on open, and cleared 
   assert.match(src, /const subjKey = `bh-draft:subj:\$\{c\.conversation_id\}`;/);
   assert.match(src, /try \{ subject\.value = sessionStorage\.getItem\(subjKey\) \|\| ''; \} catch \{ \/\* ignore \*\/ \}/);
   assert.match(src, /subject\.addEventListener\('input', \(\) => \{ try \{ sessionStorage\.setItem\(subjKey, subject\.value\); \} catch \{ \/\* ignore \*\/ \} \}\);/);
-  assert.match(src, /try \{ sessionStorage\.removeItem\(draftKey\); sessionStorage\.removeItem\(modeKey\); sessionStorage\.removeItem\(subjKey\); sessionStorage\.removeItem\(subjTplKey\); \} catch \{ \/\* ignore \*\/ \}/);
+  assert.match(src, /if \(body\.value === sent\) \{ sessionStorage\.removeItem\(draftKey\); sessionStorage\.removeItem\(modeKey\); \}/);
+  assert.match(src, /if \(subject\.value === sentSubject\) \{ sessionStorage\.removeItem\(subjKey\); sessionStorage\.removeItem\(subjTplKey\); \}/);
 });
 
 test('opening a thread clears its unread look, the header count, the view counts and the menu badge', () => {

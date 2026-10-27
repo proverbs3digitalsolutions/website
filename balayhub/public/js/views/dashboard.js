@@ -20,7 +20,7 @@ export async function dashboardView(el, { rerender }) {
   const canManage = state.user.role !== 'staff';
 
   const head = h('div', { class: 'page-head' },
-    h('div', { class: 'page-head__title' }, h('h1', null, 'Dashboard'),
+    h('div', { class: 'page-head__title' }, h('h1', null, state.user?.business_type === 'both' ? 'Long-term rentals' : 'Dashboard'), // the menu's name for this page (D-130, D-132)
       h('p', null, `${state.user.organization_name} · ${fmtMonth(d.month_start)}`)));
 
   if (p.properties === 0) {

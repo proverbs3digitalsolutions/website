@@ -1,6 +1,6 @@
 // Security deposit card on a reservation, and the Home reminder for deposits to return.
 
-import { get, post, uploadFile, qs } from '../api.js';
+import { get, post, uploadFile, qs, PHOTO_KINDS } from '../api.js';
 import { h, peso, fmtDate, fmtDateTime, field, formModal, confirmDialog, toast, badge, uploadField, fileRefused, todayManila, emptyState, parseAmount } from '../ui.js';
 import { initFilters, filterBar, changed, apiFilters } from '../filters.js';
 import { state } from '../app.js';
@@ -112,9 +112,11 @@ export async function depositCard(r, rerender) {
       if (upload.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
       up.clear();
       if (!upload.files[0]) return;
+      // Photo-only: a file that is not a JPG, PNG or WEBP photo (a PDF) is refused here, before any request (D-132).
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(upload.files[0].type)) { upload.value = ''; up.show('Upload a JPG, PNG or WEBP photo up to 10 MB.'); return; }
       // aria-disabled, not disabled: a disabled control drops focus to the page while it waits (D-97, D-105, D-120).
       upload.setAttribute('aria-disabled', 'true');
-      try { await uploadFile('deposit', dep.deposit_id, upload.files[0]); upload.value = ''; toast('Photo added.'); rerender(); } catch (err) { upload.removeAttribute('aria-disabled'); upload.value = ''; if (fileRefused(err)) up.show(err.message); else toast(err.message, 'error'); }
+      try { await uploadFile('deposit', dep.deposit_id, upload.files[0], PHOTO_KINDS); upload.value = ''; toast('Photo added.'); rerender(); } catch (err) { upload.removeAttribute('aria-disabled'); upload.value = ''; if (fileRefused(err)) up.show(err.message); else toast(err.message, 'error'); }
     } });
   const up = uploadField(upload);
 

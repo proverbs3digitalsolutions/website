@@ -89,6 +89,9 @@ async function settleHosted(orgId) {
 }
 
 const paymentReceived = () => new HttpError(409, 'That payment was just received. Check your plan before paying again.', { code: 'PAYMENT_RECEIVED' });
+// The same refusal after a free activation (a ₱0 coupon row), which is not a payment received: it names what happened (D-115, D-132).
+const freeActivated = () => new HttpError(409, 'Your free plan was just activated. Check your plan before paying again.', { code: 'PAYMENT_RECEIVED' });
+const justDone = (row) => (row.provider === 'coupon' ? freeActivated() : paymentReceived());
 
 // A workspace scheduled for deletion takes no plan payment: the money would be taken for a workspace the deletion job
 // removes. The owner cancels the deletion first (D-116). The routes refuse earlier; this is the check under the lock.
@@ -143,14 +146,15 @@ async function prepareCharge(user, plan, months, { couponCode, provider, seenPai
     // page), not a new month: refused under the lock for a minute. Paying ahead from a fresh page works after that (D-122).
     if (provider === 'paymongo_intent') {
       const { rows: [recent] } = await db.query(
-        `SELECT 1 FROM billing_payments WHERE organization_id = $1 AND kind = 'plan' AND status = 'paid'
-            AND paid_at > now() - make_interval(secs => $2)`, [user.organization_id, JUST_PAID_SECONDS]);
-      if (recent) throw paymentReceived();
+        `SELECT provider FROM billing_payments WHERE organization_id = $1 AND kind = 'plan' AND status = 'paid'
+            AND paid_at > now() - make_interval(secs => $2) ORDER BY provider = 'coupon' LIMIT 1`, [user.organization_id, JUST_PAID_SECONDS]);
+      if (recent) throw justDone(recent);
     }
     // A plan payment that landed after this request started (a webhook or another tab) also stops it.
     const { rows: [landed] } = await db.query(
-      `SELECT 1 FROM billing_payments WHERE organization_id = $1 AND kind = 'plan' AND status = 'paid' AND paid_at > $2`, [user.organization_id, startedAt]);
-    if (landed) throw paymentReceived();
+      `SELECT provider FROM billing_payments WHERE organization_id = $1 AND kind = 'plan' AND status = 'paid' AND paid_at > $2
+        ORDER BY provider = 'coupon' LIMIT 1`, [user.organization_id, startedAt]);
+    if (landed) throw justDone(landed);
     if (provider === 'paymongo') {
       const { rows: [openHosted] } = await db.query(
         `SELECT 1 FROM billing_payments WHERE organization_id = $1 AND kind = 'plan' AND status = 'pending' AND provider = 'paymongo'`, [user.organization_id]);

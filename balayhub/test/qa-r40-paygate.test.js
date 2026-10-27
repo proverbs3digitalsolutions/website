@@ -86,7 +86,10 @@ test('after a free activation a one-tap payment with the fresh date is refused',
   assert.equal(act.status, 200, JSON.stringify(act.data));
   assert.equal(act.data.activated, true);
   const intents = fake.state.intents.size;
-  refused(await pay({ seen_paid_until: await fresh() }));
+  const answer = await pay({ seen_paid_until: await fresh() });
+  assert.equal(answer.status, 409, JSON.stringify(answer.data));
+  assert.equal(answer.data.code, 'PAYMENT_RECEIVED');
+  assert.equal(answer.data.error, 'Your free plan was just activated. Check your plan before paying again.');
   assert.equal(fake.state.intents.size, intents);
 });
 

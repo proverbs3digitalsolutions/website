@@ -25,6 +25,7 @@ const STUBS = {
     'export const post = (...a) => globalThis.__r38.post(...a);',
     'export const uploadFile = (...a) => globalThis.__r38.uploadFile(...a);',
     "export const qs = () => '';",
+    "export const PHOTO_KINDS = 'JPG, PNG or WEBP';",
   ].join('\n'),
   'filters.js': [
     'export const initFilters = () => ({});',

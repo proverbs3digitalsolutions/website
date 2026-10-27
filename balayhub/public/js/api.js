@@ -112,11 +112,12 @@ export async function fileContentError(file, kinds = 'PDF, JPG, PNG or WEBP') {
   return imageIsComplete(file.type, new Uint8Array(await file.arrayBuffer())) ? null : bad;
 }
 
-export async function uploadFile(recordType, recordId, file) {
+// `kinds` is what the box takes, for the renamed-file sentence (a photo-only box passes PHOTO_KINDS, D-132).
+export async function uploadFile(recordType, recordId, file, kinds) {
   // An empty file, a file over 10 MB and a file whose first bytes are not its type are refused before any request, on every control that uploads (D-110, D-112); the server says the same (files.js).
   if (!file || !file.size) throw new ApiError('This file is empty. Choose the file again.', { status: 400, code: 'EMPTY_FILE' });
   if (file.size > 10 * 1024 * 1024) throw new ApiError('Files must be 10 MB or smaller.', { status: 413 });
-  const bad = await fileContentError(file);
+  const bad = await fileContentError(file, kinds);
   if (bad) throw new ApiError(bad, { status: 415, code: 'BAD_FILE_CONTENT' });
   return api('POST', `/files${qs({ record_type: recordType, record_id: recordId })}`, undefined, {
     rawBody: file,

@@ -22,6 +22,8 @@ const { ALLOWED } = require('../lib/storage');
 
 // Cleaners only ever attach or read files on these record types.
 const CLEANER_RECORD_TYPES = ['cleaning', 'damage', 'lost_found'];
+// Records whose screens take photos only: a PDF sent straight to the route is refused as the screens refuse it (D-132).
+const PHOTO_RECORD_TYPES = ['cleaning', 'damage', 'lost_found', 'inspection', 'deposit'];
 function requireCleanerRecord(user, type) {
   if (isCleaner(user) && !CLEANER_RECORD_TYPES.includes(type)) {
     throw forbidden('Cleaners can only use files on cleaning, damage and lost-and-found records.');
@@ -177,6 +179,7 @@ router.post('/files',
     if (!spec || !Buffer.isBuffer(req.body) || !req.body.length) {
       throw new HttpError(415, 'Upload a PDF, JPG, PNG or WEBP file up to 10 MB.', { code: 'UNSUPPORTED_FILE' });
     }
+    if (PHOTO_RECORD_TYPES.includes(type) && !mime.startsWith('image/')) throw new HttpError(415, 'Upload a JPG, PNG or WEBP photo up to 10 MB.', { code: 'UNSUPPORTED_FILE' });
     if (!spec.magic(req.body)) throw new HttpError(415, "The file content doesn't match its type.", { code: 'UNSUPPORTED_FILE' });
     const rawName = decodeURIComponent(String(req.get('X-File-Name') || `upload.${spec.ext}`));
     const fileName = rawName.replace(/[^\w.\- ()]/g, '_').slice(0, 150) || `upload.${spec.ext}`;

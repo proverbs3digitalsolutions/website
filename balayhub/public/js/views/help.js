@@ -32,6 +32,9 @@ const STEPS = [['new', 'Received'], ['in_progress', 'In progress'], ['waiting_on
 const STATUS_BADGE = { new: 'open', in_progress: 'in_progress', waiting_on_customer: 'partial', resolved: 'resolved', closed: 'voided' };
 const statusBadge = (t, admin) => badge(STATUS_BADGE[t.status], admin && t.status === 'waiting_on_customer' ? 'Waiting on customer' : t.status_label);
 const OPEN = ['new', 'in_progress', 'waiting_on_customer'];
+// A reply box's text typed while its send waited, put back after the redraw instead of wiped (D-132). Key: ticket id ("admin:" + id on the admin page).
+const typedAfterSend = new Map();
+const takeTyped = (key) => { const v = typedAfterSend.get(key) || ''; typedAfterSend.delete(key); return v; };
 
 function articleCard(a, open = false) {
   return h('details', { class: 'help-article', open },
@@ -252,6 +255,7 @@ export async function helpTicketView(el, { params, rerender }) {
 
   const reply = h('textarea', { class: 'input', maxlength: 8000, rows: 4, 'aria-label': 'Your reply',
     placeholder: t.status === 'waiting_on_customer' ? 'Answer the question from support…' : t.status === 'resolved' ? 'Still not fixed? Reply here and we’ll reopen it.' : 'Add more details…' });
+  reply.value = takeTyped(t.ticket_id);
   const replyError = h('div', { class: 'error', role: 'alert' });
   const replyField = h('div', { class: 'field' }, reply, replyError);
   const attach = h('input', { type: 'file', class: 'input', accept: 'image/jpeg,image/png,image/webp,application/pdf', id: 'reply-attach', 'aria-describedby': 'reply-attach-err' });
@@ -282,7 +286,9 @@ export async function helpTicketView(el, { params, rerender }) {
           throw err;
         }
       }
-      if (reply.value.trim()) await post(`/support/tickets/${t.ticket_id}/reply`, { body: reply.value.trim() });
+      const sent = reply.value;
+      if (sent.trim()) await post(`/support/tickets/${t.ticket_id}/reply`, { body: sent.trim() });
+      if (reply.value !== sent) typedAfterSend.set(t.ticket_id, reply.value);
       toast(t.status === 'resolved' ? 'Ticket reopened. We’ll take another look.' : 'Sent to support.');
       rerender();
     } catch (err) { toast(err.message, 'error'); btn.removeAttribute('aria-disabled'); }
@@ -395,15 +401,17 @@ export async function adminSupportTicketView(el, { params, rerender }) {
   }
   const { ticket: t, messages, events, files, workspace } = await get(`/admin/support/tickets/${params.id}`);
   const body = h('textarea', { class: 'input', maxlength: 8000, rows: 5, 'aria-label': 'Reply', placeholder: 'Write to the customer, or an internal note…' });
+  body.value = takeTyped(`admin:${t.ticket_id}`);
   const internal = h('input', { type: 'checkbox' });
   const nextStatus = h('select', { class: 'input', 'aria-label': 'Status after sending' },
     h('option', { value: '' }, 'Status: automatic (waiting on customer)'),
     STEPS.concat([['closed', 'Closed']]).map(([k, v]) => h('option', { value: k }, `Set to: ${v}`)));
-  const act = async (e, fn, msg) => {
+  // `after` runs once the request succeeded, before the redraw.
+  const act = async (e, fn, msg, after) => {
     const btn = e.currentTarget;
     if (btn.getAttribute('aria-disabled') === 'true') return; // busy with its own request: a second press does nothing
     btn.setAttribute('aria-disabled', 'true');
-    try { await fn(); toast(msg); rerender(); } catch (err) { toast(err.message, 'error'); btn.removeAttribute('aria-disabled'); }
+    try { await fn(); after?.(); toast(msg); rerender(); } catch (err) { toast(err.message, 'error'); btn.removeAttribute('aria-disabled'); }
   };
   const ctx = t.context || {};
   const thread = timeline(messages, events);
@@ -422,8 +430,10 @@ export async function adminSupportTicketView(el, { params, rerender }) {
           h('div', { class: 'toolbar' }, h('label', { class: 'check' }, internal, h('span', null, 'Internal note (customer won’t see it)')), nextStatus),
           h('div', null, h('button', { class: 'btn btn--primary', onclick: (e) => {
             if (!body.value.trim()) { toast('Write a message first.', 'error'); return; }
-            act(e, () => post(`/admin/support/tickets/${t.ticket_id}/reply`, { body: body.value.trim(), internal: internal.checked, ...(nextStatus.value ? { status: nextStatus.value } : {}) }),
-              internal.checked ? 'Note saved.' : 'Reply sent to the customer.');
+            const sent = body.value;
+            act(e, () => post(`/admin/support/tickets/${t.ticket_id}/reply`, { body: sent.trim(), internal: internal.checked, ...(nextStatus.value ? { status: nextStatus.value } : {}) }),
+              internal.checked ? 'Note saved.' : 'Reply sent to the customer.',
+              () => { if (body.value !== sent) typedAfterSend.set(`admin:${t.ticket_id}`, body.value); });
           } }, 'Send')))),
       h('div', { class: 'stack' },
         h('div', { class: 'card' },

@@ -68,9 +68,12 @@ async function checkMentions(user, conv, text) {
     [user.organization_id, [...typed.keys()], propertyId, user.role !== 'owner', user.user_id]);
   const people = new Map(rows.map((r) => [r.user_id, r]));
   // Staff (and cleaners) exist in the workspace but can't be mentioned: say so rather than the general refusal.
+  // Only for someone the caller may see (an owner, everyone; a manager, the people sharing a property): anyone else gets the unknown-id answer (D-130, D-132).
   const { rows: others } = await query(
-    `SELECT user_id FROM users WHERE organization_id = $1 AND account_status = 'active' AND user_id = ANY($2::uuid[])`,
-    [user.organization_id, [...typed.keys()].filter((id) => !people.has(id))]);
+    `SELECT u.user_id FROM users u WHERE u.organization_id = $1 AND u.account_status = 'active' AND u.user_id = ANY($2::uuid[])
+        AND (NOT $3::boolean OR u.user_id = $4 OR EXISTS (SELECT 1 FROM property_assignments pa
+              JOIN property_assignments mine ON mine.property_id = pa.property_id AND mine.user_id = $4 WHERE pa.user_id = u.user_id))`,
+    [user.organization_id, [...typed.keys()].filter((id) => !people.has(id)), user.role !== 'owner', user.user_id]);
   const known = new Set(others.map((r) => r.user_id));
   const problems = new Set();
   const mentions = [];

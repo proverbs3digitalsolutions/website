@@ -343,6 +343,9 @@ async function photosModal(listing) {
           if (bad) throw new ApiError(bad, { status: 415, code: 'BAD_FILE_CONTENT' });
           status.textContent = `Uploading ${i + 1} of ${files.length}…`;
           const blob = await shrink(f);
+          // Photo-only: a file that is not a JPG, PNG or WEBP photo after resizing (a PDF, a photo the browser can't open) is refused
+          // here in the server's words, before any request (D-132).
+          if (!['image/jpeg', 'image/png', 'image/webp'].includes(blob.type)) throw new ApiError('Upload a photo (JPG, PNG or WEBP) up to 10 MB.', { status: 415, code: 'UNSUPPORTED_FILE' });
           await api('POST', `/units/${listing.unit_id}/photos`, undefined, { rawBody: blob, headers: { 'Content-Type': blob.type || 'image/jpeg' } });
         }
         toast('Photos uploaded.');

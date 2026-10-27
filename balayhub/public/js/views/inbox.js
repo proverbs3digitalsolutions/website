@@ -602,6 +602,9 @@ function composer(c, templates, status, rerender, assignees = []) {
         if (!await confirmDialog({ title: 'That time has passed. Send it now?', text: 'The message goes out straight away instead of at the time you picked.', confirmText: 'Send now' })) return;
         scheduleFor = null;
       }
+      // What this press sends. Text typed while it waits is not part of it, and is kept for the next press (D-132).
+      const sent = body.value;
+      const sentSubject = subject.value;
       busy = true;
       sendBtn.setAttribute('aria-disabled', 'true');
       try {
@@ -611,10 +614,14 @@ function composer(c, templates, status, rerender, assignees = []) {
           if (scheduleFor) payload.send_at = scheduleFor.toISOString();
         }
         const r = await post(`/inbox/${c.conversation_id}/messages`, payload);
-        try { sessionStorage.removeItem(draftKey); sessionStorage.removeItem(modeKey); sessionStorage.removeItem(subjKey); sessionStorage.removeItem(subjTplKey); } catch { /* ignore */ }
+        // The saved draft is dropped only if nothing was typed after the press; otherwise the redrawn box shows the new text (D-121, D-132).
+        try {
+          if (body.value === sent) { sessionStorage.removeItem(draftKey); sessionStorage.removeItem(modeKey); }
+          if (subject.value === sentSubject) { sessionStorage.removeItem(subjKey); sessionStorage.removeItem(subjTplKey); }
+        } catch { /* ignore */ }
         if (r.message.status === 'failed') toast(`Saved, but the email was not sent: ${r.message.error}`, 'error');
         else if (r.mentions.length) toast(`Note saved. ${r.mentions.map((x) => x.full_name).join(', ')} mentioned.`);
-        else if (r.message.status === 'note' && /(^|\s)@[^\s@]/.test(body.value)) toast('Note saved. Nobody was notified: pick a name from the @ list to mention someone.');
+        else if (r.message.status === 'note' && /(^|\s)@[^\s@]/.test(sent)) toast('Note saved. Nobody was notified: pick a name from the @ list to mention someone.');
         else toast({ note: 'Note saved.', scheduled: `Scheduled for ${fmtDateTime(r.message.scheduled_at)}.`, sent: 'Sent.' }[r.message.status] || 'Saved.');
         rerender();
       } catch (ex) {

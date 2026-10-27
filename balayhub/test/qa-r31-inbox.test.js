@@ -27,7 +27,7 @@ test('INB-2: the unpicked @name toast', () => {
   const sentence = 'Note saved. Nobody was notified: pick a name from the @ list to mention someone.';
   assert.ok(src.includes(`toast('${sentence}')`));
   const re = /(^|\s)@[^\s@]/;
-  assert.ok(src.includes('/(^|\\s)@[^\\s@]/.test(body.value)'));
+  assert.ok(src.includes('/(^|\\s)@[^\\s@]/.test(sent)'));
   assert.ok(re.test('QA r31 note @Mara'));
   assert.ok(re.test('@Mara hi'));
   assert.ok(!re.test('mail ana@x.com'));
