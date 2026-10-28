@@ -190,8 +190,21 @@ async function newQuoteModal(listings, onSaved) {
   // Once the host types a price, a date change keeps it; the rate-card price is offered as a button instead.
   // Each box keeps its own typed mark: a typed Accommodation does not keep an old Cleaning fee suggestion (D-131).
   const typed = new Set(); let rate = null;
+  // A box the page has just filled (the price check, Use rate-card price) is no longer what its message was about: it drops its
+  // message and red mark, and the banner goes with the last marked box, as when the host types (makeForm's rule; D-133).
+  // A box the page empties keeps its message. A fill is not the host's typing: `typed`, the draft and the press guard are untouched.
+  const dropMark = (n) => {
+    const wrap = el(n).closest?.('[data-field]');
+    if (String(el(n).value) === '' || !wrap?.classList.contains('field--invalid')) return;
+    wrap.classList.remove('field--invalid');
+    wrap.querySelectorAll('[aria-invalid]').forEach((f) => f.removeAttribute('aria-invalid'));
+    const err = wrap.querySelector('.error');
+    if (err) err.textContent = '';
+    if (!form.querySelector('.field--invalid')) form.querySelector('.form-error [data-field-note]')?.remove();
+  };
   const useRate = h('button', { class: 'btn btn--secondary btn--sm', type: 'button', hidden: true, onclick: () => {
     el('accommodation_total').value = rate.accommodation_total ?? ''; el('cleaning_fee').value = rate.cleaning_fee ?? '';
+    dropMark('accommodation_total'); dropMark('cleaning_fee');
     typed.clear(); useRate.hidden = true; drawTotal();
   } });
   preview.after(useRate);
@@ -211,8 +224,9 @@ async function newQuoteModal(listings, onSaved) {
       } else {
         // With no rate for some nights the box stays empty for the host to type an amount.
         el('accommodation_total').value = stay ?? '';
+        dropMark('accommodation_total');
       }
-      if (!typed.has('cleaning_fee')) el('cleaning_fee').value = p.cleaning_fee ?? '';
+      if (!typed.has('cleaning_fee')) { el('cleaning_fee').value = p.cleaning_fee ?? ''; dropMark('cleaning_fee'); }
       const warn = p.available ? '' : ' Warning: these dates are already booked, so this quote cannot be created.';
       preview.textContent = p.missing_rates
         ? `This listing has no nightly rate for some nights. Enter the total yourself.${warn}`

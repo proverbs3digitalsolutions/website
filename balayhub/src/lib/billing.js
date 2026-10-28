@@ -92,6 +92,14 @@ const paymentReceived = () => new HttpError(409, 'That payment was just received
 // The same refusal after a free activation (a ₱0 coupon row), which is not a payment received: it names what happened (D-115, D-132).
 const freeActivated = () => new HttpError(409, 'Your free plan was just activated. Check your plan before paying again.', { code: 'PAYMENT_RECEIVED' });
 const justDone = (row) => (row.provider === 'coupon' ? freeActivated() : paymentReceived());
+// A page whose "paid until" is out of date is refused with the words for what moved it: the workspace's latest paid plan row is a
+// free activation (a ₱0 coupon row) or a payment (D-115, D-133). `db` is the pool or the transaction's client.
+async function staleRefusal(db, orgId) {
+  const { rows: [last] } = await db.query(
+    `SELECT provider FROM billing_payments WHERE organization_id = $1 AND kind = 'plan' AND status = 'paid'
+      ORDER BY paid_at DESC NULLS LAST, created_at DESC LIMIT 1`, [orgId]);
+  return last ? justDone(last) : paymentReceived();
+}
 
 // A workspace scheduled for deletion takes no plan payment: the money would be taken for a workspace the deletion job
 // removes. The owner cancels the deletion first (D-116). The routes refuse earlier; this is the check under the lock.
@@ -104,7 +112,7 @@ async function prepareCharge(user, plan, months, { couponCode, provider, seenPai
   // The page says which "paid until" it showed. If the workspace has moved on (paid in another tab), nothing new starts.
   // undefined = the caller sent none (an API caller): no check.
   const stale = (o) => seenPaidUntil !== undefined && (o.paid_until ? String(o.paid_until).slice(0, 10) : null) !== seenPaidUntil;
-  if (stale(await one('SELECT paid_until FROM organizations WHERE organization_id = $1', [user.organization_id]))) throw paymentReceived();
+  if (stale(await one('SELECT paid_until FROM organizations WHERE organization_id = $1', [user.organization_id]))) throw await staleRefusal(pool, user.organization_id);
   // No plan charge starts while another is open: a one-tap charge waiting at the bank is cancelled first, an open hosted
   // checkout is expired first, and either proceeds only if PayMongo shows the older one dead. If the older one turns out
   // paid, nothing new starts.
@@ -122,7 +130,9 @@ async function prepareCharge(user, plan, months, { couponCode, provider, seenPai
     // A free activation (a ₱0 coupon row) is not a payment received: another tab's activation is caught by the stale check (D-115).
     const { rows: [justPaid] } = await db.query(
       `SELECT 1 FROM billing_payments WHERE organization_id = $1 AND kind = 'plan' AND status = 'paid' AND provider <> 'coupon' AND paid_at > now() - interval '2 minutes'`, [user.organization_id]);
-    const openError = (message) => (justPaid || stale(org) ? paymentReceived() : new HttpError(409, message, { code: 'PAYMENT_IN_PROGRESS' }));
+    // A stale page's refusal, read once under the lock: it names a free activation or a payment (D-133).
+    const staleError = stale(org) ? await staleRefusal(db, user.organization_id) : null;
+    const openError = (message) => (justPaid ? paymentReceived() : staleError || new HttpError(409, message, { code: 'PAYMENT_IN_PROGRESS' }));
     // A free activation is written pending and marked paid in its own transaction; until then it is an open payment too
     // (BIL-1, D-108). Bounded to 2 minutes so a row left pending by a crash never blocks for long.
     const { rows: [freeOpen] } = await db.query(
@@ -141,7 +151,7 @@ async function prepareCharge(user, plan, months, { couponCode, provider, seenPai
         throw openError(`A payment is already in progress. Try again in ${busy.mins} minute${busy.mins === 1 ? '' : 's'}.`);
       }
     }
-    if (stale(org)) throw paymentReceived();
+    if (staleError) throw staleError;
     // A one-tap charge right after a paid plan payment is the same press again (a double click or Enter on the redrawn
     // page), not a new month: refused under the lock for a minute. Paying ahead from a fresh page works after that (D-122).
     if (provider === 'paymongo_intent') {

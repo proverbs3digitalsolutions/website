@@ -175,9 +175,9 @@ test("a negative quantity is said on its own row, in the alert its box names", a
   const { opts, list } = await openSupplies();
   box(list, 's1').value = '-1';
   const err = await opts.onSubmit({}).catch((e) => e);
-  assert.deepEqual(err.fields, { 'qty-s1': "Quantity can't be negative." });
+  assert.deepEqual(err.fields, { 'qty-s1': "Quantity cannot be negative." });
   ui.showErrors(list, err.fields);
-  assertSaid(list, 's1', "Quantity can't be negative.");
+  assertSaid(list, 's1', "Quantity cannot be negative.");
   assert.equal(line(list, 's2').textContent, '', 'the other row says nothing');
 });
 

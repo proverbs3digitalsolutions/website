@@ -45,7 +45,7 @@ extendTranslations({
   'Qty': 'Dami', 'Used': 'Nagamit', 'Restocked': 'Nadagdag', 'Used or restocked': 'Nagamit o nadagdag', 'Save': 'I-save', 'Cancel': 'Kanselahin',
   'No supplies are set up for this property yet.': 'Wala pang supplies na naka-set up para sa property na ito.', 'Set up supplies': 'I-set up ang supplies',
   'Enter a quantity for at least one item.': 'Maglagay ng dami sa kahit isang gamit.', 'Supplies saved.': 'Na-save ang supplies.',
-  'Quantity must be a whole number.': 'Dapat buong bilang ang dami.', 'Quantity can\'t be negative.': 'Hindi puwedeng negatibo ang dami.',
+  'Quantity must be a whole number.': 'Dapat buong bilang ang dami.', 'Quantity cannot be negative.': 'Hindi puwedeng negatibo ang dami.',
   '{name} was out of stock, so it wasn\'t recorded.': 'Ubos na ang {name}, kaya hindi ito na-record.', 'Tell your manager.': 'Sabihan ang manager mo.',
   'Only {onHand} of {name} {verb} on hand, so {recorded} {verb} recorded.': '{onHand} lang ng {name} ang nasa stock, kaya {recorded} ang na-record.',
   'Title': 'Pamagat', 'What needs fixing?': 'Ano ang kailangang ayusin?', 'Priority': 'Prayoridad',
@@ -598,7 +598,7 @@ async function suppliesModal(task, onSaved) {
         throw err;
       };
       const negative = rows.filter((r) => Number(r.qty.value) < 0);
-      if (negative.length) refuse(T('Quantity can\'t be negative.'), negative);
+      if (negative.length) refuse(T('Quantity cannot be negative.'), negative);
       const filled = rows.filter((r) => Number(r.qty.value) > 0);
       const decimal = filled.filter((r) => !Number.isInteger(Number(r.qty.value)));
       if (decimal.length) refuse(T('Quantity must be a whole number.'), decimal);

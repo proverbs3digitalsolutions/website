@@ -161,7 +161,7 @@ test('a negative quantity is refused on its own row and nothing is sent', async 
   });
   await assert.rejects(submit(), (err) => {
     assert.equal(err.status, 400);
-    assert.equal(err.message, 'Quantity can\'t be negative.');
+    assert.equal(err.message, 'Quantity cannot be negative.');
     assert.deepEqual(Object.keys(err.fields), ['qty-sup-1'], 'the message is placed on the negative row only');
     assert.equal(typeof err.onRender, 'function', 'the message is not repeated in the form box');
     return true;
@@ -177,13 +177,13 @@ test('a negative decimal gets the negative message, and blank or zero rows are s
     post: async (url, body) => { sent.push({ url, body }); return { skipped: [] }; },
   });
   await assert.rejects(submit(), (err) => {
-    assert.deepEqual(err.fields, { 'qty-sup-1': 'Quantity can\'t be negative.' });
+    assert.deepEqual(err.fields, { 'qty-sup-1': 'Quantity cannot be negative.' });
     return true;
   });
   assert.deepEqual(sent, []);
 });
 
 test('the negative-quantity message has Taglish wording for cleaners', () => {
-  assert.match(src, /T\('Quantity can\\'t be negative\.'\)/);
-  assert.match(src, /'Quantity can\\'t be negative\.': 'Hindi puwedeng negatibo ang dami\.'/);
+  assert.match(src, /T\('Quantity cannot be negative\.'\)/);
+  assert.match(src, /'Quantity cannot be negative\.': 'Hindi puwedeng negatibo ang dami\.'/);
 });
