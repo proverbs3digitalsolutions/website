@@ -1902,3 +1902,41 @@ select.input { appearance: none; -webkit-appearance: none; padding-right: 36px;
 /* Cleaner pay (#36): the action bar wraps so the Mark paid amount is never cut off; the select-all label stays on one line. */
 .ops-bar .check span { white-space: nowrap; }
 @media (max-width: 559px) { .ops-bar .btn { flex: 1 1 100%; white-space: normal; } }
+
+/* Calendar view switcher and the Month / Week / List views. Chips reuse .cal-bar--{channel} colours. */
+.cal-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; background: var(--surface); }
+.cal-seg__btn { border: 0; background: transparent; color: var(--text); font: inherit; font-size: .85rem; font-weight: 650; padding: 0 14px; min-height: 36px; cursor: pointer; }
+.cal-seg__btn + .cal-seg__btn { border-left: 1px solid var(--line); }
+.cal-seg__btn[aria-pressed="true"] { background: var(--teal); color: var(--on-forest); }
+.cal-seg__btn:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
+.cal-month { min-width: 560px; }
+.cal-month__head, .cal-month__body { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.cal-month__head div { padding: 8px 6px; font-size: .75rem; font-weight: 700; color: var(--muted); text-align: center; border-bottom: 1px solid var(--line); }
+.cal-mday { min-height: 104px; padding: 4px; border-bottom: 1px solid var(--line); border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 3px; min-width: 0; cursor: pointer; }
+.cal-mday:hover { background: var(--surface-2); }
+.cal-month--week .cal-mday { min-height: 240px; }
+.cal-mday.is-past { background: var(--surface-2); }
+.cal-mday.is-out { opacity: .55; }
+.cal-mday.is-today { box-shadow: inset 0 2px 0 var(--teal); background: var(--teal-soft); }
+.cal-mday__num { align-self: flex-start; border: 0; background: transparent; color: var(--text); font: inherit; font-size: .85rem; font-weight: 700; min-width: 28px; min-height: 28px; border-radius: 14px; cursor: pointer; }
+.cal-mday__num:disabled { cursor: default; }
+.cal-mday__num:focus-visible, .cal-mday__more:focus-visible, .cal-lrow:focus-visible, .cal-chip:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; }
+.cal-mday__more { align-self: flex-start; border: 0; background: transparent; color: var(--teal-ink); font: inherit; font-size: .75rem; font-weight: 700; cursor: pointer; padding: 2px 4px; }
+.cal-chip { position: static; display: block; width: 100%; height: auto; min-height: 22px; line-height: 22px; font-size: .72rem; padding: 0 6px; border-radius: 6px; box-shadow: none; flex: none; }
+.cal-list { list-style: none; margin: 0; padding: 0; }
+.cal-list li + li { border-top: 1px solid var(--line); }
+.cal-lrow { display: grid; grid-template-columns: minmax(150px, 1.2fr) 1.5fr 1.5fr auto; gap: 8px 14px; align-items: center; width: 100%; text-align: left; border: 0; background: transparent; color: var(--text); font: inherit; padding: 12px 14px; cursor: pointer; }
+.cal-lrow:hover { background: var(--surface-2); }
+.cal-lrow__dates { font-weight: 700; }
+.cal-lrow__unit { color: var(--muted); }
+.cal-lrow .cal-chip { width: auto; padding: 0 10px; border-radius: 11px; }
+@media (max-width: 640px) {
+  .cal-seg { width: 100%; }
+  .cal-seg__btn { flex: 1 1 0; padding: 0 6px; min-height: 40px; }
+  .cal-mday { min-height: 76px; padding: 2px; }
+  .cal-month--week .cal-mday { min-height: 180px; }
+  .cal-chip { font-size: .65rem; padding: 0 3px; }
+  .cal-lrow { grid-template-columns: 1fr auto; }
+  .cal-lrow__dates, .cal-lrow__unit { grid-column: 1 / -1; }
+}
+.toolbar select.input[hidden] { display: none; }

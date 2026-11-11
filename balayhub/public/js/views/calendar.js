@@ -61,7 +61,7 @@ export const calendarFolded = (compact, phone) => compact || phone;
 
 export async function calendarView(el, { query }) {
   const canManage = state.user.role !== 'staff';
-  const view = { start: calendarStart(query.start), days: Number(query.days) === 30 ? 30 : 14 };
+  const view = { start: calendarStart(query.start), days: [7, 14, 30, 60, 90].includes(Number(query.days)) ? Number(query.days) : 14, mode: 'timeline' }; // the view type is never saved: the page opens on Timeline
   // Filters only hide rows (client-side); the grid itself is unchanged.
   const defaults = { q: '', property_id: '', unit_type: '', cleaning: '', avail: '', tag: '' };
   const filters = initFilters('calendar', query, defaults);
@@ -95,15 +95,37 @@ export async function calendarView(el, { query }) {
   const title = h('strong', { class: 'cal-title' });
   const dateInput = h('input', { class: 'input input--sm', type: 'date', 'aria-label': 'Go to date' });
 
+  // The server shows at most 62 days at a time, so 90 days (and a 6-week month) are fetched in two parts and joined.
+  async function fetchRange(start, days) {
+    const first = await get(`/calendar${qs({ start, days: Math.min(days, 62) })}`);
+    if (days <= 62) return first;
+    const rest = await get(`/calendar${qs({ start: addDays(first.start, 62), days: days - 62 })}`);
+    const seen = new Set(first.bookings.map((b) => b.booking_id));
+    return { ...first, days, bookings: [...first.bookings, ...rest.bookings.filter((b) => !seen.has(b.booking_id))], rates: [...first.rates, ...rest.rates], prices: [...(first.prices || []), ...(rest.prices || [])] };
+  }
+
   async function load() {
     const asked = view.start;
-    const [data] = await Promise.all([get(`/calendar${qs({ start: view.start, days: view.days })}`), loadProblems()]);
+    let start = view.start;
+    let days = view.mode === 'week' ? 7 : view.days;
+    if (view.mode === 'month') {
+      // Weeks as rows, Sunday first: the grid starts on the Sunday on or before the 1st and runs whole weeks.
+      if (!start) start = (await get(`/calendar${qs({ days: 7 })}`)).today;
+      const first = `${start.slice(0, 8)}01`;
+      const lead = new Date(`${first}T00:00:00Z`).getUTCDay();
+      const inMonth = new Date(Date.UTC(Number(start.slice(0, 4)), Number(start.slice(5, 7)), 0)).getUTCDate();
+      start = addDays(first, -lead);
+      days = Math.ceil((lead + inMonth) / 7) * 7;
+      view.start = first;
+    }
+    const [data] = await Promise.all([fetchRange(start, days), loadProblems()]);
     // The server quietly shows today for a start that isn't a real date (e.g. 2026-02-30); say so.
-    if (asked && asked !== data.start) toast("That date wasn't valid, so we're showing today.");
-    view.start = data.start;
+    if (view.mode !== 'month' && asked && asked !== data.start) toast("That date wasn't valid, so we're showing today.");
+    if (view.mode !== 'month') view.start = data.start;
     lastData = data;
     title.textContent = rangeTitle(data.start, data.days);
-    dateInput.value = data.start;
+    if (view.mode === 'month') title.textContent = monthName(view.start);
+    dateInput.value = view.start;
     render(data);
   }
 
@@ -155,6 +177,7 @@ export async function calendarView(el, { query }) {
       grid.replaceChildren(emptyState({ iconName: 'building', title: 'No listings yet', text: 'Add a listing to start filling your calendar.', action: canManage && h('a', { class: 'btn btn--primary', href: '#/listings?new=1' }, 'Add listing') }));
       return;
     }
+    if (view.mode !== 'timeline') { renderOther(data, listings); return; }
     const rates = new Map(data.rates.map((r) => [`${r.unit_id}|${r.rate_date}`, r.price]));
     const prices = new Map((data.prices || []).map((p) => [`${p.unit_id}|${p.date}`, p]));
     const table = h('div', { class: 'cal', style: { '--cal-days': data.days } });
@@ -222,6 +245,86 @@ export async function calendarView(el, { query }) {
     grid.replaceChildren(listings.length ? table : emptyState({ title: 'No results found', text: 'No listing matches these filters. Try removing a filter.' }));
     const todayCell = grid.querySelector('.cal-day-head.is-today');
     if (todayCell) grid.scrollLeft = Math.max(0, todayCell.offsetLeft - 220);
+  }
+
+  // ---- Month, Week and List views: all listings together; the filters above still narrow them. ----
+  const channelOf = (b) => (b.kind === 'block' ? 'block' : b.channel || 'other');
+  function chip(b, d, names) {
+    const isBlock = b.kind === 'block';
+    return h('button', {
+      type: 'button', class: `cal-bar cal-chip cal-bar--${channelOf(b)}`, 'data-focus-key': `cal-chip-${b.booking_id}-${d}`,
+      title: `${isBlock ? `Blocked: ${b.block_reason || ''}` : `${b.guest_name || 'Guest'} · ${CHANNEL_LABEL[b.channel] || 'Other'}`} · ${names.get(b.unit_id) || ''} · ${b.check_in} → ${b.check_out}`,
+      onclick: (e) => { e.stopPropagation(); return openBar(b); },
+    }, isBlock ? `🔒 ${b.block_reason || 'Blocked'}` : b.guest_name || 'Guest');
+  }
+  function newOn(date) { newReservationModal({ checkIn: date, onSaved: () => reload() }); }
+
+  // Shared by Month and Week: seven columns of days, each listing that day's stays as chips. Month caps a day at 3 chips.
+  function dayGrid(data, bookings, names, dates, { cap, month }) {
+    const wrap = h('div', { class: `cal-month${cap ? '' : ' cal-month--week'}` });
+    wrap.append(h('div', { class: 'cal-month__head' }, dates.slice(0, 7).map((d) => h('div', null, dayName(d)))));
+    const body = h('div', { class: 'cal-month__body' });
+    for (const d of dates) {
+      const on = bookings.filter((b) => b.check_in <= d && d < b.check_out);
+      const shown = cap ? on.slice(0, cap) : on;
+      const out = month && d.slice(0, 7) !== month;
+      body.append(h('div', {
+        class: `cal-mday${d === data.today ? ' is-today' : ''}${d < data.today ? ' is-past' : ''}${out ? ' is-out' : ''}`,
+        onclick: canManage ? () => newOn(d) : null,
+      },
+      h('button', { type: 'button', class: 'cal-mday__num', 'data-focus-key': `cal-day-${d}`, 'aria-label': canManage ? `New reservation on ${fmtDate(d)}` : fmtDate(d), disabled: canManage ? null : true, onclick: (e) => { e.stopPropagation(); newOn(d); } }, dayLabel(d)),
+      shown.map((b) => chip(b, d, names)),
+      on.length > shown.length && h('button', { type: 'button', class: 'cal-mday__more', onclick: (e) => { e.stopPropagation(); setMode('week', d); } }, `+${on.length - shown.length} more`)));
+    }
+    wrap.append(body);
+    return wrap;
+  }
+
+  function renderMonthView(data, bookings, names) {
+    const dates = Array.from({ length: data.days }, (_, i) => addDays(data.start, i));
+    return dayGrid(data, bookings, names, dates, { cap: 3, month: view.start.slice(0, 7) });
+  }
+  function renderWeekView(data, bookings, names) {
+    return dayGrid(data, bookings, names, Array.from({ length: 7 }, (_, i) => addDays(data.start, i)), { cap: 0, month: '' });
+  }
+  function renderListView(data, bookings, names) {
+    const end = addDays(data.start, data.days);
+    const rows = bookings.filter((b) => b.check_out > data.start && b.check_in < end).sort((a, b) => a.check_in.localeCompare(b.check_in) || a.check_out.localeCompare(b.check_out));
+    if (!rows.length) return emptyState({ title: 'No bookings in these dates', text: 'Nothing is booked or blocked in this range. Try a longer range or another date.' });
+    return h('ul', { class: 'cal-list' }, rows.map((b) => {
+      const isBlock = b.kind === 'block';
+      return h('li', null, h('button', { type: 'button', class: 'cal-lrow', 'data-focus-key': `cal-chip-${b.booking_id}-list`, onclick: () => openBar(b) },
+        h('span', { class: 'cal-lrow__dates' }, `${fmtDate(b.check_in)} → ${fmtDate(b.check_out)}`),
+        h('span', { class: 'cal-lrow__guest' }, isBlock ? `🔒 ${b.block_reason || 'Blocked'}` : b.guest_name || 'Guest'),
+        h('span', { class: 'cal-lrow__unit' }, names.get(b.unit_id) || ''),
+        h('span', { class: `cal-bar cal-chip cal-bar--${channelOf(b)}` }, isBlock ? 'Blocked' : CHANNEL_LABEL[b.channel] || 'Other')));
+    }));
+  }
+  function renderOther(data, listings) {
+    if (!listings.length) { grid.replaceChildren(emptyState({ title: 'No results found', text: 'No listing matches these filters. Try removing a filter.' })); return; }
+    const names = new Map(listings.map((l) => [l.unit_id, l.unit_name]));
+    const bookings = data.bookings.filter((b) => names.has(b.unit_id));
+    const fn = { month: renderMonthView, week: renderWeekView, list: renderListView }[view.mode];
+    grid.replaceChildren(fn(data, bookings, names));
+    grid.scrollLeft = 0;
+  }
+
+  const monthStep = (s, n) => { const d = new Date(`${s.slice(0, 8)}01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() + n); return d.toISOString().slice(0, 10); };
+  function step(n) { view.start = view.mode === 'month' ? monthStep(view.start, n) : addDays(view.start, 7 * n); load(); }
+  const modes = [['timeline', 'Timeline'], ['month', 'Month'], ['week', 'Week'], ['list', 'List']];
+  const modeBtns = modes.map(([m, text]) => h('button', { type: 'button', class: 'cal-seg__btn', 'aria-pressed': m === view.mode ? 'true' : 'false', onclick: () => setMode(m) }, text));
+  const prevBtn = h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': 'Previous week', onclick: () => step(-1) }, '‹');
+  const nextBtn = h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': 'Next week', onclick: () => step(1) }, '›');
+  const daysSelect = h('select', { class: 'input input--sm', 'aria-label': 'Days shown', onchange: (e) => { view.days = Number(e.target.value); load(); } },
+    [7, 14, 30, 60, 90].map((n) => h('option', { value: n, selected: view.days === n }, `${n} days`)));
+  function setMode(m, start) {
+    view.mode = m;
+    if (start) view.start = start;
+    modes.forEach(([k], i) => modeBtns[i].setAttribute('aria-pressed', k === m ? 'true' : 'false'));
+    const unit = m === 'month' ? 'month' : 'week';
+    prevBtn.setAttribute('aria-label', `Previous ${unit}`); nextBtn.setAttribute('aria-label', `Next ${unit}`);
+    daysSelect.hidden = m === 'month' || m === 'week';
+    load();
   }
 
   async function moveBar(b, to) {
@@ -365,13 +468,13 @@ export async function calendarView(el, { query }) {
     bar,
     h('div', { class: 'toolbar' },
       h('div', { class: 'chips cal-nav' },
-        h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': 'Previous week', onclick: () => { view.start = addDays(view.start, -7); load(); } }, '‹'),
+        prevBtn,
         title,
-        h('button', { class: 'btn btn--secondary btn--sm', 'aria-label': 'Next week', onclick: () => { view.start = addDays(view.start, 7); load(); } }, '›'),
+        nextBtn,
         h('button', { class: 'btn btn--ghost btn--sm', onclick: () => { view.start = null; load(); } }, 'Today'),
         dateInput,
-        h('select', { class: 'input input--sm', 'aria-label': 'Days shown', onchange: (e) => { view.days = Number(e.target.value); load(); } },
-          h('option', { value: 14, selected: view.days === 14 }, '14 days'), h('option', { value: 30, selected: view.days === 30 }, '30 days')))),
+        daysSelect),
+      h('div', { class: 'cal-seg', role: 'group', 'aria-label': 'Calendar view' }, modeBtns)),
     fold('What the colours mean', legend, false),
     h('div', { class: 'card card--flush' }, grid));
   await load();
