@@ -225,4 +225,6 @@ export function installTopbarKeys(ctx) {
     desktopSearch?.then((s) => s.focus(returnTo)).catch(() => {});
   });
   window.addEventListener('focus', () => { const bar = document.querySelector('.topbar'); if (bar) refreshBellIn(bar, ctx); });
+  // Near-realtime badge: poll every 20s while the tab is visible (refreshBell self-throttles; focus catches up after a hidden spell).
+  setInterval(() => { if (document.hidden) return; const bar = document.querySelector('.topbar'); if (bar) refreshBellIn(bar, ctx); }, 20000);
 }
