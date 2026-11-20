@@ -19,6 +19,7 @@ const { quote, nightlyPrices } = require('../lib/pricing');
 const { applyCode } = require('../lib/discounts');
 const { addDays } = require('../lib/holidays');
 const { leasedListings } = require('../lib/leases');
+const ical = require('../lib/ical');
 const secretbox = require('../lib/secretbox');
 const paymongo = require('../lib/paymongo');
 const storage = require('../lib/storage');
@@ -486,6 +487,8 @@ async function startCheckout({ host, token, ip, label, returnUrls, row: r, befor
   if (open.n >= MAX_OPEN_HOLDS) {
     throw new HttpError(429, 'You already have a booking waiting for payment. Please finish or cancel it first, or try again in 30 minutes.', { code: 'TOO_MANY_HOLDS' });
   }
+  // Read the listing's channel calendars first, so a booking just made on Airbnb (or another channel) counts.
+  await ical.refreshUnitFeeds(r.unit_id);
   // Hold the dates (one hold at a time per listing, so two guests can't pay for the same nights).
   const hold = await tx(async (db) => {
     await db.query('SELECT unit_id FROM units WHERE unit_id = $1 FOR UPDATE', [r.unit_id]);

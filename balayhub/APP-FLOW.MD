@@ -267,6 +267,7 @@ All guest pages have an English / Tagalog toggle (Taglish text). The default is 
 - **Have a discount code?** → **Apply** → "Code … applied" or the reason it failed.
 - Payment choice: Pay in full or 50% deposit (as the host allows). Too close to arrival → charged in full.
 - Fill name, guests, email, mobile, optional message, consent → **Continue to payment** ("Opening secure payment…") → PayMongo.
+- Before PayMongo opens, the listing's channel calendars are checked live (up to 4 seconds), so a booking just made on Airbnb or another channel shows as taken here (D-135).
 - Errors: dates taken → "Sorry, these dates are no longer available." Too many open checkouts → "You already have a booking waiting for payment…". Field errors are shown inline.
 - Back from PayMongo with cancel → toast "Payment cancelled. Nothing was charged and your dates were not booked."
 

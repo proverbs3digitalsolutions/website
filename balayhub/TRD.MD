@@ -240,7 +240,7 @@ Note: `ANTHROPIC_BASE_URL` is only used by the assistant (the drafts code ignore
 | Direction | As built |
 |---|---|
 | Export | One private feed per listing at `/ical/<token>.ics` (`units.ical_token`, 20–64 characters). It contains confirmed stays and blocks from 7 days ago onward, without guest names. Owners and managers can rotate the token |
-| Import | `ical_feeds` per listing. Synced every 30 min and on demand. Only `https://` URLs without credentials are accepted. DNS results pointing at private or internal networks are refused (SSRF guard). 15 s timeout, 2 MB maximum, up to 3 redirects. Imported events become `bookings` with `ical_feed_id` and `external_uid`. Events that disappear are cancelled (stays) or deleted (blocks) |
+| Import | `ical_feeds` per listing. Synced every 30 min, on demand, and live for one listing just before a direct checkout holds dates (4 s limit, skipped if synced in the last minute; D-135). Only `https://` URLs without credentials are accepted. DNS results pointing at private or internal networks are refused (SSRF guard). 15 s timeout, 2 MB maximum, up to 3 redirects. Imported events become `bookings` with `ical_feed_id` and `external_uid`. Events that disappear are cancelled (stays) or deleted (blocks) |
 | Env vars | None (uses `APP_URL` to build links) |
 
 ### 3.7 Encryption of stored secrets (`DATA_ENCRYPTION_KEY`)

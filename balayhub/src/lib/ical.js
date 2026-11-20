@@ -176,7 +176,8 @@ function randomCode(prefix) {
  * Mirror one feed into bookings. Events that clash with an existing booking
  * are skipped and reported, never silently overwritten.
  */
-async function syncFeed(feedId, { fetcher = fetchText } = {}) {
+// The default fetcher is looked up at call time, so tests can replace `fetchText` on the module.
+async function syncFeed(feedId, { fetcher = (url) => module.exports.fetchText(url) } = {}) {
   const { rows: [feed] } = await pool.query('SELECT * FROM ical_feeds WHERE feed_id = $1', [feedId]);
   if (!feed) throw new Error('Feed not found');
   const label = CHANNEL_LABEL[feed.channel];
@@ -342,6 +343,25 @@ async function alertOverlaps(feed, label, events) {
   }
 }
 
+/**
+ * Live check before a direct checkout holds dates (D-135): read this listing's channel calendars now,
+ * so a booking made on Airbnb or another channel since the last 30-minute sync is seen first.
+ * Waits at most `LIVE_CHECK_MS`. A slow or failing channel doesn't stop the guest: the sync keeps
+ * running in the background, and the check after payment still catches a clash. Feeds synced in the
+ * last minute are skipped, so repeated attempts don't call the channel again and again.
+ */
+async function refreshUnitFeeds(unitId) {
+  const { rows } = await pool.query(
+    `SELECT feed_id FROM ical_feeds WHERE unit_id = $1
+        AND (last_synced_at IS NULL OR last_synced_at < now() - interval '1 minute')`, [unitId]);
+  if (!rows.length) return;
+  const all = Promise.all(rows.map(({ feed_id: id }) => module.exports.syncFeed(id)
+    .catch((err) => console.error('[ical] live check failed', id, err.message))));
+  let timer;
+  await Promise.race([all, new Promise((resolve) => { timer = setTimeout(resolve, module.exports.LIVE_CHECK_MS); })]);
+  clearTimeout(timer);
+}
+
 async function syncAllFeeds() {
   const { rows } = await pool.query('SELECT feed_id FROM ical_feeds');
   for (const { feed_id: id } of rows) {
@@ -349,4 +369,4 @@ async function syncAllFeeds() {
   }
 }
 
-module.exports = { guardedLookup, fetchText, buildCalendar, newFeedToken, parseEvents, classify, validateFeedUrl, isPublicAddress, syncFeed, syncAllFeeds, addDays, randomCode, CHANNEL_LABEL };
+module.exports = { guardedLookup, fetchText, buildCalendar, newFeedToken, parseEvents, classify, validateFeedUrl, isPublicAddress, syncFeed, syncAllFeeds, refreshUnitFeeds, LIVE_CHECK_MS: 4000, addDays, randomCode, CHANNEL_LABEL };

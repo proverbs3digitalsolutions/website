@@ -190,6 +190,7 @@ Server rules live in `src/lib/access.js` (property, tenant and guest scoping) an
 - Owner sets the page address (slug), welcome text, and turns the page on or off. Listings opt in with "Show this listing on my booking page".
 - Per listing: online payment option (full, 50% deposit, or guest's choice), minimum nights, balance due days, up to 12 photos (first is the cover).
 - Guest page `#/book/<slug>`: listings with photos and prices. Listing page: gallery, details, house rules, availability calendar with nightly prices, discount code, guest details, consent, **Continue to payment**.
+- Before the dates are held, BalayHub reads the listing's channel calendars live (up to 4 seconds; a slow or failing channel doesn't stop the guest), so a channel booking made since the last sync is caught before payment (D-135).
 - Guest pays on PayMongo (GCash, Maya, card, GrabPay). Dates are held for 30 minutes. Max 2 unpaid checkouts per visitor or email. Bookings open about 18 months ahead.
 - After payment: reservation (channel Direct), payment and receipt are created, guest gets confirmation and receipt emails, host gets an Inbox note and push.
 - A background check catches paid checkouts whose guest did not return to the page.
