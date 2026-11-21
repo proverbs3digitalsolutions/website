@@ -3,3 +3,11 @@
 	encode gzip
 	reverse_proxy app:3000
 }
+
+# Sabella payment portal demo (separate repo Prince0643/sabella-payment-portal).
+# Runs in its own "sabella-portal" container on this Docker network; see D-136.
+# If that container is stopped, only this address shows an error. BalayHub is unaffected.
+srv2056456.hstgr.cloud {
+	encode gzip
+	reverse_proxy sabella-portal:80
+}

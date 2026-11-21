@@ -1894,3 +1894,9 @@ Suggested refunds round half a centavo up. The suggestion uses the listing's *cu
 > - **A feed synced in the last minute is not read again**, so repeated attempts don't call the channel each time.
 > - **Still not covered:** a channel's own calendar link can be a little behind its live bookings, and channels don't see BalayHub's 30-minute payment hold (the export feed lists confirmed stays only). Those clashes are still caught after payment and alerted to the host.
 > - Code: `refreshUnitFeeds` in `src/lib/ical.js`, called from `startCheckout` in `src/routes/directbooking.js`. Test: `test/direct-live-sync.test.js`. No migration, no new env var, no schema change.
+
+> **D-136 · 2026-11-21 · BalayHub's server also hosts the Sabella payment portal demo, at https://srv2056456.hstgr.cloud.** The founder asked to put a separate client mockup (the Sabella payment portal, repo `Prince0643/sabella-payment-portal`) on the BalayHub VPS under the server's own address for now. BalayHub's Caddy already owns ports 80 and 443, so the Caddyfile gets a second site block that forwards `srv2056456.hstgr.cloud` to a `sabella-portal` nginx container on the `balayhub_default` network. That container is started by the portal's own `deploy/deploy.sh`, not by `docker-compose.prod.yml`.
+>
+> - **BalayHub is unaffected.** Caddy reloads the new Caddyfile live; no restart, no rebuild, no migration, no env var, no schema change. If the portal container is down, only its address shows an error.
+> - **One thing to know:** `docker compose down` on BalayHub will complain that the network is still in use while the portal container is attached. `./deploy/update.sh` uses `up` only and is not affected. To take BalayHub fully down, first run `docker stop sabella-portal`.
+> - *Why:* the cheapest way to show the client a live link without a new server or DNS change. When the portal gets its own domain or server, delete the block and this entry is superseded.
