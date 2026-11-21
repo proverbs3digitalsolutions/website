@@ -165,7 +165,7 @@ test('a payment during a trial with no stored end starts the covered month after
   const [b] = await sql(`INSERT INTO billing_payments (organization_id, plan, months, amount, list_amount, discount_amount, provider)
     VALUES ($1,'growth',1,999,999,0,'paymongo') RETURNING billing_id`, [orgId]);
   assert.equal(await billing.markPaid(b.billing_id, { method: 'card' }), true);
-  const [paid] = await sql(`SELECT period_start::text AS s, (SELECT (created_at + interval '14 days' + interval '8 hours')::date::text FROM organizations WHERE organization_id = $1) AS expect FROM billing_payments WHERE billing_id = $2`, [orgId, b.billing_id]);
+  const [paid] = await sql(`SELECT period_start::text AS s, (SELECT ((created_at + interval '14 days') AT TIME ZONE 'Asia/Manila')::date::text FROM organizations WHERE organization_id = $1) AS expect FROM billing_payments WHERE billing_id = $2`, [orgId, b.billing_id]);
   assert.equal(paid.s, paid.expect);
   await sql(`UPDATE organizations SET trial_ends_at = now() + interval '14 days', created_at = now() WHERE organization_id = $1`, [orgId]);
 });
